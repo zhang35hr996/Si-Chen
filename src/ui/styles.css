@@ -68,6 +68,234 @@ body {
   letter-spacing: 0.2em;
 }
 
+/* ── HUD (shared by location/map screens) ────────────────────────── */
+
+.hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 1.2rem;
+  border-bottom: 1px solid #33291f;
+  background: rgba(10, 8, 6, 0.6);
+}
+
+.hud__time {
+  color: #d9b87c;
+  letter-spacing: 0.15em;
+}
+
+.hud__button {
+  font: inherit;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  padding: 0.35rem 1.2rem;
+  color: #e8dcc8;
+  background: transparent;
+  border: 1px solid #5c4d3a;
+  cursor: pointer;
+}
+
+.hud__button:hover {
+  border-color: #d9b87c;
+  color: #d9b87c;
+}
+
+/* ── location screen ─────────────────────────────────────────────── */
+
+.location-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.location-screen__stage {
+  padding: 3rem 2rem 2rem;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 0%, #2a201a 0%, #14100e 75%);
+  border-bottom: 1px solid #33291f;
+}
+
+.location-screen__name {
+  font-size: 2.2rem;
+  letter-spacing: 0.6em;
+  text-indent: 0.6em;
+  color: #d9b87c;
+  font-weight: 400;
+}
+
+.location-screen__desc {
+  margin-top: 0.8rem;
+  color: #b8aa90;
+}
+
+.location-screen__ambience {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #6b5d4a;
+  letter-spacing: 0.2em;
+}
+
+.location-screen__present {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+}
+
+.location-screen__empty {
+  color: #6b5d4a;
+  letter-spacing: 0.3em;
+}
+
+.screen-error {
+  padding: 2rem;
+  color: #d98c7c;
+}
+
+/* ── character card ──────────────────────────────────────────────── */
+
+.char-card {
+  width: 17rem;
+  border: 1px solid #5c4d3a;
+  background: #1c1611;
+  padding: 0.9rem 1.1rem;
+}
+
+.char-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.char-card__name {
+  font-size: 1.15rem;
+  color: #e8dcc8;
+}
+
+.char-card__kind {
+  font-size: 0.75rem;
+  color: #14100e;
+  background: #d9b87c;
+  padding: 0.1rem 0.5rem;
+}
+
+.char-card__rank {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #d9b87c;
+}
+
+.char-card__selfref {
+  display: block;
+  color: #8a7a62;
+  margin-top: 0.15rem;
+}
+
+.char-card__role {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+  color: #b8aa90;
+}
+
+.char-card__stats {
+  display: flex;
+  gap: 1.2rem;
+  margin: 0.7rem 0 0;
+}
+
+.char-card__stats dt {
+  font-size: 0.72rem;
+  color: #8a7a62;
+}
+
+.char-card__stats dd {
+  margin: 0;
+  color: #e8dcc8;
+}
+
+/* ── map screen ──────────────────────────────────────────────────── */
+
+.map-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-screen__board {
+  position: relative;
+  flex: 1;
+  margin: 1.5rem;
+  border: 1px solid #33291f;
+  background:
+    radial-gradient(ellipse at 50% 40%, #241c15 0%, #14100e 80%);
+}
+
+.map-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.7rem 1.3rem;
+  color: #e8dcc8;
+  background: #1c1611;
+  border: 1px solid #5c4d3a;
+  cursor: pointer;
+}
+
+.map-node:hover:enabled {
+  border-color: #d9b87c;
+}
+
+.map-node:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.map-node--here {
+  border-color: #d9b87c;
+  box-shadow: 0 0 0 1px #d9b87c;
+}
+
+.map-node__name {
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+}
+
+.map-node__meta {
+  font-size: 0.72rem;
+  color: #8a7a62;
+}
+
+/* ── boot error ──────────────────────────────────────────────────── */
+
+.boot-error {
+  padding: 2.5rem;
+  color: #e8dcc8;
+}
+
+.boot-error h1 {
+  color: #d98c7c;
+  font-weight: 400;
+  letter-spacing: 0.3em;
+}
+
+.boot-error code {
+  color: #d9b87c;
+}
+
+.boot-error ul {
+  margin-top: 1rem;
+  line-height: 1.8;
+}
+
+.debug-panel__content {
+  font-size: 0.72rem;
+  color: #8a7a62;
+}
+
 /* ── debug panel (` to toggle) ───────────────────────────────────── */
 
 .debug-panel {

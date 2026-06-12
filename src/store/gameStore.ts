@@ -2,9 +2,11 @@
  * Engine↔React bridge (DESIGN §2.1: "a 50-line emitter", no state library).
  * Plain TS — React coupling lives only in useGameState.ts.
  */
+import type { ContentDB } from "../engine/content/loader";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
+import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState } from "../engine/state/types";
 
@@ -40,6 +42,12 @@ export class GameStore {
 
   reset(overrides: InitialStateOverrides = {}): void {
     this.state = createInitialState(overrides);
+    this.emit();
+  }
+
+  /** Start a fresh playthrough from validated content (skeleton-plan §5). */
+  newGame(db: ContentDB): void {
+    this.state = createNewGameState(db);
     this.emit();
   }
 

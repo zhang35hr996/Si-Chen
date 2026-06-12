@@ -1,0 +1,65 @@
+/**
+ * New game from content (skeleton-plan §5): world.json + character files
+ * become the initial GameState. The ContentDB is already cross-validated,
+ * so this is a pure, deterministic mapping.
+ */
+import { createCalendar, toGameTime } from "../calendar/time";
+import type { ContentDB } from "../content/loader";
+import type { CharacterMemoryStore, GameState, RelationshipState, CharacterStanding } from "./types";
+
+export function memoryEntryId(charId: string, seq: number): string {
+  return `mem_${charId}_${String(seq).padStart(6, "0")}`;
+}
+
+export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
+  const calendar = createCalendar({
+    ...db.world.calendar.start,
+    apMax: db.world.calendar.apMax,
+  });
+  const startTime = toGameTime(calendar);
+
+  const relationships: Record<string, RelationshipState> = {};
+  const standing: Record<string, CharacterStanding> = {};
+  const memories: Record<string, CharacterMemoryStore> = {};
+
+  for (const character of Object.values(db.characters)) {
+    relationships[character.id] = {
+      trust: character.initialRelationship.trust,
+      affinity: character.initialRelationship.affinity,
+      flags: [...character.initialRelationship.flags],
+    };
+    standing[character.id] = { ...character.initialStanding };
+    memories[character.id] = {
+      entries: character.initialMemories.map((draft, index) => ({
+        id: memoryEntryId(character.id, index + 1),
+        kind: draft.kind,
+        summary: draft.summary,
+        salience: draft.salience,
+        createdAt: startTime,
+        tags: [...draft.tags],
+        participants: [...draft.participants],
+        ...(draft.locationId !== undefined ? { locationId: draft.locationId } : {}),
+        source: "authored" as const, // 既有背景记忆 — may be protected
+        protected: draft.protected,
+      })),
+      nextSeq: character.initialMemories.length + 1,
+    };
+  }
+
+  return {
+    calendar,
+    playerLocation: db.world.startingLocation,
+    resources: {
+      court: { ...db.world.startingResources.court },
+      harem: { ...db.world.startingResources.harem },
+      bloodline: { ...db.world.startingResources.bloodline, heirs: [] },
+    },
+    flags: {},
+    relationships,
+    standing,
+    memories,
+    eventLog: [],
+    sceneHistory: [],
+    rngSeed,
+  };
+}

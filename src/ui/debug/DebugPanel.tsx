@@ -4,11 +4,12 @@
  */
 import { useEffect, useState } from "react";
 import { formatAp, formatGameTime } from "../../engine/calendar/time";
+import type { ContentDB } from "../../engine/content/loader";
 import { formatErrorTag } from "../../engine/infra/errors";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 
-export function DebugPanel({ store }: { store: GameStore }) {
+export function DebugPanel({ store, db }: { store: GameStore; db?: ContentDB }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -20,10 +21,20 @@ export function DebugPanel({ store }: { store: GameStore }) {
   }, []);
 
   if (!open) return null;
-  return <DebugPanelBody store={store} />;
+  return <DebugPanelBody store={store} db={db} />;
 }
 
-function DebugPanelBody({ store }: { store: GameStore }) {
+function ContentSummary({ db }: { db: ContentDB }) {
+  return (
+    <p className="debug-panel__content">
+      content v{db.contentVersion} · 角色 {Object.keys(db.characters).join(", ")} · 地点{" "}
+      {Object.keys(db.locations).join(", ")} · 事件 {Object.keys(db.events).length} · 场景{" "}
+      {Object.keys(db.scenes).length} · 位分 {Object.keys(db.ranks).join(", ")}
+    </p>
+  );
+}
+
+function DebugPanelBody({ store, db }: { store: GameStore; db?: ContentDB }) {
   const state = useGameState(store);
   const [lastRejection, setLastRejection] = useState<string | null>(null);
 
@@ -58,6 +69,7 @@ function DebugPanelBody({ store }: { store: GameStore }) {
         </button>
       </div>
       {lastRejection && <p className="debug-panel__rejection">{lastRejection}</p>}
+      {db && <ContentSummary db={db} />}
       <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
     </aside>
   );
