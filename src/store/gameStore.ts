@@ -5,6 +5,7 @@
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import { applyEffects } from "../engine/effects/funnel";
+import { resolveEvent, type EventResolution } from "../engine/events/resolve";
 import type { GameError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import type { Result } from "../engine/infra/result";
@@ -84,6 +85,28 @@ export class GameStore {
 
   getLastEffectReport(): EffectReport | null {
     return this.lastEffectReport;
+  }
+
+  /**
+   * Resolve an event as ONE transaction: same effect funnel + apCost spend +
+   * eventLog entry (review rule #4). Rejection → state untouched, no notify,
+   * NOT marked fired; errors logged once and reported as diagnostics.
+   */
+  resolveEvent(
+    db: ContentDB,
+    eventId: string,
+    effects: readonly EventEffect[],
+  ): Result<EventResolution, GameError[]> {
+    const result = resolveEvent(db, this.state, eventId, effects);
+    if (result.ok) {
+      this.state = result.value.state;
+      this.lastEffectReport = { effects, outcome: "applied", errors: [] };
+      this.emit();
+    } else {
+      for (const error of result.error) this.logger?.logGameError(error);
+      this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
+    }
+    return result;
   }
 
   private lastEffectReport: EffectReport | null = null;

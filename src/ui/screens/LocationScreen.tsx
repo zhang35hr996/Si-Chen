@@ -2,6 +2,7 @@ import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatAp, formatGameTime } from "../../engine/calendar/time";
 import { getPresentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
+import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { CharacterCard } from "../components/CharacterCard";
@@ -11,11 +12,13 @@ export function LocationScreen({
   store,
   registry,
   onOpenMap,
+  onStartEvent,
 }: {
   db: ContentDB;
   store: GameStore;
   registry: AssetRegistry;
   onOpenMap: () => void;
+  onStartEvent: (eventId: string) => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -25,6 +28,7 @@ export function LocationScreen({
   }
   const present = getPresentAt(db, state, location.id);
   const background = registry.background(location.backgroundKey);
+  const eligible = getEligibleEvents(db, state, "location_enter");
 
   return (
     <main className="location-screen">
@@ -46,6 +50,23 @@ export function LocationScreen({
         <p className="location-screen__desc">{location.description}</p>
         <p className="location-screen__ambience">{location.ambience.join(" · ")}</p>
       </section>
+
+      {eligible.length > 0 && (
+        <section className="location-screen__events">
+          {eligible.map(({ event, affordable }) => (
+            <button
+              key={event.id}
+              type="button"
+              className="location-screen__event"
+              disabled={!affordable}
+              title={affordable ? `耗费 ${event.apCost} 行动点` : "行动点不足"}
+              onClick={() => onStartEvent(event.id)}
+            >
+              {event.title}（{event.apCost} 行动点{affordable ? "" : " · 行动点不足"}）
+            </button>
+          ))}
+        </section>
+      )}
 
       <section className="location-screen__present">
         {present.length === 0 ? (

@@ -22,7 +22,7 @@ export function MapScreen({
   db: ContentDB;
   store: GameStore;
   registry: AssetRegistry;
-  onTravelled: () => void;
+  onTravelled: (rolledOver: boolean) => void;
   onClose: () => void;
 }) {
   const state = useGameState(store);
@@ -32,7 +32,7 @@ export function MapScreen({
     const batch = buildTravelBatch(db, state, to);
     if (!batch.ok) return; // button should be disabled; backstop only
     const result = store.dispatchBatch(batch.value);
-    if (result.ok) onTravelled();
+    if (result.ok) onTravelled(result.value.rolledOver);
   };
 
   return (

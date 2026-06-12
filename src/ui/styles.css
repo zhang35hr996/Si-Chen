@@ -283,6 +283,105 @@ body {
   color: #8a7a62;
 }
 
+/* ── location event hooks ────────────────────────────────────────── */
+
+.location-screen__events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  padding: 1.2rem 2rem 0;
+}
+
+.location-screen__event {
+  font: inherit;
+  padding: 0.5rem 1.2rem;
+  color: #d9b87c;
+  background: #241c15;
+  border: 1px solid #8a6d3f;
+  cursor: pointer;
+}
+
+.location-screen__event:hover:enabled {
+  border-color: #d9b87c;
+}
+
+.location-screen__event:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── event screen (interim PR 7 UI) ──────────────────────────────── */
+
+.event-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.event-screen__cost {
+  color: #8a7a62;
+  font-size: 0.85rem;
+  letter-spacing: 0.15em;
+}
+
+.event-screen__body {
+  flex: 1;
+  display: flex;
+  gap: 2rem;
+  padding: 2rem;
+  align-items: flex-start;
+}
+
+.event-screen__portrait {
+  width: 14rem;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border: 1px solid #5c4d3a;
+  background: #14100e;
+}
+
+.event-screen__dialogue {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.event-screen__line {
+  line-height: 1.9;
+  color: #e8dcc8;
+}
+
+.event-screen__speaker {
+  display: block;
+  font-size: 0.8rem;
+  color: #d9b87c;
+  letter-spacing: 0.2em;
+}
+
+.event-screen__choices {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 32rem;
+}
+
+.event-screen__choices button {
+  font: inherit;
+  text-align: left;
+  padding: 0.6rem 1.1rem;
+  color: #e8dcc8;
+  background: #1c1611;
+  border: 1px solid #5c4d3a;
+  cursor: pointer;
+}
+
+.event-screen__choices button:hover {
+  border-color: #d9b87c;
+  color: #d9b87c;
+}
+
 /* ── boot error ──────────────────────────────────────────────────── */
 
 .boot-error {
