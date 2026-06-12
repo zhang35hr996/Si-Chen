@@ -1,8 +1,12 @@
 # Si-Chen — Foundational Design Document
 
-**Status:** Draft v1 — pre-implementation
+**Status:** Draft v2.1 — pre-implementation, aligned to the world bible `docs/background-v0.1.md`
 **Audience:** Engineers implementing the MVP vertical slice
 **Scope:** Architecture, data model, memory, dialogue, scenes, assets, save/load, errors, testing, roadmap
+
+**v2 changes (setting alignment only — architecture unchanged):** product vision recast to the 礼法女尊 imperial-harem setting; calendar/AP time model replaces day+time-slot (§1.1.1, §3, §6.1); court status (位分 rank / 恩宠 favor) added to the data model (§3.2); 血脉 lineage state designed but slice-inert (§3.8); lexicon & address rules fed into prompts and validation (§5.3–§5.5); vertical slice recast to the palace cast (§10); two new risks (§11). The module map, memory system, dialogue pipeline, validation gates, save/load, error handling, and testing strategy carry over from v1 intact.
+
+**v2.1 changes (model strategy & palace-news context):** multi-vendor model routing with task profiles (§2.1, §5.7); model evaluation metrics & bake-off harness (§5.8); `WorldLexicon` promoted to a full schema (§3.9); public-record layer so NPCs react to palace-wide events (§3.5, §4.1, §5.4); authored NPC↔NPC stances (§3.1). Runtime validation stays deterministic engine code — there is deliberately no LLM-as-validator in the play loop (§5.7).
 
 ---
 
@@ -10,16 +14,24 @@
 
 ### 1.1 What the game is
 
-A **character-driven narrative game** (visual-novel / social-sim hybrid) in which the player moves between a handful of locations in a small world, talks to a small cast of characters, and watches relationships and the world state evolve. Dialogue is **AI-generated but engine-governed**: each character speaks from their own profile, mood, relationship state, and **private subjective memory**, while all consequences (memory writes, relationship changes, event triggers) pass through validated, typed update channels.
+A **character-driven court/harem narrative game** (visual-novel / social-sim hybrid) set in the ritualized matriarchal empire defined in `docs/background-v0.1.md`. The player is the **女帝** (reigning Empress), moving between a handful of palace locations, talking to a small cast of consorts (侍君) and court figures, and watching relationships, court standing, and the world state evolve. Dialogue is **AI-generated but engine-governed**: each character speaks from their own profile, mood, relationship state, court status, and **private subjective memory**, while all consequences (memory writes, relationship changes, rank/favor changes, event triggers) pass through validated, typed update channels.
 
-- **Genre:** narrative adventure / relationship sim with emergent dialogue.
-- **Target experience:** "These characters remember me, and they each remember things *differently*." The player feels continuity — a promise made on day 2 is referenced on day 9; a character who saw you lie trusts you less than one who only heard about it.
-- **Core loop:** open map → pick a location → see who's there and what's happening → talk (scripted scene or generated conversation) → choose responses → relationships/memories/world state update → new scenes unlock → time advances.
-- **What makes it compelling:** persistent per-character subjective memory + relationship state driving generated dialogue, inside a hand-authored scaffold of scenes and events that gives the story shape. Neither pure VN (static) nor pure chatbot (shapeless).
+- **Genre:** narrative court/harem sim with emergent dialogue. Game text is Simplified Chinese; code, schemas, and ids are English.
+- **Target experience:** "These consorts remember me, and they each remember things *differently*." The player feels continuity — a promise made one 旬 is referenced months later; the consort you lied to face-to-face trusts you less than the one who only heard palace gossip about it.
+- **Core loop:** open palace map → pick a location → see who's there and what's happening → talk (scripted scene or generated conversation) → choose responses → relationships/memories/court status/world state update → new scenes unlock → action points drain and the calendar advances (§1.1.1).
+- **What makes it compelling:** persistent per-character subjective memory + relationship/court state driving generated dialogue, inside a hand-authored scaffold of scenes and events that gives the story shape. Neither pure VN (static) nor pure chatbot (shapeless).
+
+#### 1.1.1 Time model (from the world bible §11)
+
+> 1 year = 12 months; 1 month = 3 action-days (上旬 / 中旬 / 下旬); 1 action-day = **5 action points (AP)**.
+
+Travel and light actions cost 1 AP; medium actions (侍寝, banquets, deep talks) cost 2; heavy actions (大朝会, 大祭, 转胎仪式) cost 3+. When AP reaches 0 the action-day rolls over and a `time_advance` checkpoint fires. The bible's per-旬 themes (上旬 朝政 / 中旬 后宫 / 下旬 宗嗣) are **not a mechanism** — they are just event pools gated by `periodIs` conditions (§3.5).
 
 ### 1.2 Intentionally out of scope for MVP
 
 - Combat, action mechanics, minigames, inventory, economy.
+- 江山 (state/court governance) as a simulated system — in the slice it exists only as flags, events, and dialogue color.
+- 血脉 mechanics (经血祭祀, 怀胎, 自孕/承养, 胎息稳定度) as dedicated subsystems — the state schema is reserved now (§3.8) but the slice represents them with events + flags so the architecture is proven first.
 - Quests as a formal system (events + flags cover the slice).
 - Character-to-character autonomous simulation (NPCs talking to each other off-screen).
 - Voice, music systems, animation beyond portrait swaps and simple transitions.
@@ -29,22 +41,22 @@ A **character-driven narrative game** (visual-novel / social-sim hybrid) in whic
 ### 1.3 MVP feature triage
 
 **Must have (the vertical slice is not done without these):**
-1. 3 characters with profiles, portraits (placeholder, ≥3 expressions each), independent memory.
-2. 3 locations with backgrounds, a map screen, click-to-travel navigation.
-3. Time model (day + time-slot) advancing on actions.
+1. 3 consorts (侍君) with profiles, portraits (placeholder, ≥3 expressions each), independent memory.
+2. 3 palace locations with backgrounds, a palace map screen, click-to-travel navigation.
+3. Calendar/AP time model (year → month → 旬 action-day → 5 AP) advancing on actions.
 4. Dialogue screen: portrait, name, text, 2–4 player choices.
 5. Scripted scenes (authored JSON) and generated conversations (LLM) through the same runtime.
 6. Structured AI output → validated memory/relationship/event updates.
-7. Relationship state per character (trust/affection + flags) influencing dialogue.
+7. Relationship state (trust/affection + flags) and court status (位分 rank + 恩宠 favor) per character, influencing dialogue.
 8. Save/load (manual slots + autosave), versioned, corruption-tolerant.
 9. Debug overlay: state inspector, per-character memory browser, prompt viewer, force-event.
 10. Full fallback ladder: missing asset → placeholder; AI failure → canned dialogue; bad save → recovery.
 
 **Should have soon after MVP:**
-- Character schedules (location by time-slot), mood decay/drift, conversation topic memory ("we already talked about this today"), scene cooldown UI hints, settings screen, asset preloading, a second "pack" of content to prove data-driven extension.
+- Character schedules (location by 旬/AP), mood decay/drift, 下旬 宗嗣 checkpoint events as authored scenes (经血祭祀, 胎息检查), rank promotion/demotion ceremony scenes, conversation topic memory ("we already talked about this today"), scene cooldown UI hints, settings screen, asset preloading, a second "pack" of content to prove data-driven extension.
 
 **Later expansion:**
-- Quests, inventory, factions, NPC↔NPC generated side conversations, procedural events, schedules with exceptions, affection/rivalry webs, Steam/desktop packaging (Tauri), real art pipeline integration, audio.
+- Full 血脉 subsystem (§3.8: menses rites, pregnancy, 承养 lifecycle with its legal rules), 江山 systems (朝政, factions), quests, inventory, gossip propagation (NPC↔NPC secondhand memory), NPC↔NPC generated side conversations, procedural events, schedules with exceptions, affection/rivalry webs, Steam/desktop packaging (Tauri), real art pipeline integration, audio.
 
 ---
 
@@ -65,7 +77,7 @@ There is no existing code (empty repo), so the stack is chosen fresh:
 | Tests | **Vitest** | Native to the Vite ecosystem. |
 | Content | JSON files in `content/`, validated at load | Data-driven extension without code changes. |
 | Persistence | `localStorage` for slots + JSON export/import (IndexedDB only if saves outgrow ~5 MB) | Local-first; zero infra. |
-| AI dialogue | **Provider interface** with two impls: `LLMProvider` (Claude API via Anthropic SDK) and `ScriptedProvider` (canned/mock) | Game runs fully offline on ScriptedProvider; LLM is a plug-in, not a dependency. |
+| AI dialogue | **Provider interface** with pluggable vendor adapters: `LLMProvider` (one **OpenAI-compatible adapter** covers Qwen/Kimi/DeepSeek/OpenAI — same wire format, different `baseURL`+model id; an **Anthropic adapter** covers Claude) and `ScriptedProvider` (canned/mock). Models are picked per **task profile** via `ModelRouting` config (§5.7) | Game runs fully offline on ScriptedProvider; vendors are config, not architecture. Which model writes the best 古风 Chinese is an empirical bake-off (§5.8), not a stack decision. |
 | AI key handling | Dev: user-supplied key in local settings, called client-side. Production path: a **single-endpoint proxy** (`POST /dialogue`) — designed now, deployed later | Don't ship keys in a client; but don't build a backend before the slice needs one. |
 
 **Why web-based / local-first:** a narrative game is text + images + UI state; the browser is the cheapest excellent renderer for that. Local-first means no accounts, no server state, no sync bugs; saves are user-owned JSON. The only network dependency is the optional LLM call, which is isolated behind one interface with an offline fallback. Desktop packaging later is a Tauri wrapper, not a rewrite.
@@ -103,12 +115,12 @@ For each module: responsibility, owned data, public interface, must-not-do, depe
 #### GameStateManager (`engine/state/`)
 - **Responsibility:** owns the single authoritative `GameState`; applies **commands** (typed mutations) and emits change notifications. All state changes in the entire game flow through `dispatch`.
 - **Owns:** `GameState` (time, player position, flags, relationship states, event log, scene history pointer). Does **not** own character memory contents (delegates to MemorySystem) but holds the serialized memory stores inside `GameState` for save purposes.
-- **Interface:** `getState(): Readonly<GameState>`, `dispatch(cmd: GameCommand): CommandResult`, `subscribe(fn)`. Commands: `ADVANCE_TIME`, `MOVE_TO_LOCATION`, `SET_FLAG`, `APPLY_RELATIONSHIP_DELTA`, `APPEND_MEMORY`, `RECORD_EVENT_FIRED`, `APPLY_SCENE_OUTCOME`, …
+- **Interface:** `getState(): Readonly<GameState>`, `dispatch(cmd: GameCommand): CommandResult`, `subscribe(fn)`. Commands: `SPEND_AP` (rolls the 旬/month/year when AP hits 0), `MOVE_TO_LOCATION`, `SET_FLAG`, `APPLY_RELATIONSHIP_DELTA`, `APPLY_FAVOR_DELTA`, `SET_RANK`, `APPEND_MEMORY`, `RECORD_EVENT_FIRED`, `APPLY_SCENE_OUTCOME`, …
 - **Must not:** call the AI, touch the DOM, read files, know what a "scene" means narratively.
 - **Depends on:** Logger only.
 
 #### ContentLoader (`engine/content/`)
-- **Responsibility:** load + Zod-validate all static content (characters, locations, scenes, events, asset manifest) at boot; produce a typed, frozen `ContentDB` with cross-reference checking (every `locationId`, `characterId`, `sceneId`, asset key referenced anywhere must exist).
+- **Responsibility:** load + Zod-validate all static content (characters, locations, scenes, events, lexicon, rank table, asset manifest) at boot; produce a typed, frozen `ContentDB` with cross-reference checking (every `locationId`, `characterId`, `sceneId`, asset key referenced anywhere must exist).
 - **Owns:** the immutable `ContentDB`.
 - **Interface:** `loadAll(): Promise<Result<ContentDB, ContentError[]>>`, `getCharacter(id)`, `getScene(id)`, `getLocation(id)`, `getEvent(id)` (throwing typed `ContentError` on miss).
 - **Must not:** hold mutable runtime state; silently skip invalid files (collect and report all errors).
@@ -159,7 +171,7 @@ For each module: responsibility, owned data, public interface, must-not-do, depe
 - **Must not:** advance time or trigger events directly (returns data; the travel *command* does the rest).
 
 #### AssetRegistry (`engine/assets/`)
-- **Responsibility:** resolve logical asset keys (`portrait.mara.smile`) to URLs via the manifest; preload per-location bundles; provide fallback chain on miss (§6.3).
+- **Responsibility:** resolve logical asset keys (`portrait.shen_yan.smile`) to URLs via the manifest; preload per-location bundles; provide fallback chain on miss (§6.3).
 - **Owns:** parsed `AssetManifest`, load-status cache.
 - **Interface:** `resolve(key: AssetKey): ResolvedAsset` (never throws — always returns something drawable, flags `isFallback`), `preload(keys): Promise<void>`.
 - **Must not:** be bypassed (UI components never hardcode asset paths).
@@ -185,16 +197,17 @@ For each module: responsibility, owned data, public interface, must-not-do, depe
 si-chen/
 ├── content/                      # data, no code — adding here adds game
 │   ├── characters/               #   one file per character
-│   │   └── mara.json
+│   │   └── shen_yan.json
 │   ├── locations/
-│   │   └── inn.json
+│   │   └── fengyi_palace.json
 │   ├── scenes/
-│   │   └── intro_mara.json
+│   │   └── intro_shen_yan.json
 │   ├── events/
-│   │   └── ev_mara_intro.json
+│   │   └── ev_shen_yan_intro.json
 │   ├── fallback_dialogue/        #   canned lines per character for AI failure
-│   │   └── mara.json
-│   └── world.json                #   map graph, time-slot config, starting state
+│   │   └── shen_yan.json
+│   ├── lexicon.json              #   world terms (胎息/承养/…), address & self-reference rules, banned terms (§5.4)
+│   └── world.json                #   map graph, calendar config, rank table (位分), starting state
 ├── assets/
 │   ├── portraits/<charId>/<expression>.png
 │   ├── backgrounds/<locationId>.png
@@ -229,43 +242,46 @@ si-chen/
 
 ## 3. Data Model
 
-Schemas are **Zod definitions**; TS types are inferred (`z.infer`), so runtime validation and compile-time types cannot drift. Shown here as TS interfaces for readability. Conventions: IDs are lowercase snake strings, namespaced by collection (`mara`, not `char_001`); cross-references validated at load; all game-time stamps use `GameTime {day:number, slot:"morning"|"afternoon"|"evening"|"night"}`.
+Schemas are **Zod definitions**; TS types are inferred (`z.infer`), so runtime validation and compile-time types cannot drift. Shown here as TS interfaces for readability. Conventions: IDs are lowercase snake strings, namespaced by collection (`shen_yan`, not `char_001`); cross-references validated at load; all game-time stamps use `GameTime { year: number; month: number /*1–12*/; period: "early"|"mid"|"late" /*上旬·中旬·下旬*/; ap: number /*AP remaining this action-day, 5→0*/ }`. Recency math uses the derived **action-day index** (`((year*12 + month-1)*3) + periodOrdinal`) so "days" in scoring formulas mean action-days.
 
 ### 3.1 Character & CharacterProfile (static content)
 
 ```ts
 interface Character {
-  id: string;                    // "mara"
+  id: string;                    // "shen_yan"
   profile: CharacterProfile;
-  defaultLocation: string;       // locationId
+  defaultLocation: string;       // locationId — typically the consort's own palace
   schedule?: ScheduleRule[];     // post-MVP; absent = always at defaultLocation
   portraitSet: string;           // asset namespace, usually == id
   expressions: string[];         // ["neutral","smile","frown","worried"] — must exist in manifest
   voice: VoiceSpec;              // prompt-facing style constraints
   initialRelationship: RelationshipState;
+  initialCourt: CourtState;      // starting 位分 + 恩宠 (§3.2)
   initialMemories: MemoryEntryDraft[];   // seeded subjective backstory
   secrets: Secret[];
+  stances?: { charId: string; attitude: string }[];  // authored one-line attitudes toward other NPCs,
+                                         // prompt-fed when both are present; dynamic NPC↔NPC state is post-MVP
 }
 
 interface CharacterProfile {
   name: string;
   age: number;
-  role: string;                  // "innkeeper"
+  role: string;                  // "皇后（凤后，后宫之主）"
   appearance: string;            // 1–2 sentences, for prompt + art reference
   personalityTraits: string[];   // 3–6 adjectives, stable
-  coreFacts: string[];           // immutable truths ("grew up in the capital")
+  coreFacts: string[];           // immutable truths ("出身世族沈氏")
   goals: string[];               // current wants — drive dialogue agendas
   speechStyle: string;           // "warm, teasing, short sentences, never curses"
 }
 
 interface VoiceSpec {
   register: "formal" | "casual" | "rough" | "poetic";
-  quirks: string[];              // ["calls the player 'stranger' until trust ≥ 30"]
+  quirks: string[];              // ["自称『臣后』，仪式场合用『本宫』", "trust ≥ 60 后私下偶尔自称『我』"]
   tabooTopics: string[];         // things the character deflects from
 }
 
 interface Secret {
-  id: string;                    // "mara_debt"
+  id: string;                    // "shen_yan_ledger"
   content: string;               // what's true
   revealCondition?: TriggerCondition;  // when it MAY surface in dialogue
 }
@@ -275,32 +291,37 @@ interface Secret {
 
 ```json
 {
-  "id": "mara",
+  "id": "shen_yan",
   "profile": {
-    "name": "Mara",
-    "age": 38,
-    "role": "innkeeper",
-    "appearance": "Broad-shouldered woman with graying braids and flour-dusted sleeves.",
-    "personalityTraits": ["warm", "shrewd", "protective", "secretly anxious"],
-    "coreFacts": ["owns the Driftwood Inn", "widowed six years ago"],
-    "goals": ["keep the inn solvent", "find out who the newcomer (player) really is"],
-    "speechStyle": "Warm and teasing; short sentences; switches to clipped formality when suspicious."
+    "name": "沈晏",
+    "age": 26,
+    "role": "皇后（凤后，后宫之主）",
+    "appearance": "清瘦端方，常服深青凤纹礼衣，仪态一丝不苟。",
+    "personalityTraits": ["端肃", "克制", "敏锐", "外冷内热", "暗自不安"],
+    "coreFacts": ["出身世族沈氏", "大婚三年，执掌凤印总理后宫", "久不承宠，地位全系于名分与母家"],
+    "goals": ["维持后宫秩序与自身体面", "试探陛下对沈氏一族的真实态度"],
+    "speechStyle": "措辞雅正，多用敬语，句子短而克制；动情时偶有一瞬失措，随即收敛。"
   },
-  "defaultLocation": "inn",
-  "portraitSet": "mara",
+  "defaultLocation": "fengyi_palace",
+  "portraitSet": "shen_yan",
   "expressions": ["neutral", "smile", "frown", "worried"],
-  "voice": { "register": "casual", "quirks": ["calls player 'stranger' until trust >= 30"], "tabooTopics": ["her late husband's debts"] },
-  "initialRelationship": { "trust": 10, "affection": 5, "flags": [] },
+  "voice": { "register": "formal", "quirks": ["自称『臣后』，仪式场合用『本宫』", "称玩家『陛下』，绝不直呼"], "tabooTopics": ["自己久不承宠之事", "沈氏母家在朝中的动向"] },
+  "initialRelationship": { "trust": 30, "affection": 15, "flags": [] },
+  "initialCourt": { "rank": "huanghou", "favor": 20 },
   "initialMemories": [
-    { "kind": "event", "summary": "A stranger (the player) arrived in town yesterday on the evening ferry.", "salience": 60, "tags": ["player", "arrival"], "protected": true }
+    { "kind": "event", "summary": "陛下已有三月未踏入凤仪宫，昨日大朝会后却单独召见了楚贵君。", "salience": 70, "tags": ["player", "favor", "chu_he"], "protected": true }
   ],
   "secrets": [
-    { "id": "mara_debt", "content": "Mara owes the harbormaster a large sum and could lose the inn.", "revealCondition": { "all": [{ "relationshipAtLeast": { "char": "mara", "field": "trust", "value": 60 } }] } }
+    { "id": "shen_yan_ledger", "content": "沈晏借『账册法』之名私录各宫用度，暗中推演前朝派系的银钱往来，已逾男子之学的边界。", "revealCondition": { "all": [{ "relationshipAtLeast": { "char": "shen_yan", "field": "trust", "value": 60 } }] } }
+  ],
+  "stances": [
+    { "charId": "chu_he", "attitude": "视其恃宠而骄，面上仍以礼相待" },
+    { "charId": "lin_wan", "attitude": "几乎不曾留意此人，只当是掖庭寻常侍者" }
   ]
 }
 ```
 
-### 3.2 CharacterMemory, MemoryEntry, RelationshipState, MoodState (runtime)
+### 3.2 CharacterMemory, MemoryEntry, RelationshipState, CourtState, MoodState (runtime)
 
 ```ts
 interface CharacterMemory {
@@ -312,14 +333,14 @@ interface CharacterMemory {
 }
 
 interface MemoryEntry {
-  id: string;                      // "mem_mara_000017" (monotonic per char)
+  id: string;                      // "mem_shen_yan_000017" (monotonic per char)
   kind: "event" | "fact_learned" | "opinion" | "promise" | "conversation_summary";
   summary: string;                 // ≤ 240 chars, third person, from THIS character's POV
   detail?: string;                 // optional longer text, never sent to prompts wholesale
   salience: number;                // 0–100, how much this matters to the character
   createdAt: GameTime;
   lastReferencedAt?: GameTime;     // touched on retrieval — feeds recency scoring
-  tags: string[];                  // ["player","promise","inn"] — retrieval keys
+  tags: string[];                  // ["player","promise","fengyi_palace"] — retrieval keys
   participants: string[];          // character ids incl. "player"
   locationId?: string;
   source: "authored" | "scene_outcome" | "ai_proposed" | "consolidation";
@@ -327,31 +348,36 @@ interface MemoryEntry {
   supersededBy?: string;           // contradiction handling, §4.7
 }
 
-interface RelationshipState {
-  trust: number;                   // 0–100
-  affection: number;               // 0–100
-  flags: string[];                 // ["knows_player_name","owes_player_favor"]
-  // future axes (rivalry, fear, respect) added as optional fields + migration
+interface RelationshipState {     // the character's stance toward the player (女帝)
+  trust: number;                   // 0–100 信任/忠诚
+  affection: number;               // 0–100 爱慕
+  flags: string[];                 // ["has_served_night","resents_chu_he"]
+  // future axes (妒 jealousy, 惧 fear, 敬 respect) added as optional fields + migration
+}
+
+interface CourtState {             // the character's formal standing — granted by the player, never by AI
+  rank: string;                    // rank id from world.json's 位分 table ("huanghou","guijun","chenghui","gengyi",…)
+  favor: number;                   // 0–100 恩宠 — drives rank eligibility, 侍寝 priority, event conditions
 }
 
 interface MoodState {
   current: "neutral" | "happy" | "tense" | "sad" | "angry" | "anxious";
-  intensity: number;               // 0–100, decays toward neutral each time slot
+  intensity: number;               // 0–100, decays toward neutral each action-day
   cause?: string;                  // memoryEntry id or event id — debuggability
 }
 ```
 
-**Validation:** salience clamped 0–100; summary length enforced; `kind` whitelist; `source:"ai_proposed"` entries additionally pass the AI-update validator (§5.6). Trust/affection deltas clamped to ±10 per scene.
+**Validation:** salience clamped 0–100; summary length enforced; `kind` whitelist; `source:"ai_proposed"` entries additionally pass the AI-update validator (§5.6). Trust/affection/favor deltas clamped to ±10 per scene. `rank` must exist in the rank table; rank changes happen only via explicit `SET_RANK` commands from authored effects or scene outcomes — the AI cannot propose them.
 
 ### 3.3 Location & MapNode
 
 ```ts
 interface Location {
-  id: string;                      // "inn"
-  name: string;                    // "The Driftwood Inn"
+  id: string;                      // "fengyi_palace"
+  name: string;                    // "凤仪宫"
   description: string;             // shown on entry + fed to prompts as setting
-  backgroundKey: AssetKey;         // "bg.inn"
-  ambience: string[];              // ["smell of bread","fire crackling"] — prompt color
+  backgroundKey: AssetKey;         // "bg.fengyi_palace"
+  ambience: string[];              // ["殿内焚着安息香","廊下宫人垂手侍立"] — prompt color
   hooks: SceneHook[];              // interactable non-character things (post-slice ok)
 }
 
@@ -359,13 +385,13 @@ interface MapNode {
   locationId: string;
   position: { x: number; y: number };   // 0–1 normalized coords on map image
   connections: string[];           // travel edges; MVP: fully connected is fine
-  travelCost: { slots: number };   // time slots consumed (MVP: 1 for all)
+  travelCost: { ap: number };      // action points consumed (MVP: 1 for all)
   unlockedBy?: TriggerCondition;   // hidden until condition met
 }
 ```
 
 ```json
-{ "locationId": "docks", "position": { "x": 0.72, "y": 0.61 }, "connections": ["inn", "archive"], "travelCost": { "slots": 1 } }
+{ "locationId": "lantai", "position": { "x": 0.72, "y": 0.61 }, "connections": ["fengyi_palace", "yuhua_garden"], "travelCost": { "ap": 1 } }
 ```
 
 **Validation:** connections symmetric (loader auto-mirrors and warns); every `backgroundKey` exists in manifest; node positions within [0,1].
@@ -374,7 +400,7 @@ interface MapNode {
 
 ```ts
 interface Scene {
-  id: string;                          // "intro_mara"
+  id: string;                          // "intro_shen_yan"
   kind: "scripted" | "dynamic" | "hybrid";
   locationId: string;
   participants: string[];              // character ids
@@ -386,8 +412,10 @@ type SceneNode =
   | { type: "line"; id: string; speaker: string; text: string; expression?: string; next?: string }
   | { type: "choice"; id: string; choices: DialogueChoice[] }
   | { type: "branch"; id: string; condition: TriggerCondition; ifTrue: string; ifFalse: string }
-  | { type: "generate"; id: string; characterId: string; directive: string;   // authored steering, e.g. "Mara probes who the player is; she is friendly but fishing"
-      maxTurns: number; exitOn: "choice_exit" | "turn_limit"; next?: string }
+  | { type: "generate"; id: string; characterId: string; directive: string;   // authored steering, e.g. "沈晏克制地试探陛下三月不至凤仪宫的缘由；守礼、敏锐、不肯露怯"
+      maxTurns: number; exitOn: "choice_exit" | "turn_limit";
+      profile?: "dialogue" | "dialogue_keystone";                              // model routing override (§5.7); default "dialogue"
+      next?: string }
   | { type: "effect"; id: string; commands: SceneEffect[]; next?: string };   // SET_FLAG, RELATIONSHIP_DELTA, APPEND_MEMORY — engine-validated
 
 interface DialogueChoice {
@@ -416,21 +444,24 @@ interface DialogueTurn {                // what UI renders — provider-agnostic
 
 ```ts
 interface GameEvent {
-  id: string;                          // "ev_mara_debt_reveal"
+  id: string;                          // "ev_shen_yan_ledger_reveal"
   sceneId: string;                     // what runs when it fires
   checkpoint: "location_enter" | "time_advance" | "scene_end" | "game_start";
   condition: TriggerCondition;
   priority: number;                    // higher wins; ties broken by id (deterministic)
   once: boolean;
-  cooldown?: { slots: number };        // for repeatable events
+  cooldown?: { slots: number };        // for repeatable events (slots = action-days)
   exclusiveGroup?: string;             // at most one event per group per checkpoint
+  public?: boolean;                    // 宫中大事: goes into every prompt's palace-news digest (§4.1)
+  headline?: string;                   // one-line digest text, required if public ("楚贵君晋皇贵君，赐居昭阳殿")
 }
 
 type TriggerCondition =
   | { all: TriggerCondition[] } | { any: TriggerCondition[] } | { not: TriggerCondition }
-  | { flagSet: string } | { dayAtLeast: number } | { timeSlotIs: string }
+  | { flagSet: string } | { monthAtLeast: number } | { periodIs: "early" | "mid" | "late" }
   | { atLocation: string }
   | { relationshipAtLeast: { char: string; field: "trust" | "affection"; value: number } }
+  | { favorAtLeast: { char: string; value: number } } | { rankAtLeast: { char: string; rank: string } }
   | { hasMemoryTag: { char: string; tag: string } }
   | { eventFired: string } | { secretRevealed: { char: string; secretId: string } };
 ```
@@ -439,10 +470,10 @@ This closed predicate set is the **condition DSL** — adding a predicate = one 
 
 ```json
 {
-  "id": "ev_mara_debt_reveal",
-  "sceneId": "mara_debt_confession",
+  "id": "ev_shen_yan_ledger_reveal",
+  "sceneId": "shen_yan_ledger_confession",
   "checkpoint": "location_enter",
-  "condition": { "all": [ { "atLocation": "inn" }, { "relationshipAtLeast": { "char": "mara", "field": "trust", "value": 60 } }, { "not": { "eventFired": "ev_mara_debt_reveal" } } ] },
+  "condition": { "all": [ { "atLocation": "fengyi_palace" }, { "relationshipAtLeast": { "char": "shen_yan", "field": "trust", "value": 60 } }, { "not": { "eventFired": "ev_shen_yan_ledger_reveal" } } ] },
   "priority": 50,
   "once": true
 }
@@ -456,8 +487,10 @@ interface GameState {
   playerLocation: string;
   flags: Record<string, boolean | number | string>;
   relationships: Record<string, RelationshipState>;   // by characterId
+  court: Record<string, CourtState>;                   // by characterId — 位分/恩宠
   moods: Record<string, MoodState>;
   memories: Record<string, CharacterMemory>;
+  lineage: LineageState;                               // 血脉 (§3.8) — slice: inert defaults
   eventLog: EventLogEntry[];           // {eventId, firedAt} — drives once/cooldown
   sceneHistory: string[];              // completed scene ids
   pendingScene?: string;               // resume safety: scene queued but not started
@@ -481,10 +514,10 @@ interface SaveData {
 ```ts
 interface AssetManifest {
   version: number;
-  entries: Record<AssetKey, AssetEntry>;   // key e.g. "portrait.mara.smile"
+  entries: Record<AssetKey, AssetEntry>;   // key e.g. "portrait.shen_yan.smile"
 }
 interface AssetEntry {
-  path: string;                        // "portraits/mara/smile.png"
+  path: string;                        // "portraits/shen_yan/smile.png"
   kind: "portrait" | "background" | "ui" | "map";
   placeholder: boolean;                // true until real art lands — drives a debug report
   size?: { w: number; h: number };
@@ -495,11 +528,46 @@ interface AssetEntry {
 {
   "version": 1,
   "entries": {
-    "portrait.mara.neutral": { "path": "portraits/mara/neutral.png", "kind": "portrait", "placeholder": true },
-    "bg.inn": { "path": "backgrounds/inn.png", "kind": "background", "placeholder": true }
+    "portrait.shen_yan.neutral": { "path": "portraits/shen_yan/neutral.png", "kind": "portrait", "placeholder": true },
+    "bg.fengyi_palace": { "path": "backgrounds/fengyi_palace.png", "kind": "background", "placeholder": true }
   }
 }
 ```
+
+### 3.8 LineageState (designed now, slice-inert)
+
+The 血脉 pillar (经血祭祀 / 怀胎 / 自孕·承养, world bible §3 & §5) is core to the setting but **not an MVP mechanism** — the slice plays it through events and flags. The state shape is reserved now so saves won't need a disruptive migration later:
+
+```ts
+interface LineageState {
+  menses: { status: "normal" | "irregular" | "absent"; lastRiteAt?: GameTime };  // 经血状态 — a political signal, not just biology
+  pregnancy?: {
+    mode: "self" | "chengyang";        // 自孕 | 承养 (bible §3.1)
+    conceivedAt: GameTime;
+    chengyangCharId?: string;          // 承养人 — immutable once set (bible §3.3: no substitution, ever)
+    stability: number;                 // 0–100 胎息稳定度
+  };
+  heirs: { id: string; bornAt: GameTime; chengyangCharId?: string }[];
+}
+```
+
+When the subsystem lands (post-slice), its rules — 三月转胎 timing, blood-nurture irreplaceability, 承养人 health drain — are enforced the same way everything else is: as validation inside dedicated commands (`BEGIN_PREGNANCY`, `ASSIGN_CHENGYANG`, …) evaluated at 下旬 `time_advance` checkpoints. No new architecture required.
+
+### 3.9 WorldLexicon (`content/lexicon.json`)
+
+The setting's biggest LLM failure mode isn't plot — it's vocabulary: 皇郎 drifting to 皇子, 承养人 to “血父”, a 侍宸 self-referencing 本宫, men written as 现代恋爱脑, or invented ranks (圣血妃, 御胎君). The lexicon is the single source of truth feeding both prompt injection (§5.4) and the gate-2 string validators (§5.3):
+
+```ts
+interface WorldLexicon {
+  approvedTerms: string[];           // 胎息, 承养, 承养人, 承嗣君, 育嗣君, 养君, 自孕, 经血祭祀, 皇郎, 贵主, …
+  forbiddenTerms: string[];          // 父皇, 血父, 王爷, 娘娘(用于男子), modern vocabulary, …
+  rankAddressRules: { rank: string; selfRef: string; addressedAs: string }[];  // bible §9.3 自称表
+  kinshipTerms: { concept: string; term: string }[];                           // bible §8 称谓体系
+  styleRules: string[];              // "不得创造新的官职、位分、宗嗣术语；制度未定时用普通描述，不要造词"
+}
+```
+
+**Validation:** `approvedTerms ∩ forbiddenTerms = ∅`; every rank in `rankAddressRules` exists in world.json's rank table; loader cross-checks that no character's `voice.quirks` contradicts their rank's `selfRef`. The prompt always carries the rules verbatim: *你只能使用 approvedTerms 中的制度词；不得造词；如需表达未定制度，用普通描述。*
 
 ---
 
@@ -517,8 +585,11 @@ This is the heart of the design. Principles: **structured over freeform**, **sub
 | **Short-term transcript** | verbatim lines of the *current/last* conversation | cleared/compressed at scene end | last conversation tail, always (continuity) |
 | **Relationship + mood** | numeric axes, flags, mood | runtime | always, rendered as natural language |
 | **Secrets** | content-defined hidden knowledge + revealed flags | forever | only `revealCondition`-eligible secrets, with handling instructions |
+| **Public record (宫闱邸闻)** | palace-wide happenings everyone knows: 册封, 晋降, 大祭, 降罪 — `public:true` events in the eventLog | forever (digest capped) | last ~5 public-event headlines, always |
 
-**Subjectivity:** there is no global "what happened" store that characters read from. When a scene ends, the SceneOutcome generates **per-witness** memory drafts — each present character gets their own entry, worded from their POV, with their own salience. Mara (lied to directly) stores *"The stranger lied to me about where they came from"* at salience 75; Joren (overheard) stores *"The stranger told Mara some story about the capital; sounded off"* at salience 40. Characters absent from a scene get nothing unless an explicit gossip effect writes a secondhand entry (post-MVP system; supported now by just authoring an `effect` node).
+**Subjectivity:** there is no global "what happened" store that characters read from. When a scene ends, the SceneOutcome generates **per-witness** memory drafts — each present character gets their own entry, worded from their POV, with their own salience. 沈晏 (lied to face-to-face about why the Empress skipped a rite) stores *“陛下当面诓我，说下旬未行祭祀是太医的意思”* at salience 75; 楚荷 (heard it secondhand) stores *“听闻陛下同皇后解释了祭祀的事，说辞含糊”* at salience 40. Characters absent from a scene get nothing unless an explicit gossip effect writes a secondhand entry (post-MVP system; supported now by just authoring an `effect` node — and since palace gossip is thematically load-bearing in this setting, the gossip system ranks high on the post-MVP list).
+
+**Palace-wide events (宫中大事):** big public happenings — 册封, 晋降, 大祭, 降罪 — must not depend on who was in the room. Events flagged `public: true` (§3.5) contribute their `headline` to a "recent palace news" digest rendered into **every** character's prompt (§5.4): shared public knowledge, the NPC equivalent of reading the 邸报. Each character's *reaction* to the news stays subjective — a private memory/opinion entry, authored per-witness or written by the AI's own `memory_updates` when the topic comes up in conversation. No new storage: the digest is a read over `GameState.eventLog`. This is what lets 林晚 comment on 楚荷's promotion she never witnessed, while still *feeling* about it differently than 沈晏 does.
 
 ### 4.2 How memory is created
 
@@ -543,7 +614,7 @@ Scoring (plain weighted sum — tune constants later, no embeddings in MVP):
 
 ```
 score = 0.45 * salience/100
-      + 0.25 * recency          // exp decay on (now - lastReferencedAt ?? createdAt), half-life ≈ 6 days
+      + 0.25 * recency          // exp decay on (now - lastReferencedAt ?? createdAt), half-life ≈ 6 action-days (= 2 game months)
       + 0.20 * tagOverlap       // |query.tags ∩ entry.tags| / |query.tags|
       + 0.10 * participantMatch
 + guarantees: all `promise` entries involving the player are always included;
@@ -577,10 +648,10 @@ Memories are never edited in place. A new entry that contradicts an old one (sam
 
 ### 4.8 Bloat prevention & consolidation
 
-Budget: **60 active entries per character** (configurable). When exceeded, consolidation runs at the next safe checkpoint (end of day):
-- Candidates: unprotected, salience < 40, not referenced in 5+ days, not `promise`.
-- Cluster candidates by shared dominant tag; merge each cluster into one `consolidation` entry ("Over several days, the stranger helped around the inn a few times"), salience = max of merged + 5.
-- Originals get `supersededBy = <consolidated id>` (retained but inactive; a hard purge of superseded entries older than 30 game-days keeps saves bounded).
+Budget: **60 active entries per character** (configurable). When exceeded, consolidation runs at the next safe checkpoint (end of action-day):
+- Candidates: unprotected, salience < 40, not referenced in 5+ action-days, not `promise`.
+- Cluster candidates by shared dominant tag; merge each cluster into one `consolidation` entry (“数旬之间，林晚常在御花园伺候笔墨，安静妥帖”), salience = max of merged + 5.
+- Originals get `supersededBy = <consolidated id>` (retained but inactive; a hard purge of superseded entries older than 30 action-days keeps saves bounded).
 - `protected` entries and promises are untouchable, ever. Authored initial memories default to protected.
 
 ### 4.9 Debugging memory
@@ -596,7 +667,7 @@ Debug overlay memory browser per character: table of entries (id, kind, salience
 ```
 player intent (choice/talk)
   → DialogueOrchestrator.assembleContext
-      profile + voice + mood + relationship(level + flags, rendered as prose)
+      profile + voice + mood + relationship + court status (rank/favor), rendered as prose
       + scene directive (authored steering)            ← keeps story on rails
       + retrieved memories (§4.4)
       + eligible secrets w/ handling rules
@@ -615,19 +686,19 @@ Generated dialogue **never mutates state at render time.** Proposed updates accu
 
 ```json
 {
-  "speaker": "mara",
-  "text": "Capital folk don't usually know one end of a mop from the other. You surprise me, stranger.",
+  "speaker": "chu_he",
+  "text": "陛下竟舍得来兰台？本宫还当，这一旬的工夫都要赏给凤仪宫了。……坐呀，茶是新沏的，气性也是。",
   "emotion": "amused",
   "expression": "smile",
   "choices": [
-    { "text": "I wasn't always a clerk.", "tone": "friendly" },
-    { "text": "Maybe I'm full of surprises.", "tone": "flirty" },
-    { "text": "(Say nothing and keep mopping.)", "tone": "guarded", "isExit": false }
+    { "text": "朕去中宫议事，与你何干。", "tone": "guarded" },
+    { "text": "吃味了？朕这不是来了。", "tone": "flirty" },
+    { "text": "（不接话，自顾端起茶盏。）", "tone": "neutral", "isExit": false }
   ],
   "memory_updates": [
-    { "kind": "opinion", "summary": "The stranger works harder than expected for a self-described clerk.", "salience": 45, "tags": ["player", "work", "inn"] }
+    { "kind": "opinion", "summary": "陛下嘴上不提凤仪宫，神色却不像要疏远中宫的样子。", "salience": 45, "tags": ["player", "shen_yan", "favor"] }
   ],
-  "relationship_updates": { "trust": 3, "affection": 1 },
+  "relationship_updates": { "trust": 2, "affection": 3 },
   "event_triggers": []
 }
 ```
@@ -635,10 +706,10 @@ Generated dialogue **never mutates state at render time.** Proposed updates accu
 ### 5.3 Validation & repair (three gates)
 
 1. **Syntactic:** extract first JSON object from response; `JSON.parse`; Zod schema. Failure → one **repair retry**: re-send with the parse error appended ("Your previous output was invalid: <error>. Return only valid JSON matching the schema."). Second failure → fallback.
-2. **Semantic:** `speaker` is the requested character; `expression` ∈ character's expression list (else map via `emotion→expression` table, else `neutral`); 1–4 choices, each ≤ 120 chars; `text` ≤ 600 chars and contains no other character's dialogue; relationship deltas clamped ±5 per *turn* (and ±10 per scene total); `event_triggers` ⊆ the whitelist of trigger ids offered in the prompt (anything else dropped + logged).
+2. **Semantic:** `speaker` is the requested character; `expression` ∈ character's expression list (else map via `emotion→expression` table, else `neutral`); 1–4 choices, each ≤ 120 chars; `text` ≤ 600 chars and contains no other character's dialogue; `text` contains no banned-lexicon terms (father-line/modern vocabulary listed in `lexicon.json` — cheap string scan) and uses the correct self-reference for the speaker's rank (臣后/本宫/本位/臣侍/小侍 — regex check; violation → repair retry, not fallback); relationship deltas clamped ±5 per *turn* (and ±10 per scene total); `event_triggers` ⊆ the whitelist of trigger ids offered in the prompt (anything else dropped + logged).
 3. **Safety/state:** memory_updates pass §4.2 rule 3; the model cannot set flags, move characters, reveal non-eligible secrets (output mentioning an ineligible secret's content is not detectable cheaply — mitigated by never putting ineligible secrets in the prompt at all).
 
-**Fallback ladder:** LLM ok → use it. Retry ok → use it. Else → ScriptedProvider serves a character-appropriate canned line from `content/fallback_dialogue/<char>.json` (keyed by mood + relationship tier, e.g. "mara.tense.low_trust": "Not now, stranger. The kettle's screaming.") with generic choices (continue / leave). Turn is marked `degraded:true`; UI shows it normally (player shouldn't be slapped with an error), debug overlay counts degradations. Conversation can always be exited; the game never hard-blocks on the model.
+**Fallback ladder:** LLM ok → use it. Retry ok → use it. Else → ScriptedProvider serves a character-appropriate canned line from `content/fallback_dialogue/<char>.json` (keyed by mood + relationship tier, e.g. "shen_yan.tense.low_trust": "陛下恕罪，臣后今日精神短了些……改日再奉茶罢。") with generic choices (continue / leave). Turn is marked `degraded:true`; UI shows it normally (player shouldn't be slapped with an error), debug overlay counts degradations. Conversation can always be exited; the game never hard-blocks on the model.
 
 ### 5.4 Prompt template (per character, per turn)
 
@@ -653,26 +724,39 @@ Current goals: {goals, bulleted}
 Speech style: {speechStyle} Register: {voice.register}. Quirks: {voice.quirks}.
 Never discuss willingly: {voice.tabooTopics} — deflect if raised.
 
+== COURT & SPEECH RULES ==
+The player is the reigning Empress (女帝); address her as 陛下 unless your quirks say otherwise.
+Your rank: {rankName}. Self-reference: {selfRef per the rank table — 臣后/本宫/本位/臣侍/小侍}.
+World terms, use them correctly: {lexicon terms — 胎息, 承养, 承养人, 承嗣君, 育嗣君, 养君, 自孕, 经血祭祀, …}
+Forbidden vocabulary: {lexicon.banned — father-line terms (父亲/父皇/夫人 for men), modern speech}.
+This is a 礼法女尊 court: women hold throne, army, rites; men keep the inner palace.
+All dialogue is Simplified Chinese.
+
 == YOUR CURRENT STATE ==
 Mood: {mood.current} (intensity {mood.intensity}/100){mood.cause ? ", because " + causeSummary : ""}
-Your relationship with the player: trust {trust}/100 ({trustTierWord}), affection {affection}/100 ({affTierWord}).
+Your relationship with the Empress: trust {trust}/100 ({trustTierWord}), affection {affection}/100 ({affTierWord}).
+Your standing: rank {rankName}, favor {favor}/100 ({favorTierWord}).
 Relationship notes: {flags rendered as sentences}
 
 == WHAT YOU REMEMBER (your subjective memories — others may remember differently) ==
-{retrieved entries, newest last: "- [day {d}] {summary}"}
+{retrieved entries, newest last: "- [{year}年{month}月{period}] {summary}"}
 
 == SECRETS YOU HOLD ==        (section omitted if none eligible)
 {for each eligible secret: "- {content} — You may hint at or reveal this ONLY if the
  conversation naturally leads there and you feel safe. Otherwise guard it."}
 
+== RECENT PALACE NEWS (宫闱邸闻 — public knowledge, everyone has heard) ==
+{last ~5 public-event headlines, newest last; section omitted if none}
+
 == SCENE ==
 Location: {location.name}. {location.description} Ambience: {ambience}.
-Time: day {day}, {slot}. Also present: {others or "no one else"}.
+Time: {year}年{month}月{period 上旬/中旬/下旬}. Also present: {others or "no one else"}.
+Your attitude toward those present: {stances for present charIds; omitted if none}
 Direction for this conversation: {scene directive}
 
 == CONVERSATION SO FAR ==
 {transcript lines: "{Speaker}: {text}" — last 12 lines}
-Player ({choice.tone} tone): {player's chosen line}
+陛下 ({choice.tone} tone): {player's chosen line}
 
 == OUTPUT ==
 Respond with ONLY a JSON object, no prose around it:
@@ -685,8 +769,9 @@ Respond with ONLY a JSON object, no prose around it:
   "relationship_updates": {"trust": -5..5, "affection": -5..5} (0 if nothing changed),
   "event_triggers": [] or subset of {offeredTriggerIds} if its condition was clearly met }
 
-Rules: Speak only as {name}. ≤120 words of dialogue. React to the player's tone and to
-your memories. Do not invent facts about the world or other characters not given above.
+Rules: Speak only as {name}, in Simplified Chinese, ≤150 字 of dialogue. Obey the COURT &
+SPEECH RULES (address, self-reference, lexicon). React to the player's tone and to your
+memories. Do not invent facts about the world or other characters not given above.
 Do not reveal information from sections above verbatim as exposition.
 ```
 
@@ -694,7 +779,7 @@ Player **choices are model-generated** in dynamic nodes (with the tone-variety r
 
 ### 5.5 Staying in-character
 
-Defense in depth: (a) profile/voice/taboo sections in every prompt; (b) directive from the authored scene bounds the topic; (c) only that character's memories are in context — it literally cannot leak others' knowledge; (d) semantic validator rejects wrong-speaker output; (e) regression "voice tests" (§8) snapshot known-good outputs for prompt-change review; (f) temperature ~0.8 for dialogue, 0.2 for summarization.
+Defense in depth: (a) profile/voice/taboo sections in every prompt; (b) directive from the authored scene bounds the topic; (c) only that character's memories are in context — it literally cannot leak others' knowledge; (d) semantic validator rejects wrong-speaker output; (e) regression "voice tests" (§8) snapshot known-good outputs for prompt-change review; (f) temperature ~0.8 for dialogue, 0.2 for summarization; (g) the lexicon/self-reference string checks in gate 2 (§5.3) catch register drift cheaply, with repair retry before fallback.
 
 ### 5.6 How dialogue affects game state — the single funnel
 
@@ -705,9 +790,42 @@ raw model JSON → Zod → semantic clamps → ProposedUpdates (typed)
 
 There is exactly one path, and the reducer only accepts typed commands. The model cannot name a command; it can only fill whitelisted proposal fields. This satisfies the "AI never directly mutates state" constraint structurally rather than by discipline.
 
-### 5.7 API boundary (future backend)
+### 5.7 API boundary, vendor adapters & model routing
 
-`LLMProvider` speaks to `POST /dialogue { request: DialogueRequest }` → `{ response: RawDialogueResponse }`. In dev this "endpoint" is a local function calling the Anthropic SDK with a user-provided key (stored in localStorage settings, never in saves or content). Moving to a real proxy later changes one file. The request type contains the fully-assembled prompt — the server stays stateless and game-agnostic.
+`LLMProvider` speaks to `POST /dialogue { request: DialogueRequest }` → `{ response: RawDialogueResponse }`. In dev this "endpoint" is a local function calling a vendor SDK with a user-provided key (stored in localStorage settings, never in saves or content). Moving to a real proxy later changes one file. The request type contains the fully-assembled prompt — the server stays stateless and game-agnostic.
+
+Two vendor adapters cover every candidate model:
+- **OpenAI-compatible adapter** — Qwen (DashScope), Kimi (Moonshot), DeepSeek, OpenAI all expose OpenAI-compatible chat endpoints: one adapter, different `baseURL` + model id.
+- **Anthropic adapter** — Claude.
+
+Model choice is data, not code: a `ModelRouting` config maps **task profiles** to pinned model snapshots —
+
+| Task profile | What it is | Default candidate class | Temp |
+|---|---|---|---|
+| `dialogue` | in-character NPC turns — the hot path: every talk action, cost-sensitive, Chinese-naturalness-critical | Qwen / Kimi class | ~0.8 |
+| `dialogue_keystone` | authored-flagged key scenes (deep talks, confessions, 大事 aftermaths) where prose quality justifies premium cost | Claude class | ~0.8 |
+| `summarize` | conversation summaries, consolidation merges — background tasks: cheap + obedient beats eloquent | DeepSeek / GPT-mini class | 0.2 |
+
+Routing rules:
+- Snapshots are **pinned** — a silent vendor upgrade must never change a character's voice mid-playthrough; new snapshots only after a §5.8 scorecard run.
+- Each profile has an ordered fallback list (primary → secondary vendor → ScriptedProvider), reusing the §5.3 ladder unchanged — a vendor outage degrades exactly like a malformed response.
+- A scene's `generate` node may set `profile: "dialogue_keystone"` — authored, never automatic.
+- Swapping the bake-off winner in is a config edit, not a refactor.
+
+**What is deliberately *not* a model: runtime validation.** Gates 1–3 (§5.3) — JSON schema, lexicon/self-reference scans, clamps, whitelists — are deterministic engine code: free, instant, testable, and incapable of hallucinating an approval. A second "validator LLM" in the play loop would double latency and cost to do a strictly worse job. Likewise there is no separate "state-patch generator" model: the dialogue model proposes updates inline in its own JSON (§5.2) and the engine validates and applies them (§5.6) — one model call per turn, one funnel. LLM-as-judge appears only **offline**, in the eval harness (§5.8).
+
+### 5.8 Model evaluation — what "good" means here
+
+For this game, raw model intelligence is the wrong axis. Bake-off metrics, in priority order:
+
+1. **中文自然度** — reads like 古风宫廷 Chinese, not translated English or 网文模板. (Human-judged sample sheets.)
+2. **称谓/自称错误率** — wrong rank self-reference, invented honorifics. (Automatic: §5.3 string validators over the eval corpus.)
+3. **术语表遵守率** — uses 胎息/承养/承嗣君 correctly, never invents terms (圣血妃, 御胎君, 血父…). (Automatic: approved/forbidden scans.)
+4. **JSON 合规率** — first-try parse rate, repair-retry rate. (Automatic.)
+5. **人设长期一致性** — 20-turn drift test per character: is 沈晏 still 端肃 at turn 20? (Offline LLM-as-judge + human spot check.)
+6. **单轮成本与延迟** — tokens × price at hot-path frequency; this alone gates which models are eligible for the `dialogue` profile.
+
+Harness: `tools/eval-dialogue.ts` (extends the §8 voice-check) replays a fixed set of `DialogueRequest` fixtures against any routed model, runs the automatic checks, and emits a scorecard — same fixtures for every candidate, so vendor choices are evidence, not vibes. Run before pinning any snapshot. *Built in PR 11 alongside the first live adapter.*
 
 ---
 
@@ -716,14 +834,15 @@ There is exactly one path, and the reducer only accepts typed commands. The mode
 ### 6.1 Map & locations
 
 - Map screen renders `world.json`'s MapNodes on a single map image; nodes with unmet `unlockedBy` are hidden or shown locked.
-- Travel: click reachable node → `MOVE_TO_LOCATION` command → time advances by `travelCost.slots` → `time_advance` then `location_enter` event checkpoints run → LocationScreen renders background + present characters (clickable portraits → start conversation) + any location hooks.
-- **Presence (MVP):** character is at `defaultLocation` every slot unless a fired event/flag relocates them (`flagSet` conditions on a per-character `presenceOverrides` list in world.json). **Schedules** are the designed-but-deferred upgrade: `ScheduleRule { slot, day?, locationId, condition? }`, evaluated top-down, first match wins; the `getPresentAt()` interface already supports this so UI/events won't change.
+- Travel: click reachable node → `MOVE_TO_LOCATION` command → `SPEND_AP travelCost.ap` (AP hitting 0 rolls the 旬/month/year and fires the `time_advance` checkpoint) → `location_enter` event checkpoint runs → LocationScreen renders background + present characters (clickable portraits → start conversation) + any location hooks.
+- **Presence (MVP):** a consort is at `defaultLocation` (their own palace) every action-day unless a fired event/flag relocates them (`flagSet` conditions on a per-character `presenceOverrides` list in world.json). **Schedules** are the designed-but-deferred upgrade: `ScheduleRule { period, month?, locationId, condition? }`, evaluated top-down, first match wins; the `getPresentAt()` interface already supports this so UI/events won't change.
 - Location-specific events: just `GameEvent`s with `atLocation` conditions on the `location_enter` checkpoint.
+- **旬 themes:** the bible's 上旬 朝政 / 中旬 后宫 / 下旬 宗嗣 cadence is plain content — e.g. the 下旬 宗嗣 checks (经血祭祀 reminders, 胎息/承养 inspection scenes) are `time_advance` events with `{ periodIs: "late" }` conditions. No bespoke calendar logic in the engine.
 
 ### 6.2 Scenes & events
 
 - **Scripted scenes**: pure node graphs (line/choice/branch/effect) — deterministic, testable, no AI needed. Used for: intros, reveals, anything canon-critical.
-- **Dynamic conversations**: a 1-node `generate` scene with a directive — the default "talk to X" interaction. Directive comes from a small pool per character/relationship tier ("Mara makes small talk and probes...") so even free talk has authored intent.
+- **Dynamic conversations**: a 1-node `generate` scene with a directive — the default "talk to X" interaction. Directive comes from a small pool per character/relationship tier ("楚荷恃宠撒娇，顺势打探陛下近日的行踪……") so even free talk has authored intent.
 - **Hybrid**: scripted spine with `generate` nodes for connective conversation — the workhorse format.
 - **Trigger rules**: at each checkpoint EventEngine filters events by checkpoint → evaluates conditions → drops fired `once` events and cooling-down repeatables → groups by `exclusiveGroup` → picks max priority (deterministic tiebreak by id) → returns at most **one** event. Scene-end checkpoints can chain (reveal scene unlocks confession scene) but with a **chain depth cap of 3 per player action**; hitting the cap logs `StateError:EVENT_CHAIN_LIMIT` and defers remaining events to the next checkpoint — this is the circular-trigger guard, plus a content-validation pass that walks `eventFired` references looking for static cycles and warns at load.
 - **Consequences** are only ever `SceneOutcomeSpec` + effect nodes: flags, relationship deltas, memory appends, mood sets, presence overrides, unlocking map nodes. New scene unlocks are *not* a mechanism of their own — they're just events whose conditions (memory tags, relationship thresholds, flags) become true.
@@ -735,7 +854,7 @@ There is exactly one path, and the reducer only accepts typed commands. The mode
 - **Adding assets without code changes:** drop file → add manifest entry → (for a new expression) add to the character's `expressions` list. `tools/validate-manifest.ts` checks: every manifest path exists on disk, every content-referenced key exists in manifest, orphan files reported, and prints a "placeholder report" (% real art).
 - **Placeholder strategy:** every placeholder is a real file (solid-color card: character color + name + expression label; backgrounds: color + location name) generated by `tools/gen-placeholders.ts` from the manifest, and marked `placeholder:true`. The game *never* special-cases placeholders — they're just assets. Swapping in real art = replacing a file + flipping the flag.
 - **Runtime fallback chain (AssetRegistry.resolve, never throws):**
-  `portrait.mara.worried` missing → `portrait.mara.neutral` → built-in silhouette (a data-URI baked into the bundle, cannot be missing) ; `bg.docks` missing → built-in neutral gradient. Every fallback hit logs `AssetError:ASSET_MISSING` once per key and flags `isFallback` (debug overlay shows a badge).
+  `portrait.shen_yan.worried` missing → `portrait.shen_yan.neutral` → built-in silhouette (a data-URI baked into the bundle, cannot be missing) ; `bg.lantai` missing → built-in neutral gradient. Every fallback hit logs `AssetError:ASSET_MISSING` once per key and flags `isFallback` (debug overlay shows a badge).
 - **Expression mapping:** model outputs semantic `emotion`; a per-character (with global default) `emotionToExpression` table maps it to an actual portrait key; unmapped → `neutral`. Adding a new expression: art + manifest + table row. No code.
 - Preload per location: background + portraits×expressions of present characters on travel start.
 
@@ -779,7 +898,7 @@ The engine being framework-free makes ~90% of this headless Vitest with no DOM.
 - **Condition DSL:** table-driven truth tests per predicate + nesting (`all`/`any`/`not`).
 - **Memory:** append (validation, monotonic ids), retrieval scoring (fixture store with known scores → expected top-K order), guarantees (promises always retrieved), consolidation (budget trigger, protected untouched, supersededBy set), contradiction supersede, clamps.
 - **Reducer:** every command — known state in, expected state out; rejected batch leaves state untouched (atomicity test).
-- **Dialogue validation:** corpus of bad model outputs (truncated JSON, prose-wrapped JSON, wrong speaker, 9 choices, ±40 trust delta, unknown expression, ineligible event trigger) → each is repaired, clamped, or rejected exactly as specced. This corpus grows every time a real malformed output is seen in the wild.
+- **Dialogue validation:** corpus of bad model outputs (truncated JSON, prose-wrapped JSON, wrong speaker, 9 choices, ±40 trust delta, unknown expression, ineligible event trigger, banned-lexicon text, wrong rank self-reference) → each is repaired, clamped, or rejected exactly as specced. This corpus grows every time a real malformed output is seen in the wild.
 - **Asset fallback:** missing key resolves through the documented chain; `isFallback` flagged; never throws.
 - **Migrations:** fixture save per historical version → migrate → validates as current.
 
@@ -802,15 +921,15 @@ Each phase is one reviewable PR, each leaves `main` green and the game bootable.
 |---|---|---|---|---|
 | **1. Skeleton** | Vite+React+TS strict+Vitest+lint (incl. no-React-in-engine rule); empty screens; Result/error/logger primitives | scaffolding, `engine/infra` | `npm run dev` shows title screen; CI runs tests+lint | Over-scaffolding — keep it thin |
 | **2. Schemas & ContentLoader** | All Zod schemas (§3); loader with cross-ref validation; `tools/validate-content`; 3 stub characters/locations/scenes as fixtures | `engine/content`, `content/`, tests | Loader returns typed ContentDB; every schema has accept+reject tests; CLI validator exits nonzero on bad content | Schema churn later → keep migrations in mind, version content informally |
-| **3. GameState & reducer** | GameState, all commands, atomic batch apply, store bridge to React | `engine/state`, `src/store` | Reducer unit tests pass incl. atomicity; debug JSON dump of state visible in UI | Command set too narrow — add commands as needed, it's cheap |
-| **4. Map & navigation** | Map screen, location screen, travel command, time advance, presence (default-location rule) | `engine/map`, `ui/screens` | Can travel between 3 locations; time advances; correct characters shown | None significant |
+| **3. GameState & reducer** | GameState, all commands (incl. calendar/AP model: `SPEND_AP` rollover), atomic batch apply, store bridge to React | `engine/state`, `src/store` | Reducer unit tests pass incl. atomicity and 旬/month/year rollover; debug JSON dump of state visible in UI | Command set too narrow — add commands as needed, it's cheap |
+| **4. Map & navigation** | Palace map screen, location screen, travel command, AP spend, presence (default-location rule) | `engine/map`, `ui/screens` | Can travel between 3 palace locations; AP drains and the 旬 rolls over; correct characters shown | None significant |
 | **5. Assets & placeholders** | Manifest, AssetRegistry + fallback chain, placeholder generator, validate-manifest tool | `engine/assets`, `assets/`, `tools/` | All placeholder art renders; deleting a file produces silhouette + one log line, no crash | Path/bundler quirks with Vite asset handling |
 | **6. Scripted scenes** | SceneRunner (line/choice/branch/effect), DialogueScreen rendering DialogueTurn, outcome batch application | `engine/scenes`, `ui` | Authored intro scene playable start→finish; effects land; mid-scene quit drops outcome | Node-graph edge cases — lean on validator from PR2 |
 | **7. Memory system** | MemorySystem: append/retrieve/score/protect; seeded initial memories; memory debug browser v1 | `engine/memory`, `ui/debug` | Retrieval ordering tests pass; scene effects write memories; browser shows per-char entries with sources | Scoring constants wrong — fine, they're tunable, tests pin *ordering logic* not constants |
 | **8. Events** | EventEngine, condition DSL evaluators, checkpoints wired into travel/scene-end, chain cap | `engine/events` | Intro event auto-fires on first location entry; once/priority/cooldown tests pass | Checkpoint wiring subtle — integration tests here |
 | **9. Save/load** | SaveSystem, slots+autosave, checksum, quarantine, export/import | `engine/save`, `ui` | Roundtrip test passes; corrupting a save in devtools triggers recovery path; mid-scene save blocked | localStorage quota — measure save size now |
 | **10. Dialogue: providers & pipeline** | DialogueOrchestrator, prompt builder, validation gates, ScriptedProvider + fallback content, FakeProvider tests | `engine/dialogue`, `content/fallback_dialogue` | Full pipeline integration tests green **without any real LLM**; degraded turns render normally | Biggest PR — split orchestrator/provider if review is heavy |
-| **11. Live LLM + structured output** | LLMProvider (Anthropic SDK), key settings UI, repair retry, prompt viewer in debug overlay | `providers/llmProvider`, `ui/debug`, settings | Real generated conversation with memory references; malformed-output corpus seeded from real failures; works offline via fallback when key absent | Model JSON discipline; latency UX (add typing indicator) |
+| **11. Live LLM + structured output** | LLMProvider with OpenAI-compatible + Anthropic adapters, `ModelRouting` config, key settings UI, repair retry, prompt viewer in debug overlay, eval harness `tools/eval-dialogue.ts` (§5.8) | `providers/`, `ui/debug`, `tools/`, settings | Real generated conversation, in-register Chinese with memory references; §5.8 scorecard produced for ≥2 candidate models; malformed-output corpus seeded from real failures; works offline via fallback when key absent | Model JSON discipline; lexicon/register drift (§11 risk 10); latency UX (add typing indicator) |
 | **12. Scene-end updates & consolidation** | AI-proposed memory/relationship funnel, per-witness memory writes, summarization call, consolidation job | `engine/memory`, `engine/dialogue` | Play 2 conversations → second references the first; budget overflow consolidates correctly in test | Summary quality — keep dumb-truncation fallback |
 | **13. Vertical slice content & polish** | Real slice content (§10), expression mapping tables, hybrid scenes, transitions, Playwright smoke test, placeholder report | `content/`, `ui` | A new player can play the §10 slice end-to-end; all failure drills (kill network, delete asset, corrupt save) behave per §7.2 | Content tuning time-sink — timebox |
 
@@ -820,53 +939,56 @@ Rough sizing: PRs 1–6 are the deterministic foundation (no AI anywhere yet), 7
 
 ## 10. Concrete Vertical Slice Example
 
-Placeholder lore — demonstrates architecture, not canon. Setting: a small harbor town the player has just arrived in.
+Slice content uses the world bible's canon (terms, ranks, 称谓, conflicts) but the slice characters are placeholders — they demonstrate architecture, not final cast. Setting: the inner palace, early in the reign; the player is the young 女帝.
 
-**Characters:** `mara` — innkeeper (full example in §3.1; secret: debt to the harbormaster). `joren` — dockworker: blunt, loyal, suspicious of strangers (`initialRelationship: {trust: 5, affection: 0}`; initial memory: *"Saw the stranger step off the evening ferry with no luggage. No luggage means trouble."* salience 55, protected). `sela` — archive scribe: curious, formal, gossip-hungry (`trust: 15, affection: 10`; secret: she reads sealed correspondence; initial memory: *"A stranger arrived; Mara took them in at the Driftwood."* salience 30 — secondhand, lower salience than the witnesses').
+**Characters:**
+- `shen_yan` 沈晏 — 皇后 (full example in §3.1). 端肃克制, 无宠但掌后宫 (bible conflict #6). Court: `{ rank: "huanghou", favor: 20 }`. Secret: 私录各宫账册推演前朝银钱往来 — brushing the 男子不得私习外学 line (conflict #5, the mild version).
+- `chu_he` 楚荷 — 贵君: bold, vivid, openly favored, needles the 皇后 at every chance (conflict #6 from the other side). `initialRelationship: { trust: 20, affection: 40 }`; court `{ rank: "guijun", favor: 70 }`; initial memory: *“大朝会后陛下单独召见了我；凤仪宫那位的脸色，啧。”* salience 55, protected. Secret: 妆匣夹层里藏着半部手抄兵书 (conflict #5, the sharp version).
+- `lin_wan` 林晚 — 更衣 (lowest rank): quiet, observant, rumored to have exceptional 血养 aptitude (conflict #3). `initialRelationship: { trust: 10, affection: 5 }`; court `{ rank: "gengyi", favor: 5 }`; initial memory: *“听闻陛下已三月未进凤仪宫，宫人都在押中宫何时失势。”* salience 30 — secondhand, lower salience than the witnesses'.
 
-**Locations:** `inn` (Driftwood Inn — Mara's default), `docks` (Joren's default), `archive` (Sela's default). Map: three nodes, fully connected, travelCost 1 slot each.
+**Locations:** `fengyi_palace` 凤仪宫 (沈晏's seat), `lantai` 兰台 (楚荷's palace), `yuhua_garden` 御花园 (林晚 is assigned duties here). Map: three nodes on the 宫城图, fully connected, travelCost 1 AP each.
 
-**Scene** `intro_mara` (hybrid), triggered by event `ev_intro` (`checkpoint: game_start`, priority 100, once):
+**Scene** `intro_shen_yan` (hybrid), triggered by event `ev_intro` (`checkpoint: game_start`, priority 100, once):
 ```
-line(mara, "worried→smile"): "Off the evening ferry, no luggage... You'll be wanting a room, stranger."
-choice: ["I can pay." (neutral) | "I can work for my keep." (friendly) | "Who's asking?" (guarded)]
-branch on choice → effect: SET_FLAG intro_tone=<tone>; RELATIONSHIP_DELTA mara trust +2 (friendly) / -2 (guarded)
-generate(mara, directive: "Mara settles the room arrangement and probes who the player is.
-  She is welcoming but fishing for information. Do not reveal her debt.", maxTurns: 4)
+line(shen_yan, "worried→neutral"): "陛下今日肯踏进凤仪宫，臣后竟一时不知，该备哪一盏茶。"
+choice: ["皇后这是在怨朕。" (guarded) | "随手煮一盏便是，朕坐坐就走。" (neutral) | "备你自己常喝的那盏。" (friendly)]
+branch on choice → effect: SET_FLAG intro_tone=<tone>; RELATIONSHIP_DELTA shen_yan trust +2 (friendly) / -2 (guarded)
+generate(shen_yan, directive: "沈晏与陛下叙后宫近况，克制地试探陛下三月不至凤仪宫的缘由，
+  并隐晦提及楚贵君近来的风头。他守礼、敏锐、不肯露怯。不得暴露他私录账册之事。", maxTurns: 4)
 outcome: per-witness memories + conversation summary + autosave
 ```
 
-**Generated flow (illustrative):** player picked "I can work for my keep" → next morning, player travels to `inn`, taps Mara → dynamic scene, directive from her `friendly_low_trust` pool. Context assembled: profile + mood `neutral` + trust 12 + retrieved memories include the protected arrival memory and yesterday's conversation summary *"The stranger offered to work for their keep; said little about their past."* Model returns the §5.2 example JSON (Mara teases about capital clerks, proposes the `opinion` memory at salience 45, trust +3 / affection +1). Validator: expression `smile` ✓ in her list, deltas within ±5 ✓, no event triggers ✓ → turn renders with `portrait.mara.smile`; updates held.
+**Generated flow (illustrative):** player chose the friendly line → next 中旬 (the 后宫 action-day), player travels to `lantai` (1 AP), taps 楚荷 → dynamic scene, directive from her `favored_mid_trust` pool ("楚荷恃宠撒娇，顺势打探陛下昨日去凤仪宫做了什么"). Context assembled: profile + mood `neutral` + trust 20 / favor 70 (rendered: rank 贵君, self-reference 本宫) + retrieved memories include her protected 召见 memory and the gossip summary *“陛下昨日去了凤仪宫，坐了近一盏茶的工夫。”* Model returns the §5.2 example JSON (楚荷 needles about 凤仪宫, proposes an `opinion` memory at salience 45, trust +2 / affection +3). Validator: expression `smile` ✓ in her list, deltas within ±5 ✓, no banned terms ✓, self-reference 本宫 ✓ for rank `guijun`, no event triggers ✓ → turn renders with `portrait.chu_he.smile`; updates held.
 
-**Memory before/after (mara):**
+**Memory before/after (chu_he):**
 ```
-before: [mem_mara_000001 event   "A stranger arrived on the evening ferry." sal 60 🔒]
-        [mem_mara_000002 c.summ  "The stranger offered to work for keep; vague about past." sal 50]
+before: [mem_chu_he_000001 event  "大朝会后陛下单独召见了我；凤仪宫那位的脸色，啧。" sal 55 🔒]
+        [mem_chu_he_000002 c.summ "陛下昨日去了凤仪宫，坐了近一盏茶的工夫。" sal 50]
 after:  ...both, plus
-        [mem_mara_000003 opinion "The stranger works harder than expected for a self-described
-                                  clerk." sal 45 tags:[player,work,inn] source:ai_proposed]
-        [mem_mara_000004 c.summ  "Friendly morning chat while the stranger mopped; they hinted
-                                  they weren't always a clerk." sal 45 source:scene_outcome]
+        [mem_chu_he_000003 opinion "陛下嘴上不提凤仪宫，神色却不像要疏远中宫的样子。" sal 45
+                                    tags:[player,shen_yan,favor] source:ai_proposed]
+        [mem_chu_he_000004 c.summ  "兰台闲谈；试探凤仪宫之事，陛下避而不答，却多坐了半盏茶。" sal 45
+                                    source:scene_outcome]
 ```
-Joren, absent, gets nothing — ask him about the player and he still only has the ferry memory: subjectivity demonstrated.
+林晚, absent, gets nothing — ask her about the Empress and she still only has the palace-gossip memory: subjectivity demonstrated. (沈晏 likewise learns nothing of the 兰台 visit — what 楚荷 later gossips about is an authored `effect`, never automatic.)
 
-**Relationship update:** `mara: {trust: 12→15, affection: 6→7}` via one `APPLY_SCENE_OUTCOME` batch, visible in the debug relationship panel with the scene id as cause.
+**Relationship update:** `chu_he: {trust: 20→22, affection: 40→43}` via one `APPLY_SCENE_OUTCOME` batch, visible in the debug relationship panel with the scene id as cause. Favor unchanged — 恩宠 moves only through explicit player actions (赏赐, 侍寝, 晋位 via `APPLY_FAVOR_DELTA`/`SET_RANK` effects), never by AI proposal.
 
 **Asset manifest entries:**
 ```json
-"portrait.mara.neutral":  { "path": "portraits/mara/neutral.png",  "kind": "portrait", "placeholder": true },
-"portrait.mara.smile":    { "path": "portraits/mara/smile.png",    "kind": "portrait", "placeholder": true },
-"portrait.joren.neutral": { "path": "portraits/joren/neutral.png", "kind": "portrait", "placeholder": true },
-"bg.inn":                 { "path": "backgrounds/inn.png",          "kind": "background", "placeholder": true },
-"bg.docks":               { "path": "backgrounds/docks.png",        "kind": "background", "placeholder": true },
-"map.town":               { "path": "map/town.png",                 "kind": "map",        "placeholder": true }
+"portrait.shen_yan.neutral": { "path": "portraits/shen_yan/neutral.png", "kind": "portrait", "placeholder": true },
+"portrait.shen_yan.smile":   { "path": "portraits/shen_yan/smile.png",   "kind": "portrait", "placeholder": true },
+"portrait.chu_he.smile":     { "path": "portraits/chu_he/smile.png",     "kind": "portrait", "placeholder": true },
+"bg.fengyi_palace":          { "path": "backgrounds/fengyi_palace.png",  "kind": "background", "placeholder": true },
+"bg.lantai":                 { "path": "backgrounds/lantai.png",         "kind": "background", "placeholder": true },
+"map.palace":                { "path": "map/palace.png",                 "kind": "map",        "placeholder": true }
 ```
 
 ---
 
 ## 11. Key Risks & Decisions Needing Confirmation
 
-1. **LLM cost/latency per conversation turn.** Each turn ≈ 1.5–2.5k prompt tokens. Decide later: model tier (Haiku-class is likely sufficient for in-character chat; use a stronger model for summarization/consolidation?), caching strategy, and a per-day soft budget. *Decision deferred to PR 11.*
+1. **LLM cost/latency per conversation turn.** Each turn ≈ 1.5–2.5k prompt tokens on the hot `dialogue` profile. Mitigation is the routing table (§5.7): a cheap Chinese-strong model on the hot path, premium models only for authored keystone scenes, mini-class models for summarization — plus prompt caching and a per-day soft budget. Final picks come from the §5.8 scorecard, not vendor marketing. *Decision lands in PR 11.*
 2. **Client-side API key is dev-only.** Before any public release a proxy endpoint is mandatory (key security + rate limiting). The boundary is designed (§5.7); the deployment isn't. *Confirm hosting choice when release is in sight.*
 3. **Retrieval without embeddings** is a bet that tags+salience+recency suffice at slice scale. Re-evaluate when characters exceed ~100 active entries or dialogue visibly "forgets" relevant things despite entries existing. The interface allows swapping the scorer.
 4. **Model-generated player choices** risk railroading or tonal mush. Mitigations are in the prompt (tone variety, exit option); if quality disappoints, fall back to choice templates with generated fill-ins. *Evaluate during PR 11–13 playtesting.*
@@ -874,3 +996,6 @@ Joren, absent, gets nothing — ask him about the player and he still only has t
 6. **Relationship model breadth** (2 axes + flags) is intentionally minimal. Adding axes is a schema field + save migration — cheap — so resist adding them until a design need is proven.
 7. **localStorage ceiling** (~5 MB) vs growing memory stores. Consolidation + transcript caps should keep saves <300 KB; PR 9 must measure and assert this in a test. IndexedDB is the escape hatch.
 8. **Content authoring ergonomics**: raw JSON will grate as content grows. Planned answer is a schema-aware editor or YAML+build step — *not* in MVP; revisit after PR 13 when authoring pain is real and informed.
+9. **Content rating & model refusals.** 侍寝/承养 themes sit near content the model may refuse or sanitize. Decision needed before PR 11: target rating (recommendation: non-explicit, fade-to-black — enforced by scene directives, not by hoping). A refusal is just another `AIError` and the fallback ladder absorbs it, but a high refusal rate in intimate scenes would gut the experience — the manual voice-check script must include these scenes from day one.
+10. **Chinese terminology & register drift.** The invented lexicon (胎息/承养/承嗣君…) and rank-based self-reference (臣后/本宫/本位/臣侍/小侍) are exactly the kind of detail LLMs drift on. Mitigations: lexicon + rules in every prompt (§5.4), cheap string validators with repair retry (§5.3), banned-term/self-reference cases in the test corpus (§8), per-character voice snapshots. If drift persists despite all that, add a post-generation rewrite pass — *not* in MVP.
+11. **Open world-bible items** (bible §14: 转胎 timing, 绝经判定, succession rules, …) are deliberately *not* blocked on: the slice touches none of them mechanically, and §3.8 + the condition DSL absorb whichever way they're decided. Track them as content decisions, not engineering ones.
