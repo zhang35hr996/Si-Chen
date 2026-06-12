@@ -1,3 +1,4 @@
+import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatAp, formatGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import { buildTravelBatch, checkTravel } from "../../engine/map/travel";
@@ -14,15 +15,18 @@ const REASON_TEXT: Record<string, string> = {
 export function MapScreen({
   db,
   store,
+  registry,
   onTravelled,
   onClose,
 }: {
   db: ContentDB;
   store: GameStore;
+  registry: AssetRegistry;
   onTravelled: () => void;
   onClose: () => void;
 }) {
   const state = useGameState(store);
+  const board = registry.resolve("map.palace", "map");
 
   const travel = (to: string) => {
     const batch = buildTravelBatch(db, state, to);
@@ -42,7 +46,11 @@ export function MapScreen({
         </button>
       </header>
 
-      <section className="map-screen__board" aria-label="宫城图">
+      <section
+        className="map-screen__board"
+        aria-label="宫城图"
+        style={{ backgroundImage: `url("${board.url}")` }}
+      >
         {Object.values(db.locations).map((location) => {
           const here = location.id === state.playerLocation;
           const check = checkTravel(db, state, location.id);

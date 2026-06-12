@@ -19,4 +19,5 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run validate-content
+      - run: npm run validate-manifest
       - run: npm run build

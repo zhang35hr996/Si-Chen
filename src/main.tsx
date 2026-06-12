@@ -15,6 +15,6 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App store={store} />
+    <App store={store} logger={logger} />
   </StrictMode>,
 );

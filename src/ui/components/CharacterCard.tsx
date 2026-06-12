@@ -3,6 +3,7 @@
  * consorts show 位分 + 恩宠; officials show 官职 + 圣眷 (the rank's favorTerm)
  * and are never rendered as an empty/fake consort standing.
  */
+import type { AssetRegistry } from "../../engine/assets/registry";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
@@ -10,19 +11,28 @@ import type { GameState } from "../../engine/state/types";
 export function CharacterCard({
   db,
   state,
+  registry,
   character,
 }: {
   db: ContentDB;
   state: GameState;
+  registry: AssetRegistry;
   character: CharacterContent;
 }) {
   const standing = state.standing[character.id];
   const relationship = state.relationships[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
   const isConsort = character.kind === "consort";
+  const portrait = registry.portrait(character.portraitSet, "neutral");
 
   return (
     <article className="char-card">
+      <img
+        className="char-card__portrait"
+        src={portrait.url}
+        alt={character.profile.name}
+        data-fallback={portrait.isFallback || undefined}
+      />
       <header className="char-card__header">
         <strong className="char-card__name">{character.profile.name}</strong>
         <span className="char-card__kind">{isConsort ? "侍君" : "女官"}</span>

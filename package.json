@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "validate-content": "tsx tools/validate-content.ts"
+    "validate-content": "tsx tools/validate-content.ts",
+    "validate-manifest": "tsx tools/validate-manifest.ts",
+    "gen-placeholders": "tsx tools/gen-placeholders.ts"
   },
   "dependencies": {
     "react": "^19.2.7",

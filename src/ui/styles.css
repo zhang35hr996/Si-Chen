@@ -111,8 +111,11 @@ body {
 .location-screen__stage {
   padding: 3rem 2rem 2rem;
   text-align: center;
-  background: radial-gradient(ellipse at 50% 0%, #2a201a 0%, #14100e 75%);
+  background-color: #14100e;
+  background-size: cover;
+  background-position: center;
   border-bottom: 1px solid #33291f;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
 
 .location-screen__name {
@@ -159,6 +162,16 @@ body {
   border: 1px solid #5c4d3a;
   background: #1c1611;
   padding: 0.9rem 1.1rem;
+}
+
+.char-card__portrait {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border: 1px solid #33291f;
+  margin-bottom: 0.7rem;
+  background: #14100e;
 }
 
 .char-card__header {
@@ -226,8 +239,9 @@ body {
   flex: 1;
   margin: 1.5rem;
   border: 1px solid #33291f;
-  background:
-    radial-gradient(ellipse at 50% 40%, #241c15 0%, #14100e 80%);
+  background-color: #14100e;
+  background-size: cover;
+  background-position: center;
 }
 
 .map-node {

@@ -16,6 +16,7 @@
 
     "skipLibCheck": true,
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "noEmit": true
   },
   "include": ["src", "tests", "tools", "vite.config.ts", "eslint.config.js"]

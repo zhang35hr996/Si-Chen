@@ -1,3 +1,4 @@
+import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatAp, formatGameTime } from "../../engine/calendar/time";
 import { getPresentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
@@ -8,10 +9,12 @@ import { CharacterCard } from "../components/CharacterCard";
 export function LocationScreen({
   db,
   store,
+  registry,
   onOpenMap,
 }: {
   db: ContentDB;
   store: GameStore;
+  registry: AssetRegistry;
   onOpenMap: () => void;
 }) {
   const state = useGameState(store);
@@ -21,6 +24,7 @@ export function LocationScreen({
     return <p className="screen-error">未知地点：{state.playerLocation}</p>;
   }
   const present = getPresentAt(db, state, location.id);
+  const background = registry.background(location.backgroundKey);
 
   return (
     <main className="location-screen">
@@ -33,7 +37,11 @@ export function LocationScreen({
         </button>
       </header>
 
-      <section className="location-screen__stage">
+      <section
+        className="location-screen__stage"
+        style={{ backgroundImage: `url("${background.url}")` }}
+        data-fallback={background.isFallback || undefined}
+      >
         <h1 className="location-screen__name">{location.name}</h1>
         <p className="location-screen__desc">{location.description}</p>
         <p className="location-screen__ambience">{location.ambience.join(" · ")}</p>
@@ -44,7 +52,13 @@ export function LocationScreen({
           <p className="location-screen__empty">此处无人。</p>
         ) : (
           present.map((character) => (
-            <CharacterCard key={character.id} db={db} state={state} character={character} />
+            <CharacterCard
+              key={character.id}
+              db={db}
+              state={state}
+              registry={registry}
+              character={character}
+            />
           ))
         )}
       </section>
