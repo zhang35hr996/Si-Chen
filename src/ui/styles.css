@@ -1,0 +1,75 @@
+:root {
+  color-scheme: dark;
+  font-family: "Songti SC", "Noto Serif SC", "SimSun", serif;
+}
+
+* {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #14100e;
+  color: #e8dcc8;
+  min-height: 100vh;
+}
+
+.title-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  background: radial-gradient(ellipse at 50% 30%, #2a201a 0%, #14100e 70%);
+}
+
+.title-screen__name {
+  font-size: 4.5rem;
+  letter-spacing: 1.5rem;
+  text-indent: 1.5rem; /* visually re-center despite trailing letter-spacing */
+  font-weight: 400;
+  color: #d9b87c;
+}
+
+.title-screen__tagline {
+  font-size: 0.95rem;
+  letter-spacing: 0.4em;
+  color: #8a7a62;
+}
+
+.title-screen__menu {
+  margin-top: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.title-screen__button {
+  font: inherit;
+  font-size: 1.05rem;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  padding: 0.6rem 2.4rem;
+  color: #e8dcc8;
+  background: transparent;
+  border: 1px solid #5c4d3a;
+  cursor: pointer;
+}
+
+.title-screen__button:hover:enabled {
+  border-color: #d9b87c;
+  color: #d9b87c;
+}
+
+.title-screen__button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.title-screen__note {
+  font-size: 0.8rem;
+  color: #6b5d4a;
+  letter-spacing: 0.2em;
+}
