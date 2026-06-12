@@ -1,12 +1,14 @@
 # Si-Chen — Foundational Design Document
 
-**Status:** Draft v2.1 — pre-implementation, aligned to the world bible `docs/background-v0.1.md`
+**Status:** Draft v2.2 — implementation in progress, aligned to the world bible `docs/background-v0.1.md` and reconciled with `docs/skeleton-plan-v0.md`
 **Audience:** Engineers implementing the MVP vertical slice
 **Scope:** Architecture, data model, memory, dialogue, scenes, assets, save/load, errors, testing, roadmap
 
 **v2 changes (setting alignment only — architecture unchanged):** product vision recast to the 礼法女尊 imperial-harem setting; calendar/AP time model replaces day+time-slot (§1.1.1, §3, §6.1); court status (位分 rank / 恩宠 favor) added to the data model (§3.2); 血脉 lineage state designed but slice-inert (§3.8); lexicon & address rules fed into prompts and validation (§5.3–§5.5); vertical slice recast to the palace cast (§10); two new risks (§11). The module map, memory system, dialogue pipeline, validation gates, save/load, error handling, and testing strategy carry over from v1 intact.
 
 **v2.1 changes (model strategy & palace-news context):** multi-vendor model routing with task profiles (§2.1, §5.7); model evaluation metrics & bake-off harness (§5.8); `WorldLexicon` promoted to a full schema (§3.9); public-record layer so NPCs react to palace-wide events (§3.5, §4.1, §5.4); authored NPC↔NPC stances (§3.1). Runtime validation stays deterministic engine code — there is deliberately no LLM-as-validator in the play loop (§5.7).
+
+**v2.2 changes (skeleton-plan reconciliation, blocking-before-PR-3 sync):** per-character `CourtState` renamed `CharacterStanding` (the name `CourtState` now means the 江山 resource pillar); pure `GameTime` timestamp split from `CalendarState` (AP bookkeeping); `Scene.outcome`/`SceneOutcomeSpec` removed — all consequences including memory are EventEffects through the single funnel, committed by the SceneSession transaction (`apCost` reserved at entry, spent at commit); `affection` → `affinity`; `selfRef` string → structured `selfRefs {toPlayer, formal, informal?}`.
 
 ---
 
@@ -47,7 +49,7 @@ Travel and light actions cost 1 AP; medium actions (侍寝, banquets, deep talks
 4. Dialogue screen: portrait, name, text, 2–4 player choices.
 5. Scripted scenes (authored JSON) and generated conversations (LLM) through the same runtime.
 6. Structured AI output → validated memory/relationship/event updates.
-7. Relationship state (trust/affection + flags) and court status (位分 rank + 恩宠 favor) per character, influencing dialogue.
+7. Relationship state (trust/affinity + flags) and court status (位分 rank + 恩宠 favor) per character, influencing dialogue.
 8. Save/load (manual slots + autosave), versioned, corruption-tolerant.
 9. Debug overlay: state inspector, per-character memory browser, prompt viewer, force-event.
 10. Full fallback ladder: missing asset → placeholder; AI failure → canned dialogue; bad save → recovery.
@@ -56,7 +58,7 @@ Travel and light actions cost 1 AP; medium actions (侍寝, banquets, deep talks
 - Character schedules (location by 旬/AP), mood decay/drift, 下旬 宗嗣 checkpoint events as authored scenes (经血祭祀, 胎息检查), rank promotion/demotion ceremony scenes, conversation topic memory ("we already talked about this today"), scene cooldown UI hints, settings screen, asset preloading, a second "pack" of content to prove data-driven extension.
 
 **Later expansion:**
-- Full 血脉 subsystem (§3.8: menses rites, pregnancy, 承养 lifecycle with its legal rules), 江山 systems (朝政, factions), quests, inventory, gossip propagation (NPC↔NPC secondhand memory), NPC↔NPC generated side conversations, procedural events, schedules with exceptions, affection/rivalry webs, Steam/desktop packaging (Tauri), real art pipeline integration, audio.
+- Full 血脉 subsystem (§3.8: menses rites, pregnancy, 承养 lifecycle with its legal rules), 江山 systems (朝政, factions), quests, inventory, gossip propagation (NPC↔NPC secondhand memory), NPC↔NPC generated side conversations, procedural events, schedules with exceptions, affinity/rivalry webs, Steam/desktop packaging (Tauri), real art pipeline integration, audio.
 
 ---
 
@@ -242,7 +244,7 @@ si-chen/
 
 ## 3. Data Model
 
-Schemas are **Zod definitions**; TS types are inferred (`z.infer`), so runtime validation and compile-time types cannot drift. Shown here as TS interfaces for readability. Conventions: IDs are lowercase snake strings, namespaced by collection (`shen_yan`, not `char_001`); cross-references validated at load; all game-time stamps use `GameTime { year: number; month: number /*1–12*/; period: "early"|"mid"|"late" /*上旬·中旬·下旬*/; ap: number /*AP remaining this action-day, 5→0*/ }`. Recency math uses the derived **action-day index** (`((year*12 + month-1)*3) + periodOrdinal`) so "days" in scoring formulas mean action-days.
+Schemas are **Zod definitions**; TS types are inferred (`z.infer`), so runtime validation and compile-time types cannot drift. Shown here as TS interfaces for readability. Conventions: IDs are lowercase snake strings, namespaced by collection (`shen_yan`, not `char_001`); cross-references validated at load; all record timestamps use the pure `GameTime { year: number; month: number /*1–12*/; period: "early"|"mid"|"late" /*上旬·中旬·下旬*/; dayIndex: number /*derived action-day index, stored for cooldown/sorting*/ }`; the live clock is `CalendarState extends GameTime { ap: number; apMax: number }` — AP bookkeeping never appears on timestamps (a memory's moment must not carry how many AP the player had left). "Days" in scoring formulas mean action-days (`dayIndex` deltas).
 
 ### 3.1 Character & CharacterProfile (static content)
 
@@ -256,7 +258,7 @@ interface Character {
   expressions: string[];         // ["neutral","smile","frown","worried"] — must exist in manifest
   voice: VoiceSpec;              // prompt-facing style constraints
   initialRelationship: RelationshipState;
-  initialCourt: CourtState;      // starting 位分 + 恩宠 (§3.2)
+  initialStanding: CharacterStanding;  // starting 位分 + 恩宠/圣眷 (§3.2); rank domain must match character kind
   initialMemories: MemoryEntryDraft[];   // seeded subjective backstory
   secrets: Secret[];
   stances?: { charId: string; attitude: string }[];  // authored one-line attitudes toward other NPCs,
@@ -306,8 +308,8 @@ interface Secret {
   "portraitSet": "shen_yan",
   "expressions": ["neutral", "smile", "frown", "worried"],
   "voice": { "register": "formal", "quirks": ["自称『臣后』，仪式场合用『本宫』", "称玩家『陛下』，绝不直呼"], "tabooTopics": ["自己久不承宠之事", "沈氏母家在朝中的动向"] },
-  "initialRelationship": { "trust": 30, "affection": 15, "flags": [] },
-  "initialCourt": { "rank": "huanghou", "favor": 20 },
+  "initialRelationship": { "trust": 30, "affinity": 15, "flags": [] },
+  "initialStanding": { "rank": "huanghou", "favor": 20 },
   "initialMemories": [
     { "kind": "event", "summary": "陛下已有三月未踏入凤仪宫，昨日大朝会后却单独召见了楚贵君。", "salience": 70, "tags": ["player", "favor", "chu_he"], "protected": true }
   ],
@@ -321,7 +323,7 @@ interface Secret {
 }
 ```
 
-### 3.2 CharacterMemory, MemoryEntry, RelationshipState, CourtState, MoodState (runtime)
+### 3.2 CharacterMemory, MemoryEntry, RelationshipState, CharacterStanding, MoodState (runtime)
 
 ```ts
 interface CharacterMemory {
@@ -350,14 +352,16 @@ interface MemoryEntry {
 
 interface RelationshipState {     // the character's stance toward the player (女帝)
   trust: number;                   // 0–100 信任/忠诚
-  affection: number;               // 0–100 爱慕
+  affinity: number;               // 0–100 — 爱慕 for consorts, 亲附/敬慕 for officials (one axis, kind-appropriate label)
   flags: string[];                 // ["has_served_night","resents_chu_he"]
   // future axes (妒 jealousy, 惧 fear, 敬 respect) added as optional fields + migration
 }
 
-interface CourtState {             // the character's formal standing — granted by the player, never by AI
+interface CharacterStanding {      // the character's formal standing — granted by the player, never by AI
+                                   // (named CourtState in v2.1; renamed — CourtState now means the 江山 resource pillar)
   rank: string;                    // rank id from world.json's 位分 table ("huanghou","guijun","chenghui","gengyi",…)
-  favor: number;                   // 0–100 恩宠 — drives rank eligibility, 侍寝 priority, event conditions
+  favor: number;                   // 0–100 — 恩宠 (consort ranks) / 圣眷 (official ranks); drives rank
+                                   //   eligibility, 侍寝 priority, event conditions; rank domain must match kind
 }
 
 interface MoodState {
@@ -367,7 +371,7 @@ interface MoodState {
 }
 ```
 
-**Validation:** salience clamped 0–100; summary length enforced; `kind` whitelist; `source:"ai_proposed"` entries additionally pass the AI-update validator (§5.6). Trust/affection/favor deltas clamped to ±10 per scene. `rank` must exist in the rank table; rank changes happen only via explicit `SET_RANK` commands from authored effects or scene outcomes — the AI cannot propose them.
+**Validation:** salience clamped 0–100; summary length enforced; `kind` whitelist; `source:"ai_proposed"` entries additionally pass the AI-update validator (§5.6). Trust/affinity/favor deltas clamped to ±10 per scene. `rank` must exist in the rank table; rank changes happen only via explicit `SET_RANK` commands from authored effects or scene outcomes — the AI cannot propose them.
 
 ### 3.3 Location & MapNode
 
@@ -405,7 +409,9 @@ interface Scene {
   locationId: string;
   participants: string[];              // character ids
   nodes: SceneNode[];                  // execution graph; entry = nodes[0]
-  outcome?: SceneOutcomeSpec;          // declarative effects applied at scene end
+  startNodeId: string;                 // explicit entry node — no "first element" convention
+                                       // NO outcome block (removed in v2.2): every consequence, memory
+                                       // included, is an EventEffect inside an effect node — one funnel
 }
 
 type SceneNode =
@@ -450,7 +456,10 @@ interface GameEvent {
   condition: TriggerCondition;
   priority: number;                    // higher wins; ties broken by id (deterministic)
   once: boolean;
-  cooldown?: { slots: number };        // for repeatable events (slots = action-days)
+  cooldown?: { actionDays: number };   // for repeatable events
+  apCost: number;                      // reserved at scene entry (affordability gate: 行动点不足 blocks,
+                                       //   no auto-rollover), SPENT only at scene commit; quit/reload
+                                       //   discards the SceneSession — no AP loss, `once` unconsumed
   exclusiveGroup?: string;             // at most one event per group per checkpoint
   public?: boolean;                    // 宫中大事: goes into every prompt's palace-news digest (§4.1)
   headline?: string;                   // one-line digest text, required if public ("楚贵君晋皇贵君，赐居昭阳殿")
@@ -460,7 +469,7 @@ type TriggerCondition =
   | { all: TriggerCondition[] } | { any: TriggerCondition[] } | { not: TriggerCondition }
   | { flagSet: string } | { monthAtLeast: number } | { periodIs: "early" | "mid" | "late" }
   | { atLocation: string }
-  | { relationshipAtLeast: { char: string; field: "trust" | "affection"; value: number } }
+  | { relationshipAtLeast: { char: string; field: "trust" | "affinity"; value: number } }
   | { favorAtLeast: { char: string; value: number } } | { rankAtLeast: { char: string; rank: string } }
   | { hasMemoryTag: { char: string; tag: string } }
   | { eventFired: string } | { secretRevealed: { char: string; secretId: string } };
@@ -487,7 +496,10 @@ interface GameState {
   playerLocation: string;
   flags: Record<string, boolean | number | string>;
   relationships: Record<string, RelationshipState>;   // by characterId
-  court: Record<string, CourtState>;                   // by characterId — 位分/恩宠
+  standing: Record<string, CharacterStanding>;         // by characterId — 位分 + 恩宠/圣眷
+  resources: { court: CourtState; harem: HaremState; bloodline: BloodlineState };
+                                       // 江山/后宫/血脉 pillars (scalars in skeleton-plan §4; scaffold-only
+                                       //   until their systems land — never read by logic or conditions)
   moods: Record<string, MoodState>;
   memories: Record<string, CharacterMemory>;
   lineage: LineageState;                               // 血脉 (§3.8) — slice: inert defaults
@@ -561,13 +573,15 @@ The setting's biggest LLM failure mode isn't plot — it's vocabulary: 皇郎 dr
 interface WorldLexicon {
   approvedTerms: string[];           // 胎息, 承养, 承养人, 承嗣君, 育嗣君, 养君, 自孕, 经血祭祀, 皇郎, 贵主, …
   forbiddenTerms: string[];          // 父皇, 血父, 王爷, 娘娘(用于男子), modern vocabulary, …
-  rankAddressRules: { rank: string; selfRef: string; addressedAs: string }[];  // bible §9.3 自称表
+  rankAddressRules: { rank: string;                                            // bible §9.3 自称表
+    selfRefs: { toPlayer: string[]; formal: string[]; informal?: string[] };   // structured — never a joined display string
+    addressedAs: string }[];
   kinshipTerms: { concept: string; term: string }[];                           // bible §8 称谓体系
   styleRules: string[];              // "不得创造新的官职、位分、宗嗣术语；制度未定时用普通描述，不要造词"
 }
 ```
 
-**Validation:** `approvedTerms ∩ forbiddenTerms = ∅`; every rank in `rankAddressRules` exists in world.json's rank table; loader cross-checks that no character's `voice.quirks` contradicts their rank's `selfRef`. The prompt always carries the rules verbatim: *你只能使用 approvedTerms 中的制度词；不得造词；如需表达未定制度，用普通描述。*
+**Validation:** `approvedTerms ∩ forbiddenTerms = ∅`; every rank in `rankAddressRules` exists in world.json's rank table; loader cross-checks that no character's `voice.quirks` contradicts their rank's `selfRefs`. The prompt always carries the rules verbatim: *你只能使用 approvedTerms 中的制度词；不得造词；如需表达未定制度，用普通描述。*
 
 ---
 
@@ -596,7 +610,7 @@ This is the heart of the design. Principles: **structured over freeform**, **sub
 Only four producers, all explicit:
 
 1. **Authored**: `initialMemories` in character files; `effect` nodes in scripted scenes (`APPEND_MEMORY` with full entry specified by the writer).
-2. **Scene outcome**: SceneRunner's end-of-scene step writes the conversation summary + per-witness event entries declared in `SceneOutcomeSpec`.
+2. **Scene effects**: per-witness entries are `memory` effects inside the scene's effect nodes, accumulated on the SceneSession and committed atomically at scene end; the conversation summary is written in the same commit. (v2.1's `SceneOutcomeSpec` side-door is removed — memory has no write path outside the effect funnel.)
 3. **AI-proposed**: the model's `memory_updates` field — these are *drafts* that must pass the AI-update validator (§5.6): schema-valid, summary length ok, salience clamp, tag whitelist-ish (free tags allowed but lowercased/trimmed/capped at 5), `protected` forced to `false` (AI can never write protected memories), kind ∈ whitelist. Rejected drafts are logged, never applied.
 4. **Consolidation**: the system itself writing merged summaries (§4.8).
 
@@ -630,17 +644,18 @@ If retrieval throws (corrupt entry, etc.): log `MemoryError`, fall back to profi
 
 ### 4.6 Updates after a scene
 
-Fixed, ordered, atomic sequence at scene end (`APPLY_SCENE_OUTCOME` command batch):
-1. Validate all proposed updates (AI + declarative outcome spec).
-2. Apply relationship deltas (clamped ±10/scene per axis).
-3. Apply mood change.
-4. Append per-witness memory entries.
-5. Write conversation summary; trim transcript.
-6. Record event-fired bookkeeping; set flags.
-7. Run EventEngine `scene_end` checkpoint.
-8. Autosave.
+Fixed, ordered, atomic sequence at scene commit (`APPLY_SCENE_OUTCOME` command batch — the SceneSession transaction's terminal step; mid-scene, nothing touches state):
+1. Validate all accumulated effects (AI-proposed + authored effect nodes).
+2. Spend the reserved AP (`event.apCost`).
+3. Apply relationship/favor deltas (clamped ±10/scene per axis).
+4. Apply mood change.
+5. Append per-witness memory entries (`memory` effects).
+6. Write conversation summary; trim transcript.
+7. Record event-fired bookkeeping (`once` consumed here only); set flags.
+8. Run EventEngine `scene_end` checkpoint.
+9. Autosave.
 
-If any step fails validation, the *whole batch* is rejected and a minimal safe outcome applies (conversation summary only + log). State is never half-updated.
+If any step fails validation, the *whole batch* is rejected (AP included) and a minimal safe outcome applies (conversation summary only + log). State is never half-updated. Quit/reload before the terminal node discards the session: no AP cost, no effects, `once` unconsumed.
 
 ### 4.7 Contradictions
 
@@ -698,7 +713,7 @@ Generated dialogue **never mutates state at render time.** Proposed updates accu
   "memory_updates": [
     { "kind": "opinion", "summary": "陛下嘴上不提凤仪宫，神色却不像要疏远中宫的样子。", "salience": 45, "tags": ["player", "shen_yan", "favor"] }
   ],
-  "relationship_updates": { "trust": 2, "affection": 3 },
+  "relationship_updates": { "trust": 2, "affinity": 3 },
   "event_triggers": []
 }
 ```
@@ -726,7 +741,7 @@ Never discuss willingly: {voice.tabooTopics} — deflect if raised.
 
 == COURT & SPEECH RULES ==
 The player is the reigning Empress (女帝); address her as 陛下 unless your quirks say otherwise.
-Your rank: {rankName}. Self-reference: {selfRef per the rank table — 臣后/本宫/本位/臣侍/小侍}.
+Your rank: {rankName}. Self-reference: {selfRefs for your rank, by register — 臣后/本宫/本位/臣侍/小侍}.
 World terms, use them correctly: {lexicon terms — 胎息, 承养, 承养人, 承嗣君, 育嗣君, 养君, 自孕, 经血祭祀, …}
 Forbidden vocabulary: {lexicon.banned — father-line terms (父亲/父皇/夫人 for men), modern speech}.
 This is a 礼法女尊 court: women hold throne, army, rites; men keep the inner palace.
@@ -734,7 +749,7 @@ All dialogue is Simplified Chinese.
 
 == YOUR CURRENT STATE ==
 Mood: {mood.current} (intensity {mood.intensity}/100){mood.cause ? ", because " + causeSummary : ""}
-Your relationship with the Empress: trust {trust}/100 ({trustTierWord}), affection {affection}/100 ({affTierWord}).
+Your relationship with the Empress: trust {trust}/100 ({trustTierWord}), affinity {affinity}/100 ({affTierWord}).
 Your standing: rank {rankName}, favor {favor}/100 ({favorTierWord}).
 Relationship notes: {flags rendered as sentences}
 
@@ -766,7 +781,7 @@ Respond with ONLY a JSON object, no prose around it:
   "memory_updates": [0–2 NEW things {name} will remember from this exchange, only if
                      genuinely noteworthy; {"kind","summary"(≤240 chars, your POV),
                      "salience"(0–100),"tags"(≤5)}],
-  "relationship_updates": {"trust": -5..5, "affection": -5..5} (0 if nothing changed),
+  "relationship_updates": {"trust": -5..5, "affinity": -5..5} (0 if nothing changed),
   "event_triggers": [] or subset of {offeredTriggerIds} if its condition was clearly met }
 
 Rules: Speak only as {name}, in Simplified Chinese, ≤150 字 of dialogue. Obey the COURT &
@@ -845,7 +860,7 @@ Harness: `tools/eval-dialogue.ts` (extends the §8 voice-check) replays a fixed 
 - **Dynamic conversations**: a 1-node `generate` scene with a directive — the default "talk to X" interaction. Directive comes from a small pool per character/relationship tier ("楚荷恃宠撒娇，顺势打探陛下近日的行踪……") so even free talk has authored intent.
 - **Hybrid**: scripted spine with `generate` nodes for connective conversation — the workhorse format.
 - **Trigger rules**: at each checkpoint EventEngine filters events by checkpoint → evaluates conditions → drops fired `once` events and cooling-down repeatables → groups by `exclusiveGroup` → picks max priority (deterministic tiebreak by id) → returns at most **one** event. Scene-end checkpoints can chain (reveal scene unlocks confession scene) but with a **chain depth cap of 3 per player action**; hitting the cap logs `StateError:EVENT_CHAIN_LIMIT` and defers remaining events to the next checkpoint — this is the circular-trigger guard, plus a content-validation pass that walks `eventFired` references looking for static cycles and warns at load.
-- **Consequences** are only ever `SceneOutcomeSpec` + effect nodes: flags, relationship deltas, memory appends, mood sets, presence overrides, unlocking map nodes. New scene unlocks are *not* a mechanism of their own — they're just events whose conditions (memory tags, relationship thresholds, flags) become true.
+- **Consequences** are only ever effect nodes (EventEffects committed at scene end): flags, relationship deltas, memory appends, mood sets, presence overrides, unlocking map nodes. New scene unlocks are *not* a mechanism of their own — they're just events whose conditions (memory tags, relationship thresholds, flags) become true.
 - **Cooldowns/once** bookkeeping lives in `GameState.eventLog`, so it saves/loads for free.
 
 ### 6.3 Asset pipeline
@@ -943,8 +958,8 @@ Slice content uses the world bible's canon (terms, ranks, 称谓, conflicts) but
 
 **Characters:**
 - `shen_yan` 沈晏 — 皇后 (full example in §3.1). 端肃克制, 无宠但掌后宫 (bible conflict #6). Court: `{ rank: "huanghou", favor: 20 }`. Secret: 私录各宫账册推演前朝银钱往来 — brushing the 男子不得私习外学 line (conflict #5, the mild version).
-- `chu_he` 楚荷 — 贵君: bold, vivid, openly favored, needles the 皇后 at every chance (conflict #6 from the other side). `initialRelationship: { trust: 20, affection: 40 }`; court `{ rank: "guijun", favor: 70 }`; initial memory: *“大朝会后陛下单独召见了我；凤仪宫那位的脸色，啧。”* salience 55, protected. Secret: 妆匣夹层里藏着半部手抄兵书 (conflict #5, the sharp version).
-- `lin_wan` 林晚 — 更衣 (lowest rank): quiet, observant, rumored to have exceptional 血养 aptitude (conflict #3). `initialRelationship: { trust: 10, affection: 5 }`; court `{ rank: "gengyi", favor: 5 }`; initial memory: *“听闻陛下已三月未进凤仪宫，宫人都在押中宫何时失势。”* salience 30 — secondhand, lower salience than the witnesses'.
+- `chu_he` 楚荷 — 贵君: bold, vivid, openly favored, needles the 皇后 at every chance (conflict #6 from the other side). `initialRelationship: { trust: 20, affinity: 40 }`; court `{ rank: "guijun", favor: 70 }`; initial memory: *“大朝会后陛下单独召见了我；凤仪宫那位的脸色，啧。”* salience 55, protected. Secret: 妆匣夹层里藏着半部手抄兵书 (conflict #5, the sharp version).
+- `lin_wan` 林晚 — 更衣 (lowest rank): quiet, observant, rumored to have exceptional 血养 aptitude (conflict #3). `initialRelationship: { trust: 10, affinity: 5 }`; court `{ rank: "gengyi", favor: 5 }`; initial memory: *“听闻陛下已三月未进凤仪宫，宫人都在押中宫何时失势。”* salience 30 — secondhand, lower salience than the witnesses'.
 
 **Locations:** `fengyi_palace` 凤仪宫 (沈晏's seat), `lantai` 兰台 (楚荷's palace), `yuhua_garden` 御花园 (林晚 is assigned duties here). Map: three nodes on the 宫城图, fully connected, travelCost 1 AP each.
 
@@ -958,7 +973,7 @@ generate(shen_yan, directive: "沈晏与陛下叙后宫近况，克制地试探�
 outcome: per-witness memories + conversation summary + autosave
 ```
 
-**Generated flow (illustrative):** player chose the friendly line → next 中旬 (the 后宫 action-day), player travels to `lantai` (1 AP), taps 楚荷 → dynamic scene, directive from her `favored_mid_trust` pool ("楚荷恃宠撒娇，顺势打探陛下昨日去凤仪宫做了什么"). Context assembled: profile + mood `neutral` + trust 20 / favor 70 (rendered: rank 贵君, self-reference 本宫) + retrieved memories include her protected 召见 memory and the gossip summary *“陛下昨日去了凤仪宫，坐了近一盏茶的工夫。”* Model returns the §5.2 example JSON (楚荷 needles about 凤仪宫, proposes an `opinion` memory at salience 45, trust +2 / affection +3). Validator: expression `smile` ✓ in her list, deltas within ±5 ✓, no banned terms ✓, self-reference 本宫 ✓ for rank `guijun`, no event triggers ✓ → turn renders with `portrait.chu_he.smile`; updates held.
+**Generated flow (illustrative):** player chose the friendly line → next 中旬 (the 后宫 action-day), player travels to `lantai` (1 AP), taps 楚荷 → dynamic scene, directive from her `favored_mid_trust` pool ("楚荷恃宠撒娇，顺势打探陛下昨日去凤仪宫做了什么"). Context assembled: profile + mood `neutral` + trust 20 / favor 70 (rendered: rank 贵君, self-reference 本宫) + retrieved memories include her protected 召见 memory and the gossip summary *“陛下昨日去了凤仪宫，坐了近一盏茶的工夫。”* Model returns the §5.2 example JSON (楚荷 needles about 凤仪宫, proposes an `opinion` memory at salience 45, trust +2 / affinity +3). Validator: expression `smile` ✓ in her list, deltas within ±5 ✓, no banned terms ✓, self-reference 本宫 ✓ for rank `guijun`, no event triggers ✓ → turn renders with `portrait.chu_he.smile`; updates held.
 
 **Memory before/after (chu_he):**
 ```
@@ -972,7 +987,7 @@ after:  ...both, plus
 ```
 林晚, absent, gets nothing — ask her about the Empress and she still only has the palace-gossip memory: subjectivity demonstrated. (沈晏 likewise learns nothing of the 兰台 visit — what 楚荷 later gossips about is an authored `effect`, never automatic.)
 
-**Relationship update:** `chu_he: {trust: 20→22, affection: 40→43}` via one `APPLY_SCENE_OUTCOME` batch, visible in the debug relationship panel with the scene id as cause. Favor unchanged — 恩宠 moves only through explicit player actions (赏赐, 侍寝, 晋位 via `APPLY_FAVOR_DELTA`/`SET_RANK` effects), never by AI proposal.
+**Relationship update:** `chu_he: {trust: 20→22, affinity: 40→43}` via one `APPLY_SCENE_OUTCOME` batch, visible in the debug relationship panel with the scene id as cause. Favor unchanged — 恩宠 moves only through explicit player actions (赏赐, 侍寝, 晋位 via `APPLY_FAVOR_DELTA`/`SET_RANK` effects), never by AI proposal.
 
 **Asset manifest entries:**
 ```json
