@@ -5,8 +5,7 @@
 export function TitleScreen() {
   return (
     <main className="title-screen">
-      <h1 className="title-screen__name">思宸</h1>
-      <p className="title-screen__tagline">江山 · 后宫 · 血脉</p>
+      <h1 className="title-screen__name">凤司晨</h1>
       <nav className="title-screen__menu">
         <button type="button" className="title-screen__button" disabled>
           新游戏

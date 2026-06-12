@@ -32,12 +32,6 @@ body {
   color: #d9b87c;
 }
 
-.title-screen__tagline {
-  font-size: 0.95rem;
-  letter-spacing: 0.4em;
-  color: #8a7a62;
-}
-
 .title-screen__menu {
   margin-top: 2.5rem;
   display: flex;
