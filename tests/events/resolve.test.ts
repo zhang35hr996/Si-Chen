@@ -34,6 +34,7 @@ describe("resolveEvent — one transaction", () => {
     expect(rolledOver).toBe(false);
     expect(hasEventFired(state, "ev_menses_rite")).toBe(true);
     expect(state.eventLog[0]?.firedAt).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
+    expect(state.sceneHistory).toEqual(["sc_menses_rite"]); // committed in the same transaction
   });
 
   it("firedAt is stamped on the action-day it happened, even when apCost rolls the day", () => {

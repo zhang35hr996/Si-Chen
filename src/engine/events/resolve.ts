@@ -64,6 +64,10 @@ export function resolveEvent(
     rolledOver = spent.value.rolledOver;
   }
 
-  next = { ...next, eventLog: [...next.eventLog, { eventId, firedAt }] };
+  next = {
+    ...next,
+    eventLog: [...next.eventLog, { eventId, firedAt }],
+    sceneHistory: [...next.sceneHistory, event.sceneId], // completed scenes — same transaction
+  };
   return ok({ state: next, rolledOver });
 }
