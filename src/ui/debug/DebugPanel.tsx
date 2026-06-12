@@ -37,11 +37,45 @@ function ContentSummary({ db }: { db: ContentDB }) {
 function DebugPanelBody({ store, db }: { store: GameStore; db?: ContentDB }) {
   const state = useGameState(store);
   const [lastRejection, setLastRejection] = useState<string | null>(null);
+  const [, bumpReport] = useState(0);
 
   const spendAp = (amount: number) => {
     const result = store.dispatch({ type: "SPEND_AP", amount });
     setLastRejection(result.ok ? null : `${formatErrorTag(result.error)} — ${result.error.message}`);
   };
+
+  const gameStarted = Object.keys(state.relationships).length > 0;
+  const firstCharId = Object.keys(state.relationships)[0];
+
+  const fireEffects = (valid: boolean) => {
+    if (!db || !firstCharId) return;
+    store.applyEffects(
+      db,
+      valid
+        ? [
+            { type: "relationship", char: firstCharId, field: "trust", delta: 2 },
+            { type: "resource", pillar: "harem", field: "harmony", delta: 1 },
+            {
+              type: "memory",
+              char: firstCharId,
+              entry: {
+                kind: "opinion",
+                summary: "（调试）陛下方才在调试面板里拨弄了一下人心。",
+                salience: 10,
+                tags: ["debug"],
+                participants: ["player", firstCharId],
+              },
+            },
+          ]
+        : [
+            { type: "relationship", char: firstCharId, field: "trust", delta: 2 },
+            { type: "relationship", char: "char_ghost", field: "trust", delta: 2 },
+          ],
+    );
+    bumpReport((n) => n + 1); // rejected batches don't emit — refresh report display
+  };
+
+  const report = store.getLastEffectReport();
 
   return (
     <aside className="debug-panel">
@@ -69,6 +103,26 @@ function DebugPanelBody({ store, db }: { store: GameStore; db?: ContentDB }) {
         </button>
       </div>
       {lastRejection && <p className="debug-panel__rejection">{lastRejection}</p>}
+      <div className="debug-panel__actions">
+        <button type="button" onClick={() => fireEffects(true)} disabled={!gameStarted || !db}>
+          合法效果批
+        </button>
+        <button type="button" onClick={() => fireEffects(false)} disabled={!gameStarted || !db}>
+          非法效果批
+        </button>
+      </div>
+      {!gameStarted && <p className="debug-panel__content">效果批演示需先开始新游戏。</p>}
+      {report && (
+        <p className={report.outcome === "applied" ? "debug-panel__content" : "debug-panel__rejection"}>
+          上一效果批：{report.outcome === "applied" ? "已应用" : "已整批拒绝"}（{report.effects.length} 个效果）
+          {report.errors.map((error, i) => (
+            <span key={i}>
+              <br />
+              {formatErrorTag(error)} — {error.message}
+            </span>
+          ))}
+        </p>
+      )}
       {db && <ContentSummary db={db} />}
       <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
     </aside>

@@ -3,12 +3,23 @@
  * Plain TS — React coupling lives only in useGameState.ts.
  */
 import type { ContentDB } from "../engine/content/loader";
+import type { EventEffect } from "../engine/content/schemas";
+import { applyEffects } from "../engine/effects/funnel";
+import type { GameError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
+import type { Result } from "../engine/infra/result";
 import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
 import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState } from "../engine/state/types";
+
+/** Diagnostics for the debug panel: what the last effect batch did. */
+export interface EffectReport {
+  effects: readonly EventEffect[];
+  outcome: "applied" | "rejected";
+  errors: GameError[];
+}
 
 export interface GameStoreOptions {
   logger?: RingBufferLogger;
@@ -48,8 +59,34 @@ export class GameStore {
   /** Start a fresh playthrough from validated content (skeleton-plan §5). */
   newGame(db: ContentDB): void {
     this.state = createNewGameState(db);
+    this.lastEffectReport = null;
     this.emit();
   }
+
+  /**
+   * THE single entry point for gameplay-state changes (skeleton-plan §6):
+   * relationships, favor, resources, memory, and flags change only here,
+   * through the effect funnel. Atomic: rejection leaves the state reference
+   * untouched, notifies no one, and logs every collected error once.
+   */
+  applyEffects(db: ContentDB, effects: readonly EventEffect[]): Result<GameState, GameError[]> {
+    const result = applyEffects(db, this.state, effects);
+    if (result.ok) {
+      this.state = result.value;
+      this.lastEffectReport = { effects, outcome: "applied", errors: [] };
+      this.emit();
+    } else {
+      for (const error of result.error) this.logger?.logGameError(error);
+      this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
+    }
+    return result;
+  }
+
+  getLastEffectReport(): EffectReport | null {
+    return this.lastEffectReport;
+  }
+
+  private lastEffectReport: EffectReport | null = null;
 
   private commit(result: CommandResult): CommandResult {
     if (result.ok) {
