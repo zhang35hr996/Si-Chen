@@ -67,3 +67,62 @@ body {
   color: #6b5d4a;
   letter-spacing: 0.2em;
 }
+
+/* ── debug panel (` to toggle) ───────────────────────────────────── */
+
+.debug-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(30rem, 90vw);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  background: rgba(10, 8, 6, 0.94);
+  border-left: 1px solid #5c4d3a;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.78rem;
+  z-index: 100;
+}
+
+.debug-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: #d9b87c;
+}
+
+.debug-panel__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.debug-panel__actions button {
+  font: inherit;
+  color: #e8dcc8;
+  background: #241c15;
+  border: 1px solid #5c4d3a;
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+}
+
+.debug-panel__actions button:hover {
+  border-color: #d9b87c;
+}
+
+.debug-panel__rejection {
+  color: #d98c7c;
+}
+
+.debug-panel__dump {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 0.6rem;
+  background: #0a0806;
+  border: 1px solid #33291f;
+  color: #b8aa90;
+  white-space: pre;
+}
