@@ -1,0 +1,35 @@
+{
+  "id": "sili_nvguan",
+  "kind": "official",
+  "profile": {
+    "name": "司礼女官",
+    "age": 41,
+    "role": "司礼女官（掌祭仪礼制）",
+    "appearance": "一丝不苟的绛色官服，腰间悬礼部铜符，神色永远平静。",
+    "personalityTraits": ["严谨", "守制", "不徇私", "忠于礼法"],
+    "coreFacts": ["执掌经血祭仪与宫廷礼制十余年", "先帝旧人，深谙典章"],
+    "goals": ["确保祭仪依制按期举行", "以礼法护国本"],
+    "speechStyle": "公事公办，条理分明，引经据典；从不多言一句私话。"
+  },
+  "defaultLocation": "yushufang",
+  "portraitSet": "sili_nvguan",
+  "expressions": ["neutral", "frown", "worried"],
+  "voice": {
+    "register": "formal",
+    "quirks": ["自称『臣』", "称玩家『陛下』", "言必称典制"],
+    "tabooTopics": ["先帝末年的旧事"]
+  },
+  "initialRelationship": { "trust": 50, "affinity": 30, "flags": [] },
+  "initialStanding": { "rank": "sili_zhang", "favor": 40 },
+  "initialMemories": [
+    {
+      "kind": "fact_learned",
+      "summary": "本月下旬经血祭仪的仪程尚未得陛下御批，礼不可误期。",
+      "salience": 60,
+      "tags": ["rite", "duty"],
+      "participants": ["sili_nvguan"],
+      "protected": true
+    }
+  ],
+  "secrets": []
+}

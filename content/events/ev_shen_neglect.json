@@ -1,0 +1,12 @@
+{
+  "id": "ev_shen_neglect",
+  "title": "沈承徽被冷落",
+  "sceneId": "sc_shen_neglect",
+  "checkpoint": "location_enter",
+  "condition": {
+    "all": [{ "atLocation": "yuhuayuan" }, { "not": { "eventFired": "ev_shen_neglect" } }]
+  },
+  "priority": 50,
+  "once": true,
+  "apCost": 1
+}

@@ -1,0 +1,12 @@
+{
+  "id": "ev_fenghou_rules",
+  "title": "凤后提醒宫规",
+  "sceneId": "sc_fenghou_rules",
+  "checkpoint": "location_enter",
+  "condition": {
+    "all": [{ "atLocation": "hougong_zhudian" }, { "not": { "eventFired": "ev_fenghou_rules" } }]
+  },
+  "priority": 50,
+  "once": true,
+  "apCost": 1
+}

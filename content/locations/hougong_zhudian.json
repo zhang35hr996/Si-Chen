@@ -1,0 +1,10 @@
+{
+  "id": "hougong_zhudian",
+  "name": "后宫主殿",
+  "description": "凤后所居正殿，礼器森然，金砖照影，宫人垂手屏息。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": ["檀香", "环佩轻响", "殿外请安声"],
+  "position": { "x": 0.62, "y": 0.4 },
+  "connections": ["yushufang", "yuhuayuan"],
+  "travelCost": { "ap": 1 }
+}

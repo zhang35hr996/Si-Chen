@@ -1,0 +1,39 @@
+{
+  "contentVersion": "0.1.0",
+  "calendar": { "apMax": 5, "start": { "year": 1, "month": 1, "period": "early" } },
+  "startingLocation": "yushufang",
+  "startingResources": {
+    "court": { "authority": 50, "publicSupport": 50, "factionPressure": 20 },
+    "harem": { "harmony": 60, "jealousy": 20 },
+    "bloodline": { "legitimacy": 60, "menstrualStatus": "normal" }
+  },
+  "ranks": [
+    {
+      "id": "fenghou",
+      "name": "凤后",
+      "grade": "正宫",
+      "selfRefs": { "toPlayer": ["臣后"], "formal": ["本宫"] },
+      "order": 100,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "chenghui",
+      "name": "承徽",
+      "grade": "正三品",
+      "selfRefs": { "toPlayer": ["本位"], "formal": ["本位"], "informal": ["我"] },
+      "order": 60,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "sili_zhang",
+      "name": "司礼女官",
+      "grade": "正五品",
+      "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] },
+      "order": 50,
+      "domain": "official",
+      "favorTerm": "圣眷"
+    }
+  ]
+}

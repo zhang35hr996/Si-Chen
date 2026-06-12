@@ -1,0 +1,12 @@
+{
+  "id": "ev_menses_rite",
+  "title": "司礼女官请示经血祭仪",
+  "sceneId": "sc_menses_rite",
+  "checkpoint": "location_enter",
+  "condition": {
+    "all": [{ "atLocation": "yushufang" }, { "not": { "eventFired": "ev_menses_rite" } }]
+  },
+  "priority": 50,
+  "once": true,
+  "apCost": 2
+}

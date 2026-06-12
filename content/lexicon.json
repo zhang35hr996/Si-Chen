@@ -1,0 +1,54 @@
+{
+  "approvedTerms": [
+    "胎息",
+    "承养",
+    "承养人",
+    "承嗣君",
+    "育嗣君",
+    "养君",
+    "自孕",
+    "经血祭祀",
+    "经血祭仪",
+    "凤后",
+    "承徽",
+    "侍君",
+    "位分",
+    "凤印",
+    "宫规",
+    "皇嗣",
+    "皇子",
+    "皇郎",
+    "公主",
+    "贵主"
+  ],
+  "forbiddenTerms": ["父皇", "血父", "王爷", "太监", "娘娘", "嫔妃", "皇上"],
+  "rankAddressRules": [
+    {
+      "rank": "fenghou",
+      "selfRefs": { "toPlayer": ["臣后"], "formal": ["本宫"] },
+      "addressedAs": "凤后"
+    },
+    {
+      "rank": "chenghui",
+      "selfRefs": { "toPlayer": ["本位"], "formal": ["本位"], "informal": ["我"] },
+      "addressedAs": "承徽"
+    },
+    {
+      "rank": "sili_zhang",
+      "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] },
+      "addressedAs": "司礼"
+    }
+  ],
+  "kinshipTerms": [
+    { "concept": "皇帝亲生子嗣统称", "term": "皇嗣" },
+    { "concept": "皇帝女儿", "term": "皇子" },
+    { "concept": "皇帝男儿", "term": "皇郎" },
+    { "concept": "成年受封的女性皇子", "term": "公主" },
+    { "concept": "皇郎成年后的尊称", "term": "贵主" }
+  ],
+  "styleRules": [
+    "不得创造新的官职、位分、宗嗣术语；制度未定时用普通描述，不要造词",
+    "男子角色遵循礼法语体，不用现代恋爱腔",
+    "对女帝一律称『陛下』，不得称『皇上』"
+  ]
+}

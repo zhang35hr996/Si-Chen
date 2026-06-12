@@ -1,0 +1,108 @@
+{
+  "id": "sc_fenghou_rules",
+  "locationId": "hougong_zhudian",
+  "participants": ["feng_hou"],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "feng_hou",
+      "text": "陛下驾临，臣后正有一事启奏。近来各宫请安废弛，位分僭越之语渐起。臣后欲重申宫规，请陛下示下。",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        { "id": "c_adopt", "text": "凤印在你手中，照你的意思办。", "tone": "friendly", "next": "n_fx_adopt" },
+        { "id": "c_vague", "text": "此事……容朕再想想。", "tone": "neutral", "next": "n_fx_vague" },
+        { "id": "c_reject", "text": "小题大做。后宫安分得很，不必兴师动众。", "tone": "guarded", "next": "n_fx_reject" }
+      ]
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_adopt",
+      "effects": [
+        { "type": "resource", "pillar": "harem", "field": "harmony", "delta": 4 },
+        { "type": "relationship", "char": "feng_hou", "field": "trust", "delta": 3 },
+        {
+          "type": "memory",
+          "char": "feng_hou",
+          "entry": {
+            "kind": "event",
+            "summary": "陛下当面准我重申宫规。凤印的分量，还在。",
+            "salience": 60,
+            "tags": ["player", "rules", "authority"],
+            "participants": ["player", "feng_hou"],
+            "locationId": "hougong_zhudian"
+          }
+        }
+      ],
+      "next": "n_end_adopt"
+    },
+    {
+      "type": "line",
+      "id": "n_end_adopt",
+      "speaker": "feng_hou",
+      "text": "臣后领旨。必不使后宫之事，再扰陛下分毫。",
+      "expression": "smile"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_vague",
+      "effects": [
+        { "type": "relationship", "char": "feng_hou", "field": "trust", "delta": -1 },
+        {
+          "type": "memory",
+          "char": "feng_hou",
+          "entry": {
+            "kind": "opinion",
+            "summary": "陛下对宫规之事含糊其辞。是不愿管，还是不愿我管？",
+            "salience": 55,
+            "tags": ["player", "rules", "doubt"],
+            "participants": ["player", "feng_hou"],
+            "locationId": "hougong_zhudian"
+          }
+        }
+      ],
+      "next": "n_end_vague"
+    },
+    {
+      "type": "line",
+      "id": "n_end_vague",
+      "speaker": "feng_hou",
+      "text": "……是。臣后静候陛下圣裁。",
+      "expression": "neutral"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_reject",
+      "effects": [
+        { "type": "resource", "pillar": "harem", "field": "harmony", "delta": -4 },
+        { "type": "relationship", "char": "feng_hou", "field": "trust", "delta": -3 },
+        {
+          "type": "memory",
+          "char": "feng_hou",
+          "entry": {
+            "kind": "event",
+            "summary": "陛下当面驳了我整肃宫规之奏，说是小题大做。殿上宫人都听见了。",
+            "salience": 70,
+            "tags": ["player", "rules", "humiliation"],
+            "participants": ["player", "feng_hou"],
+            "locationId": "hougong_zhudian"
+          }
+        }
+      ],
+      "next": "n_end_reject"
+    },
+    {
+      "type": "line",
+      "id": "n_end_reject",
+      "speaker": "feng_hou",
+      "text": "……臣后失言。恭送陛下。",
+      "expression": "frown"
+    }
+  ]
+}

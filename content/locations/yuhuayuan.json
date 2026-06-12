@@ -1,0 +1,10 @@
+{
+  "id": "yuhuayuan",
+  "name": "御花园",
+  "description": "曲径通幽，时有落花拂过水面；宫中私语，多半从这里传开。",
+  "backgroundKey": "bg.yuhuayuan",
+  "ambience": ["花气", "流水", "远处隐约的笑语"],
+  "position": { "x": 0.48, "y": 0.7 },
+  "connections": ["yushufang", "hougong_zhudian"],
+  "travelCost": { "ap": 1 }
+}

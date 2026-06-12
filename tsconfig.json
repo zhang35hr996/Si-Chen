@@ -5,7 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
 
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -18,5 +18,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src", "tests", "vite.config.ts", "eslint.config.js"]
+  "include": ["src", "tests", "tools", "vite.config.ts", "eslint.config.js"]
 }
