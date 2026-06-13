@@ -12,12 +12,14 @@ export function LocationScreen({
   store,
   registry,
   onOpenMap,
+  onOpenSave,
   onStartEvent,
 }: {
   db: ContentDB;
   store: GameStore;
   registry: AssetRegistry;
   onOpenMap: () => void;
+  onOpenSave: () => void;
   onStartEvent: (eventId: string) => void;
 }) {
   const state = useGameState(store);
@@ -36,9 +38,14 @@ export function LocationScreen({
         <span className="hud__time">
           {formatGameTime(state.calendar)} · {formatAp(state.calendar)}
         </span>
-        <button type="button" className="hud__button" onClick={onOpenMap}>
-          宫城图
-        </button>
+        <span className="hud__group">
+          <button type="button" className="hud__button" onClick={onOpenSave}>
+            存档
+          </button>
+          <button type="button" className="hud__button" onClick={onOpenMap}>
+            宫城图
+          </button>
+        </span>
       </header>
 
       <section

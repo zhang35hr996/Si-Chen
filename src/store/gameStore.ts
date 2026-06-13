@@ -64,6 +64,13 @@ export class GameStore {
     this.emit();
   }
 
+  /** Replace state with a save-system-validated GameState (load/import). */
+  loadState(state: GameState): void {
+    this.state = state;
+    this.lastEffectReport = null;
+    this.emit();
+  }
+
   /**
    * THE single entry point for gameplay-state changes (skeleton-plan §6):
    * relationships, favor, resources, memory, and flags change only here,

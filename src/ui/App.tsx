@@ -6,18 +6,21 @@ import { loadGameContent } from "../engine/content/viteSource";
 import { pickNextEvent } from "../engine/events/engine";
 import { assetError, stateError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
+import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
+import { createLocalStorageAdapter } from "../engine/save/storage";
 import type { GameStore } from "../store/gameStore";
 import { DebugPanel } from "./debug/DebugPanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
 import { DialogueScreen } from "./screens/DialogueScreen";
 import { LocationScreen } from "./screens/LocationScreen";
 import { MapScreen } from "./screens/MapScreen";
+import { SaveLoadScreen } from "./screens/SaveLoadScreen";
 import { TitleScreen } from "./screens/TitleScreen";
 
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "event";
+type View = "title" | "location" | "map" | "event" | "save";
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -31,7 +34,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   );
   const [view, setView] = useState<View>("title");
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [continueError, setContinueError] = useState<string | null>(null);
   const chainDepth = useRef(0);
+  const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   if (!content.ok || !manifest.success) {
     const errors = [
@@ -48,6 +53,26 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     chainDepth.current = 0; // player-initiated start resets the chain budget
     setActiveEventId(eventId);
     setView("event");
+  };
+
+  /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
+  const doAutosave = () => {
+    if (storage) autosave(storage, db, store.getState(), { logger });
+  };
+
+  const canContinue =
+    storage !== null && listSaves(storage).some((s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok");
+
+  const continueGame = () => {
+    if (!storage) return;
+    const result = loadWithRecovery(storage, db, { logger });
+    if (result.ok) {
+      store.loadState(result.value.state);
+      setContinueError(result.value.warnings.map((w) => w.message).join("；") || null);
+      setView("location");
+    } else {
+      setContinueError(result.error.map((e) => e.message).join("；"));
+    }
   };
 
   /** Checkpoint wiring: time_advance (after a rollover) wins over location_enter. */
@@ -69,14 +94,33 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   return (
     <>
-      {view === "title" && <TitleScreen onNewGame={newGame} />}
+      {view === "title" && (
+        <TitleScreen
+          onNewGame={newGame}
+          onContinue={continueGame}
+          canContinue={canContinue}
+          continueError={continueError}
+        />
+      )}
       {view === "location" && (
         <LocationScreen
           db={db}
           store={store}
           registry={registry}
           onOpenMap={() => setView("map")}
+          onOpenSave={() => setView("save")}
           onStartEvent={startEvent}
+        />
+      )}
+      {view === "save" && (
+        <SaveLoadScreen
+          db={db}
+          store={store}
+          storage={storage}
+          logger={logger}
+          gameStarted
+          onClose={() => setView("location")}
+          onLoaded={() => setView("location")}
         />
       )}
       {view === "map" && (
@@ -84,7 +128,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           db={db}
           store={store}
           registry={registry}
-          onTravelled={runCheckpoints}
+          onTravelled={(rolledOver) => {
+            doAutosave(); // travel autosave (plan §9)
+            runCheckpoints(rolledOver);
+          }}
           onClose={() => setView("location")}
         />
       )}
@@ -97,6 +144,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onDone={(committed) => {
             setActiveEventId(null);
             if (committed) {
+              doAutosave(); // scene-commit autosave (plan §9)
               const pick = pickNextEvent(db, store.getState(), "scene_end");
               if (pick) {
                 if (chainDepth.current < MAX_EVENT_CHAIN) {

@@ -100,6 +100,88 @@ body {
   color: #d9b87c;
 }
 
+.hud__group {
+  display: flex;
+  gap: 0.6rem;
+}
+
+/* ── save/load screen ────────────────────────────────────────────── */
+
+.save-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.save-screen__banner {
+  margin: 1rem 2rem 0;
+  padding: 0.6rem 1rem;
+  color: #d98c7c;
+  border: 1px solid #d98c7c;
+}
+
+.save-screen__message {
+  margin: 0.5rem 2rem 0;
+  color: #d9b87c;
+}
+
+.save-screen__slots {
+  list-style: none;
+  margin: 0.5rem 2rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 42rem;
+}
+
+.save-screen__slot {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid #33291f;
+  background: #1c1611;
+}
+
+.save-screen__slot-name {
+  width: 9rem;
+  color: #d9b87c;
+}
+
+.save-screen__slot-meta {
+  flex: 1;
+  color: #8a7a62;
+  font-size: 0.85rem;
+}
+
+.save-screen__slot-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.save-screen__slot-actions button,
+.save-screen__io button {
+  font: inherit;
+  padding: 0.3rem 1rem;
+  color: #e8dcc8;
+  background: #241c15;
+  border: 1px solid #5c4d3a;
+  cursor: pointer;
+}
+
+.save-screen__slot-actions button:hover,
+.save-screen__io button:hover {
+  border-color: #d9b87c;
+}
+
+.save-screen__io {
+  display: flex;
+  gap: 0.8rem;
+  margin: 0.5rem 2rem 2rem;
+}
+
 /* ── location screen ─────────────────────────────────────────────── */
 
 .location-screen {
