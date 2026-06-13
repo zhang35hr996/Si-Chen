@@ -126,6 +126,39 @@ body {
   color: #d9b87c;
 }
 
+.save-screen__import-preview {
+  margin: 0.5rem 2rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid #5c4d3a;
+  background: #1a140d;
+  max-width: 42rem;
+}
+
+.save-screen__import-hint {
+  color: #8a7a62;
+  font-size: 0.8rem;
+}
+
+.save-screen__import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.save-screen__import-actions button {
+  font: inherit;
+  color: #e8dcc8;
+  background: #241c15;
+  border: 1px solid #5c4d3a;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+}
+
+.save-screen__import-actions button:hover {
+  border-color: #d9b87c;
+}
+
 .save-screen__slots {
   list-style: none;
   margin: 0.5rem 2rem 0;

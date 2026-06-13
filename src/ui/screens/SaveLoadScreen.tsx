@@ -15,6 +15,7 @@ import {
   listSaves,
   readSlot,
   writeSave,
+  type LoadedSave,
   type SaveSlot,
 } from "../../engine/save/saveSystem";
 import type { KVStorage } from "../../engine/save/storage";
@@ -41,6 +42,10 @@ export function SaveLoadScreen({
   useGameState(store); // re-render after load/save
   const [message, setMessage] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  // An imported file is validated and PREVIEWED — never auto-loaded and never
+  // allowed to clobber the autosave. The player explicitly writes it to a manual
+  // slot (or loads it) after seeing what it is (user feedback, plan §9).
+  const [pendingImport, setPendingImport] = useState<LoadedSave | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const report = (prefix: string, errors: GameError[]) =>
@@ -86,12 +91,32 @@ export function SaveLoadScreen({
   const importFile = async (file: File) => {
     const result = importSaveText(db, await file.text());
     if (result.ok) {
-      store.loadState(result.value.state);
-      setMessage(result.value.warnings.map((w) => w.message).join("；") || null);
-      onLoaded();
+      setPendingImport(result.value); // preview first — no live state touched yet
+      setMessage(null);
     } else {
+      setPendingImport(null);
       report("导入失败", [result.error]);
     }
+  };
+
+  // Commit a previewed import into a manual slot. Never writes auto / auto.prev.
+  const writeImportToSlot = (slot: SaveSlot) => {
+    if (!storage || !pendingImport) return;
+    const result = writeSave(storage, db, pendingImport.state, slot, { logger });
+    if (result.ok) {
+      setMessage(`已将导入的存档写入 ${slot}（请从该槽读取以载入）`);
+      setPendingImport(null);
+      setRefresh(refresh + 1);
+    } else {
+      report("写入失败", [result.error]);
+    }
+  };
+
+  const loadImportNow = () => {
+    if (!pendingImport) return;
+    store.loadState(pendingImport.state);
+    setPendingImport(null);
+    onLoaded();
   };
 
   return (
@@ -105,6 +130,33 @@ export function SaveLoadScreen({
 
       {!storage && <p className="save-screen__banner">存档不可用——请使用导出备份进度。</p>}
       {message && <p className="save-screen__message">{message}</p>}
+
+      {pendingImport && (
+        <div className="save-screen__import-preview">
+          <p>
+            待导入存档 · 创建于 {new Date(pendingImport.meta.createdAt).toLocaleString()} · 内容版本{" "}
+            {pendingImport.meta.contentVersion}
+          </p>
+          {pendingImport.warnings.length > 0 && (
+            <p className="save-screen__banner">{pendingImport.warnings.map((w) => w.message).join("；")}</p>
+          )}
+          <p className="save-screen__import-hint">导入不会覆盖自动存档；请选择写入哪个手动槽，或直接载入。</p>
+          <div className="save-screen__import-actions">
+            {storage &&
+              MANUAL_SLOTS.map((slot) => (
+                <button key={slot} type="button" onClick={() => writeImportToSlot(slot)}>
+                  写入 {slot}
+                </button>
+              ))}
+            <button type="button" onClick={loadImportNow}>
+              直接载入到当前游戏
+            </button>
+            <button type="button" onClick={() => setPendingImport(null)}>
+              取消
+            </button>
+          </div>
+        </div>
+      )}
 
       {storage && (
         <ul className="save-screen__slots">

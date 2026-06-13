@@ -1,7 +1,10 @@
 /**
- * Canonical JSON + checksum. The checksum exists for CORRUPTION DETECTION,
- * not cryptography — a synchronous 64-bit FNV-1a keeps the whole save path
- * sync (crypto.subtle would force async through every caller). Documented
+ * Canonical JSON + checksum. The checksum is for CORRUPTION/TAMPER DETECTION,
+ * NOT cryptographic security and NOT anti-cheat. A local single-player game
+ * has nothing to defend against a determined player editing their own save;
+ * the goal is only to catch bad JSON, accidental hand-edits, and truncated
+ * writes. A synchronous 64-bit FNV-1a keeps the whole save path sync
+ * (crypto.subtle would force async through every caller). Documented
  * deviation from the plan's sha-256.
  */
 export function canonicalStringify(value: unknown): string {

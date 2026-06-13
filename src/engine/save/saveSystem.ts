@@ -42,6 +42,8 @@ export interface SaveData extends SaveEnvelope {
 export interface LoadedSave {
   state: GameState;
   warnings: GameError[];
+  /** Envelope summary for previews (e.g. the import flow before it writes a slot). */
+  meta: { createdAt: string; contentVersion: string; slot: string };
 }
 
 const keyOf = (slot: SaveSlot): string => `${SAVE_KEY_PREFIX}${slot}`;
@@ -199,25 +201,39 @@ function validateSave(
   for (const sceneId of state.sceneHistory) {
     if (!db.scenes[sceneId]) missing.push(`scene:${sceneId}`);
   }
+  // Severe tier: the save points at content objects that no longer exist.
+  // It cannot load coherently → quarantine, never silently load (plan §9).
   if (missing.length > 0) {
+    const refs = [...new Set(missing)];
     return err({
-      error: saveError("MISSING_REF", `save references unknown content: ${[...new Set(missing)].join(", ")}`, {
-        context: { missing: [...new Set(missing)] },
+      error: saveError("MISSING_REF", `存档引用了当前内容不存在的对象（${refs.join("、")}），已隔离`, {
+        context: { missing: refs },
       }),
       quarantineWorthy: true,
     });
   }
 
+  // Warn tier: every referenced id still resolves, but the content changed
+  // since the save. Loadable, but values may read oddly → visible warning,
+  // never silent (plan §9). This is NOT the severe tier above.
   const warnings: GameError[] = [];
   if (save.contentHash !== hashContent(db) || save.contentVersion !== db.contentVersion) {
     warnings.push(
-      saveError("CONTENT_MISMATCH", "存档与当前内容版本不一致，可能出现异常", {
-        severity: "warn",
-        context: { saved: save.contentVersion, current: db.contentVersion },
-      }),
+      saveError(
+        "CONTENT_MISMATCH",
+        `存档内容版本（${save.contentVersion}）与当前（${db.contentVersion}）不一致：可载入，但部分内容可能与存档时不同`,
+        {
+          severity: "warn",
+          context: { saved: save.contentVersion, current: db.contentVersion },
+        },
+      ),
     );
   }
-  return ok({ state, warnings });
+  return ok({
+    state,
+    warnings,
+    meta: { createdAt: save.createdAt, contentVersion: save.contentVersion, slot: save.slot },
+  });
 }
 
 export function readSlot(

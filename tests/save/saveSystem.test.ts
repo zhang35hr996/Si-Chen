@@ -121,6 +121,7 @@ describe("corruption ladder", () => {
     if (!result.ok) {
       expect(result.error.code).toBe("MISSING_REF");
       expect(result.error.message).toContain("ev_ghost");
+      expect(result.error.message).toContain("已隔离"); // severe tier: quarantined, not loaded
     }
   });
 });
@@ -138,7 +139,8 @@ describe("content mismatch warning", () => {
     if (!result.ok) return;
     expect(result.value.warnings).toHaveLength(1);
     expect(result.value.warnings[0]?.code).toBe("CONTENT_MISMATCH");
-    expect(result.value.warnings[0]?.message).toContain("存档与当前内容版本不一致");
+    expect(result.value.warnings[0]?.message).toContain("不一致");
+    expect(result.value.warnings[0]?.message).toContain("可载入");
     expect(logger.entries().some((e) => e.message.includes("CONTENT_MISMATCH"))).toBe(true); // never silent
   });
 });
