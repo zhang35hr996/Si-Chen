@@ -390,7 +390,7 @@ Validation per effect type: char/flag targets exist (the discriminated union alr
                           { "not": { "eventFired": "ev_shen_neglect" } } ] },
   "priority": 50, "once": true, "apCost": 1 }
 ```
-Scene: `startNodeId` → line (沈承徽 alone among 落花, voice per his rank: selfRefs.toPlayer 「本位」) → choice 安抚/敷衍/离开 → branch → per-choice effect node carrying both the relationship/resource deltas **and** that branch's `memory` effect with its own POV wording — one funnel, divergent memories for free. The other two events follow the same shape: `ev_fenghou_rules` (后宫主殿, tests etiquette framing + `harem.harmony`, 凤后 trust), `ev_menses_rite` (御书房, 司礼女官, tests bloodline scaffold + `apCost: 2` heavy action + `flag rite_scheduled`).
+Scene: `startNodeId` → line (沈承徽 alone among 落花, voice per his rank: selfRefs.toPlayer 「本位」) → choice 安抚/敷衍/离开 → branch → per-choice effect node carrying both the relationship/resource deltas **and** that branch's `memory` effect with its own POV wording — one funnel, divergent memories for free. The other two events follow the same shape: `ev_fenghou_rules` (后宫主殿, tests etiquette framing + `harem.harmony`, 凤后 trust), `ev_menses_rite` (御书房, 司礼女官, tests bloodline scaffold + `flag rite_scheduled`; apCost 1 — the 召对 is a light action, and BOTH outcomes commit it: 准奏 and 推迟 are decisions with consequences, while 离开 is the free non-decision. The true heavy action, 大祭 itself at 3+ AP, arrives as its own future event — if a decline-vs-approve cost asymmetry is ever wanted, that's a per-choice-cost design decision, not a bypass).
 
 Trigger evaluation, once/cooldown/priority/deterministic tiebreak, chain-depth cap 3: exactly DESIGN §6.2.
 

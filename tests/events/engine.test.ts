@@ -33,8 +33,8 @@ describe("eligibility", () => {
   });
 
   it("affordability is flagged engine-side and pickNextEvent skips unaffordable", () => {
-    const state = at("yushufang"); // rite costs 2 AP
-    const broke: GameState = { ...state, calendar: { ...state.calendar, ap: 1 } };
+    const state = at("yushufang"); // rite costs 1 AP
+    const broke: GameState = { ...state, calendar: { ...state.calendar, ap: 0 } };
     const eligible = getEligibleEvents(db, broke, "location_enter");
     expect(eligible).toHaveLength(1);
     expect(eligible[0]?.affordable).toBe(false); // surfaced as disabled, never started

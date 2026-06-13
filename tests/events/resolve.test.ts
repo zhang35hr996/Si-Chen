@@ -9,7 +9,7 @@ import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
-const atRite = (): GameState => createNewGameState(db); // yushufang; ev_menses_rite costs 2 AP
+const atRite = (): GameState => createNewGameState(db); // yushufang; ev_menses_rite costs 1 AP (召对)
 
 const riteEffects: EventEffect[] = [
   { type: "resource", pillar: "bloodline", field: "legitimacy", delta: 5 },
@@ -30,7 +30,7 @@ describe("resolveEvent — one transaction", () => {
     expect(state.resources.bloodline.legitimacy).toBe(65);
     expect(state.flags["rite_scheduled"]).toBe(true);
     expect(state.memories["sili_nvguan"]?.entries).toHaveLength(2);
-    expect(state.calendar.ap).toBe(3); // 5 - apCost 2
+    expect(state.calendar.ap).toBe(4); // 5 - apCost 1
     expect(rolledOver).toBe(false);
     expect(hasEventFired(state, "ev_menses_rite")).toBe(true);
     expect(state.eventLog[0]?.firedAt).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
@@ -39,7 +39,7 @@ describe("resolveEvent — one transaction", () => {
 
   it("firedAt is stamped on the action-day it happened, even when apCost rolls the day", () => {
     const base = atRite();
-    const state: GameState = { ...base, calendar: { ...base.calendar, ap: 2 } };
+    const state: GameState = { ...base, calendar: { ...base.calendar, ap: 1 } };
     const result = resolveEvent(db, state, "ev_menses_rite", []);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -50,12 +50,12 @@ describe("resolveEvent — one transaction", () => {
 
   it("AP insufficient: blocked outright, no auto-rollover, nothing changes, NOT fired", () => {
     const base = atRite();
-    const broke: GameState = { ...base, calendar: { ...base.calendar, ap: 1 } };
+    const broke: GameState = { ...base, calendar: { ...base.calendar, ap: 0 } };
     const result = resolveEvent(db, broke, "ev_menses_rite", riteEffects);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error[0]?.code).toBe("AP_INSUFFICIENT");
-    expect(broke.calendar.ap).toBe(1);
+    expect(broke.calendar.ap).toBe(0);
     expect(broke.eventLog).toEqual([]);
   });
 

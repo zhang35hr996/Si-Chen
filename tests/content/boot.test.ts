@@ -34,7 +34,7 @@ describe("real content/ boots", () => {
     expect(db.world.startingLocation).toBe("yushufang");
     expect(db.ranks[db.characters["feng_hou"]!.initialStanding.rank]?.domain).toBe("harem");
     expect(db.ranks[db.characters["sili_nvguan"]!.initialStanding.rank]?.domain).toBe("official");
-    expect(db.events["ev_menses_rite"]?.apCost).toBe(2); // heavy action per plan §6
+    expect(db.events["ev_menses_rite"]?.apCost).toBe(1); // 召对是轻行动；真正的大祭（3+ AP 重行动）是未来单独的事件
     expect(db.characters["shen_chenghui"]?.defaultLocation).toBe("yuhuayuan");
   });
 });

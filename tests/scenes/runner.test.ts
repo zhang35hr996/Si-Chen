@@ -68,11 +68,11 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
   it("start enforces affordability engine-side (行动点不足, no rollover) and once", async () => {
     const runner = new SceneRunner(db, mockProvider);
     const base = fresh();
-    const broke: GameState = { ...base, calendar: { ...base.calendar, ap: 1 } };
-    const blocked = await runner.start(broke, "ev_menses_rite"); // costs 2
+    const broke: GameState = { ...base, calendar: { ...base.calendar, ap: 0 } };
+    const blocked = await runner.start(broke, "ev_menses_rite"); // costs 1
     expect(blocked.ok).toBe(false);
     if (!blocked.ok) expect(blocked.error.code).toBe("AP_INSUFFICIENT");
-    expect(broke.calendar.ap).toBe(1); // time did not advance
+    expect(broke.calendar.ap).toBe(0); // time did not advance
 
     const fired: GameState = {
       ...base,
