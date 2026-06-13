@@ -1,11 +1,11 @@
 {
   "version": 1,
   "entries": {
-    "portrait.consort.neutral": { "path": "portraits/consort/neutral.png", "kind": "portrait", "placeholder": true },
-    "portrait.official.neutral": { "path": "portraits/official/neutral.png", "kind": "portrait", "placeholder": true },
-    "bg.yushufang": { "path": "backgrounds/yushufang.png", "kind": "background", "placeholder": true },
-    "bg.hougong_zhudian": { "path": "backgrounds/hougong_zhudian.png", "kind": "background", "placeholder": true },
-    "bg.yuhuayuan": { "path": "backgrounds/yuhuayuan.png", "kind": "background", "placeholder": true },
-    "map.palace": { "path": "map/palace.svg", "kind": "map", "placeholder": true }
+    "portrait.consort.neutral": { "path": "portraits/consort/neutral.png", "kind": "portrait", "placeholder": false },
+    "portrait.official.neutral": { "path": "portraits/official/neutral.png", "kind": "portrait", "placeholder": false },
+    "bg.yushufang": { "path": "backgrounds/yushufang.png", "kind": "background", "placeholder": false },
+    "bg.hougong_zhudian": { "path": "backgrounds/hougong_zhudian.png", "kind": "background", "placeholder": false },
+    "bg.yuhuayuan": { "path": "backgrounds/yuhuayuan.png", "kind": "background", "placeholder": false },
+    "map.palace": { "path": "map/palace.png", "kind": "map", "placeholder": false }
   }
 }

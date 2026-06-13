@@ -39,7 +39,7 @@ describe("checkManifest", () => {
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
     expect(result.entryCount).toBe(6);
-    expect(result.placeholderCount).toBe(6);
+    expect(result.placeholderCount).toBe(0); // all real art uploaded
   });
 
   it("manifest path missing on disk is an error", () => {
