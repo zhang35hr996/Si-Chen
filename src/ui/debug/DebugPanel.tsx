@@ -3,9 +3,11 @@
  * Toggle with ` (backtick). Grows tabs (characters/memory/events) in later PRs.
  */
 import { useEffect, useState } from "react";
-import { formatAp, formatGameTime } from "../../engine/calendar/time";
+import { formatAp, formatGameTime, toGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import { formatErrorTag } from "../../engine/infra/errors";
+import { listMemories, memoryAgeDays, memoryOriginLabel } from "../../engine/memory/inspect";
+import type { GameState } from "../../engine/state/types";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 
@@ -31,6 +33,48 @@ function ContentSummary({ db }: { db: ContentDB }) {
       {Object.keys(db.locations).join(", ")} · 事件 {Object.keys(db.events).length} · 场景{" "}
       {Object.keys(db.scenes).length} · 位分 {Object.keys(db.ranks).join(", ")}
     </p>
+  );
+}
+
+function MemoryBrowser({ db, state }: { db?: ContentDB; state: GameState }) {
+  const charIds = Object.keys(state.memories);
+  const [selected, setSelected] = useState<string | null>(null);
+  const charId = selected && charIds.includes(selected) ? selected : (charIds[0] ?? null);
+  if (!charId) return null;
+
+  const now = toGameTime(state.calendar);
+  const entries = listMemories(state, charId);
+  const nameOf = (id: string) => db?.characters[id]?.profile.name ?? id;
+
+  return (
+    <section className="memory-browser">
+      <div className="memory-browser__tabs">
+        {charIds.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className={id === charId ? "memory-browser__tab--active" : ""}
+            onClick={() => setSelected(id)}
+          >
+            {nameOf(id)}（{listMemories(state, id).length}）
+          </button>
+        ))}
+      </div>
+      <ul className="memory-browser__list">
+        {entries.length === 0 && <li className="memory-browser__meta">（无记忆）</li>}
+        {entries.map((entry) => (
+          <li key={entry.id}>
+            <span className="memory-browser__meta">
+              {entry.id} · {entry.kind} · 显著 {entry.salience} · {memoryAgeDays(entry, now)} 行动日前 ·{" "}
+              {memoryOriginLabel(entry)}
+              {entry.protected ? " · 🔒" : ""}
+              {entry.tags.length > 0 ? ` · #${entry.tags.join(" #")}` : ""}
+            </span>
+            <span className="memory-browser__summary">{entry.summary}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -124,6 +168,7 @@ function DebugPanelBody({ store, db }: { store: GameStore; db?: ContentDB }) {
         </p>
       )}
       {db && <ContentSummary db={db} />}
+      {gameStarted && <MemoryBrowser db={db} state={state} />}
       <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
     </aside>
   );

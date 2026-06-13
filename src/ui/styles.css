@@ -457,6 +457,55 @@ body {
   color: #d98c7c;
 }
 
+.memory-browser {
+  border: 1px solid #33291f;
+  padding: 0.5rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.memory-browser__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.memory-browser__tabs button {
+  font: inherit;
+  font-size: 0.72rem;
+  color: #b8aa90;
+  background: #241c15;
+  border: 1px solid #33291f;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+}
+
+.memory-browser__tabs .memory-browser__tab--active {
+  color: #d9b87c;
+  border-color: #d9b87c;
+}
+
+.memory-browser__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.memory-browser__meta {
+  display: block;
+  color: #8a7a62;
+  font-size: 0.7rem;
+}
+
+.memory-browser__summary {
+  display: block;
+  color: #e8dcc8;
+}
+
 .debug-panel__dump {
   flex: 1;
   overflow: auto;

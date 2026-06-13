@@ -76,6 +76,8 @@ export interface MemoryEntry {
   participants: string[];
   locationId?: string;
   source: "authored" | "scene_outcome";
+  /** Which scene's commit wrote this entry — the debug trace. Absent for authored seeds and non-scene batches. */
+  originSceneId?: string;
   protected: boolean;
 }
 

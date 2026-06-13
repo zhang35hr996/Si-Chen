@@ -48,7 +48,8 @@ export function resolveEvent(
   }
 
   // Effects through the one funnel. Rejection → nothing else happens.
-  const applied = applyEffects(db, state, effects);
+  // The scene id rides along so memory entries carry their origin trace.
+  const applied = applyEffects(db, state, effects, { sceneId: event.sceneId });
   if (!applied.ok) return err(applied.error);
 
   // The event "happened" on the action-day it was resolved — stamp before

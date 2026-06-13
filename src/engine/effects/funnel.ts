@@ -75,10 +75,16 @@ export function validateEffects(
  * is never mutated. On failure returns ALL collected errors and the caller's
  * state stays exactly what it was.
  */
+export interface EffectContext {
+  /** Stamped onto memory entries as their origin trace (debug: which scene wrote this). */
+  sceneId?: string;
+}
+
 export function applyEffects(
   db: ContentDB,
   state: GameState,
   effects: readonly EventEffect[],
+  context: EffectContext = {},
 ): Result<GameState, GameError[]> {
   const errors = validateEffects(db, state, effects);
   if (errors.length > 0) return err(errors);
@@ -140,6 +146,7 @@ export function applyEffects(
           participants: [...effect.entry.participants],
           ...(effect.entry.locationId !== undefined ? { locationId: effect.entry.locationId } : {}),
           source: "scene_outcome", // runtime memory is never "authored"
+          ...(context.sceneId !== undefined ? { originSceneId: context.sceneId } : {}),
           protected: false, // and never protected (schema already forbids true)
         });
         store.nextSeq += 1;
