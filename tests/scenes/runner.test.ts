@@ -32,7 +32,10 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
     expect(first.awaiting).toBe("choice");
     expect(first.line.speakerId).toBe("shen_chenghui");
     expect(first.line.speakerName).toBe("沈承徽");
-    expect(first.line.expression).toBe("frown");
+    // v0 ships only the shared "neutral" portrait per kind, so the scene's
+    // authored expression ("frown") normalizes to neutral (orchestrator fallback).
+    // Add per-expression art back to a character's `expressions` to restore it.
+    expect(first.line.expression).toBe("neutral");
     expect(first.line.meta).toEqual({ generated: false, degraded: false });
     expect(first.line.choices.map((c) => c.id)).toEqual(["c_comfort", "c_brush", "c_cold"]);
 
@@ -43,7 +46,7 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
 
     const second = asFrame(unwrap(await runner.advance("c_comfort")));
     expect(second.awaiting).toBe("continue"); // closing line, effects pending
-    expect(second.line.expression).toBe("smile");
+    expect(second.line.expression).toBe("neutral"); // "smile" normalizes — v0 ships neutral only
     expect(runner.getSession()?.pendingEffects).toHaveLength(3);
     expect(state.calendar.ap).toBe(5); // STILL untouched
 

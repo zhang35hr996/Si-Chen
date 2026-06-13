@@ -12,8 +12,8 @@
     "speechStyle": "公事公办，条理分明，引经据典；从不多言一句私话。"
   },
   "defaultLocation": "yushufang",
-  "portraitSet": "sili_nvguan",
-  "expressions": ["neutral", "frown", "worried"],
+  "portraitSet": "official",
+  "expressions": ["neutral"],
   "voice": {
     "register": "formal",
     "quirks": ["自称『臣』", "称玩家『陛下』", "言必称典制"],

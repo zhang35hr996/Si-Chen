@@ -1,20 +1,11 @@
 {
   "version": 1,
   "entries": {
-    "portrait.feng_hou.neutral": { "path": "portraits/feng_hou/neutral.svg", "kind": "portrait", "placeholder": true },
-    "portrait.feng_hou.smile": { "path": "portraits/feng_hou/smile.svg", "kind": "portrait", "placeholder": true },
-    "portrait.feng_hou.frown": { "path": "portraits/feng_hou/frown.svg", "kind": "portrait", "placeholder": true },
-    "portrait.feng_hou.worried": { "path": "portraits/feng_hou/worried.svg", "kind": "portrait", "placeholder": true },
-    "portrait.shen_chenghui.neutral": { "path": "portraits/shen_chenghui/neutral.svg", "kind": "portrait", "placeholder": true },
-    "portrait.shen_chenghui.smile": { "path": "portraits/shen_chenghui/smile.svg", "kind": "portrait", "placeholder": true },
-    "portrait.shen_chenghui.frown": { "path": "portraits/shen_chenghui/frown.svg", "kind": "portrait", "placeholder": true },
-    "portrait.shen_chenghui.worried": { "path": "portraits/shen_chenghui/worried.svg", "kind": "portrait", "placeholder": true },
-    "portrait.sili_nvguan.neutral": { "path": "portraits/sili_nvguan/neutral.svg", "kind": "portrait", "placeholder": true },
-    "portrait.sili_nvguan.frown": { "path": "portraits/sili_nvguan/frown.svg", "kind": "portrait", "placeholder": true },
-    "portrait.sili_nvguan.worried": { "path": "portraits/sili_nvguan/worried.svg", "kind": "portrait", "placeholder": true },
-    "bg.yushufang": { "path": "backgrounds/yushufang.svg", "kind": "background", "placeholder": true },
-    "bg.hougong_zhudian": { "path": "backgrounds/hougong_zhudian.svg", "kind": "background", "placeholder": true },
-    "bg.yuhuayuan": { "path": "backgrounds/yuhuayuan.svg", "kind": "background", "placeholder": true },
+    "portrait.consort.neutral": { "path": "portraits/consort/neutral.png", "kind": "portrait", "placeholder": true },
+    "portrait.official.neutral": { "path": "portraits/official/neutral.png", "kind": "portrait", "placeholder": true },
+    "bg.yushufang": { "path": "backgrounds/yushufang.png", "kind": "background", "placeholder": true },
+    "bg.hougong_zhudian": { "path": "backgrounds/hougong_zhudian.png", "kind": "background", "placeholder": true },
+    "bg.yuhuayuan": { "path": "backgrounds/yuhuayuan.png", "kind": "background", "placeholder": true },
     "map.palace": { "path": "map/palace.svg", "kind": "map", "placeholder": true }
   }
 }

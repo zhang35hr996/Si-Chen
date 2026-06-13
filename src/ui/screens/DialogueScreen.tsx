@@ -85,10 +85,16 @@ export function DialogueScreen({
 
   const speaker = db.characters[frame.line.speakerId];
   const portrait = registry.portrait(speaker?.portraitSet ?? frame.line.speakerId, frame.line.expression);
+  const scene = event ? db.scenes[event.sceneId] : undefined;
+  const location = scene ? db.locations[scene.locationId] : undefined;
+  const background = location ? registry.background(location.backgroundKey) : null;
 
   return (
-    <main className="dialogue-screen">
-      <header className="hud">
+    <main
+      className="dialogue-screen"
+      style={background ? { backgroundImage: `url("${background.url}")` } : undefined}
+    >
+      <header className="hud dialogue-screen__hud">
         <span className="hud__time">
           {formatGameTime(state.calendar)} · {formatAp(state.calendar)}
         </span>
@@ -100,30 +106,32 @@ export function DialogueScreen({
         </button>
       </header>
 
-      <section className="dialogue-screen__body">
-        <img className="dialogue-screen__portrait" src={portrait.url} alt="" />
-        <div className="dialogue-screen__panel">
-          <p className="dialogue-screen__line">
-            <span className="dialogue-screen__speaker">{frame.line.speakerName}</span>
-            {frame.line.text}
-          </p>
-          <div className="dialogue-screen__choices">
-            {frame.awaiting === "choice" ? (
-              frame.line.choices.map((choice) => (
-                <button
-                  key={choice.id}
-                  type="button"
-                  onClick={() => void runnerRef.current?.advance(choice.id).then(handleStep)}
-                >
-                  {choice.text}
-                </button>
-              ))
-            ) : (
-              <button type="button" onClick={() => void runnerRef.current?.advance().then(handleStep)}>
-                （继续）
+      <img
+        className="dialogue-screen__portrait"
+        src={portrait.url}
+        alt={frame.line.speakerName}
+        data-fallback={portrait.isFallback || undefined}
+      />
+
+      <section className="dialogue-screen__box">
+        <p className="dialogue-screen__speaker">{frame.line.speakerName}</p>
+        <p className="dialogue-screen__line">{frame.line.text}</p>
+        <div className="dialogue-screen__choices">
+          {frame.awaiting === "choice" ? (
+            frame.line.choices.map((choice) => (
+              <button
+                key={choice.id}
+                type="button"
+                onClick={() => void runnerRef.current?.advance(choice.id).then(handleStep)}
+              >
+                {choice.text}
               </button>
-            )}
-          </div>
+            ))
+          ) : (
+            <button type="button" onClick={() => void runnerRef.current?.advance().then(handleStep)}>
+              （继续）
+            </button>
+          )}
         </div>
       </section>
     </main>

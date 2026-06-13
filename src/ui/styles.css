@@ -224,16 +224,33 @@ body {
 }
 
 .location-screen__stage {
-  padding: 3rem 2rem 2rem;
-  text-align: center;
+  flex: 1;
+  min-height: 42vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  text-align: left;
+  padding: 2.5rem 2.2rem;
+  position: relative;
   background-color: #14100e;
   background-size: cover;
   background-position: center;
   border-bottom: 1px solid #33291f;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95);
+}
+
+.location-screen__stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(10, 8, 6, 0.85), transparent 55%);
+  pointer-events: none;
 }
 
 .location-screen__name {
+  position: relative;
+  z-index: 1;
   font-size: 2.2rem;
   letter-spacing: 0.6em;
   text-indent: 0.6em;
@@ -242,14 +259,19 @@ body {
 }
 
 .location-screen__desc {
+  position: relative;
+  z-index: 1;
   margin-top: 0.8rem;
-  color: #b8aa90;
+  max-width: 50rem;
+  color: #cdbfa6;
 }
 
 .location-screen__ambience {
+  position: relative;
+  z-index: 1;
   margin-top: 0.5rem;
   font-size: 0.85rem;
-  color: #6b5d4a;
+  color: #8a7a62;
   letter-spacing: 0.2em;
 }
 
@@ -425,61 +447,85 @@ body {
   cursor: not-allowed;
 }
 
-/* ── event screen (PR 8) ──────────────────────────────── */
+/* ── event screen — galgame layout (full-bleed bg · bottom portrait · box) ── */
 
 .dialogue-screen {
+  position: relative;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
+  background-color: #14100e;
+  background-size: cover;
+  background-position: center;
+}
+
+.dialogue-screen__hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  background: linear-gradient(to bottom, rgba(10, 8, 6, 0.85), transparent);
 }
 
 .dialogue-screen__cost {
-  color: #8a7a62;
+  color: #d9c0a0;
   font-size: 0.85rem;
   letter-spacing: 0.15em;
 }
 
-.dialogue-screen__body {
-  flex: 1;
-  display: flex;
-  gap: 2rem;
-  padding: 2rem;
-  align-items: flex-start;
-}
-
 .dialogue-screen__portrait {
-  width: 14rem;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
-  border: 1px solid #5c4d3a;
-  background: #14100e;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 90vh;
+  max-width: 64vw;
+  object-fit: contain;
+  object-position: bottom center;
+  z-index: 1;
+  filter: drop-shadow(0 6px 28px rgba(0, 0, 0, 0.6));
 }
 
-.dialogue-screen__panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+.dialogue-screen__portrait[data-fallback] {
+  opacity: 0.85;
 }
 
-.dialogue-screen__line {
-  line-height: 1.9;
-  color: #e8dcc8;
+.dialogue-screen__box {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  min-height: 30vh;
+  padding: 1.6rem 2.5rem 2.2rem;
+  background: linear-gradient(to top, rgba(8, 6, 4, 0.97) 62%, rgba(8, 6, 4, 0));
+  border-top: 1px solid #5c4d3a;
 }
 
 .dialogue-screen__speaker {
-  display: block;
-  font-size: 0.8rem;
+  display: inline-block;
+  font-size: 1rem;
   color: #d9b87c;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.25em;
+  margin-bottom: 0.7rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid #d9b87c;
+}
+
+.dialogue-screen__line {
+  line-height: 2;
+  font-size: 1.05rem;
+  color: #f0e7d6;
+  max-width: 60rem;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
 
 .dialogue-screen__choices {
-  margin-top: 1rem;
+  margin-top: 1.2rem;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  max-width: 32rem;
+  gap: 0.55rem;
+  max-width: 34rem;
 }
 
 .dialogue-screen__choices button {
@@ -487,7 +533,7 @@ body {
   text-align: left;
   padding: 0.6rem 1.1rem;
   color: #e8dcc8;
-  background: #1c1611;
+  background: rgba(28, 22, 17, 0.9);
   border: 1px solid #5c4d3a;
   cursor: pointer;
 }

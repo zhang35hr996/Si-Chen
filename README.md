@@ -96,6 +96,26 @@ CI（GitHub Actions）：`check` 作业按序跑 typecheck → lint → test →
 
 ---
 
+## 美术资产（占位 → 真图）
+
+逻辑 **key** 在 `assets/manifest.json`，文件本体在 `public/assets/`，代码/内容只认 key。当前背景与立绘是**占位 PNG**；对话/地点已是 galgame 式布局（背景铺满 + 立绘居中靠下 + 底部对话框）。
+
+**立绘现在全员共用两张**（按身份分流）：所有侍君用 `portrait.consort.neutral`，女官用 `portrait.official.neutral`。
+
+**换上真图**：把 PNG 覆盖到下面对应路径（同名即可），再把 `manifest.json` 里该条的 `placeholder` 改成 `false`：
+
+```
+public/assets/backgrounds/yushufang.png         御书房
+public/assets/backgrounds/yuhuayuan.png         御花园
+public/assets/backgrounds/hougong_zhudian.png   后宫主殿
+public/assets/portraits/consort/neutral.png     侍君立绘（凤后 / 沈承徽 共用）
+public/assets/portraits/official/neutral.png    女官立绘（司礼女官）
+```
+
+放完跑 `npm run validate-manifest` 确认无误。**想给某角色单独立绘或多表情**：把该角色 `portraitSet` 改成独有名（如 `feng_hou`）、在 `expressions` 里列出表情、在 manifest 加 `portrait.<set>.<表情>` 条目并放文件即可——场景里写 `expression: "smile"` 就会生效（缺图时自动回退 neutral，绝不崩）。
+
+---
+
 ## 目录结构
 
 ```

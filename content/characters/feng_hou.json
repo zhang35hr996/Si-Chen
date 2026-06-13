@@ -12,8 +12,8 @@
     "speechStyle": "措辞雅正，多用敬语，句短而克制；急时仍不失礼数。"
   },
   "defaultLocation": "hougong_zhudian",
-  "portraitSet": "feng_hou",
-  "expressions": ["neutral", "smile", "frown", "worried"],
+  "portraitSet": "consort",
+  "expressions": ["neutral"],
   "voice": {
     "register": "formal",
     "quirks": ["对陛下自称『臣后』，仪式场合用『本宫』", "称玩家『陛下』，绝不直呼"],
