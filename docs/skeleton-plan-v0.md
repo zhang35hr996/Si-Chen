@@ -1,7 +1,7 @@
 # Si-Chen — First Playable Skeleton: Implementation Plan v0
 
-**Status:** Planning — no code exists yet; repo contains only `docs/`
-**Parent documents:** `docs/DESIGN.md` (Draft v2.1, the architecture authority) · `docs/background-v0.1.md` (world bible)
+**Status:** ✅ **Complete — PR 1–12 all shipped on `main`.** The §13 acceptance slice was walked end-to-end (250 Vitest cases + a Playwright smoke against the production build, all green). This document is now a historical record of the plan as executed; the next milestone is real AI integration (the text gates and a `DialogueProvider` adapter skeleton are already in place — see §8 / §11).
+**Parent documents:** `docs/DESIGN.md` (Draft v2.2, the architecture authority) · `docs/background-v0.1.md` (world bible)
 **Goal:** the smallest bootable build that proves the architecture: data-driven content → validated state machine → scripted events → dialogue UI → per-character memory → save/load → debug panel. **No real AI model.**
 
 > Where this plan and DESIGN.md describe the same thing, DESIGN.md's section is referenced instead of restated. Where this plan deviates (naming, scope cuts, additions), the deviation is called out explicitly with a `Δ` marker.
@@ -518,6 +518,8 @@ Engine is framework-free → ~90% headless Vitest, no DOM.
 
 ## 12. PR-Sized Roadmap
 
+> **Status: all 12 PRs shipped.** The table below is the plan as executed. Notable as-built deltas: the save checksum is a synchronous 64-bit FNV-1a (not sha-256) for a sync save path; PR 11 added the text gates + a types-only remote-provider adapter skeleton; PR 12 added a Playwright smoke run against the production build plus an `e2e` CI job. The toolchain grew exactly one script beyond the DoD (`test:e2e`).
+
 **Uniform Definition of Done — every PR must satisfy:** `npm install` succeeds from a clean checkout; `npm run dev` starts without runtime errors; `npm run typecheck`, `npm test`, `npm run lint` (configured once in PR 1 — the engine-boundary rule only, don't grow the toolchain), and `npm run build` all pass; no TODO blocks the current PR's acceptance criteria; `main` remains playable up to the latest implemented slice.
 
 Each PR leaves `main` green and the app bootable. Sequence refines the suggested one: schemas/content come **before** characters/locations (they're just content once the loader exists); the debug panel grows **incrementally** (a raw JSON state dump ships in PR 2 — waiting until PR 10 for any visibility would slow every PR in between); effects come before dialogue UI so the UI never grows a side-channel; and the **DialogueProvider seam ships together with the first dialogue UI (PR 8)** — a temporary "render scene nodes directly" path must never exist, because it would get removed later at exactly the moment the provider contract matters most.
@@ -541,7 +543,7 @@ Each PR leaves `main` green and the app bootable. Sequence refines the suggested
 
 ## 13. First Vertical Slice Acceptance Criteria
 
-The skeleton is **done** when every line below is demonstrably true (PR 12 walks this list):
+✅ **All criteria verified** (PR 12 walked this list; #1/#6/#7/#9 are also covered by the automated Playwright smoke). The skeleton is **done** — every line below is demonstrably true:
 
 1. `npm run dev` boots to title; New Game reaches the palace map with no console errors.
 2. Calendar displays **元年一月上旬**; AP displays **行动点：5/5**.
