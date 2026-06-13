@@ -539,6 +539,39 @@ body {
   color: #d98c7c;
 }
 
+.debug-panel__diagnostics,
+.debug-panel__force {
+  border: 1px solid #33291f;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.debug-panel__force .debug-panel__actions {
+  flex-wrap: wrap;
+}
+
+.debug-panel__log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 10rem;
+  overflow: auto;
+  font-size: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.debug-panel__log--warn {
+  color: #d9b87c;
+}
+
+.debug-panel__log--error {
+  color: #d98c7c;
+}
+
 .memory-browser {
   border: 1px solid #33291f;
   padding: 0.5rem;

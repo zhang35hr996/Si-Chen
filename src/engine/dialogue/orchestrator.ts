@@ -7,8 +7,10 @@
 import { toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import { aiError, type GameError } from "../infra/errors";
+import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState } from "../state/types";
+import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
 import {
   rawDialogueResponseSchema,
   type DialogueLine,
@@ -57,14 +59,21 @@ export function assembleDialogueRequest(
 }
 
 /**
- * Provider call + validation gates (v0 subset; the text gates grow in PR 11):
- * schema-valid, speaker identity matches, expression normalized to the
- * character's list with neutral fallback.
+ * Provider call + validation gates. The seam runs identically for mock and
+ * future LLM output (PR 11): schema-valid → speaker identity matches → TEXT
+ * gates (forbidden lexicon, self-ref correctness, rank/title terms, template
+ * leaks — engine/dialogue/gates) → expression normalized to neutral fallback.
+ *
+ * Gate boundary (plan §8): these are TEXT-only checks. Numeric/state validation
+ * lives in engine/effects (PR 6). A "reject" gate finding fails the line; a
+ * "flag" finding serves it with meta.degraded set. All findings are logged so
+ * they surface in the debug panel's diagnostics.
  */
 export async function produceDialogueLine(
   db: ContentDB,
   provider: DialogueProvider,
   request: DialogueRequest,
+  logger?: RingBufferLogger,
 ): Promise<Result<DialogueLine, GameError>> {
   const raw = await provider.generate(request);
   if (!raw.ok) return raw;
@@ -84,6 +93,31 @@ export async function produceDialogueLine(
     );
   }
 
+  // ── text gates (plan §8) ────────────────────────────────────────────
+  const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  const findings: GateFinding[] = [
+    ...scanDialogueText(response.text, gateCtx),
+    // Choices are the player's words, not the speaker's — content gates only.
+    ...response.choices.flatMap((c) => scanDialogueText(c.text, gateCtx, { skipIdentityGates: true })),
+  ];
+  for (const finding of findings) {
+    logger?.logGameError(
+      aiError(`GATE_${finding.gate.toUpperCase()}`, finding.message, {
+        severity: finding.severity === "reject" ? "error" : "warn",
+        context: { provider: provider.id, speaker: request.speakerId, matched: finding.matched },
+      }),
+    );
+  }
+  const rejects = findings.filter((f) => f.severity === "reject");
+  if (rejects.length > 0) {
+    return err(
+      aiError("GATE_REJECTED", `provider "${provider.id}" output failed ${rejects.length} text gate(s)`, {
+        context: { findings: rejects.map((f) => ({ gate: f.gate, matched: f.matched })) },
+      }),
+    );
+  }
+  const degraded = findings.length > 0; // flag-only findings still serve, marked degraded
+
   const character = db.characters[request.speakerId]!;
   const expression =
     response.expression !== undefined && character.expressions.includes(response.expression)
@@ -100,6 +134,6 @@ export async function produceDialogueLine(
       text: choice.text,
       ...(choice.tone !== undefined ? { tone: choice.tone } : {}),
     })),
-    meta: { generated: provider.kind === "generative", degraded: false },
+    meta: { generated: provider.kind === "generative", degraded },
   });
 }

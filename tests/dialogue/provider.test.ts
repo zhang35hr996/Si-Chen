@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { assembleDialogueRequest, produceDialogueLine } from "../../src/engine/dialogue/orchestrator";
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 import type { DialogueProvider, DialogueRequest } from "../../src/engine/dialogue/types";
+import { RingBufferLogger } from "../../src/engine/infra/logger";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
@@ -84,5 +85,57 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
     const result = await produceDialogueLine(db, garbage, requestFor("feng_hou"));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("MALFORMED");
+  });
+});
+
+describe("produceDialogueLine text gates (PR 11)", () => {
+  const speaking = (text: string, choices: { id: string; text: string }[] = []): DialogueProvider => ({
+    id: "fake",
+    kind: "generative",
+    generate: (req) => Promise.resolve(ok({ speaker: req.speakerId, text, choices })),
+  });
+
+  it("rejects output containing a forbidden lexicon term", async () => {
+    const result = await produceDialogueLine(db, speaking("皇上圣明。"), requestFor("feng_hou"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
+  });
+
+  it("rejects a speaker borrowing another rank's selfRef", async () => {
+    const result = await produceDialogueLine(db, speaking("本宫自有主张。"), requestFor("shen_chenghui"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("GATE_REJECTED");
+      expect(result.error.context?.findings).toContainEqual({ gate: "self_ref", matched: "本宫" });
+    }
+  });
+
+  it("rejects leaked template tokens", async () => {
+    const result = await produceDialogueLine(db, speaking("{{speakerName}}启奏。"), requestFor("feng_hou"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
+  });
+
+  it("rejects forbidden terms in a player choice (content gates apply to choices)", async () => {
+    const result = await produceDialogueLine(
+      db,
+      speaking("本宫有一事启奏。", [{ id: "c", text: "传旨给那娘娘。" }]),
+      requestFor("feng_hou"),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
+  });
+
+  it("logs gate findings so they surface in debug diagnostics", async () => {
+    const logger = new RingBufferLogger();
+    await produceDialogueLine(db, speaking("圣上万安。"), requestFor("feng_hou"), logger);
+    const entries = logger.entries();
+    expect(entries.some((e) => e.message.includes("AiError:GATE_RANK_TITLE"))).toBe(true);
+  });
+
+  it("clean generated output passes every gate", async () => {
+    const result = await produceDialogueLine(db, speaking("本宫累了，陛下早些歇息。"), requestFor("feng_hou"));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.meta).toEqual({ generated: true, degraded: false });
   });
 });

@@ -141,6 +141,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           eventId={activeEventId}
+          logger={logger}
           onDone={(committed) => {
             setActiveEventId(null);
             if (committed) {
@@ -164,7 +165,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           }}
         />
       )}
-      <DebugPanel store={store} db={db} />
+      <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
     </>
   );
 }

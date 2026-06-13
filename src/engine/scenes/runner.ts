@@ -20,6 +20,7 @@ import { assembleDialogueRequest, produceDialogueLine } from "../dialogue/orches
 import type { DialogueLine, DialogueProvider } from "../dialogue/types";
 import { evaluateCondition, hasEventFired } from "../events/conditions";
 import { stateError, type GameError } from "../infra/errors";
+import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState } from "../state/types";
 
@@ -56,6 +57,7 @@ export class SceneRunner {
   constructor(
     private readonly db: ContentDB,
     private readonly provider: DialogueProvider,
+    private readonly logger?: RingBufferLogger,
   ) {}
 
   getSession(): SceneSession | null {
@@ -179,7 +181,7 @@ export class SceneRunner {
             { text: node.text, ...(node.expression !== undefined ? { expression: node.expression } : {}) },
           );
           if (!request.ok) return this.fail(request.error);
-          const produced = await produceDialogueLine(this.db, this.provider, request.value);
+          const produced = await produceDialogueLine(this.db, this.provider, request.value, this.logger);
           if (!produced.ok) return this.fail(produced.error);
 
           let line = produced.value;

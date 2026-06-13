@@ -6,12 +6,21 @@ import { useEffect, useState } from "react";
 import { formatAp, formatGameTime, toGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import { formatErrorTag } from "../../engine/infra/errors";
+import type { LogEntry, RingBufferLogger } from "../../engine/infra/logger";
 import { listMemories, memoryAgeDays, memoryOriginLabel } from "../../engine/memory/inspect";
 import type { GameState } from "../../engine/state/types";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 
-export function DebugPanel({ store, db }: { store: GameStore; db?: ContentDB }) {
+export interface DebugPanelProps {
+  store: GameStore;
+  db?: ContentDB;
+  logger?: RingBufferLogger;
+  /** Force-fire an event, bypassing trigger conditions (plan §13 #10). */
+  onForceEvent?: (eventId: string) => void;
+}
+
+export function DebugPanel(props: DebugPanelProps) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -23,7 +32,7 @@ export function DebugPanel({ store, db }: { store: GameStore; db?: ContentDB }) 
   }, []);
 
   if (!open) return null;
-  return <DebugPanelBody store={store} db={db} />;
+  return <DebugPanelBody {...props} />;
 }
 
 function ContentSummary({ db }: { db: ContentDB }) {
@@ -78,7 +87,68 @@ function MemoryBrowser({ db, state }: { db?: ContentDB; state: GameState }) {
   );
 }
 
-function DebugPanelBody({ store, db }: { store: GameStore; db?: ContentDB }) {
+/** Recent warn/error diagnostics from the ring buffer (gate rejections, save
+ * failures, asset misses…). Read on demand — the buffer mutates outside React. */
+function Diagnostics({ logger }: { logger: RingBufferLogger }) {
+  const [tick, setTick] = useState(0);
+  const recent: LogEntry[] = logger
+    .entries()
+    .filter((e) => e.level === "warn" || e.level === "error")
+    .slice(-15)
+    .reverse();
+
+  const exportBundle = () => {
+    const url = URL.createObjectURL(new Blob([logger.exportJson()], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `fengsichen-bugbundle-${Date.now()}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <section className="debug-panel__diagnostics">
+      <div className="debug-panel__actions">
+        <strong>诊断日志</strong>
+        <button type="button" onClick={() => setTick(tick + 1)}>
+          刷新
+        </button>
+        <button type="button" onClick={exportBundle}>
+          导出 Bug 包
+        </button>
+      </div>
+      {recent.length === 0 ? (
+        <p className="debug-panel__content">（无警告/错误）</p>
+      ) : (
+        <ul className="debug-panel__log">
+          {recent.map((entry) => (
+            <li key={entry.seq} className={`debug-panel__log--${entry.level}`}>
+              #{entry.seq} {entry.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Force-trigger any event regardless of its condition (plan §13 #10). */
+function ForceTrigger({ db, onForceEvent }: { db: ContentDB; onForceEvent: (eventId: string) => void }) {
+  return (
+    <section className="debug-panel__force">
+      <strong>强制触发事件</strong>
+      <div className="debug-panel__actions">
+        {Object.values(db.events).map((event) => (
+          <button key={event.id} type="button" onClick={() => onForceEvent(event.id)}>
+            {event.title}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
   const state = useGameState(store);
   const [lastRejection, setLastRejection] = useState<string | null>(null);
   const [, bumpReport] = useState(0);
@@ -167,6 +237,8 @@ function DebugPanelBody({ store, db }: { store: GameStore; db?: ContentDB }) {
           ))}
         </p>
       )}
+      {db && onForceEvent && <ForceTrigger db={db} onForceEvent={onForceEvent} />}
+      {logger && <Diagnostics logger={logger} />}
       {db && <ContentSummary db={db} />}
       {gameStarted && <MemoryBrowser db={db} state={state} />}
       <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>

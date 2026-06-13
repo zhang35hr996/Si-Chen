@@ -9,6 +9,7 @@ import { formatAp, formatGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import { mockProvider } from "../../engine/dialogue/providers/mockProvider";
 import { formatErrorTag, type GameError } from "../../engine/infra/errors";
+import type { RingBufferLogger } from "../../engine/infra/logger";
 import type { Result } from "../../engine/infra/result";
 import { SceneRunner, type DialogueFrame, type RunnerStep } from "../../engine/scenes/runner";
 import type { GameStore } from "../../store/gameStore";
@@ -19,12 +20,14 @@ export function DialogueScreen({
   store,
   registry,
   eventId,
+  logger,
   onDone,
 }: {
   db: ContentDB;
   store: GameStore;
   registry: AssetRegistry;
   eventId: string;
+  logger?: RingBufferLogger;
   onDone: (committed: boolean) => void;
 }) {
   const state = useGameState(store);
@@ -51,7 +54,7 @@ export function DialogueScreen({
   };
 
   useEffect(() => {
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, mockProvider, logger);
     runnerRef.current = runner;
     void runner.start(store.getState(), eventId).then(handleStep);
     return () => runner.abandon();
