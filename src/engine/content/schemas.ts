@@ -81,6 +81,7 @@ export type TriggerCondition =
   | { relationshipAtLeast: { char: string; field: "trust" | "affinity"; value: number } }
   | { favorAtLeast: { char: string; value: number } }
   | { rankAtLeast: { char: string; rank: string } }
+  | { hasMemoryTag: { char: string; tag: string } }
   | { eventFired: string };
 
 export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
@@ -101,6 +102,7 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
     }),
     z.strictObject({ favorAtLeast: z.strictObject({ char: idSchema, value: percent }) }),
     z.strictObject({ rankAtLeast: z.strictObject({ char: idSchema, rank: idSchema }) }),
+    z.strictObject({ hasMemoryTag: z.strictObject({ char: idSchema, tag: tagSchema }) }),
     z.strictObject({ eventFired: idSchema }),
   ]),
 );
@@ -202,17 +204,69 @@ export const characterRankSchema = z.strictObject({
 
 export type CharacterRank = z.infer<typeof characterRankSchema>;
 
-// ── locations ─────────────────────────────────────────────────────────
-export const locationSchema = z.strictObject({
+// ── map boards & portals (world.json — data-driven 主图/子图 graph) ─────
+// A board is one navigable map screen (宫城图 / 后宫 / 京城 / 郊外). Portals are
+// the免行动点 buttons that switch from one board to another (出宫, 后宫, 郊外…).
+// A location's `zone` says which board hosts its node. Boards are optional in
+// world.json: when omitted, zone validation is skipped (minimal/test content).
+const normalizedPosition = z.strictObject({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+
+export const mapBoardSchema = z.strictObject({
   id: idSchema,
   name: nonEmpty,
-  description: nonEmpty,
-  backgroundKey: nonEmpty,
-  ambience: z.array(nonEmpty),
-  position: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
-  connections: z.array(idSchema).min(1),
-  travelCost: z.strictObject({ ap: z.number().int().min(1) }),
+  /** Board backdrop art. kind "map" supports time-of-day variants (宫城图);
+   *  kind "background" is a single full-scene image (京城/郊外/后宫). */
+  art: z.strictObject({
+    key: nonEmpty,
+    kind: z.enum(["map", "background"]).default("background"),
+  }),
 });
+
+export type MapBoard = z.infer<typeof mapBoardSchema>;
+
+export const mapPortalSchema = z.strictObject({
+  /** Board this portal button appears on. */
+  from: idSchema,
+  /** Board it switches to. */
+  to: idSchema,
+  /** Button label, e.g. 出宫 / 后宫 / 郊外. */
+  name: nonEmpty,
+  position: normalizedPosition,
+});
+
+export type MapPortal = z.infer<typeof mapPortalSchema>;
+
+// ── locations ─────────────────────────────────────────────────────────
+// zone   — which map board a node lives on (must be a world.json mapBoards id
+//          when boards are declared; defaults to "palace" 主图).
+// entry  — "travel" places cost AP and become playerLocation (full screen);
+//          "free" places open a read-only view (冷宫/朝会), no AP, no relocation.
+// actionEventId — a free-view may offer one AP-costing action (e.g. 上朝).
+export const locationSchema = z
+  .strictObject({
+    id: idSchema,
+    name: nonEmpty,
+    description: nonEmpty,
+    backgroundKey: nonEmpty,
+    ambience: z.array(nonEmpty),
+    position: normalizedPosition,
+    zone: idSchema.default("palace"),
+    entry: z.enum(["travel", "free"]).default("travel"),
+    connections: z.array(idSchema).min(1).optional(),
+    travelCost: z.strictObject({ ap: z.number().int().min(1) }).optional(),
+    actionEventId: idSchema.optional(),
+  })
+  .refine((loc) => loc.entry === "free" || (loc.connections !== undefined && loc.travelCost !== undefined), {
+    message: 'travel locations require "connections" and "travelCost"',
+    path: ["travelCost"],
+  })
+  .refine((loc) => loc.entry === "free" || loc.actionEventId === undefined, {
+    message: '"actionEventId" is only for free-view locations',
+    path: ["actionEventId"],
+  });
 
 export type LocationContent = z.infer<typeof locationSchema>;
 
@@ -333,6 +387,10 @@ export const worldSchema = z.strictObject({
     }),
   }),
   ranks: z.array(characterRankSchema).min(1),
+  /** Map boards (主图/子图). Optional: minimal content omits the map graph. */
+  mapBoards: z.array(mapBoardSchema).min(1).optional(),
+  /** Portal buttons linking boards (出宫/后宫/郊外). */
+  mapPortals: z.array(mapPortalSchema).optional(),
 });
 
 export type WorldContent = z.infer<typeof worldSchema>;

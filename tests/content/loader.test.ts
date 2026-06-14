@@ -175,6 +175,14 @@ describe("cross-reference checks", () => {
     expect(errors.filter((e) => e.code === "MISSING_REF")).toHaveLength(4);
   });
 
+  it("hasMemoryTag condition referencing an unknown character", () => {
+    const raw = makeRaw();
+    (raw.events[0]!.data as Record<string, unknown>)["condition"] = {
+      hasMemoryTag: { char: "char_ghost", tag: "neglect" },
+    };
+    expectErrors(raw, "MISSING_REF", "char_ghost");
+  });
+
   it("memory effect targeting an unknown character", () => {
     const raw = makeRaw();
     const nodes = sceneData(raw)["nodes"] as Record<string, unknown>[];
@@ -193,6 +201,59 @@ describe("cross-reference checks", () => {
     (raw.locations[1]!.data as Record<string, unknown>)["connections"] = ["loc_b"];
     const errors = expectErrors(raw, "ASYMMETRIC_MAP", "no return edge");
     expect(errors.some((e) => e.message.includes("connects to itself"))).toBe(true);
+  });
+});
+
+describe("map board graph checks", () => {
+  const withBoards = (raw: RawContent): Record<string, unknown> => {
+    const world = raw.world.data as Record<string, unknown>;
+    world["mapBoards"] = [
+      { id: "palace", name: "宫城图", art: { key: "map.palace", kind: "map" } },
+      { id: "jingcheng", name: "京城", art: { key: "bg.jingcheng", kind: "background" } },
+    ];
+    world["mapPortals"] = [
+      { from: "palace", to: "jingcheng", name: "出宫", position: { x: 0.1, y: 0.8 } },
+    ];
+    return world;
+  };
+
+  it("accepts locations and portals on declared boards", () => {
+    const raw = makeRaw();
+    withBoards(raw);
+    // loc_a/loc_b default to zone "palace" which is declared → no map errors.
+    expect(loadContent(raw).ok).toBe(true);
+  });
+
+  it("rejects a location on an undeclared board", () => {
+    const raw = makeRaw();
+    withBoards(raw);
+    (raw.locations[0]!.data as Record<string, unknown>)["zone"] = "atlantis";
+    expectErrors(raw, "MISSING_REF", "atlantis");
+  });
+
+  it("rejects a portal to an undeclared board", () => {
+    const raw = makeRaw();
+    const world = withBoards(raw);
+    (world["mapPortals"] as Record<string, unknown>[]).push({
+      from: "palace",
+      to: "moon",
+      name: "登月",
+      position: { x: 0.5, y: 0.5 },
+    });
+    expectErrors(raw, "MISSING_REF", "moon");
+  });
+
+  it("rejects a self-linking portal", () => {
+    const raw = makeRaw();
+    const world = withBoards(raw);
+    (world["mapPortals"] as Record<string, unknown>[])[0]!["to"] = "palace";
+    expectErrors(raw, "BAD_MAP_GRAPH", "itself");
+  });
+
+  it("skips map-graph checks when no boards are declared", () => {
+    const raw = makeRaw();
+    (raw.locations[0]!.data as Record<string, unknown>)["zone"] = "anything_goes";
+    expect(loadContent(raw).ok).toBe(true); // legacy content: zone is free
   });
 });
 

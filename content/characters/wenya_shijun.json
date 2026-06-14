@@ -1,0 +1,30 @@
+{
+  "id": "wenya_shijun",
+  "kind": "consort",
+  "profile": {
+    "name": "温雅",
+    "age": 26,
+    "role": "幽居冷宫的旧日承徽",
+    "appearance": "素衣旧钗，眉目清减，腕间犹存一缕褪色的御赐宫绦。",
+    "personalityTraits": ["温顺", "隐忍", "易感"],
+    "coreFacts": ["三年前因故失宠，迁居冷宫", "宫人渐次散尽，无人再提其名"],
+    "goals": ["盼陛下记起旧人", "求一线生机"],
+    "speechStyle": "低敛克制，话到唇边又咽回三分。"
+  },
+  "defaultLocation": "lenggong",
+  "portraitSet": "wenya_shijun",
+  "expressions": ["neutral"],
+  "voice": { "register": "formal", "quirks": ["话尾轻颤"], "tabooTopics": ["失宠缘由"] },
+  "initialRelationship": { "trust": 20, "affinity": 18, "flags": [] },
+  "initialStanding": { "rank": "chenghui", "favor": 5 },
+  "initialMemories": [
+    {
+      "kind": "opinion",
+      "summary": "陛下已三年未踏入冷宫，温雅自知早被遗忘。",
+      "salience": 55,
+      "tags": ["player", "forgotten"],
+      "participants": ["player", "wenya_shijun"]
+    }
+  ],
+  "secrets": []
+}

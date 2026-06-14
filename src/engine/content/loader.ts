@@ -77,6 +77,7 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
   // Cross-reference checks only make sense over schema-valid pieces; they run
   // on whatever parsed, so one broken file doesn't hide ref errors in others.
   if (world) checkWorldRefs(world, raw.world.source, locations.byId, errors);
+  if (world) checkMapGraph(world, raw.world.source, locations, errors);
   checkCharacterRefs(characters, ranks, locations.byId, errors);
   checkLocationGraph(locations, errors);
   checkEventRefs(events, scenes.byId, errors);
@@ -187,6 +188,47 @@ function checkWorldRefs(
   }
 }
 
+/**
+ * Map-board graph (when world.json declares mapBoards): every location.zone and
+ * every portal endpoint must name a declared board; the starting location's
+ * board must exist. Skipped entirely for minimal content with no map graph.
+ */
+function checkMapGraph(
+  world: WorldContent,
+  source: string,
+  locations: Parsed<LocationContent>,
+  errors: GameError[],
+): void {
+  if (!world.mapBoards) return;
+  const boards = new Set<string>();
+  for (const board of world.mapBoards) {
+    if (boards.has(board.id)) {
+      errors.push(dup(source, "mapBoard", board.id));
+    }
+    boards.add(board.id);
+  }
+  for (const { value: location, source: locSource } of locations.items) {
+    if (!boards.has(location.zone)) {
+      errors.push(missingRef(locSource, "mapBoard", location.zone));
+    }
+  }
+  for (const portal of world.mapPortals ?? []) {
+    if (!boards.has(portal.from)) errors.push(missingRef(source, "mapBoard", portal.from));
+    if (!boards.has(portal.to)) errors.push(missingRef(source, "mapBoard", portal.to));
+    if (portal.from === portal.to) {
+      errors.push(
+        contentError("BAD_MAP_GRAPH", `${source}: portal "${portal.name}" links board "${portal.from}" to itself`, {
+          context: { file: source },
+        }),
+      );
+    }
+  }
+  const start = locations.byId[world.startingLocation];
+  if (start && !boards.has(start.zone)) {
+    errors.push(missingRef(source, "mapBoard", start.zone));
+  }
+}
+
 function checkCharacterRefs(
   characters: Parsed<CharacterContent>,
   ranks: Record<string, CharacterRank>,
@@ -230,6 +272,8 @@ function checkCharacterRefs(
 
 function checkLocationGraph(locations: Parsed<LocationContent>, errors: GameError[]): void {
   for (const { value: location, source } of locations.items) {
+    // Free-view nodes (冷宫/朝会) carry no connections; only travel nodes form the graph.
+    if (!location.connections) continue;
     for (const connection of location.connections) {
       if (connection === location.id) {
         errors.push(
@@ -242,7 +286,7 @@ function checkLocationGraph(locations: Parsed<LocationContent>, errors: GameErro
       const target = locations.byId[connection];
       if (!target) {
         errors.push(missingRef(source, "location", connection));
-      } else if (!target.connections.includes(location.id)) {
+      } else if (!target.connections || !target.connections.includes(location.id)) {
         errors.push(
           contentError(
             "ASYMMETRIC_MAP",
@@ -423,6 +467,10 @@ function checkConditionRefs(
     }
     if (!universe.ranks[condition.rankAtLeast.rank]) {
       errors.push(missingRef(source, "rank", condition.rankAtLeast.rank));
+    }
+  } else if ("hasMemoryTag" in condition) {
+    if (!universe.characters[condition.hasMemoryTag.char]) {
+      errors.push(missingRef(source, "character", condition.hasMemoryTag.char));
     }
   }
 }

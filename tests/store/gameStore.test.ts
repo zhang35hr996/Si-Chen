@@ -10,7 +10,7 @@ describe("GameStore", () => {
 
     const r = store.dispatch({ type: "SPEND_AP", amount: 1 });
     expect(r.ok).toBe(true);
-    expect(store.getState().calendar.ap).toBe(4);
+    expect(store.getState().calendar.ap).toBe(5);
     expect(notifications).toBe(1);
   });
 
@@ -52,6 +52,6 @@ describe("GameStore", () => {
 
     store.reset();
     expect(store.getState().flags).toEqual({});
-    expect(store.getState().calendar.ap).toBe(5);
+    expect(store.getState().calendar.ap).toBe(6);
   });
 });

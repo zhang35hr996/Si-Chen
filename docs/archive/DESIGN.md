@@ -1,3 +1,9 @@
+> **Historical design document — archived.**
+> Describes the intended architecture and several systems designed-ahead but not
+> yet implemented. **Not** the current contract. For what exists today, read
+> [`docs/engineering/10-current-implementation.md`](../engineering/10-current-implementation.md);
+> for live system docs see [`docs/systems/`](../systems/00-index.md).
+
 # Si-Chen — Foundational Design Document
 
 **Status:** Draft v2.2 — implementation in progress, aligned to the world bible `docs/background-v0.1.md` and reconciled with `docs/skeleton-plan-v0.md`

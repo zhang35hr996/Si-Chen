@@ -1,6 +1,6 @@
 {
   "contentVersion": "0.1.0",
-  "calendar": { "apMax": 5, "start": { "year": 1, "month": 1, "period": "early" } },
+  "calendar": { "apMax": 6, "start": { "year": 1, "month": 1, "period": "early" } },
   "startingLocation": "yushufang",
   "startingResources": {
     "court": { "authority": 50, "publicSupport": 50, "factionPressure": 20 },
@@ -14,6 +14,15 @@
       "grade": "正宫",
       "selfRefs": { "toPlayer": ["臣后"], "formal": ["本宫"] },
       "order": 100,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "jun",
+      "name": "君",
+      "grade": "正二品",
+      "selfRefs": { "toPlayer": ["臣妾"], "formal": ["本君"] },
+      "order": 80,
       "domain": "harem",
       "favorTerm": "恩宠"
     },
@@ -35,5 +44,16 @@
       "domain": "official",
       "favorTerm": "圣眷"
     }
+  ],
+  "mapBoards": [
+    { "id": "palace", "name": "宫城图", "art": { "key": "map.palace", "kind": "map" } },
+    { "id": "hougong", "name": "后宫", "art": { "key": "bg.hougong", "kind": "background" } },
+    { "id": "jingcheng", "name": "京城", "art": { "key": "bg.jingcheng", "kind": "background" } },
+    { "id": "jingjiao", "name": "郊外", "art": { "key": "bg.jingjiao", "kind": "background" } }
+  ],
+  "mapPortals": [
+    { "from": "palace", "to": "hougong", "name": "后宫", "position": { "x": 0.62, "y": 0.4 } },
+    { "from": "palace", "to": "jingcheng", "name": "出宫", "position": { "x": 0.12, "y": 0.86 } },
+    { "from": "jingcheng", "to": "jingjiao", "name": "郊外", "position": { "x": 0.85, "y": 0.52 } }
   ]
 }

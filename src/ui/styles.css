@@ -381,6 +381,21 @@ body {
   background-position: center;
 }
 
+.map-screen__board-title {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.3rem 1.4rem;
+  font-size: 1.4rem;
+  letter-spacing: 0.4rem;
+  color: #f0e4cf;
+  background: rgba(20, 16, 14, 0.55);
+  border: 1px solid #5c4d3a;
+  pointer-events: none;
+}
+
 .map-node {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -408,6 +423,17 @@ body {
 .map-node--here {
   border-color: #d9b87c;
   box-shadow: 0 0 0 1px #d9b87c;
+}
+
+/* Free portals (后宫 / 朝会 / 冷宫): never spend AP, so they read as gateways. */
+.map-node--portal {
+  background: #2a1f3a;
+  border-color: #7a6196;
+  border-style: dashed;
+}
+
+.map-node--portal:hover:enabled {
+  border-color: #c4a6e0;
 }
 
 .map-node__name {

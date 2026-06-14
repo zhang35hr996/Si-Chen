@@ -1,0 +1,10 @@
+{
+  "id": "ev_chaohui",
+  "title": "上朝",
+  "sceneId": "sc_chaohui",
+  "checkpoint": "location_enter",
+  "condition": { "atLocation": "chaotang" },
+  "priority": 10,
+  "once": false,
+  "apCost": 1
+}

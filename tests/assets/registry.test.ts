@@ -9,6 +9,7 @@ const manifest: AssetManifest = {
     "portrait.char_a.neutral": { path: "portraits/char_a/neutral.svg", kind: "portrait", placeholder: true },
     "portrait.char_a.smile": { path: "portraits/char_a/smile.svg", kind: "portrait", placeholder: false },
     "bg.loc_a": { path: "backgrounds/loc_a.svg", kind: "background", placeholder: true },
+    "bg.loc_a.night": { path: "backgrounds/loc_a_night.svg", kind: "background", placeholder: false },
     "map.palace": { path: "map/palace.svg", kind: "map", placeholder: true },
   },
 };
@@ -87,5 +88,31 @@ describe("AssetRegistry.resolve", () => {
     const { registry } = make();
     const asset = registry.portrait("char_ghost", "neutral");
     expect(asset.url).toBe(BUILTIN_FALLBACK_URLS.portrait);
+  });
+});
+
+describe("AssetRegistry.resolveVariant (time-of-day)", () => {
+  it("uses the variant art when present, not flagged as fallback", () => {
+    const { registry, logger } = make();
+    const asset = registry.resolveVariant("bg.loc_a", "night", "background");
+    expect(asset.url).toBe("/assets/backgrounds/loc_a_night.svg");
+    expect(asset.key).toBe("bg.loc_a"); // base key, never the variant key
+    expect(asset.isFallback).toBe(false);
+    expect(logger.entries()).toHaveLength(0);
+  });
+
+  it("falls back to the base key (also real art, not flagged) when the variant is absent", () => {
+    const { registry, logger } = make();
+    const asset = registry.resolveVariant("bg.loc_a", "day", "background");
+    expect(asset.url).toBe("/assets/backgrounds/loc_a.svg"); // no .day entry → base
+    expect(asset.isFallback).toBe(false);
+    expect(logger.entries()).toHaveLength(0); // base is authored art, not a degraded hop
+  });
+
+  it("only the built-in counts as a fallback when neither variant nor base exist", () => {
+    const { registry } = make();
+    const asset = registry.resolveVariant("bg.ghost", "twilight", "background");
+    expect(asset.url).toBe(BUILTIN_FALLBACK_URLS.background);
+    expect(asset.isFallback).toBe(true);
   });
 });

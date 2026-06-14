@@ -118,6 +118,7 @@ describe("triggerConditionSchema (closed DSL — scaffold guard)", () => {
         { relationshipAtLeast: { char: "char_a", field: "affinity", value: 60 } },
         { favorAtLeast: { char: "char_a", value: 50 } },
         { rankAtLeast: { char: "char_a", rank: "rank_a" } },
+        { hasMemoryTag: { char: "char_a", tag: "neglect" } },
       ],
     });
   });
@@ -126,6 +127,7 @@ describe("triggerConditionSchema (closed DSL — scaffold guard)", () => {
     rejects(triggerConditionSchema, { resourceAtLeast: { pillar: "bloodline", field: "legitimacy", value: 50 } });
     rejects(triggerConditionSchema, { bloodlineLegitimacyAtLeast: 50 });
     rejects(triggerConditionSchema, { relationshipAtLeast: { char: "char_a", field: "favor", value: 1 } });
+    rejects(triggerConditionSchema, { hasMemoryTag: { char: "char_a", tag: "Bad Tag" } }); // tags are lowercase ascii
   });
 });
 

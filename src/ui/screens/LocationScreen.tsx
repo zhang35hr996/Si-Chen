@@ -1,5 +1,5 @@
 import type { AssetRegistry } from "../../engine/assets/registry";
-import { formatAp, formatGameTime } from "../../engine/calendar/time";
+import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
 import { getPresentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import { getEligibleEvents } from "../../engine/events/engine";
@@ -29,14 +29,14 @@ export function LocationScreen({
     return <p className="screen-error">未知地点：{state.playerLocation}</p>;
   }
   const present = getPresentAt(db, state, location.id);
-  const background = registry.background(location.backgroundKey);
+  const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const eligible = getEligibleEvents(db, state, "location_enter");
 
   return (
     <main className="location-screen">
       <header className="hud">
         <span className="hud__time">
-          {formatGameTime(state.calendar)} · {formatAp(state.calendar)}
+          {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
         <span className="hud__group">
           <button type="button" className="hud__button" onClick={onOpenSave}>

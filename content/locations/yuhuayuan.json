@@ -5,6 +5,7 @@
   "backgroundKey": "bg.yuhuayuan",
   "ambience": ["花气", "流水", "远处隐约的笑语"],
   "position": { "x": 0.48, "y": 0.7 },
-  "connections": ["yushufang", "hougong_zhudian"],
+  "zone": "palace",
+  "connections": ["yushufang"],
   "travelCost": { "ap": 1 }
 }

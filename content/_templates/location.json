@@ -1,0 +1,12 @@
+{
+  "id": "example_location",
+  "name": "示例殿",
+  "description": "TODO 一两句场景描写。",
+  "backgroundKey": "bg.example_location",
+  "ambience": ["TODO 环境细节一", "TODO 环境细节二"],
+  "position": { "x": 0.5, "y": 0.5 },
+  "zone": "palace",
+  "entry": "travel",
+  "connections": ["yushufang"],
+  "travelCost": { "ap": 1 }
+}

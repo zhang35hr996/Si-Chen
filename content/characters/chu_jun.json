@@ -1,0 +1,39 @@
+{
+  "id": "chu_jun",
+  "kind": "consort",
+  "profile": {
+    "name": "初君",
+    "age": 19,
+    "role": "君（正二品侍君，新近入宫）",
+    "appearance": "明眸皓齿，身段轻盈，常着鲜妍石榴红衣，行止间难掩雀跃。",
+    "personalityTraits": ["热切", "聪敏", "争强", "藏不住喜怒"],
+    "coreFacts": ["三月前选秀入宫，一入便破格封君", "出身新晋武勋之家，母家正盼她固宠", "初承雨露便自恃得宠，尚不知宫深似海"],
+    "goals": ["趁新宠正盛，多得陛下垂顾", "压过旧人，为母家挣一份体面"],
+    "speechStyle": "语速轻快，爱用俏皮话试探；得意时眉飞色舞，受挫时立刻垮脸。"
+  },
+  "defaultLocation": "xianfugong",
+  "portraitSet": "chujun",
+  "expressions": ["neutral"],
+  "voice": {
+    "register": "casual",
+    "quirks": ["自称『臣妾』，得意时漏出『本君』", "称玩家『陛下』", "爱拿旧人作比"],
+    "tabooTopics": ["母家逼她尽快诞下皇嗣之事"]
+  },
+  "initialRelationship": { "trust": 30, "affinity": 40, "flags": [] },
+  "initialStanding": { "rank": "jun", "favor": 45 },
+  "initialMemories": [
+    {
+      "kind": "event",
+      "summary": "陛下近来常召臣妾侍奉，新宠正浓。只是旧人那边的目光，越来越冷了。",
+      "salience": 60,
+      "tags": ["player", "favor", "rivalry"],
+      "participants": ["player", "chu_jun"],
+      "protected": true
+    }
+  ],
+  "secrets": [],
+  "stances": [
+    { "charId": "feng_hou", "attitude": "畏凤后掌印之威，面上恭谨，心里却不服管束" },
+    { "charId": "shen_chenghui", "attitude": "视沈承徽为失宠的前车，既怜且傲，暗自较劲" }
+  ]
+}

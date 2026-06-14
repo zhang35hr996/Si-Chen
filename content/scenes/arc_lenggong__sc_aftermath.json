@@ -1,0 +1,41 @@
+{
+  "id": "arc_lenggong__sc_aftermath",
+  "locationId": "lenggong",
+  "participants": ["wenya_shijun"],
+  "startNodeId": "n_after_intro",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_after_intro",
+      "speaker": "wenya_shijun",
+      "text": "那夜之后，冷宫的灯，温雅多点了一盏——也许只是为了，万一陛下再来。",
+      "next": "n_after_fx"
+    },
+    {
+      "type": "effect",
+      "id": "n_after_fx",
+      "effects": [
+        { "type": "relationship", "char": "wenya_shijun", "field": "trust", "delta": 3 },
+        {
+          "type": "memory",
+          "char": "wenya_shijun",
+          "entry": {
+            "kind": "opinion",
+            "summary": "陛下一念之恩，温雅暗自生出复见之望。",
+            "salience": 50,
+            "tags": ["player", "hopeful"],
+            "participants": ["player", "wenya_shijun"],
+            "locationId": "lenggong"
+          }
+        }
+      ],
+      "next": "n_after_end"
+    },
+    {
+      "type": "line",
+      "id": "n_after_end",
+      "speaker": "wenya_shijun",
+      "text": "臣侍不敢奢望复宠，只盼这一点暖意，不是臣侍独自做的梦。"
+    }
+  ]
+}

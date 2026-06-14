@@ -12,7 +12,7 @@
     "speechStyle": "语调轻软，常以反话掩饰真心；动情时声音发颤。"
   },
   "defaultLocation": "yuhuayuan",
-  "portraitSet": "consort",
+  "portraitSet": "shenchenghui",
   "expressions": ["neutral"],
   "voice": {
     "register": "poetic",

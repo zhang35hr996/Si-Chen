@@ -11,8 +11,8 @@
     "goals": ["整肃宫规，维持后宫秩序", "守住凤后体面与母家颜面"],
     "speechStyle": "措辞雅正，多用敬语，句短而克制；急时仍不失礼数。"
   },
-  "defaultLocation": "hougong_zhudian",
-  "portraitSet": "consort",
+  "defaultLocation": "kunninggong",
+  "portraitSet": "huanghou",
   "expressions": ["neutral"],
   "voice": {
     "register": "formal",

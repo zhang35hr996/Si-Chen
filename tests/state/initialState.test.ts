@@ -3,10 +3,10 @@ import { formatAp, formatGameTime } from "../../src/engine/calendar/time";
 import { createInitialState } from "../../src/engine/state/initialState";
 
 describe("createInitialState", () => {
-  it("starts at 元年一月上旬 with 行动点：5/5 (skeleton-plan §13 #2)", () => {
+  it("starts at 元年一月上旬 with 行动点：6/6 (skeleton-plan §13 #2)", () => {
     const state = createInitialState();
     expect(formatGameTime(state.calendar)).toBe("元年一月上旬");
-    expect(formatAp(state.calendar)).toBe("行动点：5/5");
+    expect(formatAp(state.calendar)).toBe("行动点：6/6");
   });
 
   it("initializes the three resource pillars with placeholder values", () => {

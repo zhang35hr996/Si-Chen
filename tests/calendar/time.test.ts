@@ -7,16 +7,19 @@ import {
   dayIndexOf,
   formatAp,
   formatGameTime,
+  formatShichen,
   makeGameTime,
+  shichenSlot,
+  timeOfDay,
   toGameTime,
   type CalendarState,
   type MonthPeriod,
 } from "../../src/engine/calendar/time";
 
 describe("calendar core", () => {
-  it("createCalendar defaults to 元年一月上旬 with AP 5/5", () => {
+  it("createCalendar defaults to 元年一月上旬 with AP 6/6", () => {
     const cal = createCalendar();
-    expect(cal).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0, ap: 5, apMax: 5 });
+    expect(cal).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0, ap: 6, apMax: 6 });
   });
 
   it.each([
@@ -43,7 +46,7 @@ describe("action-day rollover", () => {
   const at = (year: number, month: number, period: MonthPeriod): CalendarState => ({
     ...makeGameTime(year, month, period),
     ap: 0,
-    apMax: 5,
+    apMax: 6,
   });
 
   it.each([
@@ -57,7 +60,7 @@ describe("action-day rollover", () => {
   ] as const)("advances %o", (from, expected) => {
     const next = advanceActionDay(from);
     expect(next).toMatchObject(expected);
-    expect(next.ap).toBe(5); // AP refills
+    expect(next.ap).toBe(6); // AP refills
     expect(next.dayIndex).toBe(from.dayIndex + 1); // dayIndex is strictly monotonic
   });
 });
@@ -76,7 +79,7 @@ describe("invariant check", () => {
     [{ month: 0 }, "month"],
     [{ year: 0 }, "year"],
     [{ ap: -1 }, "ap"],
-    [{ ap: 6 }, "ap"],
+    [{ ap: 7 }, "ap"],
     [{ apMax: 0 }, "apMax"],
     [{ dayIndex: 999 }, "dayIndex"],
     [{ period: "dawn" as MonthPeriod }, "period"],
@@ -115,7 +118,31 @@ describe("Chinese formatting", () => {
   });
 
   it("formatAp renders 行动点：n/max", () => {
-    expect(formatAp(createCalendar())).toBe("行动点：5/5");
-    expect(formatAp({ ...createCalendar(), ap: 2 })).toBe("行动点：2/5");
+    expect(formatAp(createCalendar())).toBe("行动点：6/6");
+    expect(formatAp({ ...createCalendar(), ap: 2 })).toBe("行动点：2/6");
+  });
+});
+
+describe("时辰 / time-of-day", () => {
+  const ap = (n: number): CalendarState => ({ ...createCalendar(), ap: n });
+
+  it.each([
+    // [ap remaining, slot, 时辰, time-of-day]
+    [6, 0, "卯时（早上）", "day"],
+    [5, 1, "辰时（上午）", "day"],
+    [4, 2, "申时（下午）", "day"],
+    [3, 3, "酉时（黄昏）", "twilight"],
+    [2, 4, "戌时（晚上）", "night"],
+    [1, 5, "子时（深夜）", "night"],
+  ] as const)("ap %i → slot %i, %s, %s", (apLeft, slot, label, tod) => {
+    const cal = ap(apLeft);
+    expect(shichenSlot(cal)).toBe(slot);
+    expect(formatShichen(cal)).toBe(label);
+    expect(timeOfDay(cal)).toBe(tod);
+  });
+
+  it("clamps an exhausted day (ap 0) into the last 时辰 rather than overflowing", () => {
+    expect(timeOfDay(ap(0))).toBe("night");
+    expect(formatShichen(ap(0))).toBe("子时（深夜）");
   });
 });

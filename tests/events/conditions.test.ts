@@ -41,6 +41,9 @@ describe("predicate truth table", () => {
     ["rankAtLeast: 承徽(60) < 凤后(100)", { rankAtLeast: { char: "shen_chenghui", rank: "fenghou" } }, false],
     ["rankAtLeast equal rank", { rankAtLeast: { char: "shen_chenghui", rank: "chenghui" } }, true],
     ["rankAtLeast unknown rank", { rankAtLeast: { char: "feng_hou", rank: "rank_ghost" } }, false],
+    ["hasMemoryTag met (沈承徽 neglect)", { hasMemoryTag: { char: "shen_chenghui", tag: "neglect" } }, true],
+    ["hasMemoryTag wrong tag", { hasMemoryTag: { char: "shen_chenghui", tag: "favor" } }, false],
+    ["hasMemoryTag unknown char → false", { hasMemoryTag: { char: "char_ghost", tag: "neglect" } }, false],
     ["eventFired met", { eventFired: "ev_menses_rite" }, true],
     ["eventFired unmet", { eventFired: "ev_shen_neglect" }, false],
   ])("%s", (_name, condition, expected) => {

@@ -1,3 +1,9 @@
+> **Historical design draft — archived.**
+> Mixes settled lore with未定 (TBD) systems that may never ship. **Not** the
+> content-authoring contract. For what the engine supports today, read
+> [`docs/engineering/10-current-implementation.md`](../engineering/10-current-implementation.md).
+> The live, split world bible lives under [`docs/world/`](../world/00-index.md).
+
 # 女尊后宫游戏背景设定初版 V0.1
 
 > 文档用途：作为后续剧情、系统、角色、称谓与玩法设计的基础世界观文档。

@@ -24,7 +24,7 @@ test("vertical slice: new game → event → choose → save → reload → pers
 
   // ── title → new game ────────────────────────────────────────────────
   await page.getByRole("button", { name: "新游戏" }).click();
-  await expect(page.getByText("行动点：5/5")).toBeVisible();
+  await expect(page.getByText("卯时（早上）")).toBeVisible(); // 第一个行动点 = 卯时
 
   // ── trigger the event eligible at the starting location (御书房) ──────
   await page.getByRole("button", { name: /司礼女官请示经血祭仪/ }).click();
@@ -33,12 +33,12 @@ test("vertical slice: new game → event → choose → save → reload → pers
   await page.getByRole("button", { name: /准奏/ }).click();
   await page.getByRole("button", { name: "（继续）" }).click();
 
-  // back at the location screen — AP spent once (5 → 4)
-  await expect(page.getByText("行动点：4/5")).toBeVisible();
+  // back at the location screen — one AP spent advances 卯时 → 辰时 (6 → 5)
+  await expect(page.getByText("辰时（上午）")).toBeVisible();
 
   // ── verify the committed outcome ────────────────────────────────────
   const afterCommit = await readState(page);
-  expect(afterCommit.calendar.ap).toBe(4);
+  expect(afterCommit.calendar.ap).toBe(5);
   expect(afterCommit.flags.rite_scheduled).toBe(true);
   expect(afterCommit.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
   const siliMemories = afterCommit.memories.sili_nvguan?.entries ?? [];
@@ -57,11 +57,11 @@ test("vertical slice: new game → event → choose → save → reload → pers
   // ── reload the page and continue from autosave ──────────────────────
   await page.reload();
   await page.getByRole("button", { name: "继续" }).click();
-  await expect(page.getByText("行动点：4/5")).toBeVisible();
+  await expect(page.getByText("辰时（上午）")).toBeVisible();
 
   // ── state survived the roundtrip ────────────────────────────────────
   const afterReload = await readState(page);
-  expect(afterReload.calendar.ap).toBe(4);
+  expect(afterReload.calendar.ap).toBe(5);
   expect(afterReload.flags.rite_scheduled).toBe(true);
   expect(afterReload.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
   expect((afterReload.memories.sili_nvguan?.entries ?? []).length).toBe(siliMemories.length);

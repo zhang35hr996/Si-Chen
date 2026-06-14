@@ -22,11 +22,11 @@ export function checkTravel(db: ContentDB, state: GameState, to: string): Result
   if (to === state.playerLocation) {
     return err(stateError("ALREADY_THERE", `already at "${to}"`));
   }
-  const current = db.locations[state.playerLocation];
-  if (!current || !current.connections.includes(to)) {
-    return err(
-      stateError("NOT_CONNECTED", `no path from "${state.playerLocation}" to "${to}"`),
-    );
+  // The map is a fast-travel menu (plan §5, art pass): any travel node is a
+  // legal destination regardless of adjacency. Free-view nodes (冷宫/朝会) are
+  // opened by the UI, never travelled to.
+  if (target.entry === "free" || !target.travelCost) {
+    return err(stateError("NOT_TRAVELABLE", `"${to}" is a free-view location, not a travel target`));
   }
   const costAp = target.travelCost.ap;
   if (costAp > state.calendar.ap) {

@@ -11,6 +11,7 @@
     "经血祭仪",
     "凤后",
     "承徽",
+    "君",
     "侍君",
     "位分",
     "凤印",
@@ -27,6 +28,11 @@
       "rank": "fenghou",
       "selfRefs": { "toPlayer": ["臣后"], "formal": ["本宫"] },
       "addressedAs": "凤后"
+    },
+    {
+      "rank": "jun",
+      "selfRefs": { "toPlayer": ["臣妾"], "formal": ["本君"] },
+      "addressedAs": "君"
     },
     {
       "rank": "chenghui",

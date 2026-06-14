@@ -12,6 +12,7 @@ import type { GameStore } from "../store/gameStore";
 import { DebugPanel } from "./debug/DebugPanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
 import { DialogueScreen } from "./screens/DialogueScreen";
+import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
 import { MapScreen } from "./screens/MapScreen";
 import { SaveLoadScreen } from "./screens/SaveLoadScreen";
@@ -20,7 +21,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "event" | "save";
+type View = "title" | "location" | "map" | "freeview" | "event" | "save";
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -34,6 +35,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   );
   const [view, setView] = useState<View>("title");
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [continueError, setContinueError] = useState<string | null>(null);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
@@ -132,7 +134,21 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             doAutosave(); // travel autosave (plan §9)
             runCheckpoints(rolledOver);
           }}
+          onOpenView={(locationId) => {
+            setFreeViewId(locationId);
+            setView("freeview");
+          }}
           onClose={() => setView("location")}
+        />
+      )}
+      {view === "freeview" && freeViewId && (
+        <FreeViewScreen
+          db={db}
+          store={store}
+          registry={registry}
+          locationId={freeViewId}
+          onStartEvent={startEvent}
+          onClose={() => setView("map")}
         />
       )}
       {view === "event" && activeEventId && (

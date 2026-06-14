@@ -14,7 +14,11 @@
     "lint": "eslint .",
     "validate-content": "tsx tools/validate-content.ts",
     "validate-manifest": "tsx tools/validate-manifest.ts",
-    "gen-placeholders": "tsx tools/gen-placeholders.ts"
+    "gen-placeholders": "tsx tools/gen-placeholders.ts",
+    "new:character": "tsx tools/new-content.ts character",
+    "new:location": "tsx tools/new-content.ts location",
+    "new:event": "tsx tools/new-content.ts event",
+    "new:scene": "tsx tools/new-content.ts scene"
   },
   "dependencies": {
     "react": "^19.2.7",

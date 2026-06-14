@@ -8,9 +8,9 @@ const db = loadRealContent();
 describe("createNewGameState", () => {
   const state = createNewGameState(db);
 
-  it("starts at 元年一月上旬 / 5 AP at the world's starting location", () => {
+  it("starts at 元年一月上旬 / 6 AP at the world's starting location", () => {
     expect(formatGameTime(state.calendar)).toBe("元年一月上旬");
-    expect(formatAp(state.calendar)).toBe("行动点：5/5");
+    expect(formatAp(state.calendar)).toBe("行动点：6/6");
     expect(state.playerLocation).toBe("yushufang");
   });
 
@@ -22,7 +22,7 @@ describe("createNewGameState", () => {
 
   it("seeds relationship + standing for every character", () => {
     expect(Object.keys(state.relationships).sort()).toEqual(
-      ["feng_hou", "shen_chenghui", "sili_nvguan"],
+      ["chu_jun", "feng_hou", "shen_chenghui", "sili_nvguan", "wenya_shijun"],
     );
     expect(state.relationships["shen_chenghui"]).toEqual({ trust: 25, affinity: 45, flags: [] });
     expect(state.standing["feng_hou"]).toEqual({ rank: "fenghou", favor: 25 });

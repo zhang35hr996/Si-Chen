@@ -1,3 +1,8 @@
+> **Historical implementation plan — archived.**
+> The skeleton it describes (PR 1–12) has shipped. Kept for provenance only.
+> For the current implementation contract read
+> [`docs/engineering/10-current-implementation.md`](../engineering/10-current-implementation.md).
+
 # Si-Chen — First Playable Skeleton: Implementation Plan v0
 
 **Status:** ✅ **Complete — PR 1–12 all shipped on `main`.** The §13 acceptance slice was walked end-to-end (250 Vitest cases + a Playwright smoke against the production build, all green). This document is now a historical record of the plan as executed; the next milestone is real AI integration (the text gates and a `DialogueProvider` adapter skeleton are already in place — see §8 / §11).

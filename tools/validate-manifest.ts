@@ -82,6 +82,10 @@ export function checkManifest(
   for (const { key, kind } of REQUIRED_UI_KEYS) {
     require(key, kind, "ui");
   }
+  // Map-board backdrops are referenced from world.json, not from any location.
+  for (const board of db.world.mapBoards ?? []) {
+    require(board.art.key, board.art.kind, `board "${board.id}"`);
+  }
 
   // 3. orphan files on disk that no manifest entry claims
   const claimed = new Set(Object.values(manifest.entries).map((e) => e.path));
