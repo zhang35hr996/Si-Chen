@@ -65,6 +65,34 @@ export function validateEffects(
       case "set_bloodline_status":
       case "flag":
         break; // fully constrained by the schema
+      case "set_rank": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `set_rank needs a consort with standing: "${e.char}"`, { char: e.char });
+        } else {
+          const r = db.ranks[e.rank];
+          if (!r || r.domain !== "harem" || e.rank === "fenghou") {
+            bad(index, "BAD_EFFECT", `set_rank to invalid rank "${e.rank}"`, { rank: e.rank });
+          }
+        }
+        break;
+      }
+      case "set_title": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `set_title needs a consort with standing: "${e.char}"`, { char: e.char });
+        } else if (db.lexicon.forbiddenTerms.some((t) => e.title.includes(t))) {
+          bad(index, "BAD_EFFECT", `title "${e.title}" contains a forbidden term`, { title: e.title });
+        }
+        break;
+      }
+      case "remove_title": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `remove_title needs a consort with standing: "${e.char}"`, { char: e.char });
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -132,6 +160,18 @@ export function applyEffects(
       }
       case "flag": {
         next.flags[effect.key] = effect.value;
+        break;
+      }
+      case "set_rank": {
+        next.standing[effect.char]!.rank = effect.rank;
+        break;
+      }
+      case "set_title": {
+        next.standing[effect.char]!.title = effect.title;
+        break;
+      }
+      case "remove_title": {
+        delete next.standing[effect.char]!.title;
         break;
       }
       case "memory": {
