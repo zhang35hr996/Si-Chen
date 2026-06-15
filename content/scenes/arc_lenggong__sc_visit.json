@@ -8,7 +8,7 @@
       "type": "line",
       "id": "n_intro",
       "speaker": "wenya_shijun",
-      "text": "宫门久无人叩，乍闻足音，温雅几乎不敢起身相认……陛下，是来看臣侍的么？",
+      "text": "宫门久无人叩，乍闻足音，温雅几乎不敢起身相认……陛下，是来看侍身的么？",
       "next": "n_choice"
     },
     {
@@ -23,7 +23,7 @@
       "type": "line",
       "id": "n_warm",
       "speaker": "wenya_shijun",
-      "text": "陛下……竟还记得。臣侍这三年，总算没有白等。",
+      "text": "陛下……竟还记得。侍身这三年，总算没有白等。",
       "next": "n_warm_fx"
     },
     {
@@ -52,13 +52,13 @@
       "type": "line",
       "id": "n_warm_end",
       "speaker": "wenya_shijun",
-      "text": "臣侍别无所求，唯愿日后这道宫门，还能为臣侍开上一回。"
+      "text": "侍身别无所求，唯愿日后这道宫门，还能为侍身开上一回。"
     },
     {
       "type": "line",
       "id": "n_cold",
       "speaker": "wenya_shijun",
-      "text": "……是臣侍僭越了。陛下日理万机，何须记挂冷宫旧人。",
+      "text": "……是侍身僭越了。陛下日理万机，何须记挂冷宫旧人。",
       "next": "n_cold_fx"
     },
     {
@@ -74,7 +74,7 @@
       "type": "line",
       "id": "n_cold_end",
       "speaker": "wenya_shijun",
-      "text": "陛下慢走。冷宫的门，臣侍自会替陛下掩上。"
+      "text": "陛下慢走。冷宫的门，侍身自会替陛下掩上。"
     }
   ]
 }
