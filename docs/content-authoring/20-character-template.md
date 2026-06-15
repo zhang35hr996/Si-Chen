@@ -41,6 +41,9 @@ Scaffold one with `npm run new:character <id>`.
 - **`expressions`** — must include `"neutral"`. Each expression needs a portrait
   asset `portrait.<portraitSet>.<expression>` in the manifest.
 - **`voice.register`** — `formal` | `casual` | `rough` | `poetic`.
+- **`attributes`** (optional, 侍君明面属性) — `{ "appearance", "talent", "family",
+  "health", "nurture" }`, each an integer 0–100 (容貌/才情/家世/健康/承养; background
+  §四.4.1). When present the character card renders them. Officials normally omit it.
 - **`secrets`** — must be `[]` (secrets gameplay isn't implemented).
 - **`stances`** (optional) — `[{ "charId": "<other>", "attitude": "…" }]`.
 
