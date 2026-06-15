@@ -47,3 +47,23 @@ placeholder. Keep it that way until those systems are real.
   [`../systems/40-relationship-memory.md`](../systems/40-relationship-memory.md).
 - **Data-driven map boards** — `world.json` declares `mapBoards` (主图/子图 backdrops)
   and `mapPortals` (出宫 / 后宫 / 郊外 buttons). A location's `zone` names its board.
+- **Map is the home screen (皇城主地图).** 新游戏 and every committed event land on
+  the root board (`mapBoards[0]`); abandoning a scene mid-way returns to the room
+  instead. A location node for the room you are already in re-opens it 免行动点
+  (`onEnterCurrent`); other travel nodes fast-travel. The 返回 breadcrumb is seeded
+  with the current board's ancestor path (walked back through `mapPortals`), so 返回
+  climbs to the 主图 instead of dropping straight back into the room — this is the
+  fix for the old "宫城图 → 返回 fell back into the palace" bug.
+- **Consort attributes** — characters may carry an optional `attributes` block
+  (容貌/才情/家世/健康/承养, each 0–100; background §四.4.1). The character card shows
+  位分 + 属性 + relationship stats for 侍君, and 官职 + 圣眷 for 官员; it no longer
+  renders 自称 or 品级括注 (player-facing summary only).
+- **位分升降 + 封号 system** — three new effects (`set_rank` / `set_title` /
+  `remove_title`) flow through the standard effect funnel (`store.applyEffects`,
+  0-AP, not routed through events). 称呼 is composed at render time via
+  `resolveDisplayName` (封号/姓 + 当前位分); when a consort holds multiple 封号 the
+  highest-precedence one surfaces via `effectiveOrder`. Player surfaces: the consort's
+  palace card 管理 button and the 御书房 后宫名册 roster both open `RankAdminModal`;
+  after each op the consort's reaction (谢恩 / 请罪 / 惶恐) is replayed through
+  `ReactionScreen` via `DialogueProvider`. 凤后 is the 正宫 cap and is excluded from
+  all rank/title ops.
