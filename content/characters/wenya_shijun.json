@@ -1,8 +1,10 @@
 {
   "id": "wenya_shijun",
   "kind": "consort",
+  "attributes": { "appearance": 60, "talent": 66, "family": 40, "health": 42, "nurture": 48 },
   "profile": {
     "name": "温雅",
+    "surname": "温",
     "age": 26,
     "role": "幽居冷宫的旧日承徽",
     "appearance": "素衣旧钗，眉目清减，腕间犹存一缕褪色的御赐宫绦。",
