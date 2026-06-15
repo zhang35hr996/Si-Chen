@@ -9,12 +9,15 @@ import type { RingBufferLogger } from "../engine/infra/logger";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
 import type { GameStore } from "../store/gameStore";
+import { buildRankOp, type RankOpRequest } from "../store/rankOps";
+import { RankAdminModal } from "./components/RankAdminModal";
 import { DebugPanel } from "./debug/DebugPanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
 import { DialogueScreen } from "./screens/DialogueScreen";
 import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
 import { MapScreen } from "./screens/MapScreen";
+import { ReactionScreen } from "./screens/ReactionScreen";
 import { SaveLoadScreen } from "./screens/SaveLoadScreen";
 import { TitleScreen } from "./screens/TitleScreen";
 
@@ -36,6 +39,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [view, setView] = useState<View>("title");
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
+  const [manageCharId, setManageCharId] = useState<string | null>(null);
+  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[] } | null>(null);
+  // The 皇城主地图 is home: 新游戏 and 事件结束 land here (atRoot); the location's
+  // 宫城图 button opens the map on the current board instead (atRoot=false).
+  const [mapAtRoot, setMapAtRoot] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
@@ -57,9 +65,26 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     setView("event");
   };
 
+  /** Return to the 皇城主地图 (home). Used by 新游戏 and after an event ends. */
+  const goHome = () => {
+    setMapAtRoot(true);
+    setView("map");
+  };
+
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
   const doAutosave = () => {
     if (storage) autosave(storage, db, store.getState(), { logger });
+  };
+
+  const applyRankOp = (charId: string, req: RankOpRequest) => {
+    const op = buildRankOp(db, store.getState(), charId, req);
+    setManageCharId(null);
+    if (!op) return; // no change
+    const result = store.applyEffects(db, op.effects);
+    if (result.ok) {
+      doAutosave();
+      setReaction({ speakerId: charId, lines: op.lines });
+    }
   };
 
   const canContinue =
@@ -71,7 +96,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (result.ok) {
       store.loadState(result.value.state);
       setContinueError(result.value.warnings.map((w) => w.message).join("；") || null);
-      setView("location");
+      goHome();
     } else {
       setContinueError(result.error.map((e) => e.message).join("；"));
     }
@@ -84,14 +109,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       (rolledOver ? pickNextEvent(db, state, "time_advance") : null) ??
       pickNextEvent(db, state, "location_enter");
     if (pick) startEvent(pick.id);
-    else setView("location");
+    else setView("location"); // arrived somewhere with no event → show that room
   };
 
   const newGame = () => {
     store.newGame(db);
     const pick = pickNextEvent(db, store.getState(), "game_start");
     if (pick) startEvent(pick.id);
-    else setView("location");
+    else goHome(); // 开局即在皇城主地图
   };
 
   return (
@@ -109,9 +134,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           db={db}
           store={store}
           registry={registry}
-          onOpenMap={() => setView("map")}
+          onOpenMap={() => {
+            setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
+            setView("map");
+          }}
           onOpenSave={() => setView("save")}
           onStartEvent={startEvent}
+          onManage={(id) => setManageCharId(id)}
         />
       )}
       {view === "save" && (
@@ -130,14 +159,17 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           db={db}
           store={store}
           registry={registry}
+          atRoot={mapAtRoot}
           onTravelled={(rolledOver) => {
             doAutosave(); // travel autosave (plan §9)
             runCheckpoints(rolledOver);
           }}
+          onEnterCurrent={() => setView("location")}
           onOpenView={(locationId) => {
             setFreeViewId(locationId);
             setView("freeview");
           }}
+          onOpenSave={() => setView("save")}
           onClose={() => setView("location")}
         />
       )}
@@ -176,9 +208,31 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
                   }),
                 );
               }
+              goHome(); // 事件结束 → 跳回皇城主地图
+              return;
             }
+            // Abandoned mid-scene (零代价离开): back to the room you were in.
             setView("location");
           }}
+        />
+      )}
+      {manageCharId && store.getState().standing[manageCharId] && (
+        <RankAdminModal
+          db={db}
+          character={db.characters[manageCharId]!}
+          standing={store.getState().standing[manageCharId]!}
+          onApply={(req) => applyRankOp(manageCharId, req)}
+          onClose={() => setManageCharId(null)}
+        />
+      )}
+      {reaction && (
+        <ReactionScreen
+          db={db}
+          store={store}
+          registry={registry}
+          speakerId={reaction.speakerId}
+          lines={reaction.lines}
+          onDone={() => setReaction(null)}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
