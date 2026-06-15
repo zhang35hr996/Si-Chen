@@ -146,7 +146,6 @@ describe("eventEffectSchema (discriminated pillar/field pairs)", () => {
     rejects(eventEffectSchema, { type: "resource", pillar: "bloodline", field: "menstrualStatus", delta: 1 });
     rejects(eventEffectSchema, { type: "relationship", char: "char_a", field: "trust", delta: 40 }); // ±10 cap
     rejects(eventEffectSchema, { type: "set_bloodline_status", field: "menstrualStatus", value: "pregnant" });
-    rejects(eventEffectSchema, { type: "set_rank", char: "char_a", rank: "rank_a" }); // not an effect
   });
 });
 
@@ -222,5 +221,16 @@ describe("rank/title fields", () => {
   it("standing accepts an optional 封号 title", () => {
     expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30, title: "婉" }).success).toBe(true);
     expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30 }).success).toBe(true);
+  });
+});
+
+describe("rank/title effects", () => {
+  it("accepts set_rank / set_title / remove_title", () => {
+    expect(eventEffectSchema.safeParse({ type: "set_rank", char: "shen_chenghui", rank: "jun" }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "set_title", char: "shen_chenghui", title: "婉" }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "remove_title", char: "shen_chenghui" }).success).toBe(true);
+  });
+  it("rejects a 封号 longer than 4 漢字", () => {
+    expect(eventEffectSchema.safeParse({ type: "set_title", char: "shen_chenghui", title: "一二三四五" }).success).toBe(false);
   });
 });

@@ -145,6 +145,9 @@ export const eventEffectSchema = z.union([
     key: nonEmpty,
     value: z.union([z.boolean(), z.number(), z.string()]),
   }),
+  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema }),
+  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4) }),
+  z.strictObject({ type: z.literal("remove_title"), char: idSchema }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
 ]);
 
