@@ -143,6 +143,11 @@ describe("rank/title effects", () => {
   it("rejects a 封号 containing a forbidden term", () => {
     expect(applyEffects(db, fresh(), [{ type: "set_title", char: "shen_chenghui", title: "女帝" }]).ok).toBe(false);
   });
+  it("rejects rank/title ops targeting the 凤后 consort (the 正宫 cap)", () => {
+    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "feng_hou", rank: "jun" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "set_title", char: "feng_hou", title: "婉" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "remove_title", char: "feng_hou" }]).ok).toBe(false);
+  });
 });
 
 describe("atomicity", () => {
