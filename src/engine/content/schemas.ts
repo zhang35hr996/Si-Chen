@@ -382,6 +382,19 @@ export const worldLexiconSchema = z.strictObject({
 
 export type WorldLexicon = z.infer<typeof worldLexiconSchema>;
 
+// ── rank change reactions (位分/封号 op templates — rank/title system) ──
+const rankReactionSchema = z.strictObject({
+  lines: z.array(nonEmpty).min(1).max(3),
+  memory: nonEmpty,
+});
+
+export const rankChangeReactionsSchema = z.strictObject({
+  promote: rankReactionSchema,
+  demote: rankReactionSchema,
+  grant_title: rankReactionSchema,
+  strip_title: rankReactionSchema,
+});
+
 // ── world.json ────────────────────────────────────────────────────────
 export const worldSchema = z.strictObject({
   contentVersion: nonEmpty,
@@ -411,6 +424,8 @@ export const worldSchema = z.strictObject({
   mapBoards: z.array(mapBoardSchema).min(1).optional(),
   /** Portal buttons linking boards (出宫/后宫/郊外). */
   mapPortals: z.array(mapPortalSchema).optional(),
+  /** Templated consort reactions to 位分/封号 ops (rank/title system). */
+  rankChangeReactions: rankChangeReactionsSchema.optional(),
 });
 
 export type WorldContent = z.infer<typeof worldSchema>;

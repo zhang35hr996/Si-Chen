@@ -234,3 +234,15 @@ describe("rank/title effects", () => {
     expect(eventEffectSchema.safeParse({ type: "set_title", char: "shen_chenghui", title: "一二三四五" }).success).toBe(false);
   });
 });
+
+import worldJson from "../../content/world.json";
+
+it("world.json carries rankChangeReactions for all four kinds", () => {
+  const parsed = worldSchema.safeParse(worldJson);
+  expect(parsed.success).toBe(true);
+  if (parsed.success) {
+    expect(Object.keys(parsed.data.rankChangeReactions ?? {}).sort()).toEqual(
+      ["demote", "grant_title", "promote", "strip_title"],
+    );
+  }
+});
