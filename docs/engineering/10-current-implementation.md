@@ -61,8 +61,8 @@ placeholder. Keep it that way until those systems are real.
 - **位分升降 + 封号 system** — three new effects (`set_rank` / `set_title` /
   `remove_title`) flow through the standard effect funnel (`store.applyEffects`,
   0-AP, not routed through events). 称呼 is composed at render time via
-  `resolveDisplayName` (封号/姓 + 当前位分); when a consort holds multiple 封号 the
-  highest-precedence one surfaces via `effectiveOrder`. Player surfaces: the consort's
+  `resolveDisplayName` (封号/姓 + 当前位分); a 封号 also nudges a consort just above
+  untitled same-rank peers in ordering via `effectiveOrder`. Player surfaces: the consort's
   palace card 管理 button and the 御书房 后宫名册 roster both open `RankAdminModal`;
   after each op the consort's reaction (谢恩 / 请罪 / 惶恐) is replayed through
   `ReactionScreen` via `DialogueProvider`. 凤后 is the 正宫 cap and is excluded from
