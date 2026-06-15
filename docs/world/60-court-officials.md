@@ -1,30 +1,34 @@
 # Court & Officials
 
-High power is held almost entirely by women: the sovereign, 公主 and kinswomen,
-女官, generals, priests, regional governors, and senior court ministers. Men may
+> Canonical source: [`../background-v1.0.md`](../background-v1.0.md) §6, §10. In this
+> 女尊 world officials are **women by default**, so prose never writes 「女官」 — an
+> 官员 is already understood to be female (the term 「女帝」 is likewise dropped: the
+> 皇帝 is a woman).
+
+High power is held almost entirely by women: the 皇帝, 公主 and kinswomen,
+官员, generals, priests, regional governors, and senior court ministers. Men may
 influence power through household, 承养, marriage, and service, but do not enter
 the formal political system.
 
-## Women officials (女官)
+## Officials (官员)
 
 Officials hold the **official** rank domain (distinct from the 后宫 harem domain).
 The engine enforces that an `official` character cannot hold a harem rank and vice
-versa. Currently shipped: **司礼女官** (`sili_zhang`, 掌祭仪礼制) — favor term 圣眷
-(officials), versus 恩宠 (consorts).
+versa. Currently shipped: **司礼** (`sili_zhang`, 掌经血祭仪与宫廷礼制) — favor term
+圣眷 (officials), versus 恩宠 (consorts).
 
 The 朝堂 (court hall) is modeled as a free-view location with an 上朝 action.
 
-## Household-spouse titles (家宅称谓)
+## Household-spouse titles (家宅称谓 — background §10.2)
 
-For male spouses outside the 后宫 (officials' and nobles' households):
+For male spouses in officials' and nobles' households (outside the 后宫):
 
 | Identity | Title | Note |
 |---|---|---|
-| a woman official's principal husband | 正君 | most common, clearest |
-| high-rank official's principal husband | 诰君 | matches 诰命-style conferral |
-| general household male spouse | 内君 | refined term |
-| formal secondary spouse | 侧君 / 侧侍 | named status |
-| low-status concubine | 小侍 | low standing |
-| favored attendant without rank | 侍人 | may be favored, no formal rank |
+| an official's principal husband (正夫) | 内卿 | 文雅正称 |
+| high-rank official's principal husband | 命内卿 | 对应诰命性质的封赠 |
+| general household male spouse | 内卿 | refined catch-all |
+| formal secondary spouse (正式侧室) | 侧卿 | named status |
+| low-status concubine (低位通房) | 小宠 | low standing |
 
-These are lore for now; only the 后宫 + 女官 ranks are wired into the engine.
+These are lore for now; only the 后宫 + 官员 ranks are wired into the engine.

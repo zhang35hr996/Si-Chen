@@ -41,8 +41,8 @@ export interface TextGateContext {
    */
   foreignSelfRefs: string[];
   /**
-   * Wrong honorifics for the 女帝. The world's one rule (lexicon.styleRules) is
-   * 「对女帝一律称『陛下』」; styleRules are unstructured prose the engine can't
+   * Wrong honorifics for the 皇帝. The world's one rule (lexicon.styleRules) is
+   * 「对皇帝一律称『陛下』」; styleRules are unstructured prose the engine can't
    * parse, so this is a small v0 watch-list of common WRONG forms. Terms also in
    * forbiddenTerms are dropped here so they fire under forbidden_lexicon only.
    */
@@ -90,7 +90,7 @@ export function buildTextGateContext(db: ContentDB, speakerRankId: string): Text
 export interface ScanOptions {
   /**
    * Skip the speaker-identity gates (self_ref, rank/title self-claim). Used for
-   * player CHOICE text, which is the 女帝's words, not the NPC's — only the
+   * player CHOICE text, which is the 皇帝's words, not the NPC's — only the
    * content-level gates (forbidden lexicon, template leaks) apply there.
    */
   skipIdentityGates?: boolean;
@@ -142,7 +142,7 @@ export function scanDialogueText(
         findings.push({
           gate: "rank_title",
           severity: "reject",
-          message: `the 女帝 is addressed as 「陛下」, never 「${term}」`,
+          message: `the 皇帝 is addressed as 「陛下」, never 「${term}」`,
           matched: term,
         });
       }

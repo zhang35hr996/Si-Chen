@@ -10,10 +10,14 @@ gameplay numbers. For mechanics see [`../systems/`](../systems/00-index.md).
 | [`30-bloodline-pregnancy.md`](30-bloodline-pregnancy.md) | 自孕/承养, 胎息, 血养, menstrual sanctity — *worldbuilding only*. |
 | [`40-imperial-family.md`](40-imperial-family.md) | 皇嗣/皇子/皇郎/公主/贵主 and succession logic. |
 | [`50-harem-ranks.md`](50-harem-ranks.md) | 后宫 rank table + self-reference rules. |
-| [`60-court-officials.md`](60-court-officials.md) | 女官/朝堂 roles and household-spouse titles. |
+| [`60-court-officials.md`](60-court-officials.md) | 官员/朝堂 roles and household-spouse titles. |
 | [`70-taboo-and-lexicon.md`](70-taboo-and-lexicon.md) | Approved/forbidden terms, wrong-title pitfalls, dialogue red lines. |
 
-Full original draft (mixed current/TBD): [`../archive/background-v0.1.md`](../archive/background-v0.1.md).
+**★ Canonical reference:** [`../background-v1.0.md`](../background-v1.0.md) — the
+authoritative bible for lore, 位分, 称谓 and the attribute system. These split
+files must stay consistent with it; on conflict the background bible wins.
+(In this 女尊 world the 皇帝 and 官员 are women by default, so prose never writes
+「女帝」or「女官」.)
 
 **Settled vs TBD:** the world *tone* and core institutions are settled; several
 specifics (转胎 timing, 绝经 criteria, succession rule) are still 待定 — flagged

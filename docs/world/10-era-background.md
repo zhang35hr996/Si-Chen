@@ -4,7 +4,9 @@
 
 A **礼法女尊帝国** — a ritual-legalist matriarchal empire shaped by physiological
 difference, religious law, matrilineal sovereignty, and the 血养 (blood-nursing)
-institution. Every reigning sovereign in history has been a 女帝.
+institution. Every reigning sovereign in history has been a woman — the 皇帝 is a
+woman by default, so prose never writes 「女帝」 (and officials, women by default,
+are never written 「女官」). Canonical source: [`../background-v1.0.md`](../background-v1.0.md).
 
 This is **not** "an ancient patriarchy with the genders swapped." The official
 ideology does not crudely declare men base. It frames an unequal structure as
@@ -19,8 +21,8 @@ men derive standing through marriage, service, blood-nursing, and household rank
 
 ## Atmosphere
 
-- Court society centered on the female sovereign, her 后宫 of 君-ranked men, the
-  朝堂 of women officials, and the 宗室 (imperial kin).
+- Court society centered on the woman 皇帝, her 后宫 of 君-ranked men, the
+  朝堂 of 官员 (women by default), and the 宗室 (imperial kin).
 - Menstrual blood is sacred — a sign of mandate, lineage, and legitimacy — so the
   sovereign's reproductive state is a **political** matter, not a private one.
 - Reverence and taboo surround reproduction; titles and address are heavily ritualized.

@@ -33,7 +33,7 @@ Why they're wrong here:
 
 1. 不得创造新的官职、位分、宗嗣术语；制度未定时用普通描述，不要造词。
 2. 男子角色遵循礼法语体，不用现代恋爱腔。
-3. 对女帝一律称「陛下」，不得称「皇上」。
+3. 对皇帝一律称「陛下」，不得称「皇上」；女尊之世官员、皇帝皆默认女性，行文不出现「女官」「女帝」。
 
 See also [`../narrative/50-dialogue-style-guide.md`](../narrative/50-dialogue-style-guide.md)
 for tone and good/bad line examples.
