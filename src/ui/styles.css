@@ -780,3 +780,8 @@ body {
 .rank-modal__close { margin-top: 0.8rem; }
 .rank-modal button { cursor: pointer; }
 .rank-modal button:disabled { opacity: 0.4; cursor: default; }
+
+.location-screen__roster { padding: 0.8rem 1rem; }
+.roster-row { display: flex; gap: 0.8rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #2a2017; }
+.roster-row__rank { color: #b8aa90; font-size: 0.85rem; margin-left: auto; }
+.roster-row button { cursor: pointer; }

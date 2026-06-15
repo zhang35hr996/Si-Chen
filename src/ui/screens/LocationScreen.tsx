@@ -1,6 +1,7 @@
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
 import { getPresentAt } from "../../engine/characters/presence";
+import { resolveDisplayName, effectiveOrder } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
@@ -14,6 +15,7 @@ export function LocationScreen({
   onOpenMap,
   onOpenSave,
   onStartEvent,
+  onManage,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -21,6 +23,7 @@ export function LocationScreen({
   onOpenMap: () => void;
   onOpenSave: () => void;
   onStartEvent: (eventId: string) => void;
+  onManage?: (charId: string) => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -66,12 +69,36 @@ export function LocationScreen({
               type="button"
               className="location-screen__event"
               disabled={!affordable}
-              title={affordable ? `耗费 ${event.apCost} 行动点` : "行动点不足"}
+              title={affordable ? event.title : "行动点不足"}
               onClick={() => onStartEvent(event.id)}
             >
-              {event.title}（{event.apCost} 行动点{affordable ? "" : " · 行动点不足"}）
+              {event.title}
+              {affordable ? "" : "（行动点不足）"}
             </button>
           ))}
+        </section>
+      )}
+
+      {location.id === "yushufang" && (
+        <section className="location-screen__roster">
+          <h2>后宫名册</h2>
+          {Object.values(db.characters)
+            .filter((c) => c.kind === "consort" && c.id !== "feng_hou")
+            .sort((a, b) => {
+              const ra = state.standing[a.id], rb = state.standing[b.id];
+              return effectiveOrder(db.ranks[rb!.rank]!, rb!.title !== undefined) -
+                     effectiveOrder(db.ranks[ra!.rank]!, ra!.title !== undefined);
+            })
+            .map((c) => {
+              const st = state.standing[c.id]!;
+              return (
+                <div key={c.id} className="roster-row">
+                  <span>{resolveDisplayName(c, st, db.ranks[st.rank])}</span>
+                  <span className="roster-row__rank">{db.ranks[st.rank]?.name}{st.title ? `·封号「${st.title}」` : ""}</span>
+                  {onManage && <button type="button" onClick={() => onManage(c.id)}>管理</button>}
+                </div>
+              );
+            })}
         </section>
       )}
 
@@ -86,6 +113,7 @@ export function LocationScreen({
               state={state}
               registry={registry}
               character={character}
+              onManage={onManage ? () => onManage(character.id) : undefined}
             />
           ))
         )}
