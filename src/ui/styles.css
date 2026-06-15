@@ -335,10 +335,28 @@ body {
   color: #d9b87c;
 }
 
-.char-card__selfref {
-  display: block;
+.char-card__attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+  margin: 0.5rem 0 0;
+}
+
+.char-card__attrs div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.char-card__attrs dt {
+  font-size: 0.72rem;
   color: #8a7a62;
-  margin-top: 0.15rem;
+}
+
+.char-card__attrs dd {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #cdbf9f;
 }
 
 .char-card__role {
@@ -735,4 +753,16 @@ body {
   border: 1px solid #33291f;
   color: #b8aa90;
   white-space: pre;
+}
+
+.char-card__title { color: #d9b87c; }
+.char-card__manage {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+  background: #2a2017;
+  color: #d9b87c;
+  border: 1px solid #4a3b28;
+  border-radius: 3px;
+  cursor: pointer;
 }
