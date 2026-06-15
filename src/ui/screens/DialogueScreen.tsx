@@ -100,9 +100,7 @@ export function DialogueScreen({
         <span className="hud__time">
           {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
-        <span className="dialogue-screen__cost">
-          {event?.title} · 耗费 {event?.apCost} 行动点
-        </span>
+        <span className="dialogue-screen__cost">{event?.title}</span>
         <button type="button" className="hud__button" onClick={quit} title="中途离开不消耗行动点，亦无任何后果">
           离开
         </button>

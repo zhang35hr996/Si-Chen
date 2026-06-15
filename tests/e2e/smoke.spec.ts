@@ -22,18 +22,19 @@ async function readState(page: Page): Promise<GameState> {
 test("vertical slice: new game → event → choose → save → reload → persist", async ({ page }) => {
   await page.goto("/");
 
-  // ── title → new game ────────────────────────────────────────────────
+  // ── title → new game (lands on the 皇城主地图 hub) ─────────────────────
   await page.getByRole("button", { name: "新游戏" }).click();
   await expect(page.getByText("卯时（早上）")).toBeVisible(); // 第一个行动点 = 卯时
 
-  // ── trigger the event eligible at the starting location (御书房) ──────
-  await page.getByRole("button", { name: /司礼女官请示经血祭仪/ }).click();
+  // ── enter the starting room (御书房) from the map, then its event ──────
+  await page.getByRole("button", { name: /御书房/ }).click();
+  await page.getByRole("button", { name: /司礼请示经血祭仪/ }).click();
 
   // ── dialogue: pick 准奏, then advance the closing line to commit ──────
   await page.getByRole("button", { name: /准奏/ }).click();
   await page.getByRole("button", { name: "（继续）" }).click();
 
-  // back at the location screen — one AP spent advances 卯时 → 辰时 (6 → 5)
+  // back on the 皇城主地图 — one AP spent advances 卯时 → 辰时 (6 → 5)
   await expect(page.getByText("辰时（上午）")).toBeVisible();
 
   // ── verify the committed outcome ────────────────────────────────────

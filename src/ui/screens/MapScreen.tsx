@@ -22,15 +22,23 @@ export function MapScreen({
   db,
   store,
   registry,
+  atRoot,
   onTravelled,
+  onEnterCurrent,
   onOpenView,
+  onOpenSave,
   onClose,
 }: {
   db: ContentDB;
   store: GameStore;
   registry: AssetRegistry;
+  /** Open on the 皇城主地图 (root board) — true after 新游戏 / 事件结束 (hub return);
+   *  false when opened from a location's 宫城图 button (start on that board). */
+  atRoot: boolean;
   onTravelled: (rolledOver: boolean) => void;
+  onEnterCurrent: () => void;
   onOpenView: (locationId: string) => void;
+  onOpenSave: () => void;
   onClose: () => void;
 }) {
   const state = useGameState(store);
@@ -38,10 +46,27 @@ export function MapScreen({
   const portals = db.world.mapPortals ?? [];
   const boardOf = (id: string): MapBoard => boards.find((b) => b.id === id) ?? boards[0]!;
 
-  const startBoard = boardOf(db.locations[state.playerLocation]?.zone ?? boards[0]!.id).id;
+  // Ancestor path (root → … → parent) of a board, walked back through portals.
+  // Initializing 返回's breadcrumb with this is what makes 返回 climb to the
+  // 主地图 instead of dropping straight back into the room you came from.
+  const ancestorsOf = (target: string): string[] => {
+    const path: string[] = [];
+    let cur = target;
+    const seen = new Set<string>([cur]);
+    for (;;) {
+      const parent = portals.find((p) => p.to === cur)?.from;
+      if (!parent || seen.has(parent)) break;
+      path.unshift(parent);
+      seen.add(parent);
+      cur = parent;
+    }
+    return path;
+  };
+
+  const startBoard = atRoot ? boards[0]!.id : boardOf(db.locations[state.playerLocation]?.zone ?? boards[0]!.id).id;
   // The board we are looking at, plus the breadcrumb stack used by 返回.
   const [board, setBoard] = useState<string>(startBoard);
-  const [stack, setStack] = useState<string[]>([]);
+  const [stack, setStack] = useState<string[]>(() => ancestorsOf(startBoard));
 
   const current = boardOf(board);
   const boardArt = registry.resolveVariant(current.art.key, timeOfDay(state.calendar), current.art.kind);
@@ -71,22 +96,37 @@ export function MapScreen({
 
   const renderTravelNode = (location: LocationContent) => {
     const here = location.id === state.playerLocation;
+    // The node for the room you are already in re-opens it (免行动点); other
+    // nodes fast-travel (the reducer spends AP).
+    if (here) {
+      return (
+        <button
+          key={location.id}
+          type="button"
+          className="map-node map-node--here"
+          style={{ left: `${location.position.x * 100}%`, top: `${location.position.y * 100}%` }}
+          title="进入此处"
+          onClick={onEnterCurrent}
+        >
+          <span className="map-node__name">{location.name}</span>
+          <span className="map-node__meta">当前所在</span>
+        </button>
+      );
+    }
     const check = checkTravel(db, state, location.id);
     const reason = check.ok ? null : (REASON_TEXT[check.error.code] ?? check.error.message);
     return (
       <button
         key={location.id}
         type="button"
-        className={`map-node${here ? " map-node--here" : ""}`}
+        className="map-node"
         style={{ left: `${location.position.x * 100}%`, top: `${location.position.y * 100}%` }}
         disabled={!check.ok}
-        title={check.ok ? `前往（${location.travelCost?.ap ?? 1} 行动点）` : (reason ?? "")}
+        title={check.ok ? "前往" : (reason ?? "")}
         onClick={() => travel(location.id)}
       >
         <span className="map-node__name">{location.name}</span>
-        <span className="map-node__meta">
-          {here ? "当前所在" : check.ok ? `${location.travelCost?.ap ?? 1} 行动点` : reason}
-        </span>
+        {!check.ok && <span className="map-node__meta">{reason}</span>}
       </button>
     );
   };
@@ -97,11 +137,10 @@ export function MapScreen({
       type="button"
       className="map-node map-node--portal"
       style={{ left: `${location.position.x * 100}%`, top: `${location.position.y * 100}%` }}
-      title="进入（免行动点）"
+      title="进入"
       onClick={() => onOpenView(location.id)}
     >
       <span className="map-node__name">{location.name}</span>
-      <span className="map-node__meta">免行动点</span>
     </button>
   );
 
@@ -112,14 +151,12 @@ export function MapScreen({
           {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
         <span className="hud__group">
+          <button type="button" className="hud__button" onClick={onOpenSave}>
+            存档
+          </button>
           <button type="button" className="hud__button" onClick={goBack}>
             {backLabel}
           </button>
-          {stack.length > 0 && (
-            <button type="button" className="hud__button" onClick={onClose}>
-              关闭地图
-            </button>
-          )}
         </span>
       </header>
 
@@ -138,11 +175,10 @@ export function MapScreen({
             type="button"
             className="map-node map-node--portal"
             style={{ left: `${portal.position.x * 100}%`, top: `${portal.position.y * 100}%` }}
-            title={`${portal.name}（免行动点）`}
+            title={portal.name}
             onClick={() => enterBoard(portal.to)}
           >
             <span className="map-node__name">{portal.name}</span>
-            <span className="map-node__meta">免行动点</span>
           </button>
         ))}
       </section>
