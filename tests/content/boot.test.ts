@@ -18,7 +18,7 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 5 characters, 6 locations, 6 events, 6 scenes, 4 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 5 characters, 6 locations, 6 events, 6 scenes, 21 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
@@ -38,7 +38,7 @@ describe("real content/ boots", () => {
       ].sort(),
     );
     expect(Object.keys(db.scenes)).toHaveLength(6);
-    expect(Object.keys(db.ranks)).toHaveLength(4);
+    expect(Object.keys(db.ranks)).toHaveLength(21);
   });
 
   it("wires the slice correctly: domains, start location, heavy rite event", () => {
