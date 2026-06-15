@@ -36,6 +36,7 @@ export const relationshipStateSchema = z.strictObject({
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
+  title: nonEmpty.optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
@@ -149,13 +150,29 @@ export const eventEffectSchema = z.union([
 
 export type EventEffect = z.infer<typeof eventEffectSchema>;
 
+// ── consort attributes (侍君明面属性 — background §四.4.1) ──────────────
+// Static, card-facing养成 attributes. 年龄 lives in profile.age and 性格 in
+// profile.personalityTraits; these five are the numeric stats the card shows.
+export const consortAttributesSchema = z.strictObject({
+  appearance: percent, // 容貌
+  talent: percent, // 才情
+  family: percent, // 家世
+  health: percent, // 健康
+  nurture: percent, // 承养资质
+});
+
+export type ConsortAttributes = z.infer<typeof consortAttributesSchema>;
+
 // ── characters ────────────────────────────────────────────────────────
 export const characterSchema = z
   .strictObject({
     id: idSchema,
     kind: z.enum(["consort", "official"]),
+    /** 侍君明面属性. Optional: officials carry no养成 stat block. */
+    attributes: consortAttributesSchema.optional(),
     profile: z.strictObject({
       name: nonEmpty,
+      surname: nonEmpty.optional(),
       age: z.number().int().min(14).max(99),
       role: nonEmpty,
       appearance: nonEmpty,

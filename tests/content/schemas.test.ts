@@ -3,6 +3,7 @@ import type { z } from "zod";
 import {
   characterRankSchema,
   characterSchema,
+  characterStandingSchema,
   dialogueChoiceSchema,
   effectMemoryDraftSchema,
   eventEffectSchema,
@@ -214,5 +215,12 @@ describe("worldSchema / rankSchema", () => {
     rejects(worldSchema, { ...world, calendar: { apMax: 5, start: { year: 1, month: 13, period: "early" } } });
     rejects(worldSchema, { ...world, calendar: { apMax: 0, start: { year: 1, month: 1, period: "early" } } });
     rejects(worldSchema, { ...world, ranks: [] });
+  });
+});
+
+describe("rank/title fields", () => {
+  it("standing accepts an optional 封号 title", () => {
+    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30, title: "婉" }).success).toBe(true);
+    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30 }).success).toBe(true);
   });
 });

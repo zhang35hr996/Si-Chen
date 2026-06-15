@@ -56,6 +56,8 @@ export interface CharacterStanding {
   rank: string;
   /** 0–100 — 恩宠 (consort) / 圣眷 (official). */
   favor: number;
+  /** 封号 (optional). When set, 称呼 becomes 封号+位分 (rank/title system). */
+  title?: string;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
