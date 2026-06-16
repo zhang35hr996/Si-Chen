@@ -37,6 +37,8 @@ export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
   title: nonEmpty.optional(),
+  lifecycle: z.enum(["normal", "candidate", "carrying", "delivered", "deceased"]).optional(),
+  recoverUntilMonth: z.number().int().min(1).optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
@@ -151,7 +153,7 @@ export const eventEffectSchema = z.union([
   z.strictObject({
     type: z.literal("bedchamber"),
     char: idSchema,
-    mode: z.enum(["passion", "pleasure"]),
+    mode: z.enum(["passion", "pleasure", "companionship"]),
   }),
   z.strictObject({
     type: z.literal("pregnancy"),
@@ -452,6 +454,32 @@ export const worldSchema = z.strictObject({
     .strictObject({
       passion: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
       pleasure: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
+      companionship: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
+    })
+    .optional(),
+  /** 承嗣/生产/子嗣调参（缺省走引擎内置 fallback）。 */
+  gestation: z
+    .strictObject({
+      termMonths: z.number().int().min(1),
+      transferEarliestMonth: z.number().int().min(1),
+      earlyBirth: z.strictObject({ month8: percent, month9: percent }),
+      recovery: z.strictObject({ safeMonths: z.number().int().min(0), dystociaMonths: z.number().int().min(0) }),
+      dystocia: z.strictObject({
+        baseAtMonth3: percent,
+        perMonthAfter: z.number().int().min(0),
+        outcomeSplit: z.strictObject({ childDies: percent, bearerDies: percent, both: percent }),
+      }),
+      childFavor: z.strictObject({
+        selfPregnancy: percent,
+        fenghouBonus: percent,
+        tierValues: z.strictObject({
+          abundant: percent,
+          favored: percent,
+          small: percent,
+          fallen: percent,
+          none: percent,
+        }),
+      }),
     })
     .optional(),
 });
