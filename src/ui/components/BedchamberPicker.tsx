@@ -18,9 +18,10 @@ export function BedchamberPicker({
     .filter((c) => c.kind === "consort")
     .sort((a, b) => {
       const ra = state.standing[a.id], rb = state.standing[b.id];
+      if (!ra || !rb) return 0; // a consort without standing (e.g. added post-save) sorts neutrally
       return (
-        effectiveOrder(db.ranks[rb!.rank]!, rb!.title !== undefined) -
-        effectiveOrder(db.ranks[ra!.rank]!, ra!.title !== undefined)
+        effectiveOrder(db.ranks[rb.rank]!, rb.title !== undefined) -
+        effectiveOrder(db.ranks[ra.rank]!, ra.title !== undefined)
       );
     });
 

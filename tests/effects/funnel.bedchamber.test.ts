@@ -55,10 +55,30 @@ describe("funnel: pregnancy", () => {
 
   it("rejects confirm with a non-consort fatherId", () => {
     const state = createNewGameState(db);
-    const errs = validateEffects(db, state, [
+    const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]); // → pending
+    expect(begun.ok).toBe(true);
+    if (!begun.ok) return;
+    const errs = validateEffects(db, begun.value, [
       { type: "pregnancy", op: "confirm", fatherIds: ["sili_nvguan"] },
     ]);
     expect(errs).toHaveLength(1);
+  });
+
+  it("rejects begin when already pending/expecting (no overwrite)", () => {
+    const state = createNewGameState(db);
+    const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
+    expect(begun.ok).toBe(true);
+    if (!begun.ok) return;
+    const errs = validateEffects(db, begun.value, [{ type: "pregnancy", op: "begin" }]);
+    expect(errs).toHaveLength(1);
+  });
+
+  it("rejects confirm when status is not pending", () => {
+    const state = createNewGameState(db); // status "none"
+    const errs = validateEffects(db, state, [
+      { type: "pregnancy", op: "confirm", fatherIds: ["shen_chenghui"] },
+    ]);
+    expect(errs.some((e) => e.message.includes("requires status"))).toBe(true);
   });
 
   it("clear resets to none", () => {

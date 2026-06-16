@@ -107,7 +107,17 @@ export function validateEffects(
         break;
       }
       case "pregnancy": {
-        if (e.op === "confirm") {
+        const status = state.resources.bloodline.pregnancy.status;
+        if (e.op === "begin") {
+          // 受孕只在未孕时落账 — never overwrite an in-flight pregnancy.
+          if (status !== "none") {
+            bad(index, "BAD_EFFECT", `pregnancy begin requires status "none", got "${status}"`, { status });
+          }
+        } else if (e.op === "confirm") {
+          // 怀胎只能从 pending 确认 — guards against dropping conceivedAt.
+          if (status !== "pending") {
+            bad(index, "BAD_EFFECT", `pregnancy confirm requires status "pending", got "${status}"`, { status });
+          }
           const ids = e.fatherIds ?? [];
           if (ids.length < 1 || ids.length > 3) {
             bad(index, "BAD_EFFECT", `pregnancy confirm needs 1–3 fatherIds`, { fatherIds: ids });

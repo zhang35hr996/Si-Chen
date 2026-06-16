@@ -153,7 +153,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     doAutosave();
     if (plan.isFirstNight && plan.charId !== "feng_hou") {
       setFirstNightPromptId(plan.charId);
-    } else if (spend.ok && spend.value.rolledOver) {
+    } else if (spend.value.rolledOver) {
       runCheckpoints(true);
     }
   };

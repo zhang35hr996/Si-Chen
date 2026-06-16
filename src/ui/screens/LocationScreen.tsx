@@ -107,8 +107,9 @@ export function LocationScreen({
             .filter((c) => c.kind === "consort" && c.id !== "feng_hou")
             .sort((a, b) => {
               const ra = state.standing[a.id], rb = state.standing[b.id];
-              return effectiveOrder(db.ranks[rb!.rank]!, rb!.title !== undefined) -
-                     effectiveOrder(db.ranks[ra!.rank]!, ra!.title !== undefined);
+              if (!ra || !rb) return 0; // consort without standing (e.g. added post-save) sorts neutrally
+              return effectiveOrder(db.ranks[rb.rank]!, rb.title !== undefined) -
+                     effectiveOrder(db.ranks[ra.rank]!, ra.title !== undefined);
             })
             .map((c) => {
               const st = state.standing[c.id]!;
