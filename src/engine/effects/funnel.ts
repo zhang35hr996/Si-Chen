@@ -119,6 +119,18 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_designate": {
+        for (const id of e.charIds) {
+          const ch = db.characters[id];
+          const st = state.standing[id];
+          if (!ch || ch.kind !== "consort" || !st) {
+            bad(index, "BAD_EFFECT_TARGET", `heir_designate needs a consort with standing: "${id}"`, { char: id });
+          } else if (st.lifecycle === "deceased") {
+            bad(index, "BAD_EFFECT_TARGET", `cannot designate a deceased consort: "${id}"`, { char: id });
+          }
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -225,6 +237,11 @@ export function applyEffects(
           next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
           delete next.resources.bloodline.gestation;
         }
+        break;
+      }
+      case "heir_designate": {
+        for (const id of effect.charIds) next.standing[id]!.lifecycle = "candidate";
+        next.resources.bloodline.pregnancy.candidateIds = [...effect.charIds];
         break;
       }
       case "memory": {
