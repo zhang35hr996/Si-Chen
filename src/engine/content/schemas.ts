@@ -148,6 +148,16 @@ export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema }),
   z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4) }),
   z.strictObject({ type: z.literal("remove_title"), char: idSchema }),
+  z.strictObject({
+    type: z.literal("bedchamber"),
+    char: idSchema,
+    mode: z.enum(["passion", "pleasure"]),
+  }),
+  z.strictObject({
+    type: z.literal("pregnancy"),
+    op: z.enum(["begin", "confirm", "clear"]),
+    fatherIds: z.array(idSchema).min(1).max(3).optional(),
+  }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
 ]);
 
@@ -426,6 +436,24 @@ export const worldSchema = z.strictObject({
   mapPortals: z.array(mapPortalSchema).optional(),
   /** Templated consort reactions to 位分/封号 ops (rank/title system). */
   rankChangeReactions: rankChangeReactionsSchema.optional(),
+  /** 侍寝/受孕调参（缺省走引擎内置 fallback）。 */
+  bedchamber: z
+    .strictObject({
+      conceptionChance: percent,
+      tiers: z.strictObject({
+        small: z.number().int().min(1),
+        favored: z.number().int().min(1),
+        abundant: z.number().int().min(1),
+      }),
+    })
+    .optional(),
+  /** 模板化侍寝体验台词（按 mode）。 */
+  bedchamberScript: z
+    .strictObject({
+      passion: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
+      pleasure: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
+    })
+    .optional(),
 });
 
 export type WorldContent = z.infer<typeof worldSchema>;
