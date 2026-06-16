@@ -14,7 +14,7 @@ import { monthOrdinal } from "../engine/calendar/time";
 import { buildBedchamber, type BedchamberPlan } from "../store/bedchamber";
 import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
-import { PregnancyModal } from "./components/PregnancyModal";
+import { JingshifangModal } from "./components/JingshifangModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
@@ -160,11 +160,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   const liveState = store.getState();
   const preg = liveState.resources.bloodline.pregnancy;
-  const pregnancyDue =
+  // 孕二月敬事房上书：pending 且已过受孕月。
+  const jingshifangDue =
     preg.status === "pending" &&
     preg.conceivedAt !== undefined &&
     monthOrdinal(liveState.calendar) > monthOrdinal(preg.conceivedAt);
-  const fatherCandidates = pregnancyDue
+  const fatherCandidates = jingshifangDue
     ? Object.values(db.characters)
         .filter(
           (c) =>
@@ -176,9 +177,22 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         .map((c) => c.id)
     : [];
 
-  const confirmPregnancy = (fatherIds: string[]) => {
-    const r = store.applyEffects(db, [{ type: "pregnancy", op: "confirm", fatherIds }]);
+  const carrySelfPregnancy = () => {
+    const r = store.applyEffects(db, [{ type: "pregnancy", op: "carry" }]);
     if (r.ok) doAutosave();
+  };
+  const designateCandidates = (charIds: string[]) => {
+    const r = store.applyEffects(db, [
+      { type: "pregnancy", op: "carry" },
+      { type: "heir_designate", charIds },
+    ]);
+    if (r.ok) {
+      doAutosave();
+      setReaction({
+        speakerId: charIds[0]!,
+        lines: ["臣等谢陛下隆恩，必当尽心护持皇嗣。"],
+      });
+    }
   };
 
   return (
@@ -345,12 +359,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           </div>
         </div>
       )}
-      {pregnancyDue && fatherCandidates.length > 0 && (
-        <PregnancyModal
+      {jingshifangDue && (
+        <JingshifangModal
           db={db}
           state={liveState}
-          candidateIds={fatherCandidates}
-          onConfirm={confirmPregnancy}
+          fatherCandidates={fatherCandidates}
+          onSelfPregnancy={carrySelfPregnancy}
+          onDesignate={designateCandidates}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />

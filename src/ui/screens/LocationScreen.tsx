@@ -46,7 +46,7 @@ export function LocationScreen({
         <span className="hud__time">
           {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
-        {state.resources.bloodline.pregnancy.status === "expecting" && (
+        {state.resources.bloodline.gestation?.carrier === "sovereign" && (
           <span className="hud__pregnancy">怀胎</span>
         )}
         <span className="hud__group">
