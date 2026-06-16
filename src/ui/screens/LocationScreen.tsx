@@ -16,6 +16,8 @@ export function LocationScreen({
   onOpenSave,
   onStartEvent,
   onManage,
+  onBedchamber,
+  onFlipTablet,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -24,6 +26,8 @@ export function LocationScreen({
   onOpenSave: () => void;
   onStartEvent: (eventId: string) => void;
   onManage?: (charId: string) => void;
+  onBedchamber?: (charId: string) => void;
+  onFlipTablet?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -34,6 +38,7 @@ export function LocationScreen({
   const present = getPresentAt(db, state, location.id);
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const eligible = getEligibleEvents(db, state, "location_enter");
+  const canBedchamber = state.calendar.ap >= 1;
 
   return (
     <main className="location-screen">
@@ -41,6 +46,9 @@ export function LocationScreen({
         <span className="hud__time">
           {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
+        {state.resources.bloodline.pregnancy.status === "expecting" && (
+          <span className="hud__pregnancy">怀胎</span>
+        )}
         <span className="hud__group">
           <button type="button" className="hud__button" onClick={onOpenSave}>
             存档
@@ -81,7 +89,20 @@ export function LocationScreen({
 
       {location.id === "yushufang" && (
         <section className="location-screen__roster">
-          <h2>后宫名册</h2>
+          <h2>
+            后宫名册
+            {onFlipTablet && (
+              <button
+                type="button"
+                className="location-screen__flip"
+                disabled={!canBedchamber}
+                title={canBedchamber ? "翻牌子" : "行动点不足"}
+                onClick={onFlipTablet}
+              >
+                翻牌子{canBedchamber ? "" : "（行动点不足）"}
+              </button>
+            )}
+          </h2>
           {Object.values(db.characters)
             .filter((c) => c.kind === "consort" && c.id !== "feng_hou")
             .sort((a, b) => {
@@ -114,6 +135,11 @@ export function LocationScreen({
               registry={registry}
               character={character}
               onManage={onManage ? () => onManage(character.id) : undefined}
+              onBedchamber={
+                onBedchamber && character.kind === "consort" && canBedchamber
+                  ? () => onBedchamber(character.id)
+                  : undefined
+              }
             />
           ))
         )}

@@ -806,3 +806,5 @@ body {
 .bedchamber-picker__list button { width: 100%; text-align: left; display: flex; justify-content: space-between; padding: 0.5rem; }
 .bedchamber-picker__rank { color: #c7b8c0; }
 .pregnancy-modal__list label { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; }
+.hud__pregnancy { background: #7a1f3d; color: #ffe6ef; padding: 0.1rem 0.5rem; border-radius: 0.25rem; margin-left: 0.5rem; }
+.location-screen__flip { margin-left: 0.75rem; font-size: 0.85rem; }
