@@ -149,6 +149,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
     doAutosave();
     if (plan.isFirstNight && plan.charId !== "feng_hou") {
       setFirstNightPromptId(plan.charId);
