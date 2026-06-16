@@ -25,6 +25,16 @@ export interface HaremState {
 
 export type MenstrualStatus = "normal" | "irregular" | "absent";
 
+export type PregnancyStatus = "none" | "pending" | "expecting";
+
+export interface PregnancyState {
+  /** none=未受孕; pending=已受孕未告知（玩家不可见）; expecting=怀胎 */
+  status: PregnancyStatus;
+  conceivedAt?: GameTime;
+  /** 玩家选定的生父候选（1–3），confirm 后写入 */
+  fatherIds: string[];
+}
+
 export interface BloodlineState {
   /** 宗嗣合法性 */
   legitimacy: number;
@@ -32,6 +42,8 @@ export interface BloodlineState {
   menstrualStatus: MenstrualStatus;
   /** 经血祭仪 scaffold */
   lastRiteAt?: GameTime;
+  /** 帝王孕育状态（本期只到「怀胎」） */
+  pregnancy: PregnancyState;
   /** Reserved (DESIGN §3.8) — always [] in the skeleton. */
   heirs: unknown[];
 }
@@ -88,6 +100,19 @@ export interface CharacterMemoryStore {
   nextSeq: number;
 }
 
+export type BedchamberMode = "passion" | "pleasure";
+
+export interface BedchamberEncounter {
+  /** 侍寝发生时刻（纯 GameTime，不带 AP） */
+  at: GameTime;
+  mode: BedchamberMode;
+}
+
+export interface BedchamberRecord {
+  /** append-only */
+  encounters: BedchamberEncounter[];
+}
+
 // ── The single authoritative state ────────────────────────────────────
 export type FlagValue = boolean | number | string;
 
@@ -104,6 +129,8 @@ export interface GameState {
   relationships: Record<string, RelationshipState>;
   standing: Record<string, CharacterStanding>;
   memories: Record<string, CharacterMemoryStore>;
+  /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
+  bedchamber: Record<string, BedchamberRecord>;
   eventLog: EventLogEntry[];
   sceneHistory: string[];
   rngSeed: number;
