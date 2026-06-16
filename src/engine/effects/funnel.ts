@@ -154,6 +154,9 @@ export function validateEffects(
         break;
       }
       case "birth": {
+        if (state.resources.bloodline.gestation === undefined) {
+          bad(index, "BAD_EFFECT", `birth requires an active gestation`, {});
+        }
         if (e.bearer !== "sovereign" && (!db.characters[e.bearer] || !state.standing[e.bearer])) {
           bad(index, "BAD_EFFECT_TARGET", `birth bearer is not a consort with standing: "${e.bearer}"`, { char: e.bearer });
         }

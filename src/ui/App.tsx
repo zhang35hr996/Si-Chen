@@ -64,6 +64,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [mapAtRoot, setMapAtRoot] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
   const [successorOpen, setSuccessorOpen] = useState(false);
+  const [successorDismissedMonth, setSuccessorDismissedMonth] = useState<number | null>(null);
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
   const chainDepth = useRef(0);
@@ -209,7 +210,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const gestMonth =
     gest !== undefined ? monthOrdinal(liveState.calendar) - monthOrdinal(gest.conceivedAt) + 1 : 0;
   // 孕三月自动弹宗正寺；孕四–九月由御书房「召见宗正寺」手动开。
-  const successorAutoDue = selfCarrying && gestMonth === 3;
+  const successorAutoDue =
+    selfCarrying && gestMonth === 3 && successorDismissedMonth !== monthOrdinal(liveState.calendar);
   const canSummonZongzheng = selfCarrying && gestMonth >= 4 && gestMonth <= 9;
   const consortCarrying = gest !== undefined && gest.carrier !== "sovereign";
 
@@ -462,7 +464,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           db={db}
           state={liveState}
           onTransfer={transferTo}
-          onKeep={() => setSuccessorOpen(false)}
+          onKeep={() => {
+            setSuccessorOpen(false);
+            setSuccessorDismissedMonth(monthOrdinal(liveState.calendar));
+          }}
         />
       )}
       {physicianOpen && (

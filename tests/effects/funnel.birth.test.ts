@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
-import { applyEffects } from "../../src/engine/effects/funnel";
+import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 
@@ -86,6 +86,13 @@ describe("funnel: birth", () => {
     expect(r.value.resources.bloodline.heirs[0]!.bearer).toBe("sovereign");
     expect(r.value.resources.bloodline.heirs[0]!.fatherId).toBeNull();
     expect(r.value.resources.bloodline.gestation).toBeUndefined();
+  });
+
+  it("rejects a birth when no gestation is active (double-fire guard)", () => {
+    const s0 = createNewGameState(db); // no gestation
+    const errs = validateEffects(db, s0, [{ ...baseBirth, bearerOutcome: "safe" }]);
+    expect(errs.length).toBeGreaterThanOrEqual(1);
+    expect(errs.some((e) => e.message.includes("active gestation"))).toBe(true);
   });
 
   it("assigns monotonic heir ids across sequential safe births", () => {
