@@ -77,6 +77,17 @@ export function CharacterCard({
           </span>
         </div>
       )}
+      {isConsort && standing?.lifecycle && standing.lifecycle !== "normal" && (
+        <p className="char-card__lifecycle" data-lifecycle={standing.lifecycle}>
+          {standing.lifecycle === "carrying"
+            ? "承嗣君·怀胎"
+            : standing.lifecycle === "delivered"
+              ? "育嗣君"
+              : standing.lifecycle === "candidate"
+                ? "候选承嗣"
+                : "已故"}
+        </p>
+      )}
       {canManage && (
         <button type="button" className="char-card__manage" onClick={onManage}>
           管理位分 / 封号

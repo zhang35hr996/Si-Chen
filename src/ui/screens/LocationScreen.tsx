@@ -6,6 +6,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { canSummon } from "../../store/bedchamber";
 import { CharacterCard } from "../components/CharacterCard";
 
 export function LocationScreen({
@@ -130,10 +131,20 @@ export function LocationScreen({
             })
             .map((c) => {
               const st = state.standing[c.id]!;
+              const lc = st.lifecycle;
+              const lcLabel =
+                lc === "carrying" ? "·承嗣君·怀胎" :
+                lc === "delivered" ? "·育嗣君" :
+                lc === "candidate" ? "·候选承嗣" :
+                lc === "deceased" ? "·已故" : "";
               return (
                 <div key={c.id} className="roster-row">
                   <span>{resolveDisplayName(c, st, db.ranks[st.rank])}</span>
-                  <span className="roster-row__rank">{db.ranks[st.rank]?.name}{st.title ? `·封号「${st.title}」` : ""}</span>
+                  <span className="roster-row__rank">
+                    {db.ranks[st.rank]?.name}
+                    {st.title ? `·封号「${st.title}」` : ""}
+                    {lcLabel}
+                  </span>
                   {onManage && <button type="button" onClick={() => onManage(c.id)}>管理</button>}
                 </div>
               );
@@ -154,7 +165,7 @@ export function LocationScreen({
               character={character}
               onManage={onManage ? () => onManage(character.id) : undefined}
               onBedchamber={
-                onBedchamber && character.kind === "consort" && canBedchamber
+                onBedchamber && character.kind === "consort" && canBedchamber && canSummon(state, character.id)
                   ? () => onBedchamber(character.id)
                   : undefined
               }

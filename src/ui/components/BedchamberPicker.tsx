@@ -15,7 +15,7 @@ export function BedchamberPicker({
   onClose: () => void;
 }) {
   const consorts = Object.values(db.characters)
-    .filter((c) => c.kind === "consort")
+    .filter((c) => c.kind === "consort" && state.standing[c.id]?.lifecycle !== "deceased")
     .sort((a, b) => {
       const ra = state.standing[a.id], rb = state.standing[b.id];
       if (!ra || !rb) return 0; // a consort without standing (e.g. added post-save) sorts neutrally
@@ -36,7 +36,10 @@ export function BedchamberPicker({
               <li key={c.id}>
                 <button type="button" onClick={() => onPick(c.id)}>
                   {resolveDisplayName(c, st, db.ranks[st.rank])}
-                  <span className="bedchamber-picker__rank">{db.ranks[st.rank]?.name}</span>
+                  <span className="bedchamber-picker__rank">
+                    {db.ranks[st.rank]?.name}
+                    {st.lifecycle === "carrying" ? "·承嗣君" : st.lifecycle === "delivered" ? "·育嗣君" : ""}
+                  </span>
                 </button>
               </li>
             );

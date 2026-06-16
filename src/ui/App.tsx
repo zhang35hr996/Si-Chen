@@ -11,7 +11,7 @@ import { createLocalStorageAdapter } from "../engine/save/storage";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import { monthOrdinal } from "../engine/calendar/time";
-import { buildBedchamber, type BedchamberPlan } from "../store/bedchamber";
+import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildBirth, birthDue } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
@@ -402,6 +402,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       {bedchamberPickId && db.characters[bedchamberPickId] && (
         <BedchamberModal
           name={db.characters[bedchamberPickId]!.profile.name}
+          passionAllowed={passionAllowed(store.getState(), bedchamberPickId)}
           onChoose={chooseBedchamberMode}
           onClose={() => setBedchamberPickId(null)}
         />
