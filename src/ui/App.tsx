@@ -12,6 +12,8 @@ import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import { monthOrdinal } from "../engine/calendar/time";
 import { buildBedchamber, type BedchamberPlan } from "../store/bedchamber";
+import { buildBirth, birthDue } from "../store/gestation";
+import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
@@ -50,6 +52,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [manageCharId, setManageCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[] } | null>(null);
+  const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
   const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
@@ -208,6 +211,33 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const canSummonZongzheng = selfCarrying && gestMonth >= 4 && gestMonth <= 9;
   const consortCarrying = gest !== undefined && gest.carrier !== "sovereign";
 
+  const birthIsDue = gest !== undefined && birthDue(db, liveState);
+  const activeBirthPlan = birthIsDue ? buildBirth(db, liveState) : null;
+  const birthSpeaker = activeBirthPlan
+    ? activeBirthPlan.bearer === "sovereign" ||
+      activeBirthPlan.bearerOutcome === "bearer_dies" ||
+      activeBirthPlan.bearerOutcome === "both"
+      ? "sili_nvguan"
+      : activeBirthPlan.bearer
+    : "sili_nvguan";
+
+  const commitBirth = () => {
+    const plan = activeBirthPlan;
+    if (!plan) return;
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) return;
+    doAutosave();
+    if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && plan.bearer !== "feng_hou") {
+      setReaction({
+        speakerId: "feng_hou",
+        lines: ["恭喜陛下喜得麟儿。立功侍君劳苦功高，可愿晋升以彰圣眷？"],
+      });
+      setPostBirthPromoteId(plan.bearer);
+    } else if (plan.bearerOutcome === "safe") {
+      setReaction({ speakerId: "feng_hou", lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
+    }
+  };
+
   const abortPregnancy = () => {
     setPhysicianOpen(false);
     const r = store.applyEffects(db, [{ type: "pregnancy_abort" }]);
@@ -343,7 +373,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           registry={registry}
           speakerId={reaction.speakerId}
           lines={reaction.lines}
-          onDone={() => setReaction(null)}
+          onDone={() => {
+            setReaction(null);
+            if (postBirthPromoteId) {
+              const id = postBirthPromoteId;
+              setPostBirthPromoteId(null);
+              setManageCharId(id);
+            }
+          }}
         />
       )}
       {flipOpen && (
@@ -391,6 +428,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             </button>
           </div>
         </div>
+      )}
+      {activeBirthPlan && (
+        <BirthScreen
+          db={db}
+          store={store}
+          registry={registry}
+          speakerId={birthSpeaker}
+          lines={activeBirthPlan.lines}
+          onDone={commitBirth}
+        />
       )}
       {jingshifangDue && (
         <JingshifangModal
