@@ -15,6 +15,7 @@
  *     the caller keeps the original state reference
  */
 import { toGameTime } from "../calendar/time";
+import { nextHeirId } from "../characters/heirs";
 import type { ContentDB } from "../content/loader";
 import { eventEffectSchema, type EventEffect } from "../content/schemas";
 import { stateError, type GameError } from "../infra/errors";
@@ -152,6 +153,15 @@ export function validateEffects(
         }
         break;
       }
+      case "birth": {
+        if (e.bearer !== "sovereign" && (!db.characters[e.bearer] || !state.standing[e.bearer])) {
+          bad(index, "BAD_EFFECT_TARGET", `birth bearer is not a consort with standing: "${e.bearer}"`, { char: e.bearer });
+        }
+        if (e.fatherId !== null && (!db.characters[e.fatherId] || db.characters[e.fatherId]!.kind !== "consort")) {
+          bad(index, "BAD_EFFECT_TARGET", `birth fatherId is not a consort: "${e.fatherId}"`, { char: e.fatherId });
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -280,6 +290,39 @@ export function applyEffects(
       case "pregnancy_abort": {
         next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
         delete next.resources.bloodline.gestation;
+        break;
+      }
+      case "birth": {
+        const bl = next.resources.bloodline;
+        const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";
+        const bearerSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "child_dies";
+        if (childSurvives) {
+          bl.heirs.push({
+            id: nextHeirId(bl.heirs.length),
+            sex: effect.sex,
+            fatherId: effect.fatherId,
+            bearer: effect.bearer,
+            birthAt: now,
+            favor: effect.favor,
+            legitimate: effect.legitimate,
+          });
+        }
+        if (effect.bearer !== "sovereign") {
+          const st = next.standing[effect.bearer]!;
+          if (!bearerSurvives) {
+            st.lifecycle = "deceased";
+            delete st.recoverUntilMonth;
+          } else if (effect.bearerOutcome === "safe") {
+            st.lifecycle = "delivered";
+            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+          } else {
+            // child_dies, bearer survives → 不晋升，回 normal，难产三月休养
+            st.lifecycle = "normal";
+            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+          }
+        }
+        bl.pregnancy = { status: "none", candidateIds: [] };
+        delete bl.gestation;
         break;
       }
       case "memory": {

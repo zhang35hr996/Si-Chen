@@ -166,6 +166,16 @@ export const eventEffectSchema = z.union([
     atMonth: z.number().int().min(1),
   }),
   z.strictObject({ type: z.literal("pregnancy_abort") }),
+  z.strictObject({
+    type: z.literal("birth"),
+    sex: z.enum(["daughter", "son"]),
+    fatherId: z.union([idSchema, z.null()]),
+    bearer: z.union([z.literal("sovereign"), idSchema]),
+    legitimate: z.boolean(),
+    favor: percent,
+    bearerOutcome: z.enum(["safe", "child_dies", "bearer_dies", "both"]),
+    recoverUntilMonth: z.number().int().min(1).optional(),
+  }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
 ]);
 
