@@ -20,6 +20,6 @@ describe("newGame bedchamber + pregnancy init", () => {
 
   it("starts pregnancy at none", () => {
     const state = createNewGameState(db);
-    expect(state.resources.bloodline.pregnancy).toEqual({ status: "none", fatherIds: [] });
+    expect(state.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
   });
 });

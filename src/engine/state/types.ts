@@ -25,14 +25,43 @@ export interface HaremState {
 
 export type MenstrualStatus = "normal" | "irregular" | "absent";
 
-export type PregnancyStatus = "none" | "pending" | "expecting";
+export type PregnancyStatus = "none" | "pending" | "carrying";
 
 export interface PregnancyState {
-  /** none=未受孕; pending=已受孕未告知（玩家不可见）; expecting=怀胎 */
+  /** none=未孕/已传嗣后(健康); pending=已受孕未告知; carrying=帝王自孕中 */
   status: PregnancyStatus;
   conceivedAt?: GameTime;
-  /** 玩家选定的生父候选（1–3），confirm 后写入 */
-  fatherIds: string[];
+  /** 候选承嗣 charIds（孕二月敬事房打标签；可为空） */
+  candidateIds: string[];
+}
+
+/** 当前唯一在孕的胎息（单线孕育）。 */
+export interface GestationState {
+  /** "sovereign"=帝王自孕；否则承载侍君 charId */
+  carrier: "sovereign" | string;
+  conceivedAt: GameTime;
+  /** 承嗣君 charId；自孕则不设 */
+  fatherId?: string;
+  /** 传嗣时的孕月（驱动难产几率）；自孕则不设 */
+  transferredAtMonth?: number;
+}
+
+export type HeirSex = "daughter" | "son";
+
+/** 落地子嗣。 */
+export interface Heir {
+  /** "heir_000001" 单调 */
+  id: string;
+  sex: HeirSex; // daughter→皇子(女) / son→皇郎(男)
+  /** 承嗣君 charId；null=自孕 */
+  fatherId: string | null;
+  /** 谁承载生产；"sovereign"=自孕 */
+  bearer: "sovereign" | string;
+  birthAt: GameTime;
+  /** 宠爱度 0–100 */
+  favor: number;
+  /** 嫡 */
+  legitimate: boolean;
 }
 
 export interface BloodlineState {
@@ -42,10 +71,12 @@ export interface BloodlineState {
   menstrualStatus: MenstrualStatus;
   /** 经血祭仪 scaffold */
   lastRiteAt?: GameTime;
-  /** 帝王孕育状态（本期只到「怀胎」） */
+  /** 帝王孕育状态 */
   pregnancy: PregnancyState;
-  /** Reserved (DESIGN §3.8) — always [] in the skeleton. */
-  heirs: unknown[];
+  /** 当前在孕胎息（单线，至多一个）。 */
+  gestation?: GestationState;
+  /** 已落地子嗣。 */
+  heirs: Heir[];
 }
 
 export interface Resources {
@@ -63,13 +94,19 @@ export interface RelationshipState {
   flags: string[];
 }
 
+export type ConsortLifecycle = "normal" | "candidate" | "carrying" | "delivered" | "deceased";
+
 export interface CharacterStanding {
-  /** Rank id from world.json's 位分 table (PR 3). */
+  /** Rank id from world.json's 位分 table. */
   rank: string;
   /** 0–100 — 恩宠 (consort) / 圣眷 (official). */
   favor: number;
-  /** 封号 (optional). When set, 称呼 becomes 封号+位分 (rank/title system). */
+  /** 封号 (optional). */
   title?: string;
+  /** 承嗣生命周期标记（缺省视作 "normal"）。 */
+  lifecycle?: ConsortLifecycle;
+  /** 产后休养（虚弱）截止月序 monthOrdinal；未达则激情不可选。 */
+  recoverUntilMonth?: number;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
@@ -100,7 +137,7 @@ export interface CharacterMemoryStore {
   nextSeq: number;
 }
 
-export type BedchamberMode = "passion" | "pleasure";
+export type BedchamberMode = "passion" | "pleasure" | "companionship";
 
 export interface BedchamberEncounter {
   /** 侍寝发生时刻（纯 GameTime，不带 AP） */

@@ -22,7 +22,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
       bloodline: {
         legitimacy: 60,
         menstrualStatus: "normal",
-        pregnancy: { status: "none", fatherIds: [] },
+        pregnancy: { status: "none", candidateIds: [] },
         heirs: [],
       },
     },

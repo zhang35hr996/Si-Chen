@@ -20,7 +20,7 @@ describe("createNewGameState", () => {
     expect(state.resources.bloodline).toEqual({
       legitimacy: 60,
       menstrualStatus: "normal",
-      pregnancy: { status: "none", fatherIds: [] },
+      pregnancy: { status: "none", candidateIds: [] },
       heirs: [],
     });
   });

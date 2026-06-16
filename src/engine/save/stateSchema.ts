@@ -57,11 +57,29 @@ export const gameStateSchema = z.strictObject({
       menstrualStatus: z.enum(["normal", "irregular", "absent"]),
       lastRiteAt: gameTimeSchema.optional(),
       pregnancy: z.strictObject({
-        status: z.enum(["none", "pending", "expecting"]),
+        status: z.enum(["none", "pending", "carrying"]),
         conceivedAt: gameTimeSchema.optional(),
-        fatherIds: z.array(idSchema),
+        candidateIds: z.array(idSchema),
       }),
-      heirs: z.array(z.unknown()),
+      gestation: z
+        .strictObject({
+          carrier: z.union([z.literal("sovereign"), idSchema]),
+          conceivedAt: gameTimeSchema,
+          fatherId: idSchema.optional(),
+          transferredAtMonth: z.number().int().min(1).optional(),
+        })
+        .optional(),
+      heirs: z.array(
+        z.strictObject({
+          id: idSchema,
+          sex: z.enum(["daughter", "son"]),
+          fatherId: z.union([idSchema, z.null()]),
+          bearer: z.union([z.literal("sovereign"), idSchema]),
+          birthAt: gameTimeSchema,
+          favor: percent,
+          legitimate: z.boolean(),
+        }),
+      ),
     }),
   }),
   flags: z.record(z.string(), flagValueSchema),
@@ -75,7 +93,7 @@ export const gameStateSchema = z.strictObject({
     idSchema,
     z.strictObject({
       encounters: z.array(
-        z.strictObject({ at: gameTimeSchema, mode: z.enum(["passion", "pleasure"]) }),
+        z.strictObject({ at: gameTimeSchema, mode: z.enum(["passion", "pleasure", "companionship"]) }),
       ),
     }),
   ),
