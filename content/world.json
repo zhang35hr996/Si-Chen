@@ -46,5 +46,24 @@
     "demote":      { "lines": ["……{self}知罪。谢陛下教诲。"], "memory": "陛下贬我为{rank}，颜面无存。" },
     "grant_title": { "lines": ["蒙陛下赐号，{self}惶恐领赏——谢陛下隆恩！"], "memory": "陛下赐我封号「{title}」，恩宠加身。" },
     "strip_title": { "lines": ["陛下息怒……{self}知罪，惶恐请罪，恳请陛下开恩。"], "memory": "陛下褫夺我封号，我惶惶不可终日。" }
+  },
+  "bedchamber": {
+    "conceptionChance": 30,
+    "tiers": { "small": 3, "favored": 5, "abundant": 10 }
+  },
+  "bedchamberScript": {
+    "passion": {
+      "lines": [
+        "{name}闻召，颊上飞红，敛衽称是，缓步上前服侍帝王。",
+        "帐暖香浓，{self}屏息承欢，曲意逢迎，不敢有半分懈怠。",
+        "云收雨歇，陛下倦极而眠，只觉通体舒泰、神清气爽。"
+      ]
+    },
+    "pleasure": {
+      "lines": [
+        "{name}奉召近前，执扇研墨、抚琴奉茶，柔声为帝王解乏。",
+        "一夕清谈相伴，陛下心绪舒展，只觉神清气爽，并无他事。"
+      ]
+    }
   }
 }
