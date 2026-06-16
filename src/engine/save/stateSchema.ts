@@ -56,6 +56,11 @@ export const gameStateSchema = z.strictObject({
       legitimacy: percent,
       menstrualStatus: z.enum(["normal", "irregular", "absent"]),
       lastRiteAt: gameTimeSchema.optional(),
+      pregnancy: z.strictObject({
+        status: z.enum(["none", "pending", "expecting"]),
+        conceivedAt: gameTimeSchema.optional(),
+        fatherIds: z.array(idSchema),
+      }),
       heirs: z.array(z.unknown()),
     }),
   }),
@@ -65,6 +70,14 @@ export const gameStateSchema = z.strictObject({
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),
+  ),
+  bedchamber: z.record(
+    idSchema,
+    z.strictObject({
+      encounters: z.array(
+        z.strictObject({ at: gameTimeSchema, mode: z.enum(["passion", "pleasure"]) }),
+      ),
+    }),
   ),
   eventLog: z.array(z.strictObject({ eventId: idSchema, firedAt: gameTimeSchema })),
   sceneHistory: z.array(idSchema),
