@@ -13,7 +13,12 @@ describe("createInitialState", () => {
     const { resources } = createInitialState();
     expect(resources.court).toEqual({ authority: 50, publicSupport: 50, factionPressure: 20 });
     expect(resources.harem).toEqual({ harmony: 60, jealousy: 20 });
-    expect(resources.bloodline).toEqual({ legitimacy: 60, menstrualStatus: "normal", heirs: [] });
+    expect(resources.bloodline).toEqual({
+      legitimacy: 60,
+      menstrualStatus: "normal",
+      pregnancy: { status: "none", fatherIds: [] },
+      heirs: [],
+    });
   });
 
   it("starts with empty collections and a deterministic rng seed", () => {

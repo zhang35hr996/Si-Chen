@@ -17,7 +17,12 @@ describe("createNewGameState", () => {
   it("copies starting resources from world.json (bloodline gains empty heirs)", () => {
     expect(state.resources.court).toEqual({ authority: 50, publicSupport: 50, factionPressure: 20 });
     expect(state.resources.harem).toEqual({ harmony: 60, jealousy: 20 });
-    expect(state.resources.bloodline).toEqual({ legitimacy: 60, menstrualStatus: "normal", heirs: [] });
+    expect(state.resources.bloodline).toEqual({
+      legitimacy: 60,
+      menstrualStatus: "normal",
+      pregnancy: { status: "none", fatherIds: [] },
+      heirs: [],
+    });
   });
 
   it("seeds relationship + standing for every character", () => {
