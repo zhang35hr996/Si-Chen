@@ -22,3 +22,8 @@ export function resolveDisplayName(
 export function effectiveOrder(rank: CharacterRank, hasTitle: boolean): number {
   return rank.order + (hasTitle ? TITLE_BOOST : 0);
 }
+
+/** 侍君对帝王的主自称（封号/姓氏无关），无位分时退化为「臣」。 */
+export function renderSelfRef(rank: CharacterRank | undefined): string {
+  return rank?.selfRefs.toPlayer[0] ?? "臣";
+}
