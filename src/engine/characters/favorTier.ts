@@ -44,7 +44,7 @@ function countWindow(record: BedchamberRecord, cur: number, span: number): numbe
 /** Highest 3-month-window count over every month from first encounter to now. */
 function peakThreeMonth(record: BedchamberRecord, cur: number): number {
   if (record.encounters.length === 0) return 0;
-  const first = Math.min(...record.encounters.map((e) => monthOrdinal(e.at)));
+  const first = record.encounters.reduce((min, e) => Math.min(min, monthOrdinal(e.at)), Infinity);
   let peak = 0;
   for (let m = first; m <= cur; m++) {
     peak = Math.max(peak, countWindow(record, m, 3));

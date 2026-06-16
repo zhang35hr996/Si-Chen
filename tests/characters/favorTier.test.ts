@@ -22,6 +22,11 @@ describe("computeFavorStats", () => {
     expect(s).toMatchObject({ tier: "none", lastMonth: 0, lastThreeMonths: 0, lastYear: 0 });
   });
 
+  it("empty (non-undefined) record = 无宠, all counts 0", () => {
+    const s = computeFavorStats({ encounters: [] }, makeGameTime(1, 1, "early"), th);
+    expect(s).toMatchObject({ tier: "none", lastMonth: 0, lastThreeMonths: 0, lastYear: 0 });
+  });
+
   const rec = record(visits(1, 4), visits(2, 3), visits(3, 3));
   it("一月末 = 小宠 (n3=4)", () => {
     expect(computeFavorStats(rec, makeGameTime(1, 1, "late"), th).tier).toBe("small");
