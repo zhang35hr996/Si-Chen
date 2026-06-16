@@ -5,6 +5,7 @@
 import { conceives } from "../engine/characters/conception";
 import { DEFAULT_TIERS, type BedchamberThresholds } from "../engine/characters/favorTier";
 import { renderSelfRef, resolveDisplayName } from "../engine/characters/standing";
+import { monthOrdinal } from "../engine/calendar/time";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { BedchamberMode, GameState } from "../engine/state/types";
@@ -14,6 +15,7 @@ export const DEFAULT_CONCEPTION_CHANCE = 30;
 const FALLBACK_SCRIPT: Record<BedchamberMode, string[]> = {
   passion: ["{name}敛衽称是，上前服侍帝王。承欢一夕，陛下只觉神清气爽。"],
   pleasure: ["{name}近前奉茶解乏，一夕清谈相伴，陛下神清气爽。"],
+  companionship: ["{name}近前相伴，理妆奉茶、轻声叙话，小心顾着腹中胎息。"],
 };
 
 export interface BedchamberConfig {
@@ -26,6 +28,26 @@ export function bedchamberConfig(db: ContentDB): BedchamberConfig {
     conceptionChance: db.world.bedchamber?.conceptionChance ?? DEFAULT_CONCEPTION_CHANCE,
     tiers: db.world.bedchamber?.tiers ?? DEFAULT_TIERS,
   };
+}
+
+/** 当前是否有在孕胎息（单线孕育 — 受孕被封）。 */
+export function hasActiveGestation(state: GameState): boolean {
+  const bl = state.resources.bloodline;
+  return bl.pregnancy.status !== "none" || bl.gestation !== undefined;
+}
+
+/** 激情可选：非承嗣君怀胎中、且不在产后休养中。 */
+export function passionAllowed(state: GameState, charId: string): boolean {
+  const st = state.standing[charId];
+  if (!st) return false;
+  if (st.lifecycle === "carrying") return false;
+  if (st.recoverUntilMonth !== undefined && monthOrdinal(state.calendar) < st.recoverUntilMonth) return false;
+  return true;
+}
+
+/** 可召侍寝：非已故。 */
+export function canSummon(state: GameState, charId: string): boolean {
+  return state.standing[charId]?.lifecycle !== "deceased";
 }
 
 export interface BedchamberPlan {
@@ -52,7 +74,8 @@ export function buildBedchamber(
   const cfg = bedchamberConfig(db);
   const conceived =
     mode === "passion" &&
-    state.resources.bloodline.pregnancy.status === "none" &&
+    !hasActiveGestation(state) &&
+    passionAllowed(state, charId) &&
     conceives(state.rngSeed, state.calendar.dayIndex, charId, cfg.conceptionChance);
   if (conceived) effects.push({ type: "pregnancy", op: "begin" });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
-import { buildBedchamber, bedchamberConfig } from "../../src/store/bedchamber";
+import { buildBedchamber, bedchamberConfig, passionAllowed, canSummon, hasActiveGestation } from "../../src/store/bedchamber";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -62,5 +62,71 @@ describe("buildBedchamber", () => {
     const plan = buildBedchamber(db, state, "shen_chenghui", "passion");
     expect(plan!.conceived).toBe(false);
     expect(plan!.effects.some((e) => e.type === "pregnancy")).toBe(false);
+  });
+});
+
+describe("bedchamber single-track conception (heir lifecycle)", () => {
+  it("passion does not conceive when a sovereign gestation is active", () => {
+    const s = createNewGameState(db);
+    s.resources.bloodline.pregnancy = { status: "carrying", candidateIds: [] };
+    s.resources.bloodline.gestation = {
+      carrier: "sovereign",
+      conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+    };
+    const plan = buildBedchamber(db, s, "shen_chenghui", "passion");
+    expect(plan!.conceived).toBe(false);
+    expect(plan!.effects.some((e) => e.type === "pregnancy")).toBe(false);
+  });
+
+  it("passion does not conceive when a consort carries (gestation present, status none)", () => {
+    const s = createNewGameState(db);
+    s.resources.bloodline.gestation = {
+      carrier: "wenya_shijun",
+      conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+      fatherId: "wenya_shijun",
+      transferredAtMonth: 3,
+    };
+    const plan = buildBedchamber(db, s, "shen_chenghui", "passion");
+    expect(plan!.conceived).toBe(false);
+  });
+});
+
+describe("passionAllowed / canSummon / hasActiveGestation", () => {
+  it("carrying consort cannot use passion but can be summoned", () => {
+    const s = createNewGameState(db);
+    s.standing.shen_chenghui!.lifecycle = "carrying";
+    expect(passionAllowed(s, "shen_chenghui")).toBe(false);
+    expect(canSummon(s, "shen_chenghui")).toBe(true);
+  });
+
+  it("recovering consort (recoverUntilMonth in future) cannot use passion", () => {
+    const s = createNewGameState(db);
+    s.standing.shen_chenghui!.recoverUntilMonth = 999;
+    expect(passionAllowed(s, "shen_chenghui")).toBe(false);
+  });
+
+  it("recovery expired (recoverUntilMonth <= now) allows passion again", () => {
+    const s = createNewGameState(db);
+    s.standing.shen_chenghui!.recoverUntilMonth = 1; // now is monthOrdinal of 元年一月 = 1, not < 1
+    expect(passionAllowed(s, "shen_chenghui")).toBe(true);
+  });
+
+  it("deceased consort cannot be summoned", () => {
+    const s = createNewGameState(db);
+    s.standing.shen_chenghui!.lifecycle = "deceased";
+    expect(canSummon(s, "shen_chenghui")).toBe(false);
+  });
+
+  it("normal consort allows passion and summon", () => {
+    const s = createNewGameState(db);
+    expect(passionAllowed(s, "shen_chenghui")).toBe(true);
+    expect(canSummon(s, "shen_chenghui")).toBe(true);
+  });
+
+  it("hasActiveGestation reflects pregnancy status or gestation presence", () => {
+    const s = createNewGameState(db);
+    expect(hasActiveGestation(s)).toBe(false);
+    s.resources.bloodline.pregnancy = { status: "pending", candidateIds: [] };
+    expect(hasActiveGestation(s)).toBe(true);
   });
 });
