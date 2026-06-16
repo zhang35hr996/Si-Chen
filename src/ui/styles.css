@@ -795,3 +795,14 @@ body {
 .char-card__favor-tier[data-tier="none"] { background: #2a2a2a; color: #999; }
 .char-card__favor-counts { font-size: 0.8rem; color: #c7b8c0; }
 .char-card__bedchamber { margin-top: 0.35rem; }
+.bedchamber-modal, .bedchamber-picker, .pregnancy-modal {
+  background: #1f1620; color: #f0e6ec; padding: 1.25rem 1.5rem;
+  border-radius: 0.5rem; max-width: 28rem; margin: auto;
+}
+.bedchamber-modal__choices { display: flex; gap: 0.75rem; margin: 0.75rem 0; }
+.bedchamber-modal__choices button { flex: 1; padding: 0.6rem; display: flex; flex-direction: column; }
+.bedchamber-modal__choices small { color: #c7b8c0; margin-top: 0.25rem; }
+.bedchamber-picker__list, .pregnancy-modal__list { list-style: none; padding: 0; margin: 0.5rem 0; max-height: 16rem; overflow-y: auto; }
+.bedchamber-picker__list button { width: 100%; text-align: left; display: flex; justify-content: space-between; padding: 0.5rem; }
+.bedchamber-picker__rank { color: #c7b8c0; }
+.pregnancy-modal__list label { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; }
