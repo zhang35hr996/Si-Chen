@@ -15,6 +15,7 @@ import { buildBedchamber, type BedchamberPlan } from "../store/bedchamber";
 import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
+import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
@@ -57,6 +58,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   // 宫城图 button opens the map on the current board instead (atRoot=false).
   const [mapAtRoot, setMapAtRoot] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
+  const [successorOpen, setSuccessorOpen] = useState(false);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
@@ -195,6 +197,23 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     }
   };
 
+  const gest = liveState.resources.bloodline.gestation;
+  const selfCarrying = preg.status === "carrying" && gest?.carrier === "sovereign";
+  const gestMonth =
+    gest !== undefined ? monthOrdinal(liveState.calendar) - monthOrdinal(gest.conceivedAt) + 1 : 0;
+  // 孕三月自动弹宗正寺；孕四–九月由御书房「召见宗正寺」手动开。
+  const successorAutoDue = selfCarrying && gestMonth === 3;
+  const canSummonZongzheng = selfCarrying && gestMonth >= 4 && gestMonth <= 9;
+
+  const transferTo = (carrierId: string) => {
+    setSuccessorOpen(false);
+    const r = store.applyEffects(db, [{ type: "pregnancy_transfer", carrierId, atMonth: gestMonth }]);
+    if (r.ok) {
+      doAutosave();
+      setReaction({ speakerId: carrierId, lines: ["臣领旨。臣定以血躯护持皇嗣，不负圣恩。"] });
+    }
+  };
+
   return (
     <>
       {view === "title" && (
@@ -219,6 +238,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onManage={(id) => setManageCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
           onFlipTablet={() => setFlipOpen(true)}
+          onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
         />
       )}
       {view === "save" && (
@@ -366,6 +386,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           fatherCandidates={fatherCandidates}
           onSelfPregnancy={carrySelfPregnancy}
           onDesignate={designateCandidates}
+        />
+      )}
+      {(successorAutoDue || successorOpen) && selfCarrying && (
+        <SuccessorModal
+          db={db}
+          state={liveState}
+          onTransfer={transferTo}
+          onKeep={() => setSuccessorOpen(false)}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />

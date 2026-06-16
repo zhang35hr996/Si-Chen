@@ -18,6 +18,7 @@ export function LocationScreen({
   onManage,
   onBedchamber,
   onFlipTablet,
+  onSummonZongzheng,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -28,6 +29,7 @@ export function LocationScreen({
   onManage?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
   onFlipTablet?: () => void;
+  onSummonZongzheng?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -103,6 +105,11 @@ export function LocationScreen({
               </button>
             )}
           </h2>
+          <div className="yushufang-actions">
+            {onSummonZongzheng && (
+              <button type="button" onClick={onSummonZongzheng}>召见宗正寺</button>
+            )}
+          </div>
           {Object.values(db.characters)
             .filter((c) => c.kind === "consort" && c.id !== "feng_hou")
             .sort((a, b) => {
