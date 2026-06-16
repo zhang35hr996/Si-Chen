@@ -19,6 +19,7 @@ export function LocationScreen({
   onBedchamber,
   onFlipTablet,
   onSummonZongzheng,
+  onSummonPhysician,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -30,6 +31,7 @@ export function LocationScreen({
   onBedchamber?: (charId: string) => void;
   onFlipTablet?: () => void;
   onSummonZongzheng?: () => void;
+  onSummonPhysician?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -106,6 +108,9 @@ export function LocationScreen({
             )}
           </h2>
           <div className="yushufang-actions">
+            {onSummonPhysician && (
+              <button type="button" onClick={onSummonPhysician}>召见太医</button>
+            )}
             {onSummonZongzheng && (
               <button type="button" onClick={onSummonZongzheng}>召见宗正寺</button>
             )}

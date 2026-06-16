@@ -15,6 +15,7 @@ import { buildBedchamber, type BedchamberPlan } from "../store/bedchamber";
 import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
+import { PhysicianModal } from "./components/PhysicianModal";
 import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode } from "../engine/state/types";
@@ -59,6 +60,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [mapAtRoot, setMapAtRoot] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
   const [successorOpen, setSuccessorOpen] = useState(false);
+  const [physicianOpen, setPhysicianOpen] = useState(false);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
@@ -204,6 +206,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   // 孕三月自动弹宗正寺；孕四–九月由御书房「召见宗正寺」手动开。
   const successorAutoDue = selfCarrying && gestMonth === 3;
   const canSummonZongzheng = selfCarrying && gestMonth >= 4 && gestMonth <= 9;
+  const consortCarrying = gest !== undefined && gest.carrier !== "sovereign";
+
+  const abortPregnancy = () => {
+    setPhysicianOpen(false);
+    const r = store.applyEffects(db, [{ type: "pregnancy_abort" }]);
+    if (r.ok) {
+      doAutosave();
+      setReaction({ speakerId: "sili_nvguan", lines: ["太医奉旨调理，陛下凤体已无大碍。此事到此为止。"] });
+    }
+  };
 
   const transferTo = (carrierId: string) => {
     setSuccessorOpen(false);
@@ -239,6 +251,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onBedchamber={(id) => beginBedchamber(id)}
           onFlipTablet={() => setFlipOpen(true)}
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
+          onSummonPhysician={() => setPhysicianOpen(true)}
         />
       )}
       {view === "save" && (
@@ -394,6 +407,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           state={liveState}
           onTransfer={transferTo}
           onKeep={() => setSuccessorOpen(false)}
+        />
+      )}
+      {physicianOpen && (
+        <PhysicianModal
+          selfCarrying={selfCarrying}
+          consortCarrying={consortCarrying}
+          onAbort={abortPregnancy}
+          onClose={() => setPhysicianOpen(false)}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
