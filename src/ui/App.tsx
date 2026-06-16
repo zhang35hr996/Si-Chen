@@ -17,6 +17,7 @@ import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
+import { HeirListModal } from "./components/HeirListModal";
 import { PhysicianModal } from "./components/PhysicianModal";
 import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
@@ -64,6 +65,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [continueError, setContinueError] = useState<string | null>(null);
   const [successorOpen, setSuccessorOpen] = useState(false);
   const [physicianOpen, setPhysicianOpen] = useState(false);
+  const [heirListOpen, setHeirListOpen] = useState(false);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
@@ -247,6 +249,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     }
   };
 
+  const adjustHeirFavor = (heirId: string, delta: number) => {
+    const r = store.applyEffects(db, [{ type: "child_favor", heirId, delta }]);
+    if (r.ok) doAutosave();
+  };
+
   const transferTo = (carrierId: string) => {
     setSuccessorOpen(false);
     const r = store.applyEffects(db, [{ type: "pregnancy_transfer", carrierId, atMonth: gestMonth }]);
@@ -282,6 +289,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onFlipTablet={() => setFlipOpen(true)}
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
           onSummonPhysician={() => setPhysicianOpen(true)}
+          onOpenHeirs={() => setHeirListOpen(true)}
         />
       )}
       {view === "save" && (
@@ -463,6 +471,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onAbort={abortPregnancy}
           onClose={() => setPhysicianOpen(false)}
         />
+      )}
+      {heirListOpen && (
+        <HeirListModal db={db} state={liveState} onAdjust={adjustHeirFavor} onClose={() => setHeirListOpen(false)} />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
     </>

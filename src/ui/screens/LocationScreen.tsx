@@ -20,6 +20,7 @@ export function LocationScreen({
   onFlipTablet,
   onSummonZongzheng,
   onSummonPhysician,
+  onOpenHeirs,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -32,6 +33,7 @@ export function LocationScreen({
   onFlipTablet?: () => void;
   onSummonZongzheng?: () => void;
   onSummonPhysician?: () => void;
+  onOpenHeirs?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -113,6 +115,9 @@ export function LocationScreen({
             )}
             {onSummonZongzheng && (
               <button type="button" onClick={onSummonZongzheng}>召见宗正寺</button>
+            )}
+            {onOpenHeirs && (
+              <button type="button" onClick={onOpenHeirs}>子嗣</button>
             )}
           </div>
           {Object.values(db.characters)
