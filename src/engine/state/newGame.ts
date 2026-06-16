@@ -5,7 +5,7 @@
  */
 import { createCalendar, toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
-import type { CharacterMemoryStore, GameState, RelationshipState, CharacterStanding } from "./types";
+import type { BedchamberRecord, CharacterMemoryStore, GameState, RelationshipState, CharacterStanding } from "./types";
 
 export function memoryEntryId(charId: string, seq: number): string {
   return `mem_${charId}_${String(seq).padStart(6, "0")}`;
@@ -21,6 +21,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   const relationships: Record<string, RelationshipState> = {};
   const standing: Record<string, CharacterStanding> = {};
   const memories: Record<string, CharacterMemoryStore> = {};
+  const bedchamber: Record<string, BedchamberRecord> = {};
 
   for (const character of Object.values(db.characters)) {
     relationships[character.id] = {
@@ -44,6 +45,9 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
       })),
       nextSeq: character.initialMemories.length + 1,
     };
+    if (character.kind === "consort") {
+      bedchamber[character.id] = { encounters: [] };
+    }
   }
 
   return {
@@ -52,12 +56,17 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     resources: {
       court: { ...db.world.startingResources.court },
       harem: { ...db.world.startingResources.harem },
-      bloodline: { ...db.world.startingResources.bloodline, heirs: [] },
+      bloodline: {
+        ...db.world.startingResources.bloodline,
+        pregnancy: { status: "none", fatherIds: [] },
+        heirs: [],
+      },
     },
     flags: {},
     relationships,
     standing,
     memories,
+    bedchamber,
     eventLog: [],
     sceneHistory: [],
     rngSeed,
