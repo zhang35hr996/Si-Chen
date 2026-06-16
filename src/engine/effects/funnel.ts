@@ -99,6 +99,28 @@ export function validateEffects(
         }
         break;
       }
+      case "bedchamber": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.bedchamber[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `bedchamber needs a consort with a record: "${e.char}"`, { char: e.char });
+        }
+        break;
+      }
+      case "pregnancy": {
+        if (e.op === "confirm") {
+          const ids = e.fatherIds ?? [];
+          if (ids.length < 1 || ids.length > 3) {
+            bad(index, "BAD_EFFECT", `pregnancy confirm needs 1–3 fatherIds`, { fatherIds: ids });
+          } else {
+            for (const id of ids) {
+              if (!db.characters[id] || db.characters[id]!.kind !== "consort") {
+                bad(index, "BAD_EFFECT_TARGET", `fatherId is not a consort: "${id}"`, { char: id });
+              }
+            }
+          }
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -178,6 +200,28 @@ export function applyEffects(
       }
       case "remove_title": {
         delete next.standing[effect.char]!.title;
+        break;
+      }
+      case "bedchamber": {
+        next.bedchamber[effect.char]!.encounters.push({
+          at: now,
+          mode: effect.mode,
+        });
+        break;
+      }
+      case "pregnancy": {
+        const p = next.resources.bloodline.pregnancy;
+        if (effect.op === "begin") {
+          next.resources.bloodline.pregnancy = { status: "pending", conceivedAt: now, fatherIds: [] };
+        } else if (effect.op === "confirm") {
+          next.resources.bloodline.pregnancy = {
+            status: "expecting",
+            ...(p.conceivedAt !== undefined ? { conceivedAt: p.conceivedAt } : {}),
+            fatherIds: [...(effect.fatherIds ?? [])],
+          };
+        } else {
+          next.resources.bloodline.pregnancy = { status: "none", fatherIds: [] };
+        }
         break;
       }
       case "memory": {
