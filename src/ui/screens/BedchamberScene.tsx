@@ -1,5 +1,5 @@
 /** 播放模板化侍寝体验台词（经对话缝隙渲染），结束回调 onDone。 */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
@@ -27,6 +27,14 @@ export function BedchamberScene({
   const state = useGameState(store);
   const [index, setIndex] = useState(0);
   const [line, setLine] = useState<DialogueLine | null>(null);
+  // onDone commits effects + spends AP — guard against the box/button click
+  // bubbling so a single click can never fire it twice (double encounter / AP).
+  const doneRef = useRef(false);
+  const finish = () => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    onDone();
+  };
 
   useEffect(() => {
     let alive = true;
@@ -34,12 +42,12 @@ export function BedchamberScene({
     if (text === undefined) return;
     const req = assembleDialogueRequest(db, state, speakerId, state.playerLocation, { text });
     if (!req.ok) {
-      onDone();
+      finish();
       return;
     }
     void produceDialogueLine(db, mockProvider, req.value).then((r) => {
       if (alive && r.ok) setLine(r.value);
-      else if (alive) onDone();
+      else if (alive) finish();
     });
     return () => {
       alive = false;
@@ -55,7 +63,7 @@ export function BedchamberScene({
     ? registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background")
     : null;
 
-  const next = () => (index + 1 < lines.length ? setIndex(index + 1) : onDone());
+  const next = () => (index + 1 < lines.length ? setIndex(index + 1) : finish());
 
   return (
     <main
