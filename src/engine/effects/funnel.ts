@@ -145,6 +145,13 @@ export function validateEffects(
         }
         break;
       }
+      case "pregnancy_abort": {
+        const gest = state.resources.bloodline.gestation;
+        if (!gest || gest.carrier !== "sovereign") {
+          bad(index, "BAD_EFFECT", `pregnancy_abort requires sovereign self-pregnancy`, {});
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -268,6 +275,11 @@ export function applyEffects(
           transferredAtMonth: effect.atMonth,
         };
         next.standing[effect.carrierId]!.lifecycle = "carrying";
+        break;
+      }
+      case "pregnancy_abort": {
+        next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
+        delete next.resources.bloodline.gestation;
         break;
       }
       case "memory": {

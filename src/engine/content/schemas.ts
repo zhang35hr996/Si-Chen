@@ -165,6 +165,7 @@ export const eventEffectSchema = z.union([
     carrierId: idSchema,
     atMonth: z.number().int().min(1),
   }),
+  z.strictObject({ type: z.literal("pregnancy_abort") }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
 ]);
 
