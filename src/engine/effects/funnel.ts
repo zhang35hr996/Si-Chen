@@ -131,6 +131,20 @@ export function validateEffects(
         }
         break;
       }
+      case "pregnancy_transfer": {
+        const ch = db.characters[e.carrierId];
+        const st = state.standing[e.carrierId];
+        const preg = state.resources.bloodline.pregnancy;
+        const gest = state.resources.bloodline.gestation;
+        if (!ch || ch.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `pregnancy_transfer needs a consort with standing: "${e.carrierId}"`, { char: e.carrierId });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot transfer to a deceased consort: "${e.carrierId}"`, { char: e.carrierId });
+        } else if (preg.status !== "carrying" || gest?.carrier !== "sovereign") {
+          bad(index, "BAD_EFFECT", `pregnancy_transfer requires sovereign self-pregnancy`, { status: preg.status });
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -242,6 +256,18 @@ export function applyEffects(
       case "heir_designate": {
         for (const id of effect.charIds) next.standing[id]!.lifecycle = "candidate";
         next.resources.bloodline.pregnancy.candidateIds = [...effect.charIds];
+        break;
+      }
+      case "pregnancy_transfer": {
+        const gest = next.resources.bloodline.gestation!;
+        next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
+        next.resources.bloodline.gestation = {
+          carrier: effect.carrierId,
+          conceivedAt: gest.conceivedAt,
+          fatherId: effect.carrierId,
+          transferredAtMonth: effect.atMonth,
+        };
+        next.standing[effect.carrierId]!.lifecycle = "carrying";
         break;
       }
       case "memory": {
