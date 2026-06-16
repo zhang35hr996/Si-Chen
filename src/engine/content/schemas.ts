@@ -177,6 +177,7 @@ export const eventEffectSchema = z.union([
     recoverUntilMonth: z.number().int().min(1).optional(),
   }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
+  z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
 ]);
 
 export type EventEffect = z.infer<typeof eventEffectSchema>;

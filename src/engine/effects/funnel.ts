@@ -162,6 +162,12 @@ export function validateEffects(
         }
         break;
       }
+      case "child_favor": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -323,6 +329,12 @@ export function applyEffects(
         }
         bl.pregnancy = { status: "none", candidateIds: [] };
         delete bl.gestation;
+        break;
+      }
+      case "child_favor": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        const applied = cappedDelta(`heir:${effect.heirId}`, effect.delta);
+        heir.favor = clampPct(heir.favor + applied);
         break;
       }
       case "memory": {
