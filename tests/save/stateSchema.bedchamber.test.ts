@@ -9,7 +9,7 @@ if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
 describe("gameStateSchema persists bedchamber + pregnancy", () => {
-  it("round-trips a state with encounters and an expecting pregnancy", () => {
+  it("round-trips a state with encounters and a carrying pregnancy", () => {
     let state = createNewGameState(db);
     const a = applyEffects(db, state, [{ type: "bedchamber", char: "shen_chenghui", mode: "passion" }]);
     expect(a.ok).toBe(true);
@@ -17,7 +17,7 @@ describe("gameStateSchema persists bedchamber + pregnancy", () => {
     const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "begin" }]);
     expect(b.ok).toBe(true);
     if (!b.ok) return;
-    const c = applyEffects(db, b.value, [{ type: "pregnancy", op: "confirm", fatherIds: ["shen_chenghui"] }]);
+    const c = applyEffects(db, b.value, [{ type: "pregnancy", op: "carry" }]);
     expect(c.ok).toBe(true);
     if (!c.ok) return;
     state = c.value;

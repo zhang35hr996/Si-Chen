@@ -107,26 +107,14 @@ export function validateEffects(
         break;
       }
       case "pregnancy": {
-        const status = state.resources.bloodline.pregnancy.status;
-        if (e.op === "begin") {
-          // 受孕只在未孕时落账 — never overwrite an in-flight pregnancy.
-          if (status !== "none") {
-            bad(index, "BAD_EFFECT", `pregnancy begin requires status "none", got "${status}"`, { status });
-          }
-        } else if (e.op === "confirm") {
-          // 怀胎只能从 pending 确认 — guards against dropping conceivedAt.
-          if (status !== "pending") {
-            bad(index, "BAD_EFFECT", `pregnancy confirm requires status "pending", got "${status}"`, { status });
-          }
-          const ids = e.fatherIds ?? [];
-          if (ids.length < 1 || ids.length > 3) {
-            bad(index, "BAD_EFFECT", `pregnancy confirm needs 1–3 fatherIds`, { fatherIds: ids });
-          } else {
-            for (const id of ids) {
-              if (!db.characters[id] || db.characters[id]!.kind !== "consort") {
-                bad(index, "BAD_EFFECT_TARGET", `fatherId is not a consort: "${id}"`, { char: id });
-              }
-            }
+        const preg = state.resources.bloodline.pregnancy;
+        if (e.op === "begin" && preg.status !== "none") {
+          bad(index, "BAD_EFFECT", `pregnancy begin requires status "none", got "${preg.status}"`, { status: preg.status });
+        } else if (e.op === "carry") {
+          if (preg.status !== "pending") {
+            bad(index, "BAD_EFFECT", `pregnancy carry requires status "pending", got "${preg.status}"`, { status: preg.status });
+          } else if (preg.conceivedAt === undefined) {
+            bad(index, "BAD_EFFECT", `pregnancy carry requires a conceivedAt`, {});
           }
         }
         break;
@@ -222,15 +210,20 @@ export function applyEffects(
       case "pregnancy": {
         const p = next.resources.bloodline.pregnancy;
         if (effect.op === "begin") {
-          next.resources.bloodline.pregnancy = { status: "pending", conceivedAt: now, fatherIds: [] };
-        } else if (effect.op === "confirm") {
+          next.resources.bloodline.pregnancy = { status: "pending", conceivedAt: now, candidateIds: [] };
+        } else if (effect.op === "carry") {
+          // pending → carrying: 帝王自孕，建单线 gestation。
           next.resources.bloodline.pregnancy = {
-            status: "expecting",
+            status: "carrying",
             ...(p.conceivedAt !== undefined ? { conceivedAt: p.conceivedAt } : {}),
-            fatherIds: [...(effect.fatherIds ?? [])],
+            candidateIds: [...p.candidateIds],
           };
+          if (p.conceivedAt !== undefined) {
+            next.resources.bloodline.gestation = { carrier: "sovereign", conceivedAt: p.conceivedAt };
+          }
         } else {
-          next.resources.bloodline.pregnancy = { status: "none", fatherIds: [] };
+          next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
+          delete next.resources.bloodline.gestation;
         }
         break;
       }

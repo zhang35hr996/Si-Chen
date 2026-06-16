@@ -8,20 +8,15 @@ describe("eventEffectSchema: bedchamber + pregnancy", () => {
   it("rejects unknown bedchamber mode", () => {
     expect(eventEffectSchema.safeParse({ type: "bedchamber", char: "x", mode: "lust" }).success).toBe(false);
   });
-  it("accepts pregnancy begin/clear without fatherIds", () => {
+  it("accepts pregnancy begin/carry/clear", () => {
     expect(eventEffectSchema.safeParse({ type: "pregnancy", op: "begin" }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "pregnancy", op: "carry" }).success).toBe(true);
     expect(eventEffectSchema.safeParse({ type: "pregnancy", op: "clear" }).success).toBe(true);
   });
-  it("accepts pregnancy confirm with 1–3 fatherIds", () => {
-    expect(eventEffectSchema.safeParse({ type: "pregnancy", op: "confirm", fatherIds: ["chu_jun"] }).success).toBe(true);
-    expect(
-      eventEffectSchema.safeParse({ type: "pregnancy", op: "confirm", fatherIds: ["a", "b", "c"] }).success,
-    ).toBe(true);
+  it("rejects an unknown pregnancy op", () => {
+    expect(eventEffectSchema.safeParse({ type: "pregnancy", op: "confirm" }).success).toBe(false);
   });
-  it("rejects confirm with 0 or 4 fatherIds", () => {
-    expect(eventEffectSchema.safeParse({ type: "pregnancy", op: "confirm", fatherIds: [] }).success).toBe(false);
-    expect(
-      eventEffectSchema.safeParse({ type: "pregnancy", op: "confirm", fatherIds: ["a", "b", "c", "d"] }).success,
-    ).toBe(false);
+  it("rejects pregnancy with extra fatherIds key (strict)", () => {
+    expect(eventEffectSchema.safeParse({ type: "pregnancy", op: "begin", fatherIds: ["x"] }).success).toBe(false);
   });
 });

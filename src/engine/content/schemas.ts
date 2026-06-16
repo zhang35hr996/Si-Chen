@@ -157,8 +157,7 @@ export const eventEffectSchema = z.union([
   }),
   z.strictObject({
     type: z.literal("pregnancy"),
-    op: z.enum(["begin", "confirm", "clear"]),
-    fatherIds: z.array(idSchema).min(1).max(3).optional(),
+    op: z.enum(["begin", "carry", "clear"]),
   }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
 ]);

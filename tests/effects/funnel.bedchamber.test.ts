@@ -28,60 +28,61 @@ describe("funnel: bedchamber", () => {
 });
 
 describe("funnel: pregnancy", () => {
-  it("begin → pending with conceivedAt", () => {
+  it("begin → pending with conceivedAt + empty candidateIds", () => {
     const state = createNewGameState(db);
     const r = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.resources.bloodline.pregnancy.status).toBe("pending");
-    expect(r.value.resources.bloodline.pregnancy.conceivedAt?.month).toBe(state.calendar.month);
+    const p = r.value.resources.bloodline.pregnancy;
+    expect(p.status).toBe("pending");
+    expect(p.conceivedAt?.month).toBe(state.calendar.month);
+    expect(p.candidateIds).toEqual([]);
   });
 
-  it("confirm sets expecting + fatherIds and keeps conceivedAt", () => {
+  it("carry → carrying + sovereign gestation, keeps conceivedAt", () => {
     const state = createNewGameState(db);
     const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
     expect(begun.ok).toBe(true);
     if (!begun.ok) return;
-    const r = applyEffects(db, begun.value, [
-      { type: "pregnancy", op: "confirm", fatherIds: ["shen_chenghui", "chu_jun"] },
-    ]);
+    const r = applyEffects(db, begun.value, [{ type: "pregnancy", op: "carry" }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const p = r.value.resources.bloodline.pregnancy;
-    expect(p.status).toBe("expecting");
-    expect(p.fatherIds).toEqual(["shen_chenghui", "chu_jun"]);
-    expect(p.conceivedAt).toEqual(begun.value.resources.bloodline.pregnancy.conceivedAt);
+    expect(r.value.resources.bloodline.pregnancy.status).toBe("carrying");
+    expect(r.value.resources.bloodline.gestation).toEqual({
+      carrier: "sovereign",
+      conceivedAt: begun.value.resources.bloodline.pregnancy.conceivedAt,
+    });
+    expect(r.value.resources.bloodline.pregnancy.conceivedAt).toEqual(
+      begun.value.resources.bloodline.pregnancy.conceivedAt,
+    );
+    expect(r.value.resources.bloodline.pregnancy.candidateIds).toEqual([]);
   });
 
-  it("rejects confirm with a non-consort fatherId", () => {
-    const state = createNewGameState(db);
-    const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]); // → pending
-    expect(begun.ok).toBe(true);
-    if (!begun.ok) return;
-    const errs = validateEffects(db, begun.value, [
-      { type: "pregnancy", op: "confirm", fatherIds: ["sili_nvguan"] },
-    ]);
-    expect(errs).toHaveLength(1);
-  });
-
-  it("rejects begin when already pending/expecting (no overwrite)", () => {
+  it("rejects begin when not none, carry when not pending", () => {
     const state = createNewGameState(db);
     const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
     expect(begun.ok).toBe(true);
     if (!begun.ok) return;
-    const errs = validateEffects(db, begun.value, [{ type: "pregnancy", op: "begin" }]);
-    expect(errs).toHaveLength(1);
+    expect(validateEffects(db, begun.value, [{ type: "pregnancy", op: "begin" }])).toHaveLength(1);
+    expect(validateEffects(db, state, [{ type: "pregnancy", op: "carry" }])).toHaveLength(1);
   });
 
-  it("rejects confirm when status is not pending", () => {
-    const state = createNewGameState(db); // status "none"
-    const errs = validateEffects(db, state, [
-      { type: "pregnancy", op: "confirm", fatherIds: ["shen_chenghui"] },
-    ]);
-    expect(errs.some((e) => e.message.includes("requires status"))).toBe(true);
+  it("clear resets to none and drops gestation", () => {
+    const state = createNewGameState(db);
+    const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
+    expect(begun.ok).toBe(true);
+    if (!begun.ok) return;
+    const carried = applyEffects(db, begun.value, [{ type: "pregnancy", op: "carry" }]);
+    expect(carried.ok).toBe(true);
+    if (!carried.ok) return;
+    const r = applyEffects(db, carried.value, [{ type: "pregnancy", op: "clear" }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
+    expect(r.value.resources.bloodline.gestation).toBeUndefined();
   });
 
-  it("clear resets to none", () => {
+  it("clear works directly from pending", () => {
     const state = createNewGameState(db);
     const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
     expect(begun.ok).toBe(true);
@@ -89,6 +90,15 @@ describe("funnel: pregnancy", () => {
     const r = applyEffects(db, begun.value, [{ type: "pregnancy", op: "clear" }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", fatherIds: [] });
+    expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
+  });
+
+  it("rejects carry when conceivedAt is missing", () => {
+    const state = createNewGameState(db);
+    const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
+    if (!begun.ok) return;
+    const broken = structuredClone(begun.value);
+    delete broken.resources.bloodline.pregnancy.conceivedAt;
+    expect(validateEffects(db, broken, [{ type: "pregnancy", op: "carry" }])).toHaveLength(1);
   });
 });
