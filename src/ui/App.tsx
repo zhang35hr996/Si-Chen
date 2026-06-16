@@ -10,6 +10,13 @@ import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem
 import { createLocalStorageAdapter } from "../engine/save/storage";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
+import { monthOrdinal } from "../engine/calendar/time";
+import { buildBedchamber, type BedchamberPlan } from "../store/bedchamber";
+import { BedchamberModal } from "./components/BedchamberModal";
+import { BedchamberPicker } from "./components/BedchamberPicker";
+import { PregnancyModal } from "./components/PregnancyModal";
+import { BedchamberScene } from "./screens/BedchamberScene";
+import type { BedchamberMode } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
 import { DebugPanel } from "./debug/DebugPanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
@@ -41,6 +48,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [manageCharId, setManageCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[] } | null>(null);
+  // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
+  const [flipOpen, setFlipOpen] = useState(false);
+  const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
+  const [bedchamberRun, setBedchamberRun] = useState<BedchamberPlan | null>(null);
+  const [firstNightPromptId, setFirstNightPromptId] = useState<string | null>(null);
   // The 皇城主地图 is home: 新游戏 and 事件结束 land here (atRoot); the location's
   // 宫城图 button opens the map on the current board instead (atRoot=false).
   const [mapAtRoot, setMapAtRoot] = useState(false);
@@ -119,6 +131,55 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     else goHome(); // 开局即在皇城主地图
   };
 
+  const beginBedchamber = (charId: string) => {
+    setFlipOpen(false);
+    setBedchamberPickId(charId);
+  };
+
+  const chooseBedchamberMode = (mode: BedchamberMode) => {
+    const charId = bedchamberPickId;
+    setBedchamberPickId(null);
+    if (!charId) return;
+    const plan = buildBedchamber(db, store.getState(), charId, mode);
+    if (plan) setBedchamberRun(plan);
+  };
+
+  const commitBedchamber = (plan: BedchamberPlan) => {
+    setBedchamberRun(null);
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) return;
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    doAutosave();
+    if (plan.isFirstNight && plan.charId !== "feng_hou") {
+      setFirstNightPromptId(plan.charId);
+    } else if (spend.ok && spend.value.rolledOver) {
+      runCheckpoints(true);
+    }
+  };
+
+  const liveState = store.getState();
+  const preg = liveState.resources.bloodline.pregnancy;
+  const pregnancyDue =
+    preg.status === "pending" &&
+    preg.conceivedAt !== undefined &&
+    monthOrdinal(liveState.calendar) > monthOrdinal(preg.conceivedAt);
+  const fatherCandidates = pregnancyDue
+    ? Object.values(db.characters)
+        .filter(
+          (c) =>
+            c.kind === "consort" &&
+            (liveState.bedchamber[c.id]?.encounters ?? []).some(
+              (e) => e.mode === "passion" && monthOrdinal(e.at) === monthOrdinal(preg.conceivedAt!),
+            ),
+        )
+        .map((c) => c.id)
+    : [];
+
+  const confirmPregnancy = (fatherIds: string[]) => {
+    const r = store.applyEffects(db, [{ type: "pregnancy", op: "confirm", fatherIds }]);
+    if (r.ok) doAutosave();
+  };
+
   return (
     <>
       {view === "title" && (
@@ -141,6 +202,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenSave={() => setView("save")}
           onStartEvent={startEvent}
           onManage={(id) => setManageCharId(id)}
+          onBedchamber={(id) => beginBedchamber(id)}
+          onFlipTablet={() => setFlipOpen(true)}
         />
       )}
       {view === "save" && (
@@ -233,6 +296,60 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           speakerId={reaction.speakerId}
           lines={reaction.lines}
           onDone={() => setReaction(null)}
+        />
+      )}
+      {flipOpen && (
+        <BedchamberPicker
+          db={db}
+          state={store.getState()}
+          onPick={beginBedchamber}
+          onClose={() => setFlipOpen(false)}
+        />
+      )}
+      {bedchamberPickId && db.characters[bedchamberPickId] && (
+        <BedchamberModal
+          name={db.characters[bedchamberPickId]!.profile.name}
+          onChoose={chooseBedchamberMode}
+          onClose={() => setBedchamberPickId(null)}
+        />
+      )}
+      {bedchamberRun && (
+        <BedchamberScene
+          db={db}
+          store={store}
+          registry={registry}
+          speakerId={bedchamberRun.charId}
+          lines={bedchamberRun.lines}
+          onDone={() => commitBedchamber(bedchamberRun)}
+        />
+      )}
+      {firstNightPromptId && (
+        <div className="modal-backdrop">
+          <div className="rank-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{db.characters[firstNightPromptId]!.profile.name}　初承恩泽</h2>
+            <p>是否晋升以彰圣眷？</p>
+            <button
+              type="button"
+              onClick={() => {
+                const id = firstNightPromptId;
+                setFirstNightPromptId(null);
+                setManageCharId(id);
+              }}
+            >
+              晋升
+            </button>
+            <button type="button" onClick={() => setFirstNightPromptId(null)}>
+              暂且不必
+            </button>
+          </div>
+        </div>
+      )}
+      {pregnancyDue && fatherCandidates.length > 0 && (
+        <PregnancyModal
+          db={db}
+          state={liveState}
+          candidateIds={fatherCandidates}
+          onConfirm={confirmPregnancy}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
