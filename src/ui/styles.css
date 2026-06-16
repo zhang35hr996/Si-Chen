@@ -785,3 +785,13 @@ body {
 .roster-row { display: flex; gap: 0.8rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #2a2017; }
 .roster-row__rank { color: #b8aa90; font-size: 0.85rem; margin-left: auto; }
 .roster-row button { cursor: pointer; }
+
+.char-card__favor { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; }
+.char-card__favor-tier { font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: #3a2233; color: #f3d9e6; }
+.char-card__favor-tier[data-tier="abundant"] { background: #7a1f3d; color: #ffe6ef; }
+.char-card__favor-tier[data-tier="favored"] { background: #8a3b1f; color: #ffe9d6; }
+.char-card__favor-tier[data-tier="small"] { background: #4a4322; color: #f6efcf; }
+.char-card__favor-tier[data-tier="fallen"] { background: #333; color: #b9a; }
+.char-card__favor-tier[data-tier="none"] { background: #2a2a2a; color: #999; }
+.char-card__favor-counts { font-size: 0.8rem; color: #c7b8c0; }
+.char-card__bedchamber { margin-top: 0.35rem; }

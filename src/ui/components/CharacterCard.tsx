@@ -9,6 +9,9 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { ConsortAttributes, CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import { resolveDisplayName } from "../../engine/characters/standing";
+import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/favorTier";
+import { bedchamberConfig } from "../../store/bedchamber";
+import { toGameTime } from "../../engine/calendar/time";
 
 /** 侍君明面属性 — label order follows background §四.4.1. */
 const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes, string]> = [
@@ -25,12 +28,14 @@ export function CharacterCard({
   registry,
   character,
   onManage,
+  onBedchamber,
 }: {
   db: ContentDB;
   state: GameState;
   registry: AssetRegistry;
   character: CharacterContent;
   onManage?: () => void;
+  onBedchamber?: () => void;
 }) {
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
@@ -38,6 +43,10 @@ export function CharacterCard({
   const displayName = resolveDisplayName(character, standing, rank);
   const canManage = isConsort && character.id !== "feng_hou" && onManage;
   const portrait = registry.portrait(character.portraitSet, "neutral");
+  const favor =
+    isConsort
+      ? computeFavorStats(state.bedchamber[character.id], toGameTime(state.calendar), bedchamberConfig(db).tiers)
+      : null;
 
   return (
     <article className="char-card">
@@ -58,9 +67,24 @@ export function CharacterCard({
         </p>
       )}
       <p className="char-card__role">{character.profile.role}</p>
+      {favor && (
+        <div className="char-card__favor">
+          <span className="char-card__favor-tier" data-tier={favor.tier}>
+            {FAVOR_TIER_LABEL[favor.tier]}
+          </span>
+          <span className="char-card__favor-counts">
+            侍寝　月{favor.lastMonth}·季{favor.lastThreeMonths}·年{favor.lastYear}
+          </span>
+        </div>
+      )}
       {canManage && (
         <button type="button" className="char-card__manage" onClick={onManage}>
           管理位分 / 封号
+        </button>
+      )}
+      {isConsort && onBedchamber && (
+        <button type="button" className="char-card__bedchamber" onClick={onBedchamber}>
+          侍寝
         </button>
       )}
       {character.attributes && (
