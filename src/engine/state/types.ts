@@ -48,6 +48,16 @@ export interface GestationState {
 
 export type HeirSex = "daughter" | "son";
 
+/** 皇嗣养成属性（上书房问功课提升）。 */
+export interface HeirEducation {
+  /** 学问 0–100 */
+  scholarship: number;
+  /** 骑射 0–100 */
+  martial: number;
+  /** 品行 0–100 */
+  virtue: number;
+}
+
 /** 落地子嗣。 */
 export interface Heir {
   /** "heir_000001" 单调 */
@@ -62,6 +72,14 @@ export interface Heir {
   favor: number;
   /** 嫡 */
   legitimate: boolean;
+  /** 小名（≤2 字），出生时设；未起为 ""。 */
+  petName: string;
+  /** 正名/姓名（≤2 字），百日宴设；未命名为 undefined。 */
+  givenName?: string;
+  /** 养成属性。 */
+  education: HeirEducation;
+  /** 养父 charId；未指定为 undefined。 */
+  adoptiveFatherId?: string;
 }
 
 export interface BloodlineState {
