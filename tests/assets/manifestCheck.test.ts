@@ -38,7 +38,7 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(21);
+    expect(result.entryCount).toBe(22);
     expect(result.placeholderCount).toBe(1); // wenya_shijun portrait is a placeholder pending real art
   });
 
