@@ -18,6 +18,8 @@ function withHeir(favor = 50): GameState {
     birthAt: { year: 1, month: 5, period: "early", dayIndex: 12 },
     favor,
     legitimate: true,
+    petName: "",
+    education: { scholarship: 5, martial: 5, virtue: 5 },
   });
   return s;
 }

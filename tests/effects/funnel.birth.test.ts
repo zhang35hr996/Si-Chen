@@ -39,6 +39,10 @@ describe("funnel: birth", () => {
     expect(heirs[0]!.id).toBe("heir_000001");
     expect(heirs[0]!.favor).toBe(25);
     expect(heirs[0]!.sex).toBe("daughter");
+    expect(heirs[0]!.petName).toBe("");
+    expect(heirs[0]!.givenName).toBeUndefined();
+    expect(heirs[0]!.education).toEqual({ scholarship: 5, martial: 5, virtue: 5 });
+    expect(heirs[0]!.adoptiveFatherId).toBeUndefined();
     expect(heirs[0]!.fatherId).toBe("shen_chenghui");
     expect(r.value.standing.shen_chenghui!.lifecycle).toBe("delivered");
     expect(r.value.standing.shen_chenghui!.recoverUntilMonth).toBe(20);

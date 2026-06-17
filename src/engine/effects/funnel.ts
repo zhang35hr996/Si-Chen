@@ -370,6 +370,8 @@ export function applyEffects(
             birthAt: now,
             favor: effect.favor,
             legitimate: effect.legitimate,
+            petName: "",
+            education: { scholarship: 5, martial: 5, virtue: 5 },
           });
         }
         if (effect.bearer !== "sovereign") {

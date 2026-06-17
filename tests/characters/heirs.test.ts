@@ -11,6 +11,8 @@ const heir = (over: Partial<Heir>): Heir => ({
   birthAt: makeGameTime(1, 5, "early"),
   favor: 50,
   legitimate: true,
+  petName: "",
+  education: { scholarship: 5, martial: 5, virtue: 5 },
   ...over,
 });
 
