@@ -6,6 +6,8 @@
     "portrait.chujun.neutral": { "path": "portraits/consort/chujun.png", "kind": "portrait", "placeholder": false },
     "portrait.wenya_shijun.neutral": { "path": "portraits/consort/wenya_shijun.svg", "kind": "portrait", "placeholder": true },
     "portrait.official.neutral": { "path": "portraits/official/neutral.png", "kind": "portrait", "placeholder": false },
+    "portrait.child_baby.neutral": { "path": "portraits/child/baby.png", "kind": "portrait", "placeholder": false },
+    "portrait.child_school.neutral": { "path": "portraits/child/child.png", "kind": "portrait", "placeholder": false },
     "bg.yushufang": { "path": "backgrounds/yushufang.png", "kind": "background", "placeholder": false },
     "bg.yuhuayuan": { "path": "backgrounds/yuhuayuan_morning.png", "kind": "background", "placeholder": false },
     "bg.yuhuayuan.twilight": { "path": "backgrounds/yuhuayuan_twilight.png", "kind": "background", "placeholder": false },
