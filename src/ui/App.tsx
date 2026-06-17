@@ -13,7 +13,8 @@ import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import { monthOrdinal } from "../engine/calendar/time";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
-import { buildHeirSummon, type HeirInteractionPlan } from "../store/heirInteraction";
+import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
+import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { ChildReactionScreen } from "./screens/ChildReactionScreen";
 import { buildBirth, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
@@ -42,7 +43,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "save";
+type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang";
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -141,6 +142,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       (rolledOver ? pickNextEvent(db, state, "time_advance") : null) ??
       pickNextEvent(db, state, "location_enter");
     if (pick) startEvent(pick.id);
+    else if (store.getState().playerLocation === "shangshufang") setView("shangshufang");
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
@@ -330,6 +332,30 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     setChildReaction(plan);
   };
 
+  // 上书房·问功课（耗 1 行动点）：轮换一科 + 宠爱。
+  const heirLesson = (heirId: string) => {
+    const plan = buildHeirLesson(db, store.getState(), heirId);
+    if (!plan) return;
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return;
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) return;
+    doAutosave();
+    if (spend.value.rolledOver) setReactionRollover(true);
+    setChildReaction(plan);
+  };
+
+  // 上书房·问先生（耗 1 行动点）：汇报功课，不改属性。
+  const tutorReport = (heirId: string) => {
+    const lines = buildTutorReport(db, store.getState(), heirId);
+    if (!lines) return;
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return;
+    doAutosave();
+    if (spend.value.rolledOver) setReactionRollover(true);
+    setReaction({ speakerId: "sili_nvguan", lines });
+  };
+
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
@@ -384,6 +410,20 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onConverse={converse}
         />
       )}
+      {view === "shangshufang" && (
+        <ShangshufangScreen
+          db={db}
+          store={store}
+          registry={registry}
+          onOpenMap={() => {
+            setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
+            setView("map");
+          }}
+          onOpenSave={() => setView("save")}
+          onLesson={heirLesson}
+          onTutorReport={tutorReport}
+        />
+      )}
       {view === "save" && (
         <SaveLoadScreen
           db={db}
@@ -405,7 +445,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             doAutosave(); // travel autosave (plan §9)
             runCheckpoints(rolledOver);
           }}
-          onEnterCurrent={() => setView("location")}
+          onEnterCurrent={() => setView(store.getState().playerLocation === "shangshufang" ? "shangshufang" : "location")}
           onOpenView={(locationId) => {
             setFreeViewId(locationId);
             setView("freeview");
