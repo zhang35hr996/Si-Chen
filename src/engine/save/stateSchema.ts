@@ -61,14 +61,14 @@ export const gameStateSchema = z.strictObject({
         conceivedAt: gameTimeSchema.optional(),
         candidateIds: z.array(idSchema),
       }),
-      gestation: z
-        .strictObject({
+      gestations: z.array(
+        z.strictObject({
           carrier: z.union([z.literal("sovereign"), idSchema]),
           conceivedAt: gameTimeSchema,
           fatherId: idSchema.optional(),
           transferredAtMonth: z.number().int().min(1).optional(),
-        })
-        .optional(),
+        }),
+      ),
       heirs: z.array(
         z.strictObject({
           id: idSchema,

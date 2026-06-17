@@ -59,6 +59,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
       bloodline: {
         ...db.world.startingResources.bloodline,
         pregnancy: { status: "none", candidateIds: [] },
+        gestations: [],
         heirs: [],
       },
     },

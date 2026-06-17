@@ -29,6 +29,7 @@ export function CharacterCard({
   character,
   onManage,
   onBedchamber,
+  onConverse,
 }: {
   db: ContentDB;
   state: GameState;
@@ -36,6 +37,7 @@ export function CharacterCard({
   character: CharacterContent;
   onManage?: () => void;
   onBedchamber?: () => void;
+  onConverse?: () => void;
 }) {
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
@@ -91,6 +93,11 @@ export function CharacterCard({
       {canManage && (
         <button type="button" className="char-card__manage" onClick={onManage}>
           管理位分 / 封号
+        </button>
+      )}
+      {isConsort && onConverse && (
+        <button type="button" className="char-card__converse" onClick={onConverse}>
+          对话（1 行动点）
         </button>
       )}
       {isConsort && onBedchamber && (

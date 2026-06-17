@@ -42,7 +42,7 @@ describe("funnel: birth", () => {
     expect(heirs[0]!.fatherId).toBe("shen_chenghui");
     expect(r.value.standing.shen_chenghui!.lifecycle).toBe("delivered");
     expect(r.value.standing.shen_chenghui!.recoverUntilMonth).toBe(20);
-    expect(r.value.resources.bloodline.gestation).toBeUndefined();
+    expect(r.value.resources.bloodline.gestations).toEqual([]);
     expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
   });
 
@@ -85,7 +85,7 @@ describe("funnel: birth", () => {
     expect(r.value.resources.bloodline.heirs).toHaveLength(1);
     expect(r.value.resources.bloodline.heirs[0]!.bearer).toBe("sovereign");
     expect(r.value.resources.bloodline.heirs[0]!.fatherId).toBeNull();
-    expect(r.value.resources.bloodline.gestation).toBeUndefined();
+    expect(r.value.resources.bloodline.gestations).toEqual([]);
   });
 
   it("rejects a birth when no gestation is active (double-fire guard)", () => {

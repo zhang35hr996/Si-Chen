@@ -15,6 +15,22 @@ const expectErr = <T extends { ok: boolean }>(r: T): Extract<T, { ok: false }> =
   return r as Extract<T, { ok: false }>;
 };
 
+describe("SKIP_REMAINDER", () => {
+  it("jumps straight to the next 旬 morning regardless of remaining AP", () => {
+    const noon = expectOk(applyCommand(freshState(), { type: "SPEND_AP", amount: 3 })).value.state; // ap 3, 上旬
+    const r = expectOk(applyCommand(noon, { type: "SKIP_REMAINDER" }));
+    expect(r.value.rolledOver).toBe(true);
+    expect(r.value.state.calendar).toMatchObject({ period: "mid", ap: 6, month: 1, year: 1 });
+  });
+
+  it("rolls 下旬 into the next month", () => {
+    const state = { ...freshState() };
+    const late = { ...state, calendar: { ...state.calendar, period: "late" as const, dayIndex: 2 } };
+    const r = expectOk(applyCommand(late, { type: "SKIP_REMAINDER" }));
+    expect(r.value.state.calendar).toMatchObject({ month: 2, period: "early", ap: 6 });
+  });
+});
+
 describe("SPEND_AP", () => {
   it("decrements AP without rollover when AP remains", () => {
     const r = expectOk(applyCommand(freshState(), { type: "SPEND_AP", amount: 2 }));

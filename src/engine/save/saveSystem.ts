@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 1;
+export const SAVE_FORMAT_VERSION = 2;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -27,8 +27,25 @@ export const MANUAL_SLOTS = ["slot1", "slot2", "slot3"] as const;
 export const ALL_SLOTS = ["auto", "auto.prev", ...MANUAL_SLOTS] as const;
 export type SaveSlot = (typeof ALL_SLOTS)[number];
 
-/** Migration chain scaffold: vN → vN+1 steps. Empty at format version 1. */
-const MIGRATIONS: Record<number, (old: unknown) => unknown> = {};
+/**
+ * Migration chain: vN → vN+1 steps. Each receives the parsed envelope and must
+ * return a new envelope with a bumped formatVersion and a recomputed checksum
+ * (the checksum gate runs AFTER migrations).
+ *
+ * v1 → v2: single-line `gestation?` → multi-line `gestations[]`.
+ */
+const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
+  1: (old) => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    const bloodline = ((state.resources as Record<string, unknown> | undefined)?.bloodline ??
+      {}) as Record<string, unknown>;
+    const single = bloodline.gestation;
+    delete bloodline.gestation;
+    bloodline.gestations = single !== undefined && single !== null ? [single] : [];
+    return { ...env, formatVersion: 2, state, checksum: checksumOf(state) };
+  },
+};
 
 export interface SaveSystemOptions {
   logger?: RingBufferLogger;

@@ -71,10 +71,14 @@ export interface BloodlineState {
   menstrualStatus: MenstrualStatus;
   /** 经血祭仪 scaffold */
   lastRiteAt?: GameTime;
-  /** 帝王孕育状态 */
+  /** 帝王孕育状态（帝王自身的身体：是否自孕） */
   pregnancy: PregnancyState;
-  /** 当前在孕胎息（单线，至多一个）。 */
-  gestation?: GestationState;
+  /**
+   * 当前在孕的所有胎息（多线孕育）：至多一个 carrier="sovereign"（帝王自孕），
+   * 其余为承嗣侍君各自承载的一胎。传嗣后帝王 pregnancy 归 none，可再次自孕，
+   * 故同一时刻帝王自孕与多名侍君承嗣可并存。
+   */
+  gestations: GestationState[];
   /** 已落地子嗣。 */
   heirs: Heir[];
 }

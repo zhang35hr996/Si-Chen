@@ -23,6 +23,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
         legitimacy: 60,
         menstrualStatus: "normal",
         pregnancy: { status: "none", candidateIds: [] },
+        gestations: [],
         heirs: [],
       },
     },

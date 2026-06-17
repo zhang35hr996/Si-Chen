@@ -781,6 +781,37 @@ body {
 .rank-modal button { cursor: pointer; }
 .rank-modal button:disabled { opacity: 0.4; cursor: default; }
 
+/* ── event dialogue overlay (blocking) ───────────────────────────── */
+.event-overlay {
+  background: #1b1510; border: 1px solid #8a6d3f; border-radius: 6px;
+  padding: 1.4rem 1.8rem; min-width: 24rem; max-width: 34rem; color: #e8dcc8;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+.event-overlay__title { margin: 0 0 0.4rem; color: #d9b87c; letter-spacing: 0.1em; }
+.event-overlay__hint { color: #b8aa90; margin: 0 0 1rem; }
+.event-overlay__choices { display: flex; flex-direction: column; gap: 0.6rem; }
+.event-overlay__choices button {
+  font: inherit; text-align: left; padding: 0.6rem 1.1rem;
+  color: #d9b87c; background: #241c15; border: 1px solid #8a6d3f; cursor: pointer;
+}
+.event-overlay__choices button:hover:enabled { border-color: #d9b87c; }
+.event-overlay__choices button:disabled { opacity: 0.45; cursor: not-allowed; }
+.event-overlay__later {
+  margin-top: 1rem; font: inherit; padding: 0.4rem 1rem;
+  color: #b8aa90; background: transparent; border: 1px solid #4a3b28; cursor: pointer;
+}
+.event-overlay__later:hover { color: #d9b87c; border-color: #8a6d3f; }
+
+.yushufang-menu { padding: 0.8rem 1rem 0; }
+.yushufang-menu h2 { margin: 0 0 0.5rem; color: #d9b87c; font-size: 1rem; letter-spacing: 0.1em; }
+.yushufang-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.3rem 0 0.6rem; }
+.yushufang-actions button {
+  font: inherit; padding: 0.45rem 1rem; color: #d9b87c;
+  background: #241c15; border: 1px solid #8a6d3f; cursor: pointer;
+}
+.yushufang-actions button:hover:enabled { border-color: #d9b87c; }
+.yushufang-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
 .location-screen__roster { padding: 0.8rem 1rem; }
 .roster-row { display: flex; gap: 0.8rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #2a2017; }
 .roster-row__rank { color: #b8aa90; font-size: 0.85rem; margin-left: auto; }
@@ -795,6 +826,7 @@ body {
 .char-card__favor-tier[data-tier="none"] { background: #2a2a2a; color: #999; }
 .char-card__favor-counts { font-size: 0.8rem; color: #c7b8c0; }
 .char-card__bedchamber { margin-top: 0.35rem; }
+.char-card__converse { margin-top: 0.35rem; }
 .bedchamber-modal, .bedchamber-picker, .pregnancy-modal {
   background: #1f1620; color: #f0e6ec; padding: 1.25rem 1.5rem;
   border-radius: 0.5rem; max-width: 28rem; margin: auto;

@@ -12,7 +12,8 @@ import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import { monthOrdinal } from "../engine/calendar/time";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
-import { buildBirth, birthDue } from "../store/gestation";
+import { buildConversation } from "../store/conversation";
+import { buildBirth, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
@@ -54,6 +55,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [manageCharId, setManageCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[] } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
+  // 对话/反应若耗尽行动点导致换旬，待反应播完再补跑时间推进 checkpoint。
+  const [reactionRollover, setReactionRollover] = useState(false);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
   const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
@@ -205,18 +208,22 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     }
   };
 
-  const gest = liveState.resources.bloodline.gestation;
-  const selfCarrying = preg.status === "carrying" && gest?.carrier === "sovereign";
+  // 帝王自身胎息（多线孕育下至多一条 carrier="sovereign"）。
+  const sovereignGest = liveState.resources.bloodline.gestations.find((g) => g.carrier === "sovereign");
+  const selfCarrying = preg.status === "carrying" && sovereignGest !== undefined;
   const gestMonth =
-    gest !== undefined ? monthOrdinal(liveState.calendar) - monthOrdinal(gest.conceivedAt) + 1 : 0;
+    sovereignGest !== undefined
+      ? monthOrdinal(liveState.calendar) - monthOrdinal(sovereignGest.conceivedAt) + 1
+      : 0;
   // 孕三月自动弹宗正寺；孕四–九月由御书房「召见宗正寺」手动开。
   const successorAutoDue =
     selfCarrying && gestMonth === 3 && successorDismissedMonth !== monthOrdinal(liveState.calendar);
   const canSummonZongzheng = selfCarrying && gestMonth >= 4 && gestMonth <= 9;
-  const consortCarrying = gest !== undefined && gest.carrier !== "sovereign";
+  const consortCarrying = liveState.resources.bloodline.gestations.some((g) => g.carrier !== "sovereign");
 
-  const birthIsDue = gest !== undefined && birthDue(db, liveState);
-  const activeBirthPlan = birthIsDue ? buildBirth(db, liveState) : null;
+  // 逐条生产：取当前到产的第一条胎息，生产提交后重渲染再取下一条。
+  const dueGest = dueGestation(db, liveState);
+  const activeBirthPlan = dueGest ? buildBirth(db, liveState, dueGest) : null;
   const birthSpeaker = activeBirthPlan
     ? activeBirthPlan.bearer === "sovereign" ||
       activeBirthPlan.bearerOutcome === "bearer_dies" ||
@@ -256,6 +263,54 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (r.ok) doAutosave();
   };
 
+  // 候选承嗣注释管理（御书房）：同时段只能一位候选；传嗣/流产会自动清除。
+  const addCandidate = (charId: string) => {
+    const r = store.applyEffects(db, [{ type: "heir_candidate", op: "add", char: charId }]);
+    if (r.ok) doAutosave();
+  };
+  const removeCandidate = (charId: string) => {
+    const r = store.applyEffects(db, [{ type: "heir_candidate", op: "remove", char: charId }]);
+    if (r.ok) doAutosave();
+  };
+
+  // 御书房·行动：批阅奏折（耗 2 行动点，提升朝堂资源）。
+  const reviewMemorials = () => {
+    if (store.getState().calendar.ap < 2) return; // 行动点不足
+    const applied = store.applyEffects(db, [
+      { type: "resource", pillar: "court", field: "authority", delta: 5 },
+      { type: "resource", pillar: "court", field: "publicSupport", delta: 3 },
+      { type: "resource", pillar: "court", field: "factionPressure", delta: -3 },
+    ]);
+    if (!applied.ok) return;
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 2 });
+    if (!spend.ok) return; // AP guard backstop
+    doAutosave();
+    if (spend.value.rolledOver) {
+      runCheckpoints(true);
+    } else {
+      setReaction({ speakerId: "sili_nvguan", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] });
+    }
+  };
+
+  // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
+  const restAlone = () => {
+    const spend = store.dispatch({ type: "SKIP_REMAINDER" });
+    if (!spend.ok) return;
+    doAutosave();
+    runCheckpoints(true);
+  };
+
+  // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
+  const converse = (charId: string) => {
+    const lines = buildConversation(db, store.getState(), charId);
+    if (!lines) return;
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return; // 行动点不足
+    doAutosave();
+    if (spend.value.rolledOver) setReactionRollover(true);
+    setReaction({ speakerId: charId, lines });
+  };
+
   const transferTo = (carrierId: string) => {
     setSuccessorOpen(false);
     const r = store.applyEffects(db, [{ type: "pregnancy_transfer", carrierId, atMonth: gestMonth }]);
@@ -292,6 +347,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
           onSummonPhysician={() => setPhysicianOpen(true)}
           onOpenHeirs={() => setHeirListOpen(true)}
+          onAddCandidate={addCandidate}
+          onRemoveCandidate={removeCandidate}
+          onReviewMemorials={reviewMemorials}
+          onRestAlone={restAlone}
+          onConverse={converse}
         />
       )}
       {view === "save" && (
@@ -389,6 +449,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
               setManageCharId(id);
+            } else if (reactionRollover) {
+              setReactionRollover(false);
+              runCheckpoints(true); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
             }
           }}
         />

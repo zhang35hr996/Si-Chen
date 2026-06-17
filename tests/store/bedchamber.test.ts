@@ -65,29 +65,67 @@ describe("buildBedchamber", () => {
   });
 });
 
-describe("bedchamber single-track conception (heir lifecycle)", () => {
-  it("passion does not conceive when a sovereign gestation is active", () => {
+describe("陪伴 dialogue four-case branching", () => {
+  const conceivedAt = { year: 1, month: 1, period: "early" as const, dayIndex: 0 };
+
+  const lines = (s: ReturnType<typeof createNewGameState>) =>
+    buildBedchamber(db, s, "shen_chenghui", "companionship")!.lines.join("\n");
+
+  it("picks distinct lines for neither / sovereign / consort / both pregnant", () => {
+    const neither = createNewGameState(db);
+
+    const sovereign = createNewGameState(db);
+    sovereign.resources.bloodline.pregnancy = { status: "carrying", conceivedAt, candidateIds: [] };
+    sovereign.resources.bloodline.gestations = [{ carrier: "sovereign", conceivedAt }];
+
+    const consort = createNewGameState(db);
+    consort.resources.bloodline.gestations = [
+      { carrier: "shen_chenghui", conceivedAt, fatherId: "shen_chenghui", transferredAtMonth: 3 },
+    ];
+    consort.standing.shen_chenghui!.lifecycle = "carrying";
+
+    const both = createNewGameState(db);
+    both.resources.bloodline.pregnancy = { status: "carrying", conceivedAt, candidateIds: [] };
+    both.resources.bloodline.gestations = [
+      { carrier: "sovereign", conceivedAt },
+      { carrier: "shen_chenghui", conceivedAt, fatherId: "shen_chenghui", transferredAtMonth: 3 },
+    ];
+    both.standing.shen_chenghui!.lifecycle = "carrying";
+
+    const a = lines(neither), b = lines(sovereign), c = lines(consort), d = lines(both);
+    expect(new Set([a, b, c, d]).size).toBe(4); // all four distinct
+    expect(b).toContain("养胎");
+    expect(c).toContain("皇嗣");
+    expect(d).toContain("皆怀身孕");
+  });
+});
+
+describe("bedchamber conception gate (multi-line gestation)", () => {
+  it("passion does not conceive when the sovereign's own pregnancy is active", () => {
     const s = createNewGameState(db);
     s.resources.bloodline.pregnancy = { status: "carrying", candidateIds: [] };
-    s.resources.bloodline.gestation = {
-      carrier: "sovereign",
-      conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
-    };
+    s.resources.bloodline.gestations = [
+      { carrier: "sovereign", conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } },
+    ];
     const plan = buildBedchamber(db, s, "shen_chenghui", "passion");
     expect(plan!.conceived).toBe(false);
     expect(plan!.effects.some((e) => e.type === "pregnancy")).toBe(false);
   });
 
-  it("passion does not conceive when a consort carries (gestation present, status none)", () => {
+  it("a consort carrying a transferred heir does NOT block the sovereign from conceiving", () => {
+    const baseline = buildBedchamber(db, createNewGameState(db), "shen_chenghui", "passion")!;
     const s = createNewGameState(db);
-    s.resources.bloodline.gestation = {
-      carrier: "wenya_shijun",
-      conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
-      fatherId: "wenya_shijun",
-      transferredAtMonth: 3,
-    };
-    const plan = buildBedchamber(db, s, "shen_chenghui", "passion");
-    expect(plan!.conceived).toBe(false);
+    s.resources.bloodline.gestations = [
+      {
+        carrier: "wenya_shijun",
+        conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+        fatherId: "wenya_shijun",
+        transferredAtMonth: 3,
+      },
+    ];
+    // pregnancy.status stays "none" (the sovereign's own body), so conception is unaffected.
+    const plan = buildBedchamber(db, s, "shen_chenghui", "passion")!;
+    expect(plan.conceived).toBe(baseline.conceived);
   });
 });
 

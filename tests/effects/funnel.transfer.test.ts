@@ -24,12 +24,14 @@ describe("funnel: pregnancy_transfer", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.pregnancy.status).toBe("none");
-    expect(r.value.resources.bloodline.gestation).toEqual({
-      carrier: "shen_chenghui",
-      fatherId: "shen_chenghui",
-      transferredAtMonth: 3,
-      conceivedAt: state.resources.bloodline.gestation!.conceivedAt,
-    });
+    expect(r.value.resources.bloodline.gestations).toEqual([
+      {
+        carrier: "shen_chenghui",
+        fatherId: "shen_chenghui",
+        transferredAtMonth: 3,
+        conceivedAt: state.resources.bloodline.gestations[0]!.conceivedAt,
+      },
+    ]);
     expect(r.value.standing.shen_chenghui!.lifecycle).toBe("carrying");
   });
 

@@ -48,10 +48,12 @@ describe("funnel: pregnancy", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.pregnancy.status).toBe("carrying");
-    expect(r.value.resources.bloodline.gestation).toEqual({
-      carrier: "sovereign",
-      conceivedAt: begun.value.resources.bloodline.pregnancy.conceivedAt,
-    });
+    expect(r.value.resources.bloodline.gestations).toEqual([
+      {
+        carrier: "sovereign",
+        conceivedAt: begun.value.resources.bloodline.pregnancy.conceivedAt,
+      },
+    ]);
     expect(r.value.resources.bloodline.pregnancy.conceivedAt).toEqual(
       begun.value.resources.bloodline.pregnancy.conceivedAt,
     );
@@ -79,7 +81,7 @@ describe("funnel: pregnancy", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
-    expect(r.value.resources.bloodline.gestation).toBeUndefined();
+    expect(r.value.resources.bloodline.gestations).toEqual([]);
   });
 
   it("clear works directly from pending", () => {

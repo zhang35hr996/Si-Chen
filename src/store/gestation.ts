@@ -14,7 +14,7 @@ import {
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
-import type { GameState } from "../engine/state/types";
+import type { GameState, GestationState } from "../engine/state/types";
 import { bedchamberConfig } from "./bedchamber";
 
 export function gestationConfig(db: ContentDB): GestationConfig {
@@ -33,24 +33,37 @@ export interface BirthTiming {
   birthSlot: number;
 }
 
-/** 确定的生产月 + 当月行动点 slot。无 gestation 返回 null。 */
-export function plannedBirth(db: ContentDB, state: GameState): BirthTiming | null {
-  const gest = state.resources.bloodline.gestation;
-  if (!gest) return null;
+/** 某条胎息的确定生产月 + 当月行动点 slot。 */
+export function plannedBirthOf(db: ContentDB, state: GameState, gest: GestationState): BirthTiming {
   const cfg = gestationConfig(db);
   const bm = plannedBirthMonth(state.rngSeed, gest.conceivedAt, gest.carrier, cfg);
   return { birthMonthOrdinal: bm, birthSlot: birthSlot(state.rngSeed, bm, state.calendar.apMax) };
 }
 
-/** 是否已到生产时机（到月 + slot；过月即补触发）。 */
-export function birthDue(db: ContentDB, state: GameState): boolean {
-  const timing = plannedBirth(db, state);
-  if (!timing) return false;
+/** 确定的生产月 + 当月行动点 slot（首条胎息）。无胎息返回 null。 */
+export function plannedBirth(db: ContentDB, state: GameState): BirthTiming | null {
+  const gest = state.resources.bloodline.gestations[0];
+  return gest ? plannedBirthOf(db, state, gest) : null;
+}
+
+/** 某条胎息是否已到生产时机（到月 + slot；过月即补触发）。 */
+function gestationDue(db: ContentDB, state: GameState, gest: GestationState): boolean {
+  const timing = plannedBirthOf(db, state, gest);
   const cur = monthOrdinal(state.calendar);
   if (cur > timing.birthMonthOrdinal) return true;
   if (cur < timing.birthMonthOrdinal) return false;
   const slot = state.calendar.apMax - state.calendar.ap;
   return slot >= timing.birthSlot;
+}
+
+/** 当前到产的第一条胎息（多线孕育下逐条生产）。无则返回 null。 */
+export function dueGestation(db: ContentDB, state: GameState): GestationState | null {
+  return state.resources.bloodline.gestations.find((g) => gestationDue(db, state, g)) ?? null;
+}
+
+/** 是否有任意胎息到产。 */
+export function birthDue(db: ContentDB, state: GameState): boolean {
+  return dueGestation(db, state) !== null;
 }
 
 export type BirthOutcome = "safe" | "child_dies" | "bearer_dies" | "both";
@@ -63,9 +76,12 @@ export interface GestationPlan {
   bearerOutcome: BirthOutcome;
 }
 
-/** 生产裁决 → birth effect + 播报台词。无 gestation 返回 null。 */
-export function buildBirth(db: ContentDB, state: GameState): GestationPlan | null {
-  const gest = state.resources.bloodline.gestation;
+/**
+ * 生产裁决 → birth effect + 播报台词。默认对「到产的第一条胎息」裁决；可显式指定
+ * 一条胎息。无可裁决胎息返回 null。
+ */
+export function buildBirth(db: ContentDB, state: GameState, gestation?: GestationState): GestationPlan | null {
+  const gest = gestation ?? dueGestation(db, state) ?? state.resources.bloodline.gestations[0];
   if (!gest) return null;
   const cfg = gestationConfig(db);
   const now = toGameTime(state.calendar);

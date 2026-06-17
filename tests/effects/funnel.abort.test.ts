@@ -22,7 +22,7 @@ describe("funnel: pregnancy_abort", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
-    expect(r.value.resources.bloodline.gestation).toBeUndefined();
+    expect(r.value.resources.bloodline.gestations).toEqual([]);
   });
 
   it("rejects when carrier is a consort (承养不可弃)", () => {

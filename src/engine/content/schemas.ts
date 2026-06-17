@@ -160,6 +160,7 @@ export const eventEffectSchema = z.union([
     op: z.enum(["begin", "carry", "clear"]),
   }),
   z.strictObject({ type: z.literal("heir_designate"), charIds: z.array(idSchema).min(1).max(8) }),
+  z.strictObject({ type: z.literal("heir_candidate"), op: z.enum(["add", "remove"]), char: idSchema }),
   z.strictObject({
     type: z.literal("pregnancy_transfer"),
     carrierId: idSchema,
@@ -471,7 +472,14 @@ export const worldSchema = z.strictObject({
     .strictObject({
       passion: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
       pleasure: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
-      companionship: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
+      // 陪伴按双方孕情分四种台词：lines=二人都无孕（缺省）；其余三种可选，
+      // 缺省回退到 lines / 引擎内置 fallback。
+      companionship: z.strictObject({
+        lines: z.array(nonEmpty).min(1).max(6),
+        sovereignPregnant: z.array(nonEmpty).min(1).max(6).optional(),
+        consortPregnant: z.array(nonEmpty).min(1).max(6).optional(),
+        bothPregnant: z.array(nonEmpty).min(1).max(6).optional(),
+      }),
     })
     .optional(),
   /** 承嗣/生产/子嗣调参（缺省走引擎内置 fallback）。 */

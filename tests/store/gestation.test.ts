@@ -14,7 +14,7 @@ function sovereignCarrying(month: number): GameState {
   const s = createNewGameState(db);
   const conceivedAt = makeGameTime(1, month, "early");
   s.resources.bloodline.pregnancy = { status: "carrying", conceivedAt, candidateIds: [] };
-  s.resources.bloodline.gestation = { carrier: "sovereign", conceivedAt };
+  s.resources.bloodline.gestations = [{ carrier: "sovereign", conceivedAt }];
   return s;
 }
 
