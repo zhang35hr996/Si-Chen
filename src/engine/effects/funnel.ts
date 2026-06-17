@@ -197,6 +197,21 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_adopt": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        const ch = db.characters[e.fatherId];
+        const st = state.standing[e.fatherId];
+        if (!ch || ch.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort with standing: "${e.fatherId}"`, { char: e.fatherId });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `adoptive father is deceased: "${e.fatherId}"`, { char: e.fatherId });
+        } else if (ch.defaultLocation === "lenggong") {
+          bad(index, "BAD_EFFECT_TARGET", `adoptive father is in 冷宫: "${e.fatherId}"`, { char: e.fatherId });
+        }
+        break;
+      }
       case "child_favor": {
         if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
           bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
@@ -428,6 +443,11 @@ export function applyEffects(
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         heir.education[effect.subject] = clampPct(heir.education[effect.subject] + effect.attrDelta);
         heir.favor = clampPct(heir.favor + effect.favorDelta);
+        break;
+      }
+      case "heir_adopt": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        heir.adoptiveFatherId = effect.fatherId;
         break;
       }
       case "child_favor": {

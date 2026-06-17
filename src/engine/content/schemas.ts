@@ -192,6 +192,7 @@ export const eventEffectSchema = z.union([
     attrDelta: z.number().int().min(0).max(20),
     favorDelta: z.number().int().min(0).max(20),
   }),
+  z.strictObject({ type: z.literal("heir_adopt"), heirId: nonEmpty, fatherId: idSchema }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
 ]);
 
