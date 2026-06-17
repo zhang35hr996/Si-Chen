@@ -7,6 +7,7 @@ export function HeirNameModal({
   confirmLabel,
   onRandom,
   onConfirm,
+  onDismiss,
 }: {
   title: string;
   hint: string;
@@ -14,6 +15,8 @@ export function HeirNameModal({
   /** 提供则显示「随机」按钮（出生起小名用）。 */
   onRandom?: () => string;
   onConfirm: (name: string) => void;
+  /** 提供则显示「稍后再说」按钮（可延迟命名用）。 */
+  onDismiss?: () => void;
 }) {
   const [name, setName] = useState("");
   const valid = [...name.trim()].length >= 1 && [...name.trim()].length <= 2;
@@ -36,6 +39,9 @@ export function HeirNameModal({
           <button type="button" disabled={!valid} onClick={() => onConfirm(name.trim())}>
             {confirmLabel}
           </button>
+          {onDismiss && (
+            <button type="button" onClick={onDismiss}>稍后再说</button>
+          )}
         </div>
       </div>
     </div>

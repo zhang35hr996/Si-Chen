@@ -76,6 +76,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [continueError, setContinueError] = useState<string | null>(null);
   const [successorOpen, setSuccessorOpen] = useState(false);
   const [successorDismissedMonth, setSuccessorDismissedMonth] = useState<number | null>(null);
+  const [centennialDismissedMonth, setCentennialDismissedMonth] = useState<number | null>(null);
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
@@ -105,6 +106,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const goHome = () => {
     setMapAtRoot(true);
     setView("map");
+  };
+
+  /** Pick the right room view for the player's current location (specialized screens vs generic). */
+  const enterCurrentLocation = () => {
+    const loc = store.getState().playerLocation;
+    setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : "location");
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -236,7 +243,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const consortCarrying = liveState.resources.bloodline.gestations.some((g) => g.carrier !== "sovereign");
 
   const centennialHeir =
-    liveState.resources.bloodline.heirs.find((h) => centennialDue(h, liveState.calendar)) ?? null;
+    centennialDismissedMonth === monthOrdinal(liveState.calendar)
+      ? null
+      : liveState.resources.bloodline.heirs.find((h) => centennialDue(h, liveState.calendar)) ?? null;
 
   // 逐条生产：取当前到产的第一条胎息，生产提交后重渲染再取下一条。
   const dueGest = dueGestation(db, liveState);
@@ -460,8 +469,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           storage={storage}
           logger={logger}
           gameStarted
-          onClose={() => setView("location")}
-          onLoaded={() => setView("location")}
+          onClose={enterCurrentLocation}
+          onLoaded={enterCurrentLocation}
         />
       )}
       {view === "map" && (
@@ -474,10 +483,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             doAutosave(); // travel autosave (plan §9)
             runCheckpoints(rolledOver);
           }}
-          onEnterCurrent={() => {
-            const loc = store.getState().playerLocation;
-            setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : "location");
-          }}
+          onEnterCurrent={enterCurrentLocation}
           onOpenView={(locationId) => {
             setFreeViewId(locationId);
             setView("freeview");
@@ -704,6 +710,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               setReaction({ speakerId: "sili_nvguan", lines: [`司礼官高唱：皇嗣赐名「${name}」，宗祠登册，举宫同贺。`] });
             }
           }}
+          onDismiss={() => setCentennialDismissedMonth(monthOrdinal(liveState.calendar))}
         />
       )}
       {childReaction && (
