@@ -191,6 +191,12 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_educate": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
       case "child_favor": {
         if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
           bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
@@ -416,6 +422,12 @@ export function applyEffects(
       case "heir_summon": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         heir.favor = clampPct(heir.favor + 20);
+        break;
+      }
+      case "heir_educate": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        heir.education[effect.subject] = clampPct(heir.education[effect.subject] + effect.attrDelta);
+        heir.favor = clampPct(heir.favor + effect.favorDelta);
         break;
       }
       case "child_favor": {

@@ -185,6 +185,13 @@ export const eventEffectSchema = z.union([
     name: z.string().min(1).max(2),
   }),
   z.strictObject({ type: z.literal("heir_summon"), heirId: nonEmpty }),
+  z.strictObject({
+    type: z.literal("heir_educate"),
+    heirId: nonEmpty,
+    subject: z.enum(["scholarship", "martial", "virtue"]),
+    attrDelta: z.number().int().min(0).max(20),
+    favorDelta: z.number().int().min(0).max(20),
+  }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
 ]);
 
