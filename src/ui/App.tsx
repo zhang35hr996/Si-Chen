@@ -55,7 +55,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [manageCharId, setManageCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[] } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
-  // 对话/反应若耗尽行动点导致换旬，待反应播完再补跑时间推进 checkpoint。
+  // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   const [reactionRollover, setReactionRollover] = useState(false);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
@@ -166,6 +166,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     doAutosave();
     if (plan.isFirstNight && plan.charId !== "feng_hou") {
       setFirstNightPromptId(plan.charId);
+      if (spend.value.rolledOver) setReactionRollover(true); // 初夜提示关闭后再补跑
     } else if (spend.value.rolledOver) {
       runCheckpoints(true);
     }
@@ -401,7 +402,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           registry={registry}
           eventId={activeEventId}
           logger={logger}
-          onDone={(committed) => {
+          onDone={(committed, rolledOver) => {
             setActiveEventId(null);
             if (committed) {
               doAutosave(); // scene-commit autosave (plan §9)
@@ -418,6 +419,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
                     context: { deferred: pick.id },
                   }),
                 );
+              }
+              // 若本场景消耗行动点导致转旬/转月，立刻触发 time_advance 事件，
+              // 不必等玩家转换地图再 trigger。
+              if (rolledOver) {
+                const t = pickNextEvent(db, store.getState(), "time_advance");
+                if (t && chainDepth.current < MAX_EVENT_CHAIN) {
+                  chainDepth.current += 1;
+                  setActiveEventId(t.id);
+                  return;
+                }
               }
               goHome(); // 事件结束 → 跳回皇城主地图
               return;
@@ -497,7 +508,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             >
               晋升
             </button>
-            <button type="button" onClick={() => setFirstNightPromptId(null)}>
+            <button
+              type="button"
+              onClick={() => {
+                setFirstNightPromptId(null);
+                if (reactionRollover) {
+                  setReactionRollover(false);
+                  runCheckpoints(true); // 初夜恰逢转旬 → 补跑时间推进 checkpoint
+                }
+              }}
+            >
               暂且不必
             </button>
           </div>

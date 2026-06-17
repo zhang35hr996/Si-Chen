@@ -28,7 +28,7 @@ export function DialogueScreen({
   registry: AssetRegistry;
   eventId: string;
   logger?: RingBufferLogger;
-  onDone: (committed: boolean) => void;
+  onDone: (committed: boolean, rolledOver?: boolean) => void;
 }) {
   const state = useGameState(store);
   const runnerRef = useRef<SceneRunner | null>(null);
@@ -47,7 +47,7 @@ export function DialogueScreen({
     // terminal → commit the whole transaction (effects + apCost + fired)
     const commit = store.resolveEvent(db, result.value.eventId, result.value.effects);
     if (commit.ok) {
-      onDone(true);
+      onDone(true, commit.value.rolledOver);
     } else {
       setError(commit.error.map((e) => `${formatErrorTag(e)} — ${e.message}`).join("；"));
     }
