@@ -15,6 +15,8 @@ import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/b
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
+import { FengxiandianScreen } from "./screens/FengxiandianScreen";
+import { buildAdoptionReaction } from "../store/adoption";
 import { ChildReactionScreen } from "./screens/ChildReactionScreen";
 import { buildBirth, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
@@ -43,7 +45,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang";
+type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang" | "fengxiandian";
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -78,6 +80,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [heirListOpen, setHeirListOpen] = useState(false);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
+  const [adoptionQueue, setAdoptionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
@@ -143,6 +146,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       pickNextEvent(db, state, "location_enter");
     if (pick) startEvent(pick.id);
     else if (store.getState().playerLocation === "shangshufang") setView("shangshufang");
+    else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
@@ -356,6 +360,21 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     setReaction({ speakerId: "sili_nvguan", lines });
   };
 
+  const adoptHeir = (heirId: string, fatherId: string) => {
+    const heir = store.getState().resources.bloodline.heirs.find((h) => h.id === heirId);
+    if (!heir) return;
+    const reactions = buildAdoptionReaction(db, store.getState(), heir, fatherId);
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return;
+    const applied = store.applyEffects(db, [{ type: "heir_adopt", heirId, fatherId }]);
+    if (!applied.ok) return;
+    doAutosave();
+    if (spend.value.rolledOver) setReactionRollover(true);
+    const [first, ...rest] = reactions;
+    setAdoptionQueue(rest);
+    if (first) setReaction(first);
+  };
+
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
@@ -424,6 +443,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onTutorReport={tutorReport}
         />
       )}
+      {view === "fengxiandian" && (
+        <FengxiandianScreen
+          db={db}
+          store={store}
+          registry={registry}
+          onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
+          onOpenSave={() => setView("save")}
+          onAdopt={adoptHeir}
+        />
+      )}
       {view === "save" && (
         <SaveLoadScreen
           db={db}
@@ -445,7 +474,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             doAutosave(); // travel autosave (plan §9)
             runCheckpoints(rolledOver);
           }}
-          onEnterCurrent={() => setView(store.getState().playerLocation === "shangshufang" ? "shangshufang" : "location")}
+          onEnterCurrent={() => {
+            const loc = store.getState().playerLocation;
+            setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : "location");
+          }}
           onOpenView={(locationId) => {
             setFreeViewId(locationId);
             setView("freeview");
@@ -525,6 +557,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           lines={reaction.lines}
           onDone={() => {
             setReaction(null);
+            if (adoptionQueue.length > 0) {
+              const [nextLine, ...rest] = adoptionQueue;
+              setAdoptionQueue(rest);
+              setReaction(nextLine!);
+              return;
+            }
             if (postBirthPromoteId) {
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
