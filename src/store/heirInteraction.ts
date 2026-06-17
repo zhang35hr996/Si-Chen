@@ -1,5 +1,6 @@
 /** 御书房召见皇嗣 / 上书房问功课的装配层：纯台词 + effects，经子屏重放。 */
-import { heirStage, heirPortraitSet, listHeirsBySex } from "../engine/characters/heirs";
+import { heirStage, heirPortraitSet, isEnrolled, listHeirsBySex } from "../engine/characters/heirs";
+import { gestationRoll } from "../engine/characters/gestation";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { GameState, Heir } from "../engine/state/types";
@@ -55,4 +56,42 @@ export function buildHeirSummon(_db: ContentDB, state: GameState, heirId: string
     portraitSet: heirPortraitSet(heir, state.calendar),
     speakerName: name,
   };
+}
+
+const SUBJECTS = ["scholarship", "martial", "virtue"] as const;
+const SUBJECT_LABEL: Record<(typeof SUBJECTS)[number], string> = {
+  scholarship: "学问", martial: "骑射", virtue: "品行",
+};
+
+/** 上书房问功课：仅开蒙皇嗣。轮换一科 +（确定性）并增宠爱。未开蒙返回 null。 */
+export function buildHeirLesson(_db: ContentDB, state: GameState, heirId: string): HeirInteractionPlan | null {
+  const heir = state.resources.bloodline.heirs.find((h) => h.id === heirId);
+  if (!heir || !isEnrolled(heir, state.calendar)) return null;
+  const roll = gestationRoll(`lesson:${state.rngSeed}:${heirId}:${heir.favor}`);
+  const subject = SUBJECTS[roll % SUBJECTS.length]!;
+  const name = heirDisplayName(state, heir);
+  return {
+    effects: [{ type: "heir_educate", heirId, subject, attrDelta: 6, favorDelta: 4 }],
+    lines: [
+      `陛下移驾上书房，考较${name}的${SUBJECT_LABEL[subject]}。`,
+      `${name}凝神应答，引经据典，颇见用功。陛下颔首嘉许，${name}受宠若惊，愈发勤勉。`,
+    ],
+    portraitSet: heirPortraitSet(heir, state.calendar),
+    speakerName: name,
+  };
+}
+
+/** 问先生该皇嗣读书情况：纯汇报，按三项属性高低分支，不改属性。未开蒙返回 null。 */
+export function buildTutorReport(_db: ContentDB, state: GameState, heirId: string): string[] | null {
+  const heir = state.resources.bloodline.heirs.find((h) => h.id === heirId);
+  if (!heir || !isEnrolled(heir, state.calendar)) return null;
+  const name = heirDisplayName(state, heir);
+  const e = heir.education;
+  const best = SUBJECTS.reduce((a, b) => (e[b] > e[a] ? b : a));
+  const total = e.scholarship + e.martial + e.virtue;
+  const overall = total >= 180 ? "出类拔萃" : total >= 90 ? "稳步精进" : "尚需勤勉";
+  return [
+    `先生向陛下回禀${name}的功课：${overall}。`,
+    `其中${SUBJECT_LABEL[best]}最为见长（学问${e.scholarship}·骑射${e.martial}·品行${e.virtue}），望陛下时加策励。`,
+  ];
 }

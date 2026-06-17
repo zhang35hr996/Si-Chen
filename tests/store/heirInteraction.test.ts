@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
-import { buildHeirSummon } from "../../src/store/heirInteraction";
+import { buildHeirSummon, buildHeirLesson, buildTutorReport } from "../../src/store/heirInteraction";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import type { GameState, Heir } from "../../src/engine/state/types";
@@ -39,5 +39,29 @@ describe("buildHeirSummon", () => {
   it("returns null for unknown heir", () => {
     const { state } = stateAt(1);
     expect(buildHeirSummon(db, state, "nope")).toBeNull();
+  });
+});
+
+describe("buildHeirLesson", () => {
+  it("targets a subject, returns heir_educate effect + child portrait + lines", () => {
+    const { state, heir } = stateAt(6); // schooling
+    const plan = buildHeirLesson(db, state, heir.id)!;
+    const eff = plan.effects[0]!;
+    expect(eff.type).toBe("heir_educate");
+    expect(plan.portraitSet).toBe("child_school");
+    expect(plan.lines.length).toBeGreaterThan(0);
+  });
+
+  it("returns null for a non-enrolled heir", () => {
+    const { state, heir } = stateAt(2); // 1 岁
+    expect(buildHeirLesson(db, state, heir.id)).toBeNull();
+  });
+});
+
+describe("buildTutorReport", () => {
+  it("returns 先生 report lines for an enrolled heir (no attr change)", () => {
+    const { state, heir } = stateAt(6);
+    const lines = buildTutorReport(db, state, heir.id)!;
+    expect(lines.length).toBeGreaterThan(0);
   });
 });
