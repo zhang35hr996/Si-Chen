@@ -102,13 +102,8 @@ export function LocationScreen({
           <h2>行动</h2>
           <div className="yushufang-actions">
             {onReviewMemorials && (
-              <button
-                type="button"
-                disabled={state.calendar.ap < 2}
-                title={state.calendar.ap < 2 ? "行动点不足" : "批阅奏折（耗 2 行动点）"}
-                onClick={onReviewMemorials}
-              >
-                批阅奏折（2 行动点）{state.calendar.ap < 2 ? "（行动点不足）" : ""}
+              <button type="button" disabled={state.calendar.ap < 2} onClick={onReviewMemorials}>
+                批阅奏折
               </button>
             )}
             {onRestAlone && (
@@ -129,10 +124,9 @@ export function LocationScreen({
                 type="button"
                 className="location-screen__flip"
                 disabled={!canBedchamber}
-                title={canBedchamber ? "翻牌子" : "行动点不足"}
                 onClick={onFlipTablet}
               >
-                翻牌子{canBedchamber ? "" : "（行动点不足）"}
+                翻牌子
               </button>
             )}
           </h2>
@@ -224,11 +218,9 @@ export function LocationScreen({
                   key={event.id}
                   type="button"
                   disabled={!affordable}
-                  title={affordable ? event.title : "行动点不足"}
                   onClick={() => onStartEvent(event.id)}
                 >
                   {event.title}
-                  {affordable ? "" : "（行动点不足）"}
                 </button>
               ))}
             </div>

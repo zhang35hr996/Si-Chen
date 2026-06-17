@@ -61,11 +61,9 @@ export function FreeViewScreen({
             type="button"
             className="location-screen__event"
             disabled={!affordable}
-            title={affordable ? action.title : "行动点不足"}
             onClick={() => onStartEvent(action.id)}
           >
             {action.title}
-            {affordable ? "" : "（行动点不足）"}
           </button>
         ) : (
           <p className="location-screen__empty">此处无人，亦无可为之事。</p>

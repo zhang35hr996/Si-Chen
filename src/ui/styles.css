@@ -494,8 +494,12 @@ body {
 /* ── event screen — galgame layout (full-bleed bg · bottom portrait · box) ── */
 
 .dialogue-screen {
-  position: relative;
-  min-height: 100vh;
+  /* Fixed full-screen overlay: covers the whole viewport on top of any
+     underlying view (ReactionScreen / BedchamberScene / BirthScreen render as
+     overlay siblings, so they must not stack below the page). */
+  position: fixed;
+  inset: 0;
+  z-index: 40;
   overflow: hidden;
   background-color: #14100e;
   background-size: cover;

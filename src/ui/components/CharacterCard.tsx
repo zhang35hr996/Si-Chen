@@ -97,7 +97,7 @@ export function CharacterCard({
       )}
       {isConsort && onConverse && (
         <button type="button" className="char-card__converse" onClick={onConverse}>
-          对话（1 行动点）
+          对话
         </button>
       )}
       {isConsort && onBedchamber && (
