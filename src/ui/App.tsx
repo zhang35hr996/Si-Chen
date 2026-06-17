@@ -19,6 +19,9 @@ import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
 import { HeirListModal } from "./components/HeirListModal";
+import { HeirNameModal } from "./components/HeirNameModal";
+import { centennialDue } from "../engine/characters/heirs";
+import { randomPetName } from "../engine/characters/heirNames";
 import { PhysicianModal } from "./components/PhysicianModal";
 import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
@@ -70,6 +73,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [successorDismissedMonth, setSuccessorDismissedMonth] = useState<number | null>(null);
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
+  const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
@@ -222,6 +226,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const canSummonZongzheng = selfCarrying && gestMonth >= 4 && gestMonth <= 9;
   const consortCarrying = liveState.resources.bloodline.gestations.some((g) => g.carrier !== "sovereign");
 
+  const centennialHeir =
+    liveState.resources.bloodline.heirs.find((h) => centennialDue(h, liveState.calendar)) ?? null;
+
   // 逐条生产：取当前到产的第一条胎息，生产提交后重渲染再取下一条。
   const dueGest = dueGestation(db, liveState);
   const activeBirthPlan = dueGest ? buildBirth(db, liveState, dueGest) : null;
@@ -239,6 +246,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     doAutosave();
+    const heirsNow = store.getState().resources.bloodline.heirs;
+    const newborn = heirsNow[heirsNow.length - 1];
+    if (newborn && plan.bearerOutcome !== "child_dies" && plan.bearerOutcome !== "both") {
+      setNamePetHeirId(newborn.id);
+    }
     if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && plan.bearer !== "feng_hou") {
       setReaction({
         speakerId: "feng_hou",
@@ -563,6 +575,34 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {heirListOpen && (
         <HeirListModal db={db} state={liveState} onAdjust={adjustHeirFavor} onClose={() => setHeirListOpen(false)} />
+      )}
+      {namePetHeirId && (
+        <HeirNameModal
+          title="为新生皇嗣起个小名"
+          hint="乳名一双字，亲昵相唤。"
+          confirmLabel="起名"
+          onRandom={() => randomPetName(store.getState().rngSeed, namePetHeirId)}
+          onConfirm={(name) => {
+            const id = namePetHeirId;
+            setNamePetHeirId(null);
+            const r = store.applyEffects(db, [{ type: "heir_name", heirId: id, field: "pet", name }]);
+            if (r.ok) doAutosave();
+          }}
+        />
+      )}
+      {!namePetHeirId && centennialHeir && (
+        <HeirNameModal
+          title="百日宴 · 为皇嗣赐名"
+          hint="皇嗣已满百日，请陛下赐下正名。"
+          confirmLabel="赐名"
+          onConfirm={(name) => {
+            const r = store.applyEffects(db, [{ type: "heir_name", heirId: centennialHeir.id, field: "given", name }]);
+            if (r.ok) {
+              doAutosave();
+              setReaction({ speakerId: "sili_nvguan", lines: [`司礼官高唱：皇嗣赐名「${name}」，宗祠登册，举宫同贺。`] });
+            }
+          }}
+        />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
     </>
