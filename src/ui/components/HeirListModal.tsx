@@ -9,11 +9,15 @@ export function HeirListModal({
   db,
   state,
   onAdjust,
+  onSummon,
+  canSummon,
   onClose,
 }: {
   db: ContentDB;
   state: GameState;
   onAdjust: (heirId: string, delta: number) => void;
+  onSummon?: (heirId: string) => void;
+  canSummon: boolean;
   onClose: () => void;
 }) {
   const heirs = state.resources.bloodline.heirs;
@@ -60,6 +64,11 @@ export function HeirListModal({
                   <span className="heir-list__edu">
                     学问{heir.education.scholarship}·骑射{heir.education.martial}·品行{heir.education.virtue}
                   </span>
+                )}
+                {onSummon && (
+                  <button type="button" disabled={!canSummon} onClick={() => onSummon(heir.id)}>
+                    召见
+                  </button>
                 )}
                 <span className="heir-list__favor">
                   宠爱 {heir.favor}

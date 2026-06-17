@@ -13,6 +13,8 @@ import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import { monthOrdinal } from "../engine/calendar/time";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
+import { buildHeirSummon, type HeirInteractionPlan } from "../store/heirInteraction";
+import { ChildReactionScreen } from "./screens/ChildReactionScreen";
 import { buildBirth, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
@@ -73,6 +75,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [successorDismissedMonth, setSuccessorDismissedMonth] = useState<number | null>(null);
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
+  const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
@@ -311,6 +314,20 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!spend.ok) return;
     doAutosave();
     runCheckpoints(true);
+  };
+
+  // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。
+  const summonHeir = (heirId: string) => {
+    const plan = buildHeirSummon(db, store.getState(), heirId);
+    if (!plan) return;
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return; // 行动点不足
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) return;
+    doAutosave();
+    if (spend.value.rolledOver) setReactionRollover(true);
+    setHeirListOpen(false);
+    setChildReaction(plan);
   };
 
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
@@ -574,7 +591,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         />
       )}
       {heirListOpen && (
-        <HeirListModal db={db} state={liveState} onAdjust={adjustHeirFavor} onClose={() => setHeirListOpen(false)} />
+        <HeirListModal
+          db={db}
+          state={liveState}
+          onAdjust={adjustHeirFavor}
+          onSummon={summonHeir}
+          canSummon={liveState.calendar.ap >= 1}
+          onClose={() => setHeirListOpen(false)}
+        />
       )}
       {namePetHeirId && (
         <HeirNameModal
@@ -600,6 +624,23 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             if (r.ok) {
               doAutosave();
               setReaction({ speakerId: "sili_nvguan", lines: [`司礼官高唱：皇嗣赐名「${name}」，宗祠登册，举宫同贺。`] });
+            }
+          }}
+        />
+      )}
+      {childReaction && (
+        <ChildReactionScreen
+          db={db}
+          store={store}
+          registry={registry}
+          portraitSet={childReaction.portraitSet}
+          speakerName={childReaction.speakerName}
+          lines={childReaction.lines}
+          onDone={() => {
+            setChildReaction(null);
+            if (reactionRollover) {
+              setReactionRollover(false);
+              runCheckpoints(true);
             }
           }}
         />
