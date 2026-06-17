@@ -178,6 +178,12 @@ export const eventEffectSchema = z.union([
     recoverUntilMonth: z.number().int().min(1).optional(),
   }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
+  z.strictObject({
+    type: z.literal("heir_name"),
+    heirId: nonEmpty,
+    field: z.enum(["pet", "given"]),
+    name: z.string().min(1).max(2),
+  }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
 ]);
 

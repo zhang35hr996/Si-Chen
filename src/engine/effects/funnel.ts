@@ -179,6 +179,12 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_name": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
       case "child_favor": {
         if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
           bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
@@ -393,6 +399,12 @@ export function applyEffects(
         if (effect.bearer === "sovereign") {
           bl.pregnancy = { status: "none", candidateIds: [] };
         }
+        break;
+      }
+      case "heir_name": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        if (effect.field === "pet") heir.petName = effect.name;
+        else heir.givenName = effect.name;
         break;
       }
       case "child_favor": {
