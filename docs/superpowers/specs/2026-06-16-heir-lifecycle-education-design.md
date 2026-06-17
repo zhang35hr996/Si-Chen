@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-16
 **Branch:** feat/heir-lifecycle-system
-**Status:** Approved design, pre-implementation
+**Status:** Implemented (2026-06-17)
 
 ## 1. 背景与目标
 
