@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { makeGameTime } from "../../src/engine/calendar/time";
-import { heirName, heirAge, nextHeirId, listHeirsBySex } from "../../src/engine/characters/heirs";
+import {
+  heirName, heirAge, nextHeirId, listHeirsBySex,
+  heirAgeMonths, heirStage, centennialDue, isEnrolled, heirPortraitSet,
+} from "../../src/engine/characters/heirs";
 import type { Heir } from "../../src/engine/state/types";
 
 const heir = (over: Partial<Heir>): Heir => ({
@@ -51,5 +54,48 @@ describe("nextHeirId", () => {
   it("pads to 6 digits from current count", () => {
     expect(nextHeirId(0)).toBe("heir_000001");
     expect(nextHeirId(11)).toBe("heir_000012");
+  });
+});
+
+describe("heirAgeMonths", () => {
+  it("counts whole months by monthOrdinal difference", () => {
+    const h = heir({ birthAt: makeGameTime(1, 1, "early") });
+    expect(heirAgeMonths(h, makeGameTime(1, 1, "late"))).toBe(0);
+    expect(heirAgeMonths(h, makeGameTime(1, 4, "early"))).toBe(3);
+    expect(heirAgeMonths(h, makeGameTime(2, 1, "early"))).toBe(12);
+  });
+});
+
+describe("heirStage", () => {
+  it("infant <3y, toddler 3–4y, schooling ≥5y", () => {
+    const born = makeGameTime(1, 1, "early");
+    expect(heirStage(heir({ birthAt: born }), makeGameTime(3, 1, "early"))).toBe("infant"); // 2 岁
+    expect(heirStage(heir({ birthAt: born }), makeGameTime(4, 1, "early"))).toBe("toddler"); // 3 岁
+    expect(heirStage(heir({ birthAt: born }), makeGameTime(6, 1, "early"))).toBe("schooling"); // 5 岁
+  });
+});
+
+describe("centennialDue", () => {
+  it("true once ≥3 months old and not yet formally named", () => {
+    const born = makeGameTime(1, 1, "early");
+    expect(centennialDue(heir({ birthAt: born }), makeGameTime(1, 2, "early"))).toBe(false); // 1 月
+    expect(centennialDue(heir({ birthAt: born }), makeGameTime(1, 4, "early"))).toBe(true); // 3 月
+    expect(centennialDue(heir({ birthAt: born, givenName: "长安" }), makeGameTime(1, 4, "early"))).toBe(false);
+  });
+});
+
+describe("isEnrolled", () => {
+  it("true at 5 周岁", () => {
+    const born = makeGameTime(1, 1, "early");
+    expect(isEnrolled(heir({ birthAt: born }), makeGameTime(5, 1, "early"))).toBe(false); // 4 岁
+    expect(isEnrolled(heir({ birthAt: born }), makeGameTime(6, 1, "early"))).toBe(true); // 5 岁
+  });
+});
+
+describe("heirPortraitSet", () => {
+  it("baby set under schooling, school set when enrolled", () => {
+    const born = makeGameTime(1, 1, "early");
+    expect(heirPortraitSet(heir({ birthAt: born }), makeGameTime(2, 1, "early"))).toBe("child_baby");
+    expect(heirPortraitSet(heir({ birthAt: born }), makeGameTime(6, 1, "early"))).toBe("child_school");
   });
 });
