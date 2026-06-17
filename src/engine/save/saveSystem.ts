@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 2;
+export const SAVE_FORMAT_VERSION = 3;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -44,6 +44,18 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     delete bloodline.gestation;
     bloodline.gestations = single !== undefined && single !== null ? [single] : [];
     return { ...env, formatVersion: 2, state, checksum: checksumOf(state) };
+  },
+  2: (old) => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    const bloodline = ((state.resources as Record<string, unknown> | undefined)?.bloodline ??
+      {}) as Record<string, unknown>;
+    const heirs = (bloodline.heirs as Record<string, unknown>[] | undefined) ?? [];
+    for (const h of heirs) {
+      if (h.petName === undefined) h.petName = "";
+      if (h.education === undefined) h.education = { scholarship: 5, martial: 5, virtue: 5 };
+    }
+    return { ...env, formatVersion: 3, state, checksum: checksumOf(state) };
   },
 };
 
