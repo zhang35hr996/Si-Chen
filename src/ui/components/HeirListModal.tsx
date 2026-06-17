@@ -1,6 +1,6 @@
 /** 御书房·子嗣列表：皇子/皇郎两表，显示承嗣者/年龄/生日/宠爱度 + ± 调整 + 嫡标记。 */
 import { formatGameTime } from "../../engine/calendar/time";
-import { listHeirsBySex, heirAge } from "../../engine/characters/heirs";
+import { listHeirsBySex, heirAge, isEnrolled } from "../../engine/characters/heirs";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState, Heir } from "../../engine/state/types";
@@ -17,6 +17,13 @@ export function HeirListModal({
   onClose: () => void;
 }) {
   const heirs = state.resources.bloodline.heirs;
+
+  const nameOf = (charId: string): string => {
+    const c = db.characters[charId];
+    if (!c) return charId;
+    const st = state.standing[charId];
+    return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
+  };
 
   const bearerLabel = (h: Heir): string => {
     if (h.fatherId === null) return "自孕";
@@ -40,12 +47,20 @@ export function HeirListModal({
               <li key={heir.id} className="heir-list__row">
                 <span className="heir-list__name">
                   {name}
-                  {heir.legitimate ? "（嫡）" : ""}
+                  {heir.legitimate ? "（嫡）" : ""}：
+                  {heir.givenName ?? "—"}
+                  {heir.petName ? `（${heir.petName}）` : ""}
                 </span>
                 <span>承嗣：{bearerLabel(heir)}</span>
+                {heir.adoptiveFatherId && <span>养父：{nameOf(heir.adoptiveFatherId)}</span>}
                 <span>
                   {heirAge(heir, state.calendar)}岁 · {formatGameTime(heir.birthAt)}
                 </span>
+                {isEnrolled(heir, state.calendar) && (
+                  <span className="heir-list__edu">
+                    学问{heir.education.scholarship}·骑射{heir.education.martial}·品行{heir.education.virtue}
+                  </span>
+                )}
                 <span className="heir-list__favor">
                   宠爱 {heir.favor}
                   <button type="button" onClick={() => onAdjust(heir.id, 5)}>＋</button>
