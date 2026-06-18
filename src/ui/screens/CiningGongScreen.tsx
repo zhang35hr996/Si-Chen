@@ -42,7 +42,7 @@ export function CiningGongScreen({
             <span className="char-card__kind">尊长</span>
           </header>
           <p className="char-card__role">{taihou.profile.role}</p>
-          {ill && <p className="char-card__lifecycle" data-lifecycle="deceased">凤体违和</p>}
+          {ill && <p className="char-card__lifecycle" data-lifecycle="ill">凤体违和</p>}
           <button type="button" className="char-card__converse" disabled={!canAct} onClick={onConverse}>与太后叙话（1行动点）</button>
         </article>
       </section>

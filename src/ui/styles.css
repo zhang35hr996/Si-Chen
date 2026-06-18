@@ -733,6 +733,7 @@ button:active:enabled {
   letter-spacing: 0.05em;
 }
 .char-card__lifecycle[data-lifecycle="deceased"] { color: #8a7470; }
+.char-card__lifecycle[data-lifecycle="ill"] { color: #a86b5c; }
 .char-card__lifecycle[data-lifecycle="adult"] { color: var(--gold-soft); }
 .char-card__lifecycle[data-lifecycle="child"],
 .char-card__lifecycle[data-lifecycle="infant"] { color: var(--cinnabar-soft); }
