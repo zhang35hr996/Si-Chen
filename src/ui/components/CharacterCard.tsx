@@ -60,7 +60,7 @@ export function CharacterCard({
       />
       <header className="char-card__header">
         <strong className="char-card__name">{displayName}</strong>
-        <span className="char-card__kind">{isConsort ? "侍君" : "官员"}</span>
+        <span className="char-card__kind">{character.kind === "consort" ? "侍君" : character.kind === "elder" ? "尊长" : "官员"}</span>
       </header>
       {rank && (
         <p className="char-card__rank">

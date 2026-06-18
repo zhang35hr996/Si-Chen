@@ -243,8 +243,9 @@ function checkCharacterRefs(
       } else {
         // kind ⇄ domain match (plan §15.3): an official never holds a harem rank.
         // elders have no initialStanding and are excluded by the outer guard.
-        const expected = character.kind === "consort" ? "harem" : "official";
-        if (rank.domain !== expected) {
+        // A stray elder-with-standing is not domain-checked (expected === null).
+        const expected = character.kind === "consort" ? "harem" : character.kind === "official" ? "official" : null;
+        if (rank && expected !== null && rank.domain !== expected) {
           errors.push(
             contentError(
               "BAD_RANK",

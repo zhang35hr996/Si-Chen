@@ -33,6 +33,7 @@ describe("createNewGameState", () => {
     expect(state.relationships["shen_chenghui"]).toEqual({ trust: 25, affinity: 45, flags: [] });
     expect(state.standing["feng_hou"]).toEqual({ rank: "fenghou", favor: 25 });
     expect(state.standing["sili_nvguan"]).toEqual({ rank: "sili_zhang", favor: 40 });
+    expect(state.standing["taihou"]).toBeUndefined();
   });
 
   it("seeds authored initial memories: monotonic ids, authored source, protected", () => {
