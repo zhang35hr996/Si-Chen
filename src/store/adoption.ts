@@ -49,10 +49,11 @@ export function buildAdoptionReaction(
   const fatherChar = db.characters[fatherId];
   if (fatherChar?.kind === "elder") {
     const child = SEX_CHILD[heir.sex];
+    const pronoun = heir.sex === "daughter" ? "她" : "他";
     return [
       {
         speakerId: fatherId,
-        lines: [`太后闻陛下择其抚育皇嗣，含笑颔首：好，这${child}就交给哀家，定当悉心教养，看着他长大成人。`],
+        lines: [`太后闻陛下择其抚育皇嗣，含笑颔首：好，这${child}就交给哀家，定当悉心教养，看着${pronoun}长大成人。`],
       },
     ];
   }
