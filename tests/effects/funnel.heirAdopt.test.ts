@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { makeGameTime } from "../../src/engine/calendar/time";
 import type { GameState } from "../../src/engine/state/types";
 
 const content = loadGameContent();
@@ -39,5 +40,18 @@ describe("funnel: heir_adopt", () => {
   it("rejects unknown heir / non-consort", () => {
     expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "x", fatherId: "shen_chenghui" }])).toHaveLength(1);
     expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "sili_nvguan" }])).toHaveLength(1);
+  });
+
+  it("accepts elder 太后 as adoptive father, rejects official", () => {
+    const s = createNewGameState(db);
+    s.resources.bloodline.heirs.push({
+      id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
+      birthAt: makeGameTime(1, 1, "early"), favor: 50, legitimate: false, petName: "",
+      education: { scholarship: 5, martial: 5, virtue: 5 },
+    });
+    const okR = applyEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "taihou" }]);
+    expect(okR.ok).toBe(true);
+    const badR = applyEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "sili_nvguan" }]);
+    expect(badR.ok).toBe(false);
   });
 });
