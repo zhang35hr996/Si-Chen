@@ -323,6 +323,7 @@ export const locationSchema = z
     connections: z.array(idSchema).min(1).optional(),
     travelCost: z.strictObject({ ap: z.number().int().min(1) }).optional(),
     actionEventId: idSchema.optional(),
+    actionFirstSlotOnly: z.boolean().optional(),
   })
   .refine((loc) => loc.entry === "free" || (loc.connections !== undefined && loc.travelCost !== undefined), {
     message: 'travel locations require "connections" and "travelCost"',

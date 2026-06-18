@@ -7,5 +7,6 @@
   "position": { "x": 0.5, "y": 0.16 },
   "zone": "palace",
   "entry": "free",
-  "actionEventId": "ev_chaohui"
+  "actionEventId": "ev_chaohui",
+  "actionFirstSlotOnly": true
 }
