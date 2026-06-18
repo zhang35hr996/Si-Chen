@@ -6,6 +6,7 @@
  */
 import { toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
+import { resolveDisplayName } from "../characters/standing";
 import { aiError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
@@ -126,7 +127,11 @@ export async function produceDialogueLine(
 
   return ok({
     speakerId: request.speakerId,
-    speakerName: character.profile.name,
+    speakerName: resolveDisplayName(
+      character,
+      request.speakerContext.standing,
+      db.ranks[request.speakerContext.standing.rank],
+    ),
     text: response.text,
     expression,
     choices: response.choices.map((choice) => ({

@@ -25,6 +25,63 @@ export interface HaremState {
 
 export type MenstrualStatus = "normal" | "irregular" | "absent";
 
+export type PregnancyStatus = "none" | "pending" | "carrying";
+
+export interface PregnancyState {
+  /** none=未孕/已传嗣后(健康); pending=已受孕未告知; carrying=帝王自孕中 */
+  status: PregnancyStatus;
+  conceivedAt?: GameTime;
+  /** 候选承嗣 charIds（孕二月敬事房打标签；可为空） */
+  candidateIds: string[];
+}
+
+/** 当前唯一在孕的胎息（单线孕育）。 */
+export interface GestationState {
+  /** "sovereign"=帝王自孕；否则承载侍君 charId */
+  carrier: "sovereign" | string;
+  conceivedAt: GameTime;
+  /** 承嗣君 charId；自孕则不设 */
+  fatherId?: string;
+  /** 传嗣时的孕月（驱动难产几率）；自孕则不设 */
+  transferredAtMonth?: number;
+}
+
+export type HeirSex = "daughter" | "son";
+
+/** 皇嗣养成属性（上书房问功课提升）。 */
+export interface HeirEducation {
+  /** 学问 0–100 */
+  scholarship: number;
+  /** 骑射 0–100 */
+  martial: number;
+  /** 品行 0–100 */
+  virtue: number;
+}
+
+/** 落地子嗣。 */
+export interface Heir {
+  /** "heir_000001" 单调 */
+  id: string;
+  sex: HeirSex; // daughter→皇子(女) / son→皇郎(男)
+  /** 承嗣君 charId；null=自孕 */
+  fatherId: string | null;
+  /** 谁承载生产；"sovereign"=自孕 */
+  bearer: "sovereign" | string;
+  birthAt: GameTime;
+  /** 宠爱度 0–100 */
+  favor: number;
+  /** 嫡 */
+  legitimate: boolean;
+  /** 小名（≤2 字），出生时设；未起为 ""。 */
+  petName: string;
+  /** 正名/姓名（≤2 字），百日宴设；未命名为 undefined。 */
+  givenName?: string;
+  /** 养成属性。 */
+  education: HeirEducation;
+  /** 养父 charId；未指定为 undefined。 */
+  adoptiveFatherId?: string;
+}
+
 export interface BloodlineState {
   /** 宗嗣合法性 */
   legitimacy: number;
@@ -32,8 +89,16 @@ export interface BloodlineState {
   menstrualStatus: MenstrualStatus;
   /** 经血祭仪 scaffold */
   lastRiteAt?: GameTime;
-  /** Reserved (DESIGN §3.8) — always [] in the skeleton. */
-  heirs: unknown[];
+  /** 帝王孕育状态（帝王自身的身体：是否自孕） */
+  pregnancy: PregnancyState;
+  /**
+   * 当前在孕的所有胎息（多线孕育）：至多一个 carrier="sovereign"（帝王自孕），
+   * 其余为承嗣侍君各自承载的一胎。传嗣后帝王 pregnancy 归 none，可再次自孕，
+   * 故同一时刻帝王自孕与多名侍君承嗣可并存。
+   */
+  gestations: GestationState[];
+  /** 已落地子嗣。 */
+  heirs: Heir[];
 }
 
 export interface Resources {
@@ -51,11 +116,19 @@ export interface RelationshipState {
   flags: string[];
 }
 
+export type ConsortLifecycle = "normal" | "candidate" | "carrying" | "delivered" | "deceased";
+
 export interface CharacterStanding {
-  /** Rank id from world.json's 位分 table (PR 3). */
+  /** Rank id from world.json's 位分 table. */
   rank: string;
   /** 0–100 — 恩宠 (consort) / 圣眷 (official). */
   favor: number;
+  /** 封号 (optional). */
+  title?: string;
+  /** 承嗣生命周期标记（缺省视作 "normal"）。 */
+  lifecycle?: ConsortLifecycle;
+  /** 产后休养（虚弱）截止月序 monthOrdinal；未达则激情不可选。 */
+  recoverUntilMonth?: number;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
@@ -86,6 +159,19 @@ export interface CharacterMemoryStore {
   nextSeq: number;
 }
 
+export type BedchamberMode = "passion" | "pleasure" | "companionship";
+
+export interface BedchamberEncounter {
+  /** 侍寝发生时刻（纯 GameTime，不带 AP） */
+  at: GameTime;
+  mode: BedchamberMode;
+}
+
+export interface BedchamberRecord {
+  /** append-only */
+  encounters: BedchamberEncounter[];
+}
+
 // ── The single authoritative state ────────────────────────────────────
 export type FlagValue = boolean | number | string;
 
@@ -102,6 +188,8 @@ export interface GameState {
   relationships: Record<string, RelationshipState>;
   standing: Record<string, CharacterStanding>;
   memories: Record<string, CharacterMemoryStore>;
+  /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
+  bedchamber: Record<string, BedchamberRecord>;
   eventLog: EventLogEntry[];
   sceneHistory: string[];
   rngSeed: number;

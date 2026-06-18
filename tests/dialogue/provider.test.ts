@@ -26,7 +26,7 @@ describe("assembleDialogueRequest carries the full future-AI context", () => {
     expect(request.speakerContext.relevantMemories).toEqual([]); // field rides along, v0 empty
     expect(request.speakerContext.stances?.[0]?.charId).toBe("shen_chenghui");
     expect(request.etiquette.forbiddenTerms).toContain("父皇");
-    expect(request.etiquette.addressRules).toHaveLength(3);
+    expect(request.etiquette.addressRules).toHaveLength(21);
     expect(request.time).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
     expect("ap" in request.time).toBe(false); // a speaker doesn't know the player's AP
     expect(assembleDialogueRequest(db, state, "char_ghost", "yushufang").ok).toBe(false);
@@ -39,7 +39,7 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.text).toBe("依典制行事。");
-    expect(result.value.speakerName).toBe("司礼女官");
+    expect(result.value.speakerName).toBe("卫司礼");
     expect(result.value.meta).toEqual({ generated: false, degraded: false });
   });
 
@@ -102,11 +102,12 @@ describe("produceDialogueLine text gates (PR 11)", () => {
   });
 
   it("rejects a speaker borrowing another rank's selfRef", async () => {
-    const result = await produceDialogueLine(db, speaking("本宫自有主张。"), requestFor("shen_chenghui"));
+    // 承徽 borrowing 凤后's 臣后 (本宫 is now a shared to-lower ref, no longer foreign).
+    const result = await produceDialogueLine(db, speaking("臣后自有主张。"), requestFor("shen_chenghui"));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("GATE_REJECTED");
-      expect(result.error.context?.findings).toContainEqual({ gate: "self_ref", matched: "本宫" });
+      expect(result.error.context?.findings).toContainEqual({ gate: "self_ref", matched: "臣后" });
     }
   });
 
@@ -137,5 +138,11 @@ describe("produceDialogueLine text gates (PR 11)", () => {
     const result = await produceDialogueLine(db, speaking("本宫累了，陛下早些歇息。"), requestFor("feng_hou"));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.meta).toEqual({ generated: true, degraded: false });
+  });
+
+  it("speakerName recomposes from surname + 位分", async () => {
+    const result = await produceDialogueLine(db, speaking("……侍身知罪。"), requestFor("shen_chenghui"));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.speakerName).toBe("沈承徽");
   });
 });

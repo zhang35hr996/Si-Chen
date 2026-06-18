@@ -36,6 +36,9 @@ export const relationshipStateSchema = z.strictObject({
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
+  title: nonEmpty.optional(),
+  lifecycle: z.enum(["normal", "candidate", "carrying", "delivered", "deceased"]).optional(),
+  recoverUntilMonth: z.number().int().min(1).optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
@@ -81,6 +84,7 @@ export type TriggerCondition =
   | { relationshipAtLeast: { char: string; field: "trust" | "affinity"; value: number } }
   | { favorAtLeast: { char: string; value: number } }
   | { rankAtLeast: { char: string; rank: string } }
+  | { hasMemoryTag: { char: string; tag: string } }
   | { eventFired: string };
 
 export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
@@ -101,6 +105,7 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
     }),
     z.strictObject({ favorAtLeast: z.strictObject({ char: idSchema, value: percent }) }),
     z.strictObject({ rankAtLeast: z.strictObject({ char: idSchema, rank: idSchema }) }),
+    z.strictObject({ hasMemoryTag: z.strictObject({ char: idSchema, tag: tagSchema }) }),
     z.strictObject({ eventFired: idSchema }),
   ]),
 );
@@ -142,18 +147,80 @@ export const eventEffectSchema = z.union([
     key: nonEmpty,
     value: z.union([z.boolean(), z.number(), z.string()]),
   }),
+  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema }),
+  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4) }),
+  z.strictObject({ type: z.literal("remove_title"), char: idSchema }),
+  z.strictObject({
+    type: z.literal("bedchamber"),
+    char: idSchema,
+    mode: z.enum(["passion", "pleasure", "companionship"]),
+  }),
+  z.strictObject({
+    type: z.literal("pregnancy"),
+    op: z.enum(["begin", "carry", "clear"]),
+  }),
+  z.strictObject({ type: z.literal("heir_designate"), charIds: z.array(idSchema).min(1).max(8) }),
+  z.strictObject({ type: z.literal("heir_candidate"), op: z.enum(["add", "remove"]), char: idSchema }),
+  z.strictObject({
+    type: z.literal("pregnancy_transfer"),
+    carrierId: idSchema,
+    atMonth: z.number().int().min(1),
+  }),
+  z.strictObject({ type: z.literal("pregnancy_abort") }),
+  z.strictObject({
+    type: z.literal("birth"),
+    sex: z.enum(["daughter", "son"]),
+    fatherId: z.union([idSchema, z.null()]),
+    bearer: z.union([z.literal("sovereign"), idSchema]),
+    legitimate: z.boolean(),
+    favor: percent,
+    bearerOutcome: z.enum(["safe", "child_dies", "bearer_dies", "both"]),
+    recoverUntilMonth: z.number().int().min(1).optional(),
+  }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
+  z.strictObject({
+    type: z.literal("heir_name"),
+    heirId: nonEmpty,
+    field: z.enum(["pet", "given"]),
+    name: z.string().min(1).max(2),
+  }),
+  z.strictObject({ type: z.literal("heir_summon"), heirId: nonEmpty }),
+  z.strictObject({
+    type: z.literal("heir_educate"),
+    heirId: nonEmpty,
+    subject: z.enum(["scholarship", "martial", "virtue"]),
+    attrDelta: z.number().int().min(0).max(20),
+    favorDelta: z.number().int().min(0).max(20),
+  }),
+  z.strictObject({ type: z.literal("heir_adopt"), heirId: nonEmpty, fatherId: idSchema }),
+  z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
 ]);
 
 export type EventEffect = z.infer<typeof eventEffectSchema>;
+
+// ── consort attributes (侍君明面属性 — background §四.4.1) ──────────────
+// Static, card-facing养成 attributes. 年龄 lives in profile.age and 性格 in
+// profile.personalityTraits; these five are the numeric stats the card shows.
+export const consortAttributesSchema = z.strictObject({
+  appearance: percent, // 容貌
+  talent: percent, // 才情
+  family: percent, // 家世
+  health: percent, // 健康
+  nurture: percent, // 承养资质
+});
+
+export type ConsortAttributes = z.infer<typeof consortAttributesSchema>;
 
 // ── characters ────────────────────────────────────────────────────────
 export const characterSchema = z
   .strictObject({
     id: idSchema,
     kind: z.enum(["consort", "official"]),
+    /** 侍君明面属性. Optional: officials carry no养成 stat block. */
+    attributes: consortAttributesSchema.optional(),
     profile: z.strictObject({
       name: nonEmpty,
+      surname: nonEmpty.optional(),
       age: z.number().int().min(14).max(99),
       role: nonEmpty,
       appearance: nonEmpty,
@@ -202,17 +269,70 @@ export const characterRankSchema = z.strictObject({
 
 export type CharacterRank = z.infer<typeof characterRankSchema>;
 
-// ── locations ─────────────────────────────────────────────────────────
-export const locationSchema = z.strictObject({
+// ── map boards & portals (world.json — data-driven 主图/子图 graph) ─────
+// A board is one navigable map screen (宫城图 / 后宫 / 京城 / 郊外). Portals are
+// the免行动点 buttons that switch from one board to another (出宫, 后宫, 郊外…).
+// A location's `zone` says which board hosts its node. Boards are optional in
+// world.json: when omitted, zone validation is skipped (minimal/test content).
+const normalizedPosition = z.strictObject({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+
+export const mapBoardSchema = z.strictObject({
   id: idSchema,
   name: nonEmpty,
-  description: nonEmpty,
-  backgroundKey: nonEmpty,
-  ambience: z.array(nonEmpty),
-  position: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
-  connections: z.array(idSchema).min(1),
-  travelCost: z.strictObject({ ap: z.number().int().min(1) }),
+  /** Board backdrop art. kind "map" supports time-of-day variants (宫城图);
+   *  kind "background" is a single full-scene image (京城/郊外/后宫). */
+  art: z.strictObject({
+    key: nonEmpty,
+    kind: z.enum(["map", "background"]).default("background"),
+  }),
 });
+
+export type MapBoard = z.infer<typeof mapBoardSchema>;
+
+export const mapPortalSchema = z.strictObject({
+  /** Board this portal button appears on. */
+  from: idSchema,
+  /** Board it switches to. */
+  to: idSchema,
+  /** Button label, e.g. 出宫 / 后宫 / 郊外. */
+  name: nonEmpty,
+  position: normalizedPosition,
+});
+
+export type MapPortal = z.infer<typeof mapPortalSchema>;
+
+// ── locations ─────────────────────────────────────────────────────────
+// zone   — which map board a node lives on (must be a world.json mapBoards id
+//          when boards are declared; defaults to "palace" 主图).
+// entry  — "travel" places cost AP and become playerLocation (full screen);
+//          "free" places open a read-only view (冷宫/朝会), no AP, no relocation.
+// actionEventId — a free-view may offer one AP-costing action (e.g. 上朝).
+export const locationSchema = z
+  .strictObject({
+    id: idSchema,
+    name: nonEmpty,
+    description: nonEmpty,
+    backgroundKey: nonEmpty,
+    ambience: z.array(nonEmpty),
+    position: normalizedPosition,
+    zone: idSchema.default("palace"),
+    entry: z.enum(["travel", "free"]).default("travel"),
+    connections: z.array(idSchema).min(1).optional(),
+    travelCost: z.strictObject({ ap: z.number().int().min(1) }).optional(),
+    actionEventId: idSchema.optional(),
+    actionFirstSlotOnly: z.boolean().optional(),
+  })
+  .refine((loc) => loc.entry === "free" || (loc.connections !== undefined && loc.travelCost !== undefined), {
+    message: 'travel locations require "connections" and "travelCost"',
+    path: ["travelCost"],
+  })
+  .refine((loc) => loc.entry === "free" || loc.actionEventId === undefined, {
+    message: '"actionEventId" is only for free-view locations',
+    path: ["actionEventId"],
+  });
 
 export type LocationContent = z.infer<typeof locationSchema>;
 
@@ -308,6 +428,19 @@ export const worldLexiconSchema = z.strictObject({
 
 export type WorldLexicon = z.infer<typeof worldLexiconSchema>;
 
+// ── rank change reactions (位分/封号 op templates — rank/title system) ──
+const rankReactionSchema = z.strictObject({
+  lines: z.array(nonEmpty).min(1).max(3),
+  memory: nonEmpty,
+});
+
+export const rankChangeReactionsSchema = z.strictObject({
+  promote: rankReactionSchema,
+  demote: rankReactionSchema,
+  grant_title: rankReactionSchema,
+  strip_title: rankReactionSchema,
+});
+
 // ── world.json ────────────────────────────────────────────────────────
 export const worldSchema = z.strictObject({
   contentVersion: nonEmpty,
@@ -333,6 +466,63 @@ export const worldSchema = z.strictObject({
     }),
   }),
   ranks: z.array(characterRankSchema).min(1),
+  /** Map boards (主图/子图). Optional: minimal content omits the map graph. */
+  mapBoards: z.array(mapBoardSchema).min(1).optional(),
+  /** Portal buttons linking boards (出宫/后宫/郊外). */
+  mapPortals: z.array(mapPortalSchema).optional(),
+  /** Templated consort reactions to 位分/封号 ops (rank/title system). */
+  rankChangeReactions: rankChangeReactionsSchema.optional(),
+  /** 侍寝/受孕调参（缺省走引擎内置 fallback）。 */
+  bedchamber: z
+    .strictObject({
+      conceptionChance: percent,
+      tiers: z.strictObject({
+        small: z.number().int().min(1),
+        favored: z.number().int().min(1),
+        abundant: z.number().int().min(1),
+      }),
+    })
+    .optional(),
+  /** 模板化侍寝体验台词（按 mode）。 */
+  bedchamberScript: z
+    .strictObject({
+      passion: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
+      pleasure: z.strictObject({ lines: z.array(nonEmpty).min(1).max(6) }),
+      // 陪伴按双方孕情分四种台词：lines=二人都无孕（缺省）；其余三种可选，
+      // 缺省回退到 lines / 引擎内置 fallback。
+      companionship: z.strictObject({
+        lines: z.array(nonEmpty).min(1).max(6),
+        sovereignPregnant: z.array(nonEmpty).min(1).max(6).optional(),
+        consortPregnant: z.array(nonEmpty).min(1).max(6).optional(),
+        bothPregnant: z.array(nonEmpty).min(1).max(6).optional(),
+      }),
+    })
+    .optional(),
+  /** 承嗣/生产/子嗣调参（缺省走引擎内置 fallback）。 */
+  gestation: z
+    .strictObject({
+      termMonths: z.number().int().min(1),
+      transferEarliestMonth: z.number().int().min(1),
+      earlyBirth: z.strictObject({ month8: percent, month9: percent }),
+      recovery: z.strictObject({ safeMonths: z.number().int().min(0), dystociaMonths: z.number().int().min(0) }),
+      dystocia: z.strictObject({
+        baseAtMonth3: percent,
+        perMonthAfter: z.number().int().min(0),
+        outcomeSplit: z.strictObject({ childDies: percent, bearerDies: percent, both: percent }),
+      }),
+      childFavor: z.strictObject({
+        selfPregnancy: percent,
+        fenghouBonus: percent,
+        tierValues: z.strictObject({
+          abundant: percent,
+          favored: percent,
+          small: percent,
+          fallen: percent,
+          none: percent,
+        }),
+      }),
+    })
+    .optional(),
 });
 
 export type WorldContent = z.infer<typeof worldSchema>;

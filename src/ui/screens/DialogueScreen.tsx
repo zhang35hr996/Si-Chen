@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
-import { formatAp, formatGameTime } from "../../engine/calendar/time";
+import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import { mockProvider } from "../../engine/dialogue/providers/mockProvider";
 import { formatErrorTag, type GameError } from "../../engine/infra/errors";
@@ -28,7 +28,7 @@ export function DialogueScreen({
   registry: AssetRegistry;
   eventId: string;
   logger?: RingBufferLogger;
-  onDone: (committed: boolean) => void;
+  onDone: (committed: boolean, rolledOver?: boolean) => void;
 }) {
   const state = useGameState(store);
   const runnerRef = useRef<SceneRunner | null>(null);
@@ -47,7 +47,7 @@ export function DialogueScreen({
     // terminal → commit the whole transaction (effects + apCost + fired)
     const commit = store.resolveEvent(db, result.value.eventId, result.value.effects);
     if (commit.ok) {
-      onDone(true);
+      onDone(true, commit.value.rolledOver);
     } else {
       setError(commit.error.map((e) => `${formatErrorTag(e)} — ${e.message}`).join("；"));
     }
@@ -87,7 +87,9 @@ export function DialogueScreen({
   const portrait = registry.portrait(speaker?.portraitSet ?? frame.line.speakerId, frame.line.expression);
   const scene = event ? db.scenes[event.sceneId] : undefined;
   const location = scene ? db.locations[scene.locationId] : undefined;
-  const background = location ? registry.background(location.backgroundKey) : null;
+  const background = location
+    ? registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background")
+    : null;
 
   return (
     <main
@@ -96,11 +98,9 @@ export function DialogueScreen({
     >
       <header className="hud dialogue-screen__hud">
         <span className="hud__time">
-          {formatGameTime(state.calendar)} · {formatAp(state.calendar)}
+          {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
-        <span className="dialogue-screen__cost">
-          {event?.title} · 耗费 {event?.apCost} 行动点
-        </span>
+        <span className="dialogue-screen__cost">{event?.title}</span>
         <button type="button" className="hud__button" onClick={quit} title="中途离开不消耗行动点，亦无任何后果">
           离开
         </button>

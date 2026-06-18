@@ -56,7 +56,38 @@ export const gameStateSchema = z.strictObject({
       legitimacy: percent,
       menstrualStatus: z.enum(["normal", "irregular", "absent"]),
       lastRiteAt: gameTimeSchema.optional(),
-      heirs: z.array(z.unknown()),
+      pregnancy: z.strictObject({
+        status: z.enum(["none", "pending", "carrying"]),
+        conceivedAt: gameTimeSchema.optional(),
+        candidateIds: z.array(idSchema),
+      }),
+      gestations: z.array(
+        z.strictObject({
+          carrier: z.union([z.literal("sovereign"), idSchema]),
+          conceivedAt: gameTimeSchema,
+          fatherId: idSchema.optional(),
+          transferredAtMonth: z.number().int().min(1).optional(),
+        }),
+      ),
+      heirs: z.array(
+        z.strictObject({
+          id: idSchema,
+          sex: z.enum(["daughter", "son"]),
+          fatherId: z.union([idSchema, z.null()]),
+          bearer: z.union([z.literal("sovereign"), idSchema]),
+          birthAt: gameTimeSchema,
+          favor: percent,
+          legitimate: z.boolean(),
+          petName: z.string().max(2),
+          givenName: z.string().max(2).optional(),
+          education: z.strictObject({
+            scholarship: percent,
+            martial: percent,
+            virtue: percent,
+          }),
+          adoptiveFatherId: idSchema.optional(),
+        }),
+      ),
     }),
   }),
   flags: z.record(z.string(), flagValueSchema),
@@ -65,6 +96,14 @@ export const gameStateSchema = z.strictObject({
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),
+  ),
+  bedchamber: z.record(
+    idSchema,
+    z.strictObject({
+      encounters: z.array(
+        z.strictObject({ at: gameTimeSchema, mode: z.enum(["passion", "pleasure", "companionship"]) }),
+      ),
+    }),
   ),
   eventLog: z.array(z.strictObject({ eventId: idSchema, firedAt: gameTimeSchema })),
   sceneHistory: z.array(idSchema),

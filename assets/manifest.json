@@ -1,11 +1,27 @@
 {
   "version": 1,
   "entries": {
-    "portrait.consort.neutral": { "path": "portraits/consort/neutral.png", "kind": "portrait", "placeholder": false },
+    "portrait.huanghou.neutral": { "path": "portraits/consort/huanghou.png", "kind": "portrait", "placeholder": false },
+    "portrait.shenchenghui.neutral": { "path": "portraits/consort/shenchenghui.png", "kind": "portrait", "placeholder": false },
+    "portrait.chujun.neutral": { "path": "portraits/consort/chujun.png", "kind": "portrait", "placeholder": false },
+    "portrait.wenya_shijun.neutral": { "path": "portraits/consort/wenya_shijun.svg", "kind": "portrait", "placeholder": true },
     "portrait.official.neutral": { "path": "portraits/official/neutral.png", "kind": "portrait", "placeholder": false },
+    "portrait.child_baby.neutral": { "path": "portraits/child/baby.png", "kind": "portrait", "placeholder": false },
+    "portrait.child_school.neutral": { "path": "portraits/child/child.png", "kind": "portrait", "placeholder": false },
     "bg.yushufang": { "path": "backgrounds/yushufang.png", "kind": "background", "placeholder": false },
+    "bg.shangshufang": { "path": "backgrounds/shangshufang.png", "kind": "background", "placeholder": false },
+    "bg.fengxiandian": { "path": "backgrounds/fengxiandian.png", "kind": "background", "placeholder": false },
+    "bg.yuhuayuan": { "path": "backgrounds/yuhuayuan_morning.png", "kind": "background", "placeholder": false },
+    "bg.yuhuayuan.twilight": { "path": "backgrounds/yuhuayuan_twilight.png", "kind": "background", "placeholder": false },
+    "bg.yuhuayuan.night": { "path": "backgrounds/yuhuayuan_night.png", "kind": "background", "placeholder": false },
     "bg.hougong_zhudian": { "path": "backgrounds/hougong_zhudian.png", "kind": "background", "placeholder": false },
-    "bg.yuhuayuan": { "path": "backgrounds/yuhuayuan.png", "kind": "background", "placeholder": false },
-    "map.palace": { "path": "map/palace.png", "kind": "map", "placeholder": false }
+    "bg.hougong": { "path": "backgrounds/hougong.png", "kind": "background", "placeholder": false },
+    "bg.chaotang": { "path": "backgrounds/chaotang.png", "kind": "background", "placeholder": false },
+    "bg.lenggong": { "path": "backgrounds/lenggong.png", "kind": "background", "placeholder": false },
+    "bg.jingcheng": { "path": "backgrounds/jingcheng.png", "kind": "background", "placeholder": false },
+    "bg.jingjiao": { "path": "backgrounds/jingjiao.png", "kind": "background", "placeholder": false },
+    "map.palace": { "path": "map/palace_morning.png", "kind": "map", "placeholder": false },
+    "map.palace.twilight": { "path": "map/palace_twilight.png", "kind": "map", "placeholder": false },
+    "map.palace.night": { "path": "map/palace_evening.png", "kind": "map", "placeholder": false }
   }
 }

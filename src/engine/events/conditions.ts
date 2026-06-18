@@ -22,6 +22,11 @@ export function hasEventFired(state: GameState, eventId: string): boolean {
   return state.eventLog.some((entry) => entry.eventId === eventId);
 }
 
+/** True when `char` holds at least one memory entry carrying `tag`. */
+export function hasMemoryTag(state: GameState, char: string, tag: string): boolean {
+  return state.memories[char]?.entries.some((entry) => entry.tags.includes(tag)) ?? false;
+}
+
 export function evaluateCondition(condition: TriggerCondition, ctx: ConditionContext): boolean {
   const { db, state } = ctx;
   if ("all" in condition) return condition.all.every((c) => evaluateCondition(c, ctx));
@@ -44,6 +49,10 @@ export function evaluateCondition(condition: TriggerCondition, ctx: ConditionCon
     const held = state.standing[char] ? db.ranks[state.standing[char].rank] : undefined;
     const target = db.ranks[rank];
     return held !== undefined && target !== undefined && held.order >= target.order;
+  }
+  if ("hasMemoryTag" in condition) {
+    const { char, tag } = condition.hasMemoryTag;
+    return hasMemoryTag(state, char, tag);
   }
   return hasEventFired(state, condition.eventFired);
 }

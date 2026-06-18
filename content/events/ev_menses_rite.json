@@ -1,6 +1,6 @@
 {
   "id": "ev_menses_rite",
-  "title": "司礼女官请示经血祭仪",
+  "title": "司礼请示经血祭仪",
   "sceneId": "sc_menses_rite",
   "checkpoint": "location_enter",
   "condition": {

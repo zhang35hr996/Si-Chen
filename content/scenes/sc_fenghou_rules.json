@@ -1,6 +1,6 @@
 {
   "id": "sc_fenghou_rules",
-  "locationId": "hougong_zhudian",
+  "locationId": "kunninggong",
   "participants": ["feng_hou"],
   "startNodeId": "n_open",
   "nodes": [
@@ -36,7 +36,7 @@
             "salience": 60,
             "tags": ["player", "rules", "authority"],
             "participants": ["player", "feng_hou"],
-            "locationId": "hougong_zhudian"
+            "locationId": "kunninggong"
           }
         }
       ],
@@ -63,7 +63,7 @@
             "salience": 55,
             "tags": ["player", "rules", "doubt"],
             "participants": ["player", "feng_hou"],
-            "locationId": "hougong_zhudian"
+            "locationId": "kunninggong"
           }
         }
       ],
@@ -91,7 +91,7 @@
             "salience": 70,
             "tags": ["player", "rules", "humiliation"],
             "participants": ["player", "feng_hou"],
-            "locationId": "hougong_zhudian"
+            "locationId": "kunninggong"
           }
         }
       ],

@@ -18,14 +18,27 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice: 3 characters, 3 locations, 3 events, 3 scenes, 3 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 5 characters, 8 locations, 6 events, 6 scenes, 21 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
-    expect(Object.keys(db.characters).sort()).toEqual(["feng_hou", "shen_chenghui", "sili_nvguan"]);
-    expect(Object.keys(db.locations).sort()).toEqual(["hougong_zhudian", "yushufang", "yuhuayuan"].sort());
-    expect(Object.keys(db.events).sort()).toEqual(["ev_fenghou_rules", "ev_menses_rite", "ev_shen_neglect"]);
-    expect(Object.keys(db.scenes)).toHaveLength(3);
-    expect(Object.keys(db.ranks)).toHaveLength(3);
+    expect(Object.keys(db.characters).sort()).toEqual(
+      ["chu_jun", "feng_hou", "shen_chenghui", "sili_nvguan", "wenya_shijun"].sort(),
+    );
+    expect(Object.keys(db.locations).sort()).toEqual(
+      ["chaotang", "fengxiandian", "kunninggong", "lenggong", "shangshufang", "xianfugong", "yushufang", "yuhuayuan"].sort(),
+    );
+    expect(Object.keys(db.events).sort()).toEqual(
+      [
+        "arc_lenggong__ev_aftermath",
+        "arc_lenggong__ev_visit",
+        "ev_chaohui",
+        "ev_fenghou_rules",
+        "ev_menses_rite",
+        "ev_shen_neglect",
+      ].sort(),
+    );
+    expect(Object.keys(db.scenes)).toHaveLength(6);
+    expect(Object.keys(db.ranks)).toHaveLength(21);
   });
 
   it("wires the slice correctly: domains, start location, heavy rite event", () => {

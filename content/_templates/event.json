@@ -1,0 +1,10 @@
+{
+  "id": "ev_example",
+  "title": "示例事件",
+  "sceneId": "sc_example",
+  "checkpoint": "location_enter",
+  "condition": { "all": [{ "atLocation": "yushufang" }, { "not": { "eventFired": "ev_example" } }] },
+  "priority": 1,
+  "once": true,
+  "apCost": 1
+}

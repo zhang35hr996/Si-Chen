@@ -1,6 +1,6 @@
 {
   "contentVersion": "0.1.0",
-  "calendar": { "apMax": 5, "start": { "year": 1, "month": 1, "period": "early" } },
+  "calendar": { "apMax": 6, "start": { "year": 1, "month": 1, "period": "early" } },
   "startingLocation": "yushufang",
   "startingResources": {
     "court": { "authority": 50, "publicSupport": 50, "factionPressure": 20 },
@@ -8,32 +8,96 @@
     "bloodline": { "legitimacy": 60, "menstrualStatus": "normal" }
   },
   "ranks": [
-    {
-      "id": "fenghou",
-      "name": "凤后",
-      "grade": "正宫",
-      "selfRefs": { "toPlayer": ["臣后"], "formal": ["本宫"] },
-      "order": 100,
-      "domain": "harem",
-      "favorTerm": "恩宠"
+    { "id": "fenghou", "name": "凤后", "grade": "正宫", "selfRefs": { "toPlayer": ["臣后"], "formal": ["本宫"] }, "order": 1000, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "huangguijun", "name": "皇贵君", "grade": "超品", "selfRefs": { "toPlayer": ["臣"], "formal": ["本宫"] }, "order": 180, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "guijun", "name": "贵君", "grade": "正一品", "selfRefs": { "toPlayer": ["臣", "臣侍"], "formal": ["本宫"] }, "order": 170, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "jun", "name": "君", "grade": "从一品", "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 160, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "guifu", "name": "贵驸", "grade": "正二品", "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 150, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "fu", "name": "驸", "grade": "从二品", "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 140, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "chenghui", "name": "承徽", "grade": "正三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 134, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "chengyi", "name": "承仪", "grade": "正三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 132, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "chengde", "name": "承德", "grade": "正三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 130, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "zhaohui", "name": "昭徽", "grade": "从三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 124, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "zhaoyi", "name": "昭仪", "grade": "从三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 122, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "zhaorong", "name": "昭容", "grade": "从三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 120, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "shichen", "name": "侍宸", "grade": "正四品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 110, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "guiren", "name": "贵人", "grade": "从四品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本侍", "我"] }, "order": 100, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "meiren", "name": "美人", "grade": "正五品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本侍", "我"] }, "order": 90, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "cairen", "name": "才人", "grade": "从五品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本侍", "我"] }, "order": 80, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "changzai", "name": "常在", "grade": "六品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 70, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "daying", "name": "答应", "grade": "七品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 60, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "gengyi", "name": "更衣", "grade": "八品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 50, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "guannanzi", "name": "官男子", "grade": "九品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 40, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "sili_zhang", "name": "司礼", "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" }
+  ],
+  "mapBoards": [
+    { "id": "palace", "name": "宫城图", "art": { "key": "map.palace", "kind": "map" } },
+    { "id": "hougong", "name": "后宫", "art": { "key": "bg.hougong", "kind": "background" } },
+    { "id": "jingcheng", "name": "京城", "art": { "key": "bg.jingcheng", "kind": "background" } },
+    { "id": "jingjiao", "name": "郊外", "art": { "key": "bg.jingjiao", "kind": "background" } }
+  ],
+  "mapPortals": [
+    { "from": "palace", "to": "hougong", "name": "后宫", "position": { "x": 0.62, "y": 0.4 } },
+    { "from": "palace", "to": "jingcheng", "name": "出宫", "position": { "x": 0.12, "y": 0.86 } },
+    { "from": "jingcheng", "to": "jingjiao", "name": "郊外", "position": { "x": 0.85, "y": 0.52 } }
+  ],
+  "rankChangeReactions": {
+    "promote":     { "lines": ["谢陛下隆恩！{self}定当尽心侍奉，不负圣眷。"], "memory": "陛下晋我为{rank}，圣眷正隆。" },
+    "demote":      { "lines": ["……{self}知罪。谢陛下教诲。"], "memory": "陛下贬我为{rank}，颜面无存。" },
+    "grant_title": { "lines": ["蒙陛下赐号，{self}惶恐领赏——谢陛下隆恩！"], "memory": "陛下赐我封号「{title}」，恩宠加身。" },
+    "strip_title": { "lines": ["陛下息怒……{self}知罪，惶恐请罪，恳请陛下开恩。"], "memory": "陛下褫夺我封号，我惶惶不可终日。" }
+  },
+  "bedchamber": {
+    "conceptionChance": 30,
+    "tiers": { "small": 3, "favored": 5, "abundant": 10 }
+  },
+  "bedchamberScript": {
+    "passion": {
+      "lines": [
+        "{name}闻召，颊上飞红，敛衽称是，缓步上前服侍帝王。",
+        "帐暖香浓，{self}屏息承欢，曲意逢迎，不敢有半分懈怠。",
+        "云收雨歇，陛下倦极而眠，只觉通体舒泰、神清气爽。"
+      ]
     },
-    {
-      "id": "chenghui",
-      "name": "承徽",
-      "grade": "正三品",
-      "selfRefs": { "toPlayer": ["本位"], "formal": ["本位"], "informal": ["我"] },
-      "order": 60,
-      "domain": "harem",
-      "favorTerm": "恩宠"
+    "pleasure": {
+      "lines": [
+        "{name}奉召近前，执扇研墨、抚琴奉茶，柔声为帝王解乏。",
+        "一夕清谈相伴，陛下心绪舒展，只觉神清气爽，并无他事。"
+      ]
     },
-    {
-      "id": "sili_zhang",
-      "name": "司礼女官",
-      "grade": "正五品",
-      "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] },
-      "order": 50,
-      "domain": "official",
-      "favorTerm": "圣眷"
+    "companionship": {
+      "lines": [
+        "{name}近前相伴，理妆奉茶、轻声叙话，陪着陛下闲话家常。",
+        "一夕静好相守，陛下心绪安宁，{self}亦觉受用圣眷。"
+      ],
+      "sovereignPregnant": [
+        "{name}见陛下凤体有孕，愈发小心翼翼，扶坐奉茶，轻声宽慰，唯恐惊动龙胎。",
+        "一夕静守相伴，{self}只盼陛下安心养胎，母子平安。"
+      ],
+      "consortPregnant": [
+        "{name}腹中已怀皇嗣，行动渐缓。陛下亲来探视，命其安坐，不必多礼。",
+        "{self}抚腹谢恩，言必尽心护持腹中骨血，不负圣望。"
+      ],
+      "bothPregnant": [
+        "陛下与{name}皆怀身孕，相对而坐，竟生出几分惺惺相惜之意。",
+        "一夕静好，彼此叮咛保重，宫人在侧伺候，唯恐有失。"
+      ]
     }
-  ]
+  },
+  "gestation": {
+    "termMonths": 10,
+    "transferEarliestMonth": 3,
+    "earlyBirth": { "month8": 10, "month9": 20 },
+    "recovery": { "safeMonths": 1, "dystociaMonths": 3 },
+    "dystocia": {
+      "baseAtMonth3": 5,
+      "perMonthAfter": 8,
+      "outcomeSplit": { "childDies": 50, "bearerDies": 30, "both": 20 }
+    },
+    "childFavor": {
+      "selfPregnancy": 100,
+      "fenghouBonus": 30,
+      "tierValues": { "abundant": 50, "favored": 38, "small": 25, "fallen": 12, "none": 0 }
+    }
+  }
 }

@@ -1,0 +1,11 @@
+{
+  "id": "xianfugong",
+  "name": "咸福宫",
+  "description": "初君新赐的居所，陈设尚簇新，廊下花木初栽，处处透着一股急于得宠的热切。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": ["新漆气", "鸟雀啁啾", "婢子低声调笑"],
+  "position": { "x": 0.64, "y": 0.42 },
+  "zone": "hougong",
+  "connections": ["kunninggong"],
+  "travelCost": { "ap": 1 }
+}

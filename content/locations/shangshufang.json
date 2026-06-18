@@ -1,0 +1,11 @@
+{
+  "id": "shangshufang",
+  "name": "上书房",
+  "description": "窗明几净，书声琅琅。皇子皇郎在此开蒙就学，先生执卷讲授，案上笔墨纸砚俱全。",
+  "backgroundKey": "bg.shangshufang",
+  "ambience": ["书声琅琅", "墨香清苦", "戒尺轻叩"],
+  "position": { "x": 0.5, "y": 0.55 },
+  "zone": "palace",
+  "connections": ["yushufang"],
+  "travelCost": { "ap": 1 }
+}

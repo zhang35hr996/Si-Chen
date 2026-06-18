@@ -1,10 +1,12 @@
 {
   "id": "shen_chenghui",
   "kind": "consort",
+  "attributes": { "appearance": 75, "talent": 88, "family": 55, "health": 64, "nurture": 58 },
   "profile": {
     "name": "沈承徽",
+    "surname": "沈",
     "age": 22,
-    "role": "承徽（正三品侍君）",
+    "role": "出身书香沈氏，通音律，近来渐被冷落",
     "appearance": "眉目清婉，体态纤秀，常着月白衣衫，鬓边一支素银簪。",
     "personalityTraits": ["敏感", "细腻", "倔强", "口不对心"],
     "coreFacts": ["入宫两年，初时颇得召幸，近来渐被冷落", "出身书香沈氏，通音律"],
@@ -12,11 +14,11 @@
     "speechStyle": "语调轻软，常以反话掩饰真心；动情时声音发颤。"
   },
   "defaultLocation": "yuhuayuan",
-  "portraitSet": "consort",
+  "portraitSet": "shenchenghui",
   "expressions": ["neutral"],
   "voice": {
     "register": "poetic",
-    "quirks": ["自称『本位』", "称玩家『陛下』", "失落时爱说反话"],
+    "quirks": ["自称『侍身』", "称玩家『陛下』", "失落时爱说反话"],
     "tabooTopics": ["家中来信催问恩宠之事"]
   },
   "initialRelationship": { "trust": 25, "affinity": 45, "flags": [] },

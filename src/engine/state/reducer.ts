@@ -20,6 +20,9 @@ export function applyCommand(state: GameState, command: GameCommand): CommandRes
     case "SPEND_AP":
       return applySpendAp(state, command.amount);
 
+    case "SKIP_REMAINDER":
+      return applySkipRemainder(state);
+
     case "MOVE_TO_LOCATION": {
       // Existence against ContentDB is wired in PR 4; structural check only here.
       if (command.locationId === "") {
@@ -97,4 +100,19 @@ function applySpendAp(state: GameState, amount: number): CommandResult {
     );
   }
   return ok({ state: { ...state, calendar }, rolledOver });
+}
+
+/** 独自休息：无论剩余多少行动点，直接滚到次旬早上（AP 回满）。 */
+function applySkipRemainder(state: GameState): CommandResult {
+  const calendar = advanceActionDay(state.calendar);
+  const violation = calendarInvariantViolation(calendar);
+  if (violation) {
+    return err(
+      stateError("CALENDAR_INVARIANT", `impossible calendar state: ${violation}`, {
+        severity: "fatal",
+        context: { calendar },
+      }),
+    );
+  }
+  return ok({ state: { ...state, calendar }, rolledOver: true });
 }

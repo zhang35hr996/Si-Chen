@@ -1,0 +1,27 @@
+{
+  "id": "example_character",
+  "kind": "consort",
+  "profile": {
+    "name": "示例侍君",
+    "age": 22,
+    "role": "TODO 一句话身份，如「初入宫的承徽」",
+    "appearance": "TODO 外貌一两句。",
+    "personalityTraits": ["TODO 性格特征"],
+    "coreFacts": ["TODO 关键背景事实"],
+    "goals": ["TODO 角色目标"],
+    "speechStyle": "TODO 说话风格，如「克制而有礼」。"
+  },
+  "defaultLocation": "yushufang",
+  "portraitSet": "example_character",
+  "expressions": ["neutral"],
+  "voice": {
+    "register": "formal",
+    "quirks": [],
+    "tabooTopics": []
+  },
+  "initialRelationship": { "trust": 30, "affinity": 30, "flags": [] },
+  "initialStanding": { "rank": "chenghui", "favor": 20 },
+  "initialMemories": [],
+  "secrets": [],
+  "stances": []
+}

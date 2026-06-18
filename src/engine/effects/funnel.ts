@@ -15,6 +15,7 @@
  *     the caller keeps the original state reference
  */
 import { toGameTime } from "../calendar/time";
+import { nextHeirId } from "../characters/heirs";
 import type { ContentDB } from "../content/loader";
 import { eventEffectSchema, type EventEffect } from "../content/schemas";
 import { stateError, type GameError } from "../infra/errors";
@@ -65,6 +66,158 @@ export function validateEffects(
       case "set_bloodline_status":
       case "flag":
         break; // fully constrained by the schema
+      case "set_rank": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `set_rank needs a consort with standing: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "fenghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
+        } else {
+          const r = db.ranks[e.rank];
+          if (!r || r.domain !== "harem" || e.rank === "fenghou") {
+            bad(index, "BAD_EFFECT", `set_rank to invalid rank "${e.rank}"`, { rank: e.rank });
+          }
+        }
+        break;
+      }
+      case "set_title": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `set_title needs a consort with standing: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "fenghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
+        } else if (db.lexicon.forbiddenTerms.some((t) => e.title.includes(t))) {
+          bad(index, "BAD_EFFECT", `title "${e.title}" contains a forbidden term`, { title: e.title });
+        }
+        break;
+      }
+      case "remove_title": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `remove_title needs a consort with standing: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "fenghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
+        }
+        break;
+      }
+      case "bedchamber": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.bedchamber[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `bedchamber needs a consort with a record: "${e.char}"`, { char: e.char });
+        }
+        break;
+      }
+      case "pregnancy": {
+        const preg = state.resources.bloodline.pregnancy;
+        if (e.op === "begin" && preg.status !== "none") {
+          bad(index, "BAD_EFFECT", `pregnancy begin requires status "none", got "${preg.status}"`, { status: preg.status });
+        } else if (e.op === "carry") {
+          if (preg.status !== "pending") {
+            bad(index, "BAD_EFFECT", `pregnancy carry requires status "pending", got "${preg.status}"`, { status: preg.status });
+          } else if (preg.conceivedAt === undefined) {
+            bad(index, "BAD_EFFECT", `pregnancy carry requires a conceivedAt`, {});
+          }
+        }
+        break;
+      }
+      case "heir_designate": {
+        for (const id of e.charIds) {
+          const ch = db.characters[id];
+          const st = state.standing[id];
+          if (!ch || ch.kind !== "consort" || !st) {
+            bad(index, "BAD_EFFECT_TARGET", `heir_designate needs a consort with standing: "${id}"`, { char: id });
+          } else if (st.lifecycle === "deceased") {
+            bad(index, "BAD_EFFECT_TARGET", `cannot designate a deceased consort: "${id}"`, { char: id });
+          }
+        }
+        break;
+      }
+      case "heir_candidate": {
+        const ch = db.characters[e.char];
+        const st = state.standing[e.char];
+        if (!ch || ch.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `heir_candidate needs a consort with standing: "${e.char}"`, { char: e.char });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot mark a deceased consort: "${e.char}"`, { char: e.char });
+        } else if (e.op === "add" && st.lifecycle !== undefined && st.lifecycle !== "normal" && st.lifecycle !== "candidate") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot mark a 承嗣/育嗣 consort as candidate: "${e.char}"`, { char: e.char });
+        } else if (e.op === "add" && state.resources.bloodline.pregnancy.status === "none") {
+          bad(index, "BAD_EFFECT", `heir_candidate add requires an active self-pregnancy`, {});
+        }
+        break;
+      }
+      case "pregnancy_transfer": {
+        const ch = db.characters[e.carrierId];
+        const st = state.standing[e.carrierId];
+        const preg = state.resources.bloodline.pregnancy;
+        const sov = state.resources.bloodline.gestations.find((g) => g.carrier === "sovereign");
+        if (!ch || ch.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `pregnancy_transfer needs a consort with standing: "${e.carrierId}"`, { char: e.carrierId });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot transfer to a deceased consort: "${e.carrierId}"`, { char: e.carrierId });
+        } else if (preg.status !== "carrying" || sov === undefined) {
+          bad(index, "BAD_EFFECT", `pregnancy_transfer requires sovereign self-pregnancy`, { status: preg.status });
+        }
+        break;
+      }
+      case "pregnancy_abort": {
+        const sov = state.resources.bloodline.gestations.find((g) => g.carrier === "sovereign");
+        if (!sov) {
+          bad(index, "BAD_EFFECT", `pregnancy_abort requires sovereign self-pregnancy`, {});
+        }
+        break;
+      }
+      case "birth": {
+        if (!state.resources.bloodline.gestations.some((g) => g.carrier === e.bearer)) {
+          bad(index, "BAD_EFFECT", `birth requires an active gestation`, {});
+        }
+        if (e.bearer !== "sovereign" && (!db.characters[e.bearer] || !state.standing[e.bearer])) {
+          bad(index, "BAD_EFFECT_TARGET", `birth bearer is not a consort with standing: "${e.bearer}"`, { char: e.bearer });
+        }
+        if (e.fatherId !== null && (!db.characters[e.fatherId] || db.characters[e.fatherId]!.kind !== "consort")) {
+          bad(index, "BAD_EFFECT_TARGET", `birth fatherId is not a consort: "${e.fatherId}"`, { char: e.fatherId });
+        }
+        break;
+      }
+      case "heir_name": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
+      case "heir_summon": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
+      case "heir_educate": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
+      case "heir_adopt": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        const ch = db.characters[e.fatherId];
+        const st = state.standing[e.fatherId];
+        if (!ch || ch.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort with standing: "${e.fatherId}"`, { char: e.fatherId });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `adoptive father is deceased: "${e.fatherId}"`, { char: e.fatherId });
+        } else if (ch.defaultLocation === "lenggong") {
+          bad(index, "BAD_EFFECT_TARGET", `adoptive father is in 冷宫: "${e.fatherId}"`, { char: e.fatherId });
+        }
+        break;
+      }
+      case "child_favor": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -92,6 +245,18 @@ export function applyEffects(
   const next = structuredClone(state) as GameState;
   const now = toGameTime(state.calendar);
   const cumulative = new Map<string, number>();
+
+  /**
+   * 把当前所有「候选承嗣」注释回退为 normal（except 中的 id 除外），用于传嗣/流产/
+   * 改选候选时清理旧注释。仅影响 lifecycle==="candidate" 的侍君。
+   */
+  const resetCandidateAnnotations = (s: GameState, except: readonly string[] = []) => {
+    for (const id of s.resources.bloodline.pregnancy.candidateIds) {
+      if (except.includes(id)) continue;
+      const st = s.standing[id];
+      if (st && st.lifecycle === "candidate") st.lifecycle = "normal";
+    }
+  };
 
   /** Cumulative per-axis cap: returns the effective delta still allowed. */
   const cappedDelta = (axis: string, delta: number): number => {
@@ -132,6 +297,163 @@ export function applyEffects(
       }
       case "flag": {
         next.flags[effect.key] = effect.value;
+        break;
+      }
+      case "set_rank": {
+        next.standing[effect.char]!.rank = effect.rank;
+        break;
+      }
+      case "set_title": {
+        next.standing[effect.char]!.title = effect.title;
+        break;
+      }
+      case "remove_title": {
+        delete next.standing[effect.char]!.title;
+        break;
+      }
+      case "bedchamber": {
+        next.bedchamber[effect.char]!.encounters.push({
+          at: now,
+          mode: effect.mode,
+        });
+        break;
+      }
+      case "pregnancy": {
+        const p = next.resources.bloodline.pregnancy;
+        if (effect.op === "begin") {
+          next.resources.bloodline.pregnancy = { status: "pending", conceivedAt: now, candidateIds: [] };
+        } else if (effect.op === "carry") {
+          // pending → carrying: 帝王自孕，新增一条 carrier="sovereign" 的胎息。
+          next.resources.bloodline.pregnancy = {
+            status: "carrying",
+            ...(p.conceivedAt !== undefined ? { conceivedAt: p.conceivedAt } : {}),
+            candidateIds: [...p.candidateIds],
+          };
+          if (p.conceivedAt !== undefined) {
+            next.resources.bloodline.gestations.push({ carrier: "sovereign", conceivedAt: p.conceivedAt });
+          }
+        } else {
+          // clear: 作废帝王自身胎息，不影响侍君承嗣；清理候选注释。
+          resetCandidateAnnotations(next);
+          next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
+          next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter(
+            (g) => g.carrier !== "sovereign",
+          );
+        }
+        break;
+      }
+      case "heir_designate": {
+        // reset any prior candidate no longer in the designated set
+        resetCandidateAnnotations(next, effect.charIds);
+        for (const id of effect.charIds) next.standing[id]!.lifecycle = "candidate";
+        next.resources.bloodline.pregnancy.candidateIds = [...effect.charIds];
+        break;
+      }
+      case "heir_candidate": {
+        const preg = next.resources.bloodline.pregnancy;
+        if (effect.op === "add") {
+          // 同时段只能有一位候选：先清除旧候选注释。
+          resetCandidateAnnotations(next);
+          next.standing[effect.char]!.lifecycle = "candidate";
+          preg.candidateIds = [effect.char];
+        } else {
+          if (next.standing[effect.char]!.lifecycle === "candidate") {
+            next.standing[effect.char]!.lifecycle = "normal";
+          }
+          preg.candidateIds = preg.candidateIds.filter((id) => id !== effect.char);
+        }
+        break;
+      }
+      case "pregnancy_transfer": {
+        const sov = next.resources.bloodline.gestations.find((g) => g.carrier === "sovereign")!;
+        // 传嗣：除最终承嗣者外，清除所有候选承嗣注释。
+        resetCandidateAnnotations(next, [effect.carrierId]);
+        next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
+        next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter(
+          (g) => g.carrier !== "sovereign",
+        );
+        next.resources.bloodline.gestations.push({
+          carrier: effect.carrierId,
+          conceivedAt: sov.conceivedAt,
+          fatherId: effect.carrierId,
+          transferredAtMonth: effect.atMonth,
+        });
+        next.standing[effect.carrierId]!.lifecycle = "carrying";
+        break;
+      }
+      case "pregnancy_abort": {
+        // 流产：清除帝王自身胎息与所有候选承嗣注释；侍君承嗣不受影响。
+        resetCandidateAnnotations(next);
+        next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
+        next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter(
+          (g) => g.carrier !== "sovereign",
+        );
+        break;
+      }
+      case "birth": {
+        const bl = next.resources.bloodline;
+        const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";
+        const bearerSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "child_dies";
+        if (childSurvives) {
+          bl.heirs.push({
+            id: nextHeirId(bl.heirs.length),
+            sex: effect.sex,
+            fatherId: effect.fatherId,
+            bearer: effect.bearer,
+            birthAt: now,
+            favor: effect.favor,
+            legitimate: effect.legitimate,
+            petName: "",
+            education: { scholarship: 5, martial: 5, virtue: 5 },
+          });
+        }
+        if (effect.bearer !== "sovereign") {
+          const st = next.standing[effect.bearer]!;
+          if (!bearerSurvives) {
+            st.lifecycle = "deceased";
+            delete st.recoverUntilMonth;
+          } else if (effect.bearerOutcome === "safe") {
+            st.lifecycle = "delivered";
+            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+          } else {
+            // child_dies, bearer survives → 不晋升，回 normal，难产三月休养
+            st.lifecycle = "normal";
+            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+          }
+        }
+        // 仅移除生产对应的那条胎息；帝王可能另有自孕，故只在自孕生产时才清 pregnancy。
+        bl.gestations = bl.gestations.filter((g) => g.carrier !== effect.bearer);
+        if (effect.bearer === "sovereign") {
+          bl.pregnancy = { status: "none", candidateIds: [] };
+        }
+        break;
+      }
+      case "heir_name": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        if (effect.field === "pet") heir.petName = effect.name;
+        else heir.givenName = effect.name;
+        break;
+      }
+      case "heir_summon": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        heir.favor = clampPct(heir.favor + 20);
+        break;
+      }
+      case "heir_educate": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        heir.education[effect.subject] = clampPct(heir.education[effect.subject] + effect.attrDelta);
+        heir.favor = clampPct(heir.favor + effect.favorDelta);
+        break;
+      }
+      case "heir_adopt": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        heir.adoptiveFatherId = effect.fatherId;
+        break;
+      }
+      case "child_favor": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        const applied = cappedDelta(`heir:${effect.heirId}`, effect.delta);
+        heir.favor = clampPct(heir.favor + applied);
         break;
       }
       case "memory": {

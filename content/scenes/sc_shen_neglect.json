@@ -8,7 +8,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "shen_chenghui",
-      "text": "陛下竟有空来御花园？本位还当，这满园秋色，今日只配本位一个人看。",
+      "text": "陛下竟有空来御花园？侍身还当，这满园秋色，今日只配侍身一个人看。",
       "expression": "frown",
       "next": "n_choice"
     },
@@ -46,7 +46,7 @@
       "type": "line",
       "id": "n_end_comfort",
       "speaker": "shen_chenghui",
-      "text": "……本位失仪了。陛下既肯来，这园子的花，便不算白开。",
+      "text": "……侍身失仪了。陛下既肯来，这园子的花，便不算白开。",
       "expression": "smile"
     },
     {
@@ -74,7 +74,7 @@
       "type": "line",
       "id": "n_end_brush",
       "speaker": "shen_chenghui",
-      "text": "是，陛下慢走。本位……继续看本位的花。",
+      "text": "是，陛下慢走。侍身……继续看侍身的花。",
       "expression": "frown"
     },
     {
@@ -103,7 +103,7 @@
       "type": "line",
       "id": "n_end_cold",
       "speaker": "shen_chenghui",
-      "text": "……本位知罪。恭送陛下。",
+      "text": "……侍身知罪。恭送陛下。",
       "expression": "worried"
     }
   ]

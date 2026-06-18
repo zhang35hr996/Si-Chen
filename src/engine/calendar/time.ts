@@ -27,13 +27,61 @@ export interface CalendarState extends GameTime {
   readonly apMax: number;
 }
 
-export const DEFAULT_AP_MAX = 5;
+export const DEFAULT_AP_MAX = 6;
+
+// ── 时辰 / 时段 (skeleton-plan §4 Time, art pass) ─────────────────────
+// A day has apMax = 6 action slots; the slot you are about to act in maps to
+// a 时辰 and a time-of-day bucket that drives which background variant shows.
+// Slot index = apMax − ap (fresh day = slot 0). The clock never rests at ap=0:
+// spending the last AP rolls the day (reducer), so slot ∈ [0, apMax−1].
+export type TimeOfDay = "day" | "twilight" | "night";
+
+interface Shichen {
+  /** 干支时辰名, e.g. 卯时. */
+  readonly name: string;
+  /** 通俗时段, e.g. 早上. */
+  readonly label: string;
+  readonly timeOfDay: TimeOfDay;
+}
+
+const SHICHEN: readonly Shichen[] = [
+  { name: "卯时", label: "早上", timeOfDay: "day" },
+  { name: "辰时", label: "上午", timeOfDay: "day" },
+  { name: "申时", label: "下午", timeOfDay: "day" },
+  { name: "酉时", label: "黄昏", timeOfDay: "twilight" },
+  { name: "戌时", label: "晚上", timeOfDay: "night" },
+  { name: "子时", label: "深夜", timeOfDay: "night" },
+];
+
+/** 0-based action slot of the AP about to be spent; clamped into the 时辰 table. */
+export function shichenSlot(calendar: CalendarState): number {
+  const slot = calendar.apMax - calendar.ap;
+  if (slot < 0) return 0;
+  if (slot > SHICHEN.length - 1) return SHICHEN.length - 1;
+  return slot;
+}
+
+/** Time-of-day bucket for background selection (day/twilight/night). */
+export function timeOfDay(calendar: CalendarState): TimeOfDay {
+  return SHICHEN[shichenSlot(calendar)]!.timeOfDay;
+}
+
+/** e.g. 卯时（早上） — what the HUD shows instead of a raw AP count. */
+export function formatShichen(calendar: CalendarState): string {
+  const sc = SHICHEN[shichenSlot(calendar)]!;
+  return `${sc.name}（${sc.label}）`;
+}
 
 const PERIOD_ORDINAL: Record<MonthPeriod, number> = { early: 0, mid: 1, late: 2 };
 const PERIOD_NAME: Record<MonthPeriod, string> = { early: "上旬", mid: "中旬", late: "下旬" };
 
 export function dayIndexOf(year: number, month: number, period: MonthPeriod): number {
   return ((year - 1) * 12 + (month - 1)) * 3 + PERIOD_ORDINAL[period];
+}
+
+/** Month index from 元年一月 = 1 (period-agnostic) — drives 受宠 windows. */
+export function monthOrdinal(time: Pick<GameTime, "year" | "month">): number {
+  return (time.year - 1) * 12 + time.month;
 }
 
 export function makeGameTime(year: number, month: number, period: MonthPeriod): GameTime {

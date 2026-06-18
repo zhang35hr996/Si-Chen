@@ -1,0 +1,24 @@
+{
+  "id": "sc_example",
+  "locationId": "yushufang",
+  "participants": ["example_character"],
+  "startNodeId": "n_open",
+  "nodes": [
+    { "type": "line", "id": "n_open", "speaker": "example_character", "text": "TODO 开场白。", "next": "n_choice" },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        { "id": "c_warm", "text": "TODO 友善选项", "tone": "friendly", "next": "n_warm" },
+        { "id": "c_cool", "text": "TODO 疏离选项", "tone": "guarded", "next": "n_cool" }
+      ]
+    },
+    { "type": "line", "id": "n_warm", "speaker": "example_character", "text": "TODO 友善回应。", "next": "n_effect" },
+    { "type": "line", "id": "n_cool", "speaker": "example_character", "text": "TODO 疏离回应。", "next": "n_effect" },
+    {
+      "type": "effect",
+      "id": "n_effect",
+      "effects": [{ "type": "favor", "char": "example_character", "delta": 2 }]
+    }
+  ]
+}

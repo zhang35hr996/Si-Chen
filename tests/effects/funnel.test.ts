@@ -109,7 +109,7 @@ describe("invalid effects reject", () => {
     ["oversized single delta", { type: "relationship", char: "feng_hou", field: "trust", delta: 40 }],
     ["protected runtime memory", { type: "memory", char: "feng_hou", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"], protected: true } }],
     ["empty flag key", { type: "flag", key: "", value: 1 }],
-    ["unknown effect type", { type: "set_rank", char: "feng_hou", rank: "fenghou" }],
+    ["set_rank to 凤后 cap (fenghou) is rejected", { type: "set_rank", char: "feng_hou", rank: "fenghou" }],
     ["garbage", { hello: "world" }],
   ];
 
@@ -117,6 +117,36 @@ describe("invalid effects reject", () => {
     const errors = validateEffects(db, fresh(), [effect as EventEffect]);
     expect(errors.length).toBeGreaterThan(0);
     expect(applyEffects(db, fresh(), [effect as EventEffect]).ok).toBe(false);
+  });
+});
+
+describe("rank/title effects", () => {
+  it("set_rank changes a consort's rank", () => {
+    const r = applyEffects(db, fresh(), [{ type: "set_rank", char: "shen_chenghui", rank: "jun" }]);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.standing["shen_chenghui"]!.rank).toBe("jun");
+  });
+  it("set_title then remove_title sets and clears the 封号", () => {
+    const state = fresh();
+    const a = applyEffects(db, state, [{ type: "set_title", char: "shen_chenghui", title: "婉" }]);
+    expect(a.ok && a.value.standing["shen_chenghui"]!.title).toBe("婉");
+    if (!a.ok) return;
+    const b = applyEffects(db, a.value, [{ type: "remove_title", char: "shen_chenghui" }]);
+    expect(b.ok && b.value.standing["shen_chenghui"]!.title).toBeUndefined();
+  });
+  it("rejects set_rank to 凤后 (the cap)", () => {
+    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "shen_chenghui", rank: "fenghou" }]).ok).toBe(false);
+  });
+  it("rejects set_rank on an official", () => {
+    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "sili_nvguan", rank: "jun" }]).ok).toBe(false);
+  });
+  it("rejects a 封号 containing a forbidden term", () => {
+    expect(applyEffects(db, fresh(), [{ type: "set_title", char: "shen_chenghui", title: "女帝" }]).ok).toBe(false);
+  });
+  it("rejects rank/title ops targeting the 凤后 consort (the 正宫 cap)", () => {
+    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "feng_hou", rank: "jun" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "set_title", char: "feng_hou", title: "婉" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "remove_title", char: "feng_hou" }]).ok).toBe(false);
   });
 });
 

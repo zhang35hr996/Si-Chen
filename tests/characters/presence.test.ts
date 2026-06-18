@@ -8,7 +8,7 @@ const state = createNewGameState(db);
 
 describe("presence v0 (defaultLocation rule)", () => {
   it("places each slice character at their own location", () => {
-    expect(getPresentAt(db, state, "hougong_zhudian").map((c) => c.id)).toEqual(["feng_hou"]);
+    expect(getPresentAt(db, state, "kunninggong").map((c) => c.id)).toEqual(["feng_hou"]);
     expect(getPresentAt(db, state, "yuhuayuan").map((c) => c.id)).toEqual(["shen_chenghui"]);
     expect(getPresentAt(db, state, "yushufang").map((c) => c.id)).toEqual(["sili_nvguan"]);
   });

@@ -38,25 +38,25 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(6);
-    expect(result.placeholderCount).toBe(0); // all real art uploaded
+    expect(result.entryCount).toBe(22);
+    expect(result.placeholderCount).toBe(1); // wenya_shijun portrait is a placeholder pending real art
   });
 
   it("manifest path missing on disk is an error", () => {
     const manifest = realManifest();
     const disk = allPaths(manifest);
-    disk.delete("backgrounds/yuhuayuan.png");
+    disk.delete("backgrounds/yuhuayuan_morning.png");
     const result = checkManifest(manifest, disk, db);
     expect(result.errors.some((e) => e.code === "ASSET_FILE_MISSING")).toBe(true);
   });
 
   it("content-referenced key absent from manifest is an error", () => {
     const manifest = realManifest();
-    delete manifest.entries["portrait.consort.neutral"]; // shared by all 侍君
+    delete manifest.entries["portrait.huanghou.neutral"]; // 凤后's portrait
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(
       result.errors.some(
-        (e) => e.code === "MISSING_ASSET_KEY" && e.message.includes("portrait.consort.neutral"),
+        (e) => e.code === "MISSING_ASSET_KEY" && e.message.includes("portrait.huanghou.neutral"),
       ),
     ).toBe(true);
   });

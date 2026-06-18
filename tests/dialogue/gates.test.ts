@@ -8,14 +8,15 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const fenghouCtx = buildTextGateContext(db, "fenghou"); // selfRefs: 臣后/本宫
-const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 本位/我
+const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 侍/侍身/我 (本宫 to-lower)
 const siliCtx = buildTextGateContext(db, "sili_zhang"); // selfRefs: 臣/下官
 
 describe("buildTextGateContext", () => {
   it("foreign selfRefs exclude the speaker's own and single-char refs", () => {
-    // 凤后 may say 本宫; she may NOT borrow 本位 (承徽) or 下官 (司礼).
-    expect(fenghouCtx.foreignSelfRefs).toContain("本位");
+    // 凤后 may say 本宫; she may NOT borrow 臣侍 (君) or 下官 (司礼).
+    expect(fenghouCtx.foreignSelfRefs).toContain("臣侍");
     expect(fenghouCtx.foreignSelfRefs).toContain("下官");
+    // 本宫 is shared by 凤后/君/承徽 (their to-lower ref), so it is never "foreign".
     expect(fenghouCtx.foreignSelfRefs).not.toContain("本宫");
     // 「臣」 (司礼's toPlayer ref) is single-char — excluded to avoid 大臣/众臣.
     expect(fenghouCtx.foreignSelfRefs).not.toContain("臣");
@@ -43,13 +44,13 @@ describe("forbidden_lexicon gate", () => {
 
 describe("self_ref gate", () => {
   it("rejects a speaker borrowing another rank's selfRef", () => {
-    const findings = scanDialogueText("本宫自有主张。", chenghuiCtx); // 承徽 using 凤后's 本宫
+    const findings = scanDialogueText("臣后自有主张。", chenghuiCtx); // 承徽 using 凤后's 臣后
     expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ gate: "self_ref", matched: "本宫" });
+    expect(findings[0]).toMatchObject({ gate: "self_ref", matched: "臣后" });
   });
 
   it("allows a speaker using their OWN selfRef", () => {
-    expect(scanDialogueText("本位累了。", chenghuiCtx)).toHaveLength(0);
+    expect(scanDialogueText("侍身累了。", chenghuiCtx)).toHaveLength(0);
     expect(scanDialogueText("本宫累了。", fenghouCtx)).toHaveLength(0);
   });
 

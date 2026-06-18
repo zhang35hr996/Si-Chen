@@ -3,6 +3,7 @@ import type { z } from "zod";
 import {
   characterRankSchema,
   characterSchema,
+  characterStandingSchema,
   dialogueChoiceSchema,
   effectMemoryDraftSchema,
   eventEffectSchema,
@@ -118,6 +119,7 @@ describe("triggerConditionSchema (closed DSL — scaffold guard)", () => {
         { relationshipAtLeast: { char: "char_a", field: "affinity", value: 60 } },
         { favorAtLeast: { char: "char_a", value: 50 } },
         { rankAtLeast: { char: "char_a", rank: "rank_a" } },
+        { hasMemoryTag: { char: "char_a", tag: "neglect" } },
       ],
     });
   });
@@ -126,6 +128,7 @@ describe("triggerConditionSchema (closed DSL — scaffold guard)", () => {
     rejects(triggerConditionSchema, { resourceAtLeast: { pillar: "bloodline", field: "legitimacy", value: 50 } });
     rejects(triggerConditionSchema, { bloodlineLegitimacyAtLeast: 50 });
     rejects(triggerConditionSchema, { relationshipAtLeast: { char: "char_a", field: "favor", value: 1 } });
+    rejects(triggerConditionSchema, { hasMemoryTag: { char: "char_a", tag: "Bad Tag" } }); // tags are lowercase ascii
   });
 });
 
@@ -143,7 +146,6 @@ describe("eventEffectSchema (discriminated pillar/field pairs)", () => {
     rejects(eventEffectSchema, { type: "resource", pillar: "bloodline", field: "menstrualStatus", delta: 1 });
     rejects(eventEffectSchema, { type: "relationship", char: "char_a", field: "trust", delta: 40 }); // ±10 cap
     rejects(eventEffectSchema, { type: "set_bloodline_status", field: "menstrualStatus", value: "pregnant" });
-    rejects(eventEffectSchema, { type: "set_rank", char: "char_a", rank: "rank_a" }); // not an effect
   });
 });
 
@@ -213,4 +215,34 @@ describe("worldSchema / rankSchema", () => {
     rejects(worldSchema, { ...world, calendar: { apMax: 0, start: { year: 1, month: 1, period: "early" } } });
     rejects(worldSchema, { ...world, ranks: [] });
   });
+});
+
+describe("rank/title fields", () => {
+  it("standing accepts an optional 封号 title", () => {
+    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30, title: "婉" }).success).toBe(true);
+    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30 }).success).toBe(true);
+  });
+});
+
+describe("rank/title effects", () => {
+  it("accepts set_rank / set_title / remove_title", () => {
+    expect(eventEffectSchema.safeParse({ type: "set_rank", char: "shen_chenghui", rank: "jun" }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "set_title", char: "shen_chenghui", title: "婉" }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "remove_title", char: "shen_chenghui" }).success).toBe(true);
+  });
+  it("rejects a 封号 longer than 4 漢字", () => {
+    expect(eventEffectSchema.safeParse({ type: "set_title", char: "shen_chenghui", title: "一二三四五" }).success).toBe(false);
+  });
+});
+
+import worldJson from "../../content/world.json";
+
+it("world.json carries rankChangeReactions for all four kinds", () => {
+  const parsed = worldSchema.safeParse(worldJson);
+  expect(parsed.success).toBe(true);
+  if (parsed.success) {
+    expect(Object.keys(parsed.data.rankChangeReactions ?? {}).sort()).toEqual(
+      ["demote", "grant_title", "promote", "strip_title"],
+    );
+  }
 });

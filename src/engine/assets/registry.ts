@@ -125,6 +125,49 @@ export class AssetRegistry {
     return this.resolve(backgroundKey, "background");
   }
 
+  /**
+   * Resolve a time-of-day variant: prefer `<baseKey>.<variant>` (e.g.
+   * bg.yuhuayuan.twilight / map.palace.night), else the plain base key. Both
+   * the variant and the base are authored art, so neither is `isFallback`;
+   * only the built-in art is. The requested `key` is always the base key so a
+   * variant render never badges as degraded.
+   */
+  resolveVariant(baseKey: string, variant: string, kind: AssetKind): ResolvedAsset {
+    for (const candidate of [`${baseKey}.${variant}`, baseKey]) {
+      const entry = this.manifest.entries[candidate];
+      if (!entry) continue;
+      if (entry.kind !== kind) {
+        this.warnOnce(
+          `kind:${candidate}:${kind}`,
+          "ASSET_KIND_MISMATCH",
+          `asset "${candidate}" is kind "${entry.kind}", expected "${kind}"`,
+          { key: candidate, expected: kind, actual: entry.kind },
+        );
+        continue;
+      }
+      return {
+        key: baseKey,
+        url: this.baseUrl + entry.path,
+        kind,
+        isFallback: false,
+        isPlaceholder: entry.placeholder,
+      };
+    }
+    this.warnOnce(
+      `miss:${baseKey}:${kind}`,
+      "ASSET_MISSING",
+      `asset "${baseKey}" (variant "${variant}") missing; using built-in ${kind} fallback`,
+      { key: baseKey, variant, fallback: "builtin" },
+    );
+    return {
+      key: baseKey,
+      url: BUILTIN_FALLBACK_URLS[kind],
+      kind,
+      isFallback: true,
+      isPlaceholder: true,
+    };
+  }
+
   private fallbackChain(key: string, kind: AssetKind): string[] {
     if (kind === "portrait") {
       const parts = key.split(".");

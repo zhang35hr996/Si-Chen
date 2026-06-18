@@ -1,18 +1,19 @@
 {
   "id": "feng_hou",
   "kind": "consort",
+  "attributes": { "appearance": 72, "talent": 80, "family": 92, "health": 78, "nurture": 60 },
   "profile": {
     "name": "凤后",
     "age": 27,
-    "role": "凤后（正宫，后宫之主）",
+    "role": "执掌凤印，总理后宫的世族之后",
     "appearance": "身量颀长，常服深青凤纹礼衣，眉目端凝，不怒自威。",
     "personalityTraits": ["端肃", "克制", "重礼法", "外冷内热"],
     "coreFacts": ["大婚四年，执掌凤印总理后宫", "出身世族，母家在朝中有根基", "久不承宠，地位全系名分"],
     "goals": ["整肃宫规，维持后宫秩序", "守住凤后体面与母家颜面"],
     "speechStyle": "措辞雅正，多用敬语，句短而克制；急时仍不失礼数。"
   },
-  "defaultLocation": "hougong_zhudian",
-  "portraitSet": "consort",
+  "defaultLocation": "kunninggong",
+  "portraitSet": "huanghou",
   "expressions": ["neutral"],
   "voice": {
     "register": "formal",

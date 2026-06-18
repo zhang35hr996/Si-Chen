@@ -19,7 +19,7 @@ describe("eligibility", () => {
     expect(getEligibleEvents(db, at("yuhuayuan"), "location_enter").map((e) => e.event.id)).toEqual([
       "ev_shen_neglect",
     ]);
-    expect(getEligibleEvents(db, at("hougong_zhudian"), "location_enter").map((e) => e.event.id)).toEqual([
+    expect(getEligibleEvents(db, at("kunninggong"), "location_enter").map((e) => e.event.id)).toEqual([
       "ev_fenghou_rules",
     ]);
   });

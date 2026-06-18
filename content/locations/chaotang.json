@@ -1,0 +1,12 @@
+{
+  "id": "chaotang",
+  "name": "朝堂",
+  "description": "丹陛巍巍，百官列班；御座之上，是这天下唯一的皇帝。钟鸣声里，军国大事自此而出。",
+  "backgroundKey": "bg.chaotang",
+  "ambience": ["钟磬", "百官屏息", "金砖回声"],
+  "position": { "x": 0.5, "y": 0.16 },
+  "zone": "palace",
+  "entry": "free",
+  "actionEventId": "ev_chaohui",
+  "actionFirstSlotOnly": true
+}
