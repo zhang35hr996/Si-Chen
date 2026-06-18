@@ -17,6 +17,7 @@ import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractio
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
+import { CiningGongScreen } from "./screens/CiningGongScreen";
 import { buildAdoptionReaction } from "../store/adoption";
 import { ChildReactionScreen } from "./screens/ChildReactionScreen";
 import { buildBirth, dueGestation } from "../store/gestation";
@@ -47,7 +48,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang" | "fengxiandian";
+type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang" | "fengxiandian" | "cining_gong";
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -115,7 +116,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
-    setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : "location");
+    setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : loc === "cining_gong" ? "cining_gong" : "location");
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -158,6 +159,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (pick) startEvent(pick.id);
     else if (store.getState().playerLocation === "shangshufang") setView("shangshufang");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
+    else if (store.getState().playerLocation === "cining_gong") setView("cining_gong");
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
@@ -507,6 +509,17 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
           onOpenSave={() => setView("save")}
           onAdopt={adoptHeir}
+        />
+      )}
+      {view === "cining_gong" && (
+        <CiningGongScreen
+          db={db}
+          store={store}
+          registry={registry}
+          onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
+          onOpenSave={() => setView("save")}
+          onConverse={() => startEvent("ev_taihou_converse")}
+          onOpenResources={() => setResourcePanelOpen(true)}
         />
       )}
       {view === "save" && (

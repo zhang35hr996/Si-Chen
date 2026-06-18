@@ -1,0 +1,10 @@
+{
+  "id": "ev_taihou_converse",
+  "title": "与太后叙话",
+  "sceneId": "sc_taihou_converse",
+  "checkpoint": "game_start",
+  "condition": { "atLocation": "cining_gong" },
+  "priority": 0,
+  "once": false,
+  "apCost": 1
+}

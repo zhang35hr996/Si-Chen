@@ -18,7 +18,7 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 6 characters, 9 locations, 6 events, 6 scenes, 21 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 6 characters, 9 locations, 7 events, 7 scenes, 21 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
@@ -35,9 +35,10 @@ describe("real content/ boots", () => {
         "ev_fenghou_rules",
         "ev_menses_rite",
         "ev_shen_neglect",
+        "ev_taihou_converse",
       ].sort(),
     );
-    expect(Object.keys(db.scenes)).toHaveLength(6);
+    expect(Object.keys(db.scenes)).toHaveLength(7);
     expect(Object.keys(db.ranks)).toHaveLength(21);
   });
 

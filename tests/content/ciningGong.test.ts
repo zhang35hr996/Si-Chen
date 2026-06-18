@@ -27,4 +27,13 @@ describe("太后 + 慈宁宫 content", () => {
     expect(loc!.connections).toContain("yushufang");
     expect(result.value.locations["yushufang"]!.connections).toContain("cining_gong");
   });
+
+  it("太后对话 event/scene present, 1 AP, located at 慈宁宫", () => {
+    if (!result.ok) return;
+    const ev = result.value.events["ev_taihou_converse"];
+    expect(ev).toBeDefined();
+    expect(ev!.apCost).toBe(1);
+    expect(ev!.sceneId).toBe("sc_taihou_converse");
+    expect(result.value.scenes["sc_taihou_converse"]).toBeDefined();
+  });
 });
