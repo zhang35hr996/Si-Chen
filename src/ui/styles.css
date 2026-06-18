@@ -1730,3 +1730,72 @@ button:active:enabled {
   color: #b8aa90;
   white-space: pre;
 }
+
+/* ── 翻牌子 · 牌子托盘 ─────────────────────────────────────────── */
+.tablet-tray {
+  position: relative;
+  background: linear-gradient(170deg, #2a1d12, #1c130b);
+  border: 1px solid var(--line-gold);
+  border-radius: 8px;
+  padding: 1.3rem 1.6rem 1.5rem;
+  max-width: 46rem;
+  box-shadow: var(--shadow-deep);
+  animation: rise 0.3s ease both;
+}
+.tablet-tray__title {
+  margin: 0 0 1rem;
+  color: var(--gold-bright);
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  text-align: center;
+}
+.tablet-tray__rack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: center;
+  /* 托盘木纹底座 */
+  padding: 1rem 0.8rem;
+  background: linear-gradient(180deg, rgba(60, 40, 24, 0.55), rgba(34, 22, 13, 0.55));
+  border-top: 2px solid rgba(217, 184, 124, 0.25);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.tablet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  padding: 0.9rem 0.55rem;
+  min-height: 9.5rem;
+  font: inherit;
+  color: #f3ead7;
+  /* 玉/牙质名牌 */
+  background: linear-gradient(100deg, #d9c7a4, #c2a878 55%, #a98c5a);
+  border: 1px solid #6b522f;
+  border-radius: 3px 3px 5px 5px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 245, 220, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.tablet__name {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.25em;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #3a2410; /* 朱漆刻字 */
+}
+.tablet__rank {
+  writing-mode: vertical-rl;
+  font-size: 0.72rem;
+  color: #5a4124;
+}
+.tablet:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 245, 220, 0.6),
+    0 0 14px rgba(217, 184, 124, 0.4);
+}
