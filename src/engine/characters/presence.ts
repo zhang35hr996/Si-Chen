@@ -26,7 +26,7 @@ export function getPresentAt(
     .filter((character) => getCharacterLocation(db, state, character.id) === locationId)
     .sort(
       (a, b) =>
-        (db.ranks[b.initialStanding.rank]?.order ?? 0) -
-        (db.ranks[a.initialStanding.rank]?.order ?? 0),
+        (db.ranks[b.initialStanding?.rank ?? ""]?.order ?? 0) -
+        (db.ranks[a.initialStanding?.rank ?? ""]?.order ?? 0),
     );
 }

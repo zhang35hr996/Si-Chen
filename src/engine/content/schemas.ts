@@ -215,7 +215,7 @@ export type ConsortAttributes = z.infer<typeof consortAttributesSchema>;
 export const characterSchema = z
   .strictObject({
     id: idSchema,
-    kind: z.enum(["consort", "official"]),
+    kind: z.enum(["consort", "official", "elder"]),
     /** 侍君明面属性. Optional: officials carry no养成 stat block. */
     attributes: consortAttributesSchema.optional(),
     profile: z.strictObject({
@@ -238,7 +238,7 @@ export const characterSchema = z
       tabooTopics: z.array(nonEmpty),
     }),
     initialRelationship: relationshipStateSchema,
-    initialStanding: characterStandingSchema,
+    initialStanding: characterStandingSchema.optional(),
     initialMemories: z.array(initialMemoryDraftSchema),
     secrets: z.array(z.never()).max(0), // schema present, empty in the skeleton (plan §4)
     stances: z.array(z.strictObject({ charId: idSchema, attitude: nonEmpty })).optional(),

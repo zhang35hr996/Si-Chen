@@ -236,20 +236,23 @@ function checkCharacterRefs(
   errors: GameError[],
 ): void {
   for (const { value: character, source } of characters.items) {
-    const rank = ranks[character.initialStanding.rank];
-    if (!rank) {
-      errors.push(missingRef(source, "rank", character.initialStanding.rank));
-    } else {
-      // kind ⇄ domain match (plan §15.3): an official never holds a harem rank.
-      const expected = character.kind === "consort" ? "harem" : "official";
-      if (rank.domain !== expected) {
-        errors.push(
-          contentError(
-            "BAD_RANK",
-            `${source}: ${character.kind} "${character.id}" holds ${rank.domain}-domain rank "${rank.id}"`,
-            { context: { file: source, characterId: character.id, rank: rank.id } },
-          ),
-        );
+    if (character.initialStanding) {
+      const rank = ranks[character.initialStanding.rank];
+      if (!rank) {
+        errors.push(missingRef(source, "rank", character.initialStanding.rank));
+      } else {
+        // kind ⇄ domain match (plan §15.3): an official never holds a harem rank.
+        // elders have no initialStanding and are excluded by the outer guard.
+        const expected = character.kind === "consort" ? "harem" : "official";
+        if (rank.domain !== expected) {
+          errors.push(
+            contentError(
+              "BAD_RANK",
+              `${source}: ${character.kind} "${character.id}" holds ${rank.domain}-domain rank "${rank.id}"`,
+              { context: { file: source, characterId: character.id, rank: rank.id } },
+            ),
+          );
+        }
       }
     }
     if (Object.keys(locations).length > 0 && !locations[character.defaultLocation]) {
