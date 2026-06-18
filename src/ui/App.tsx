@@ -15,6 +15,7 @@ import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/b
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
+import { buildTaihouIllnessTick } from "../store/taihou";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
@@ -88,6 +89,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
+  const tickedPeriods = useRef<Set<string>>(new Set());
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   if (!content.ok || !manifest.success) {
@@ -183,11 +185,25 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return beats;
   };
 
+  /** 旬翻转：掷太后生病/自愈，应用效果并返回提示节拍（每旬至多一次）。 */
+  const rollTaihouIllness = (): DecreeReaction[] => {
+    const cal = store.getState().calendar;
+    const key = `${store.getState().rngSeed}:${cal.year}:${cal.month}:${cal.period}`;
+    if (tickedPeriods.current.has(key)) return [];
+    tickedPeriods.current.add(key);
+    const tick = buildTaihouIllnessTick(store.getState(), key);
+    if (!tick) return [];
+    const applied = store.applyEffects(db, tick.effects);
+    if (!applied.ok) return [];
+    return tick.beats;
+  };
+
   /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰。返回扣点结果与懿旨台词。 */
   const spendAp = (amount: number) => {
     const before = store.getState().calendar;
     const spend = store.dispatch({ type: "SPEND_AP", amount });
-    const decreeBeats = spend.ok ? rollDecree(before, amount) : [];
+    let decreeBeats = spend.ok ? rollDecree(before, amount) : [];
+    if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };
 
@@ -338,11 +354,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     }
   };
 
-  const adjustHeirFavor = (heirId: string, delta: number) => {
-    const r = store.applyEffects(db, [{ type: "child_favor", heirId, delta }]);
-    if (r.ok) doAutosave();
-  };
-
   // 候选承嗣注释管理（御书房）：同时段只能一位候选；传嗣/流产会自动清除。
   const addCandidate = (charId: string) => {
     const r = store.applyEffects(db, [{ type: "heir_candidate", op: "add", char: charId }]);
@@ -376,7 +387,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const spend = store.dispatch({ type: "SKIP_REMAINDER" });
     if (!spend.ok) return;
     doAutosave();
-    runCheckpoints(true);
+    const beats = rollTaihouIllness();
+    if (beats.length) playReactions(beats, true);
+    else runCheckpoints(true);
   };
 
   // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。
@@ -553,6 +566,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
                 if (applied.ok) beats = plan.reactions;
               }
             }
+            if (rolledOver) beats = [...beats, ...rollTaihouIllness()];
             if (beats.length) playReactions(beats, rolledOver);
             else runCheckpoints(rolledOver);
           }}
@@ -757,7 +771,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <HeirListModal
           db={db}
           state={liveState}
-          onAdjust={adjustHeirFavor}
+          registry={registry}
           onSummon={summonHeir}
           canSummon={liveState.calendar.ap >= 1}
           onClose={() => setHeirListOpen(false)}
