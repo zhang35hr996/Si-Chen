@@ -189,6 +189,23 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return beats;
   };
 
+  /** 每行动点掷太后敲打（独立于懿旨；至多一次/行动）。返回台词节拍。 */
+  const rollRebuke = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): DecreeReaction[] => {
+    const beats: DecreeReaction[] = [];
+    for (let i = 0; i < amount; i++) {
+      const slot = before.apMax - before.ap + i;
+      const key = `rebuke:${store.getState().rngSeed}:${before.dayIndex}:${slot}`;
+      if (rolledSlots.current.has(key)) continue;
+      rolledSlots.current.add(key);
+      const plan = buildTaihouRebuke(db, store.getState(), key);
+      if (plan) {
+        const applied = store.applyEffects(db, plan.effects);
+        if (applied.ok) { beats.push(...plan.beats); break; }
+      }
+    }
+    return beats;
+  };
+
   /** 旬翻转：掷太后生病/自愈，应用效果并返回提示节拍（每旬至多一次）。 */
   const rollTaihouIllness = (): DecreeReaction[] => {
     const cal = store.getState().calendar;
@@ -217,11 +234,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return true;
   };
 
-  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰。返回扣点结果与懿旨台词。 */
+  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰。返回扣点结果与台词。 */
   const spendAp = (amount: number) => {
     const before = store.getState().calendar;
     const spend = store.dispatch({ type: "SPEND_AP", amount });
     let decreeBeats = spend.ok ? rollDecree(before, amount) : [];
+    if (spend.ok) decreeBeats = [...decreeBeats, ...rollRebuke(before, amount)];
     if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };

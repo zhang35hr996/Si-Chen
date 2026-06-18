@@ -86,3 +86,70 @@ export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: s
     ],
   };
 }
+
+export const TAIHOU_REBUKE_CHANCE = 5;
+
+export interface RebukePlan {
+  targetId: string;
+  effects: EventEffect[];
+  beats: { speakerId: string; lines: string[] }[];
+}
+
+/** 候选：在宫存活侍君，排除凤后。 */
+function rebukePool(db: ContentDB, state: GameState): { id: string; favor: number }[] {
+  return Object.values(db.characters)
+    .filter((c) => {
+      if (c.kind !== "consort" || c.id === "feng_hou") return false;
+      if (c.defaultLocation === "lenggong") return false;
+      return state.standing[c.id]?.lifecycle !== "deceased";
+    })
+    .map((c) => ({ id: c.id, favor: state.standing[c.id]?.favor ?? 0 }));
+}
+
+/** 每行动点 5% 敲打；病中不掷。按 favor 加权选人（宠高更易中）。无候选→null。 */
+export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: string): RebukePlan | null {
+  if (state.taihou.ill) return null;
+  if (gestationRoll(`taihou:rebuke:gate:${seedKey}`) % 100 >= TAIHOU_REBUKE_CHANCE) return null;
+  const pool = rebukePool(db, state);
+  if (pool.length === 0) return null;
+
+  // favor-weighted pick; favor 全 0 时退化为均匀。
+  const total = pool.reduce((sum, p) => sum + p.favor, 0);
+  let pickId: string;
+  if (total <= 0) {
+    pickId = pool[gestationRoll(`taihou:rebuke:pick:${seedKey}`) % pool.length]!.id;
+  } else {
+    let roll = gestationRoll(`taihou:rebuke:pick:${seedKey}`) % total;
+    pickId = pool[pool.length - 1]!.id;
+    for (const p of pool) {
+      if (roll < p.favor) { pickId = p.id; break; }
+      roll -= p.favor;
+    }
+  }
+
+  const char = db.characters[pickId]!;
+  const st = state.standing[pickId];
+  const name = resolveDisplayName(char, st, st ? db.ranks[st.rank] : undefined);
+  return {
+    targetId: pickId,
+    effects: [
+      { type: "favor", char: pickId, delta: -5 },
+      { type: "resource", pillar: "harem", field: "harmony", delta: 2 },
+      {
+        type: "memory",
+        char: pickId,
+        entry: {
+          kind: "event",
+          summary: "被太后召去慈宁宫训诫，戒臣勿恃宠骄纵、独占圣心。",
+          salience: 65,
+          tags: ["taihou", "rebuke"],
+          participants: ["taihou", pickId],
+        },
+      },
+    ],
+    beats: [
+      { speakerId: "taihou", lines: [`${name}近来圣眷正浓，哀家有句话须叮嘱：宠不可恃，更不可独揽圣心，免招后宫非议。`] },
+      { speakerId: pickId, lines: [`${name}惶恐领训，谨记太后教诲，不敢有违。`] },
+    ],
+  };
+}

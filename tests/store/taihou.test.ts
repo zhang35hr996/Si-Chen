@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { taihouIllnessChance, buildTaihouIllnessTick, buildShizhiEncounter } from "../../src/store/taihou";
+import { taihouIllnessChance, buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../../src/store/taihou";
 import type { GameState } from "../../src/engine/state/types";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
@@ -80,5 +80,54 @@ describe("buildShizhiEncounter", () => {
     const s = createNewGameState(db);
     s.taihou.ill = true;
     expect(JSON.stringify(buildShizhiEncounter(db, s, "k"))).toBe(JSON.stringify(buildShizhiEncounter(db, s, "k")));
+  });
+});
+
+describe("buildTaihouRebuke", () => {
+  const loaded2 = loadGameContent();
+  const db2 = loaded2.ok ? loaded2.value : (() => { throw new Error("content failed"); })();
+
+  it("null when 太后 ill (病中不敲打)", () => {
+    const s = createNewGameState(db2);
+    s.taihou.ill = true;
+    let any = false;
+    for (let i = 0; i < 100; i++) if (buildTaihouRebuke(db2, s, `x:${i}`)) any = true;
+    expect(any).toBe(false);
+  });
+
+  it("on hit: targets a non-凤后 consort, -5 favor + harem harmony +2", () => {
+    const s = createNewGameState(db2);
+    s.taihou.ill = false;
+    let seed = "";
+    for (let i = 0; i < 300; i++) {
+      const plan = buildTaihouRebuke(db2, s, `h:${i}`);
+      if (plan) { seed = `h:${i}`; break; }
+    }
+    expect(seed).not.toBe("");
+    const plan = buildTaihouRebuke(db2, s, seed)!;
+    expect(plan.targetId).not.toBe("feng_hou");
+    expect(db2.characters[plan.targetId]!.kind).toBe("consort");
+    expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.targetId && e.delta === -5)).toBe(true);
+    expect(plan.effects.some((e) => e.type === "resource" && e.pillar === "harem" && e.field === "harmony" && e.delta === 2)).toBe(true);
+    expect(plan.beats.length).toBe(2);
+  });
+
+  it("never targets 凤后 across many hits", () => {
+    const s = createNewGameState(db2);
+    s.taihou.ill = false;
+    const counts: Record<string, number> = {};
+    let hits = 0;
+    for (let i = 0; i < 2000 && hits < 200; i++) {
+      const plan = buildTaihouRebuke(db2, s, `w:${i}`);
+      if (plan) { counts[plan.targetId] = (counts[plan.targetId] ?? 0) + 1; hits++; }
+    }
+    expect(hits).toBeGreaterThan(0);
+    expect(counts["feng_hou"]).toBeUndefined();
+  });
+
+  it("deterministic", () => {
+    const s = createNewGameState(db2);
+    s.taihou.ill = false;
+    expect(JSON.stringify(buildTaihouRebuke(db2, s, "k"))).toBe(JSON.stringify(buildTaihouRebuke(db2, s, "k")));
   });
 });
