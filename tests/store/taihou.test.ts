@@ -130,4 +130,23 @@ describe("buildTaihouRebuke", () => {
     s.taihou.ill = false;
     expect(JSON.stringify(buildTaihouRebuke(db2, s, "k"))).toBe(JSON.stringify(buildTaihouRebuke(db2, s, "k")));
   });
+
+  it("weighting reaches every consort when total favor exceeds 99 (raw roll, no 0–99 clamp)", () => {
+    const s = createNewGameState(db2);
+    s.taihou.ill = false;
+    // Push favors so total > 99 and the last cumulative slice starts above 99.
+    const pool = Object.values(db2.characters).filter(
+      (c) => c.kind === "consort" && c.id !== "feng_hou" && c.defaultLocation !== "lenggong",
+    );
+    expect(pool.length).toBeGreaterThanOrEqual(2);
+    for (const c of pool) s.standing[c.id]!.favor = 60; // e.g. 3×60 = 180 total
+    const picked = new Set<string>();
+    let hits = 0;
+    for (let i = 0; i < 4000 && hits < 400; i++) {
+      const plan = buildTaihouRebuke(db2, s, `wt:${i}`);
+      if (plan) { picked.add(plan.targetId); hits++; }
+    }
+    // every eligible consort must be reachable (the bug made high-cumulative ones unreachable)
+    for (const c of pool) expect(picked.has(c.id)).toBe(true);
+  });
 });

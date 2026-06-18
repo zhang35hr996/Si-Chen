@@ -1,5 +1,5 @@
 /** 太后系统纯逻辑（生病/侍疾/敲打），种子化确定性。 */
-import { gestationRoll } from "../engine/characters/gestation";
+import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
@@ -119,7 +119,7 @@ export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: stri
   if (total <= 0) {
     pickId = pool[gestationRoll(`taihou:rebuke:pick:${seedKey}`) % pool.length]!.id;
   } else {
-    let roll = gestationRoll(`taihou:rebuke:pick:${seedKey}`) % total;
+    let roll = gestationRollRaw(`taihou:rebuke:pick:${seedKey}`) % total;
     pickId = pool[pool.length - 1]!.id;
     for (const p of pool) {
       if (roll < p.favor) { pickId = p.id; break; }
