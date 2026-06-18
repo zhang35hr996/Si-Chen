@@ -227,15 +227,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
     doAutosave();
-    if (plan.isFirstNight && plan.charId !== "feng_hou") {
+    const firstNight = plan.isFirstNight && plan.charId !== "feng_hou";
+    if (firstNight) {
       setFirstNightPromptId(plan.charId);
       if (spend.value.rolledOver) setReactionRollover(true); // 初夜提示关闭后再补跑
-    } else if (spend.value.rolledOver) {
-      runCheckpoints(true);
-    }
-    if (decreeBeats.length) {
-      if (reaction === null) playReactions(decreeBeats, false);
-      else setReactionQueue((q) => [...q, ...decreeBeats]);
+      // 初夜弹窗在上：懿旨入队，待晋升后续反应或「暂且不必」时排空。
+      if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
+    } else {
+      // 非初夜：懿旨台词即时串播（playReactions 内含转旬补跑；无懿旨且转旬也会补跑）。
+      playReactions(decreeBeats, spend.value.rolledOver);
     }
   };
 
@@ -387,7 +387,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!applied.ok) return;
     doAutosave();
     setHeirListOpen(false);
-    if (decreeBeats.length) setReactionQueue(decreeBeats);
+    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     if (spend.value.rolledOver) setReactionRollover(true);
     setChildReaction(plan);
   };
@@ -401,7 +401,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     doAutosave();
-    if (decreeBeats.length) setReactionQueue(decreeBeats);
+    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     if (spend.value.rolledOver) setReactionRollover(true);
     setChildReaction(plan);
   };
@@ -685,7 +685,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               type="button"
               onClick={() => {
                 setFirstNightPromptId(null);
-                if (reactionRollover) {
+                if (reactionQueue.length > 0) {
+                  // 先串播待播的凤后懿旨；其 onDone 会接手转旬补跑（reactionRollover 保留）。
+                  const [next, ...rest] = reactionQueue;
+                  setReactionQueue(rest);
+                  setReaction(next!);
+                } else if (reactionRollover) {
                   setReactionRollover(false);
                   runCheckpoints(true); // 初夜恰逢转旬 → 补跑时间推进 checkpoint
                 }
