@@ -518,6 +518,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           registry={registry}
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
           onOpenSave={() => setView("save")}
+          // ev_taihou_converse 用 checkpoint:"game_start" 故永不自动触发，只由此按钮手动开启；勿改成 location_enter（会变强制弹出）。
           onConverse={() => startEvent("ev_taihou_converse")}
           onOpenResources={() => setResourcePanelOpen(true)}
         />
