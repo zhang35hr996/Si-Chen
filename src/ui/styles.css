@@ -846,3 +846,6 @@ body {
 .location-screen__flip { margin-left: 0.75rem; font-size: 0.85rem; }
 .heir-name__input { width: 8rem; padding: 0.3rem 0.5rem; margin: 0.5rem 0; }
 .heir-list__edu { color: #b89; font-size: 0.85em; }
+.resource-panel { background: #1c1611; border: 1px solid #5c4d3a; padding: 1rem 1.5rem; max-width: 22rem; }
+.resource-panel__row { display: flex; justify-content: space-between; gap: 2rem; }
+.resource-panel__val { color: #d8c7a8; }

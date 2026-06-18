@@ -28,6 +28,7 @@ export function LocationScreen({
   onReviewMemorials,
   onRestAlone,
   onConverse,
+  onOpenResources,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -46,6 +47,7 @@ export function LocationScreen({
   onReviewMemorials?: () => void;
   onRestAlone?: () => void;
   onConverse?: (charId: string) => void;
+  onOpenResources?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -77,6 +79,11 @@ export function LocationScreen({
           <span className="hud__pregnancy">怀胎</span>
         )}
         <span className="hud__group">
+          {onOpenResources && (
+            <button type="button" className="hud__button" onClick={onOpenResources}>
+              国情
+            </button>
+          )}
           <button type="button" className="hud__button" onClick={onOpenSave}>
             存档
           </button>

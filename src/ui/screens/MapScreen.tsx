@@ -28,6 +28,7 @@ export function MapScreen({
   onOpenView,
   onOpenSave,
   onClose,
+  onOpenResources,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -40,6 +41,7 @@ export function MapScreen({
   onOpenView: (locationId: string) => void;
   onOpenSave: () => void;
   onClose: () => void;
+  onOpenResources?: () => void;
 }) {
   const state = useGameState(store);
   const boards = db.world.mapBoards ?? [DEFAULT_BOARD];
@@ -151,6 +153,11 @@ export function MapScreen({
           {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
         <span className="hud__group">
+          {onOpenResources && (
+            <button type="button" className="hud__button" onClick={onOpenResources}>
+              国情
+            </button>
+          )}
           <button type="button" className="hud__button" onClick={onOpenSave}>
             存档
           </button>

@@ -33,6 +33,7 @@ import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
 import { DebugPanel } from "./debug/DebugPanel";
+import { ResourcePanel } from "./components/ResourcePanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
 import { DialogueScreen } from "./screens/DialogueScreen";
 import { FreeViewScreen } from "./screens/FreeViewScreen";
@@ -82,6 +83,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const [adoptionQueue, setAdoptionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
+  const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   const chainDepth = useRef(0);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
@@ -436,6 +438,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onReviewMemorials={reviewMemorials}
           onRestAlone={restAlone}
           onConverse={converse}
+          onOpenResources={() => setResourcePanelOpen(true)}
         />
       )}
       {view === "shangshufang" && (
@@ -490,6 +493,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           }}
           onOpenSave={() => setView("save")}
           onClose={() => setView("location")}
+          onOpenResources={() => setResourcePanelOpen(true)}
         />
       )}
       {view === "freeview" && freeViewId && (
@@ -729,6 +733,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             }
           }}
         />
+      )}
+      {resourcePanelOpen && (
+        <ResourcePanel state={liveState} onClose={() => setResourcePanelOpen(false)} />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
     </>
