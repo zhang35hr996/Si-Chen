@@ -15,7 +15,7 @@ import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/b
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
-import { buildTaihouIllnessTick } from "../store/taihou";
+import { buildTaihouIllnessTick, buildShizhiEncounter } from "../store/taihou";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
@@ -118,7 +118,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
-    setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : loc === "cining_gong" ? "cining_gong" : "location");
+    if (loc === "cining_gong") { setView("cining_gong"); maybeShizhi(); return; }
+    setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : "location");
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -161,7 +162,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (pick) startEvent(pick.id);
     else if (store.getState().playerLocation === "shangshufang") setView("shangshufang");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
-    else if (store.getState().playerLocation === "cining_gong") setView("cining_gong");
+    else if (store.getState().playerLocation === "cining_gong") { setView("cining_gong"); maybeShizhi(); }
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
@@ -196,6 +197,21 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const applied = store.applyEffects(db, tick.effects);
     if (!applied.ok) return [];
     return tick.beats;
+  };
+
+  /** 进慈宁宫且太后病中：掷侍疾遭遇，命中即应用并串播。返回是否已起反应。 */
+  const maybeShizhi = (): boolean => {
+    const cal = store.getState().calendar;
+    const key = `${cal.year}:${cal.month}:${cal.period}`;
+    const plan = buildShizhiEncounter(db, store.getState(), key);
+    if (!plan) return false;
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) return false;
+    doAutosave();
+    const [first, ...rest] = plan.beats;
+    setReactionQueue((q) => [...q, ...rest]);
+    if (first) setReaction(first);
+    return true;
   };
 
   /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰。返回扣点结果与懿旨台词。 */

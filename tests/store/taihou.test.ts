@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { taihouIllnessChance, buildTaihouIllnessTick } from "../../src/store/taihou";
+import { taihouIllnessChance, buildTaihouIllnessTick, buildShizhiEncounter } from "../../src/store/taihou";
 import type { GameState } from "../../src/engine/state/types";
+import { createNewGameState } from "../../src/engine/state/newGame";
+import { loadGameContent } from "../../src/engine/content/viteSource";
 
 function stateWith(over: { ill: boolean; year: number }): GameState {
   return {
@@ -45,5 +47,38 @@ describe("buildTaihouIllnessTick", () => {
     expect(seed).not.toBe("");
     const tick = buildTaihouIllnessTick(stateWith({ ill: true, year: 1 }), seed)!;
     expect(tick.beats.length).toBe(0);
+  });
+});
+
+describe("buildShizhiEncounter", () => {
+  const loaded = loadGameContent();
+  const db = loaded.ok ? loaded.value : (() => { throw new Error("content failed"); })();
+
+  it("null when 太后 not ill", () => {
+    const s = createNewGameState(db);
+    s.taihou.ill = false;
+    expect(buildShizhiEncounter(db, s, "1:1:early")).toBeNull();
+  });
+
+  it("when ill + hitting gate: picks an attendant, cures 太后, +5 favor", () => {
+    const s = createNewGameState(db);
+    s.taihou.ill = true;
+    let seed = "";
+    for (let i = 0; i < 200; i++) {
+      const plan = buildShizhiEncounter(db, s, `g:${i}`);
+      if (plan) { seed = `g:${i}`; break; }
+    }
+    expect(seed).not.toBe("");
+    const plan = buildShizhiEncounter(db, s, seed)!;
+    expect(db.characters[plan.attendantId]).toBeDefined();
+    expect(plan.effects.some((e) => e.type === "set_taihou_illness" && e.ill === false)).toBe(true);
+    expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.attendantId && e.delta === 5)).toBe(true);
+    expect(plan.beats.length).toBe(3);
+  });
+
+  it("deterministic", () => {
+    const s = createNewGameState(db);
+    s.taihou.ill = true;
+    expect(JSON.stringify(buildShizhiEncounter(db, s, "k"))).toBe(JSON.stringify(buildShizhiEncounter(db, s, "k")));
   });
 });
