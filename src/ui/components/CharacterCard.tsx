@@ -14,7 +14,7 @@ import { bedchamberConfig } from "../../store/bedchamber";
 import { toGameTime } from "../../engine/calendar/time";
 
 /** 侍君明面属性 — label order follows background §四.4.1. */
-const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes, string]> = [
+export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes, string]> = [
   ["appearance", "容貌"],
   ["talent", "才情"],
   ["family", "家世"],
