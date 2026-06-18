@@ -53,7 +53,7 @@
 
 新增 `src/ui/components/ConsortListModal.tsx`，结构与 `HeirListModal` 对称（`view: "list" | "detail"`）。
 
-- **列表态**：全部 `kind === "consort"` 角色（含凤后），按 `effectiveOrder` 位分降序；冷宫（`defaultLocation === "lenggong"`）、已故（`lifecycle === "deceased"`）以小字标注但仍可查看。整行可点 → 详情。
+- **列表态**：宫中侍君——`kind === "consort"` 且 `lifecycle !== "deceased"` 且 `defaultLocation !== "lenggong"`（与翻牌子同一过滤，排除冷宫与已故），含凤后，按 `effectiveOrder` 位分降序。整行可点 → 详情。
 - **详情态**：
   - 立绘：`registry.portrait(character.portraitSet, "neutral")`。
   - 位分（rank）+ 封号（`standing.title`）。
@@ -97,6 +97,7 @@
 - `src/ui/components/HeirListModal.tsx` — 列表/详情钻取；新增 `registry` prop；移除 `onAdjust` 与 ± UI。
 - `src/ui/components/ConsortListModal.tsx` — 新建。
 - `src/ui/components/BedchamberPicker.tsx` — 牌子托盘 + 排除冷宫 + 召见语义。
+- 抽共享 helper（如 `src/engine/characters/standing.ts` 内 `inPalaceConsorts(db, state)`）：`kind === "consort" && lifecycle !== "deceased" && defaultLocation !== "lenggong"`，按 `effectiveOrder` 降序；查看侍君与翻牌子共用，避免过滤漂移。
 - `src/ui/App.tsx` — `summonedConsortId` 状态与接线；`onOpenConsorts`；翻牌子 `onPick` 改为召见；清除时机；移除 `adjustHeirFavor`。
 - `src/ui/styles.css` — 御书房菜单、子嗣/侍君详情、牌子托盘样式（沿用既有朱砂鎏金主题令牌）。
 - 引擎/store：不改。
@@ -107,6 +108,6 @@
 - Playwright 手测端到端：
   1. 进入御书房 → 见 5 主选项 +（孕期时）杂务组。
   2. 查看子嗣 → 点皇嗣 → 见立绘（按年龄 baby/school）、年龄、属性；宠爱只读；召见扣 1 AP。
-  3. 查看侍君 → 点侍君 → 见五维、恩宠、抚养皇嗣、封号管理、召见；孕期见候选承嗣开关。
-  4. 翻牌子 → 牌子托盘竖排名牌，冷宫/已故不出现 → 点牌 → 御书房出现该侍君卡 → 对话/侍寝可用并各扣 1 AP；退下清除。
+  3. 查看侍君 → 列表仅宫中侍君（冷宫/已故不出现）→ 点侍君 → 见五维、恩宠、抚养皇嗣、封号管理、召见；孕期见候选承嗣开关。
+  4. 翻牌子 → 牌子托盘竖排名牌（同样冷宫/已故不出现）→ 点牌 → 御书房出现该侍君卡 → 对话/侍寝可用并各扣 1 AP；退下清除。
   5. 查看类操作前后 AP 不变。
