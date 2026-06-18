@@ -33,6 +33,8 @@ export function FreeViewScreen({
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const action = location.actionEventId ? db.events[location.actionEventId] : undefined;
   const affordable = action ? state.calendar.ap >= action.apCost : false;
+  // actionFirstSlotOnly：仅每日首个行动点（卯时早朝，ap===apMax）可行动。
+  const slotBlocked = location.actionFirstSlotOnly === true && state.calendar.ap !== state.calendar.apMax;
 
   return (
     <main className="location-screen">
@@ -57,14 +59,19 @@ export function FreeViewScreen({
 
       <section className="location-screen__events">
         {action ? (
-          <button
-            type="button"
-            className="location-screen__event"
-            disabled={!affordable}
-            onClick={() => onStartEvent(action.id)}
-          >
-            {action.title}
-          </button>
+          <>
+            <button
+              type="button"
+              className="location-screen__event"
+              disabled={!affordable || slotBlocked}
+              onClick={() => onStartEvent(action.id)}
+            >
+              {action.title}
+            </button>
+            {slotBlocked && (
+              <p className="location-screen__empty">朝时已过，请明日卯时早朝。</p>
+            )}
+          </>
         ) : (
           <p className="location-screen__empty">此处无人，亦无可为之事。</p>
         )}
