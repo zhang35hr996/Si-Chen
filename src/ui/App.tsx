@@ -144,11 +144,18 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const canContinue =
     storage !== null && listSaves(storage).some((s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok");
 
+  /** 重置每旬/每行动点的去重 ref：新游戏或读档后必须清空，否则旧局的 key（rngSeed 固定为 1）会压制本局掷骰。 */
+  const resetRollGuards = () => {
+    rolledSlots.current.clear();
+    tickedPeriods.current.clear();
+  };
+
   const continueGame = () => {
     if (!storage) return;
     const result = loadWithRecovery(storage, db, { logger });
     if (result.ok) {
       store.loadState(result.value.state);
+      resetRollGuards();
       setContinueError(result.value.warnings.map((w) => w.message).join("；") || null);
       goHome();
     } else {
@@ -257,6 +264,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   const newGame = () => {
     store.newGame(db);
+    resetRollGuards();
     const pick = pickNextEvent(db, store.getState(), "game_start");
     if (pick) startEvent(pick.id);
     else goHome(); // 开局即在皇城主地图
@@ -590,7 +598,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           logger={logger}
           gameStarted
           onClose={enterCurrentLocation}
-          onLoaded={enterCurrentLocation}
+          onLoaded={() => { resetRollGuards(); enterCurrentLocation(); }}
         />
       )}
       {view === "map" && (
@@ -664,6 +672,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               // 若本场景消耗行动点导致转旬/转月，立刻触发 time_advance 事件，
               // 不必等玩家转换地图再 trigger。
               if (rolledOver) {
+                // 场景提交导致转旬：补掷太后生病（其余转旬路径走 spendAp/travel/restAlone）。
+                const illnessBeats = rollTaihouIllness();
+                if (illnessBeats.length) {
+                  const [first, ...rest] = illnessBeats;
+                  setReactionQueue((q) => [...q, ...rest]);
+                  setReaction(first!);
+                }
                 const t = pickNextEvent(db, store.getState(), "time_advance");
                 if (t && chainDepth.current < MAX_EVENT_CHAIN) {
                   chainDepth.current += 1;
