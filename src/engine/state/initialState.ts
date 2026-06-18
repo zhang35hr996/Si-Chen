@@ -27,6 +27,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
         heirs: [],
       },
     },
+    taihou: { ill: false },
     flags: {},
     relationships: {},
     standing: {},

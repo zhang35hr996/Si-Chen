@@ -65,6 +65,7 @@ export function validateEffects(
       case "resource":
       case "set_bloodline_status":
       case "flag":
+      case "set_taihou_illness":
         break; // fully constrained by the schema
       case "set_rank": {
         const ch = db.characters[e.char];
@@ -454,6 +455,10 @@ export function applyEffects(
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         const applied = cappedDelta(`heir:${effect.heirId}`, effect.delta);
         heir.favor = clampPct(heir.favor + applied);
+        break;
+      }
+      case "set_taihou_illness": {
+        next.taihou.ill = effect.ill;
         break;
       }
       case "memory": {

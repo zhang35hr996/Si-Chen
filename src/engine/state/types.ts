@@ -172,6 +172,12 @@ export interface BedchamberRecord {
   encounters: BedchamberEncounter[];
 }
 
+// ── 太后（尊长）状态 ──────────────────────────────────────────────────
+export interface TaihouState {
+  /** 太后是否卧病。 */
+  ill: boolean;
+}
+
 // ── The single authoritative state ────────────────────────────────────
 export type FlagValue = boolean | number | string;
 
@@ -183,6 +189,7 @@ export interface EventLogEntry {
 export interface GameState {
   calendar: CalendarState;
   playerLocation: string;
+  taihou: TaihouState;
   resources: Resources;
   flags: Record<string, FlagValue>;
   relationships: Record<string, RelationshipState>;

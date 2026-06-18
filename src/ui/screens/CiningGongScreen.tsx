@@ -17,6 +17,7 @@ export function CiningGongScreen({
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const portrait = registry.portrait(taihou.portraitSet, "neutral");
   const canAct = state.calendar.ap >= 1;
+  const ill = state.taihou.ill;
 
   return (
     <main className="location-screen">
@@ -41,7 +42,7 @@ export function CiningGongScreen({
             <span className="char-card__kind">尊长</span>
           </header>
           <p className="char-card__role">{taihou.profile.role}</p>
-          {/* 凤体违和提示在后续任务接入 */}
+          {ill && <p className="char-card__lifecycle" data-lifecycle="deceased">凤体违和</p>}
           <button type="button" className="char-card__converse" disabled={!canAct} onClick={onConverse}>与太后叙话（1行动点）</button>
         </article>
       </section>

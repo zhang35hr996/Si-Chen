@@ -55,6 +55,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   return {
     calendar,
     playerLocation: db.world.startingLocation,
+    taihou: { ill: false },
     resources: {
       court: { ...db.world.startingResources.court },
       harem: { ...db.world.startingResources.harem },

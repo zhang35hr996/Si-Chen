@@ -105,6 +105,7 @@ export const gameStateSchema = z.strictObject({
       ),
     }),
   ),
+  taihou: z.strictObject({ ill: z.boolean() }),
   eventLog: z.array(z.strictObject({ eventId: idSchema, firedAt: gameTimeSchema })),
   sceneHistory: z.array(idSchema),
   rngSeed: z.number(),

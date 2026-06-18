@@ -194,6 +194,7 @@ export const eventEffectSchema = z.union([
   }),
   z.strictObject({ type: z.literal("heir_adopt"), heirId: nonEmpty, fatherId: idSchema }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
+  z.strictObject({ type: z.literal("set_taihou_illness"), ill: z.boolean() }),
 ]);
 
 export type EventEffect = z.infer<typeof eventEffectSchema>;
