@@ -1105,7 +1105,6 @@ button:active:enabled {
 .rank-modal,
 .event-overlay,
 .bedchamber-modal,
-.bedchamber-picker,
 .pregnancy-modal,
 .physician-modal,
 .heir-list {
@@ -1301,7 +1300,6 @@ button:active:enabled {
 /* ── 寝宫 / 侍寝 / 有孕 模态 ── */
 
 .bedchamber-modal,
-.bedchamber-picker,
 .pregnancy-modal {
   background: linear-gradient(170deg, #221825, #1a1320);
   color: #f0e6ec;
@@ -1366,36 +1364,12 @@ button:active:enabled {
   border-color: var(--cinnabar-soft);
 }
 
-.bedchamber-picker__list,
 .pregnancy-modal__list {
   list-style: none;
   padding: 0;
   margin: 0.5rem 0;
   max-height: 16rem;
   overflow-y: auto;
-}
-
-.bedchamber-picker__list button {
-  width: 100%;
-  text-align: left;
-  display: flex;
-  justify-content: space-between;
-  padding: 0.55rem 0.65rem;
-  font: inherit;
-  color: #f0e6ec;
-  background: rgba(58, 34, 51, 0.35);
-  border: 1px solid transparent;
-  border-bottom: 1px solid #3a2233;
-  cursor: pointer;
-}
-
-.bedchamber-picker__list button:hover {
-  border-color: var(--cinnabar-soft);
-  background: rgba(122, 31, 61, 0.3);
-}
-
-.bedchamber-picker__rank {
-  color: #c7b8c0;
 }
 
 .pregnancy-modal__list label {
@@ -1498,12 +1472,6 @@ button:active:enabled {
 .heir-list__edu {
   color: var(--gold-soft);
   font-size: 0.85em;
-}
-
-.heir-list__favor {
-  margin-left: auto;
-  color: var(--cinnabar-soft);
-  font-size: 0.85rem;
 }
 
 /* ── 名册 / 取名输入 ── */

@@ -46,6 +46,12 @@ export function ConsortListModal({
 
   const renderRow = (c: CharacterContent) => {
     const st = state.standing[c.id]!;
+    const lc = st.lifecycle;
+    const lifecycleSuffix =
+      lc === "carrying" ? "·承嗣君·怀胎"
+      : lc === "delivered" ? "·育嗣君"
+      : lc === "candidate" ? "·候选承嗣"
+      : "";
     return (
       <li key={c.id} className="consort-list__row">
         <button type="button" className="consort-list__pick" onClick={() => setSelectedId(c.id)}>
@@ -53,6 +59,7 @@ export function ConsortListModal({
           <span className="consort-list__rank">
             {db.ranks[st.rank]?.name}
             {st.title ? `·封号「${st.title}」` : ""}
+            {lifecycleSuffix}
           </span>
         </button>
       </li>
@@ -135,6 +142,7 @@ export function ConsortListModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
+      {/* 复用 .heir-list 弹窗外框样式 */}
       <div className="heir-list" onClick={(e) => e.stopPropagation()}>
         <h2>侍君</h2>
         {selected ? (
