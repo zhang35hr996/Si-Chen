@@ -14,6 +14,7 @@ import { monthOrdinal } from "../engine/calendar/time";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
+import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { buildAdoptionReaction } from "../store/adoption";
@@ -82,9 +83,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [heirListOpen, setHeirListOpen] = useState(false);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
-  const [adoptionQueue, setAdoptionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
+  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   const chainDepth = useRef(0);
+  const rolledSlots = useRef<Set<string>>(new Set());
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   if (!content.ok || !manifest.success) {
@@ -159,6 +161,45 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
+  /** 为本次行动消耗的每个行动点掷骰凤后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
+  const rollDecree = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): DecreeReaction[] => {
+    const beats: DecreeReaction[] = [];
+    for (let i = 0; i < amount; i++) {
+      const slot = before.apMax - before.ap + i;
+      const key = `${store.getState().rngSeed}:${before.dayIndex}:${slot}`;
+      if (rolledSlots.current.has(key)) continue;
+      rolledSlots.current.add(key);
+      const plan = buildEmpressDecree(db, store.getState(), key);
+      if (plan) {
+        const applied = store.applyEffects(db, plan.effects);
+        if (applied.ok) {
+          beats.push(...plan.reactions);
+          break; // 单次行动至多一道懿旨
+        }
+      }
+    }
+    return beats;
+  };
+
+  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰。返回扣点结果与懿旨台词。 */
+  const spendAp = (amount: number) => {
+    const before = store.getState().calendar;
+    const spend = store.dispatch({ type: "SPEND_AP", amount });
+    const decreeBeats = spend.ok ? rollDecree(before, amount) : [];
+    return { spend, decreeBeats };
+  };
+
+  /** 串播一组反应节拍（行动自身台词 + 凤后懿旨），空则按需补跑转旬 checkpoint。 */
+  const playReactions = (beats: DecreeReaction[], rolledOver: boolean) => {
+    if (beats.length === 0) {
+      if (rolledOver) runCheckpoints(true);
+      return;
+    }
+    setReaction(beats[0]!);
+    setReactionQueue(beats.slice(1));
+    if (rolledOver) setReactionRollover(true);
+  };
+
   const newGame = () => {
     store.newGame(db);
     const pick = pickNextEvent(db, store.getState(), "game_start");
@@ -183,7 +224,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     setBedchamberRun(null);
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
     doAutosave();
     if (plan.isFirstNight && plan.charId !== "feng_hou") {
@@ -191,6 +232,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       if (spend.value.rolledOver) setReactionRollover(true); // 初夜提示关闭后再补跑
     } else if (spend.value.rolledOver) {
       runCheckpoints(true);
+    }
+    if (decreeBeats.length) {
+      if (reaction === null) playReactions(decreeBeats, false);
+      else setReactionQueue((q) => [...q, ...decreeBeats]);
     }
   };
 
@@ -315,14 +360,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       { type: "resource", pillar: "court", field: "factionPressure", delta: -3 },
     ]);
     if (!applied.ok) return;
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 2 });
-    if (!spend.ok) return; // AP guard backstop
+    const { spend, decreeBeats } = spendAp(2);
+    if (!spend.ok) return;
     doAutosave();
-    if (spend.value.rolledOver) {
-      runCheckpoints(true);
-    } else {
-      setReaction({ speakerId: "sili_nvguan", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] });
-    }
+    const own: DecreeReaction[] = spend.value.rolledOver
+      ? []
+      : [{ speakerId: "sili_nvguan", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] }];
+    playReactions([...own, ...decreeBeats], spend.value.rolledOver);
   };
 
   // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
@@ -337,13 +381,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const summonHeir = (heirId: string) => {
     const plan = buildHeirSummon(db, store.getState(), heirId);
     if (!plan) return;
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
-    if (!spend.ok) return; // 行动点不足
+    const { spend, decreeBeats } = spendAp(1);
+    if (!spend.ok) return;
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     doAutosave();
-    if (spend.value.rolledOver) setReactionRollover(true);
     setHeirListOpen(false);
+    if (decreeBeats.length) setReactionQueue(decreeBeats);
+    if (spend.value.rolledOver) setReactionRollover(true);
     setChildReaction(plan);
   };
 
@@ -351,11 +396,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const heirLesson = (heirId: string) => {
     const plan = buildHeirLesson(db, store.getState(), heirId);
     if (!plan) return;
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return;
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     doAutosave();
+    if (decreeBeats.length) setReactionQueue(decreeBeats);
     if (spend.value.rolledOver) setReactionRollover(true);
     setChildReaction(plan);
   };
@@ -364,11 +410,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const tutorReport = (heirId: string) => {
     const lines = buildTutorReport(db, store.getState(), heirId);
     if (!lines) return;
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return;
     doAutosave();
-    if (spend.value.rolledOver) setReactionRollover(true);
-    setReaction({ speakerId: "sili_nvguan", lines });
+    playReactions([{ speakerId: "sili_nvguan", lines }, ...decreeBeats], spend.value.rolledOver);
   };
 
   const adoptHeir = (heirId: string, fatherId: string) => {
@@ -382,7 +427,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     doAutosave();
     if (spend.value.rolledOver) setReactionRollover(true);
     const [first, ...rest] = reactions;
-    setAdoptionQueue(rest);
+    setReactionQueue(rest);
     if (first) setReaction(first);
   };
 
@@ -390,11 +435,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
     if (!lines) return;
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
-    if (!spend.ok) return; // 行动点不足
+    const { spend, decreeBeats } = spendAp(1);
+    if (!spend.ok) return;
     doAutosave();
-    if (spend.value.rolledOver) setReactionRollover(true);
-    setReaction({ speakerId: charId, lines });
+    playReactions([{ speakerId: charId, lines }, ...decreeBeats], spend.value.rolledOver);
   };
 
   const transferTo = (carrierId: string) => {
@@ -483,8 +527,20 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           registry={registry}
           atRoot={mapAtRoot}
           onTravelled={(rolledOver) => {
-            doAutosave(); // travel autosave (plan §9)
-            runCheckpoints(rolledOver);
+            doAutosave();
+            const cal = store.getState().calendar;
+            const key = `${store.getState().rngSeed}:${cal.dayIndex}:travel:${cal.ap}`;
+            let beats: DecreeReaction[] = [];
+            if (!rolledSlots.current.has(key)) {
+              rolledSlots.current.add(key);
+              const plan = buildEmpressDecree(db, store.getState(), key);
+              if (plan) {
+                const applied = store.applyEffects(db, plan.effects);
+                if (applied.ok) beats = plan.reactions;
+              }
+            }
+            if (beats.length) playReactions(beats, rolledOver);
+            else runCheckpoints(rolledOver);
           }}
           onEnterCurrent={enterCurrentLocation}
           onOpenView={(locationId) => {
@@ -567,9 +623,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           lines={reaction.lines}
           onDone={() => {
             setReaction(null);
-            if (adoptionQueue.length > 0) {
-              const [nextLine, ...rest] = adoptionQueue;
-              setAdoptionQueue(rest);
+            if (reactionQueue.length > 0) {
+              const [nextLine, ...rest] = reactionQueue;
+              setReactionQueue(rest);
               setReaction(nextLine!);
               return;
             }
@@ -727,6 +783,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           lines={childReaction.lines}
           onDone={() => {
             setChildReaction(null);
+            if (reactionQueue.length > 0) {
+              const [next, ...rest] = reactionQueue;
+              setReactionQueue(rest);
+              setReaction(next!);
+              return;
+            }
             if (reactionRollover) {
               setReactionRollover(false);
               runCheckpoints(true);
