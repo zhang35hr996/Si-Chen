@@ -1975,3 +1975,40 @@ button:active:enabled {
   border-color: var(--gold);
   color: var(--gold-bright);
 }
+
+/* ── 御书房主菜单 ──────────────────────────────────────────────── */
+.yushufang-actions--minor {
+  margin-top: 0.4rem;
+}
+.yushufang-actions--minor button {
+  color: var(--cream-dim);
+  background: transparent;
+  border-color: var(--line-strong);
+}
+.yushufang-actions--minor button:hover:enabled {
+  color: var(--gold);
+  border-color: var(--line-gold);
+}
+/* ── 御书房·召见侍君卡 ─────────────────────────────────────────── */
+.summoned-consort {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  background: rgba(217, 184, 124, 0.05);
+  box-shadow: 0 0 16px rgba(217, 184, 124, 0.12);
+}
+.summoned-consort__dismiss {
+  font: inherit;
+  padding: 0.35rem 1rem;
+  color: var(--cream-dim);
+  background: var(--ink-600);
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+}
+.summoned-consort__dismiss:hover {
+  color: var(--gold);
+  border-color: var(--line-gold);
+}

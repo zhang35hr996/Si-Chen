@@ -15,7 +15,7 @@ import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/b
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
-import { buildTaihouIllnessTick, buildShizhiEncounter } from "../store/taihou";
+import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
@@ -27,6 +27,7 @@ import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
 import { HeirListModal } from "./components/HeirListModal";
+import { ConsortListModal } from "./components/ConsortListModal";
 import { HeirNameModal } from "./components/HeirNameModal";
 import { centennialDue } from "../engine/characters/heirs";
 import { randomPetName } from "../engine/characters/heirNames";
@@ -83,6 +84,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [centennialDismissedMonth, setCentennialDismissedMonth] = useState<number | null>(null);
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
+  const [consortListOpen, setConsortListOpen] = useState(false);
+  const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
@@ -260,6 +263,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!applied.ok) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
+    setSummonedConsortId(null);
     doAutosave();
     const firstNight = plan.isFirstNight && plan.charId !== "feng_hou";
     if (firstNight) {
@@ -382,6 +386,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   // 御书房·行动：批阅奏折（耗 2 行动点，提升朝堂资源）。
   const reviewMemorials = () => {
+    setSummonedConsortId(null);
     if (store.getState().calendar.ap < 2) return; // 行动点不足
     const applied = store.applyEffects(db, [
       { type: "resource", pillar: "court", field: "authority", delta: 5 },
@@ -400,6 +405,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
   const restAlone = () => {
+    setSummonedConsortId(null);
     const spend = store.dispatch({ type: "SKIP_REMAINDER" });
     if (!spend.ok) return;
     doAutosave();
@@ -468,6 +474,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!lines) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return;
+    setSummonedConsortId(null);
     doAutosave();
     playReactions([{ speakerId: charId, lines }, ...decreeBeats], spend.value.rolledOver);
   };
@@ -497,10 +504,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           onOpenMap={() => {
+            setSummonedConsortId(null);
             setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
             setView("map");
           }}
-          onOpenSave={() => setView("save")}
+          onOpenSave={() => {
+            setSummonedConsortId(null);
+            setView("save");
+          }}
           onStartEvent={startEvent}
           onManage={(id) => setManageCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
@@ -508,12 +519,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
           onSummonPhysician={() => setPhysicianOpen(true)}
           onOpenHeirs={() => setHeirListOpen(true)}
-          onAddCandidate={addCandidate}
-          onRemoveCandidate={removeCandidate}
+          onOpenConsorts={() => setConsortListOpen(true)}
           onReviewMemorials={reviewMemorials}
           onRestAlone={restAlone}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
+          summonedConsortId={summonedConsortId}
+          onDismissSummon={() => setSummonedConsortId(null)}
         />
       )}
       {view === "shangshufang" && (
@@ -688,8 +700,27 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <BedchamberPicker
           db={db}
           state={store.getState()}
-          onPick={beginBedchamber}
+          onPick={(id) => {
+            setFlipOpen(false);
+            setSummonedConsortId(id);
+          }}
           onClose={() => setFlipOpen(false)}
+        />
+      )}
+      {consortListOpen && (
+        <ConsortListModal
+          db={db}
+          state={liveState}
+          registry={registry}
+          sovereignPregnant={preg.status !== "none"}
+          onManage={(id) => setManageCharId(id)}
+          onSummon={(id) => {
+            setConsortListOpen(false);
+            setSummonedConsortId(id);
+          }}
+          onAddCandidate={addCandidate}
+          onRemoveCandidate={removeCandidate}
+          onClose={() => setConsortListOpen(false)}
         />
       )}
       {bedchamberPickId && db.characters[bedchamberPickId] && (
