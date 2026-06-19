@@ -6,7 +6,7 @@ file, this file wins. The ultimate source is the Zod schemas in
 [`src/engine/content/schemas.ts`](../../src/engine/content/schemas.ts) — content
 is **strict** (unknown keys fail validation), so a field absent here cannot be used.
 
-Last updated: 2026-06-17. Save format version: **3**.
+Last updated: 2026-06-19. Save format version: **4**.
 
 ## Capability table
 
@@ -14,17 +14,18 @@ Last updated: 2026-06-17. Save format version: **3**.
 |---|---|---|---|
 | **Scene nodes** | `line`, `choice`, `branch`, `effect` | `generate` (LLM node) | arbitrary scripts |
 | **Conditions** | `all`, `any`, `not`, `flagSet`, `eventFired`, `relationshipAtLeast`, `favorAtLeast`, `rankAtLeast`, `hasMemoryTag`, `periodIs`, `monthAtLeast`, `atLocation` | richer memory queries (count/recency) | `secretRevealed`, resource/bloodline predicates (scaffold guard) |
-| **Effects** | `relationship`, `favor`, `resource` (court/harem/bloodline), `set_bloodline_status`, `flag`, `memory` (unprotected), `set_rank`, `set_title`, `remove_title`, `heir_name`, `heir_summon`, `heir_educate`, `heir_adopt` | — | direct calendar/location mutation from scenes |
-| **Characters** | `consort`, `official` | wider roles | nested schedules, secrets gameplay (`secrets` must be empty) |
+| **Effects** | `relationship`, `favor`, `resource` (court/harem/bloodline), `set_bloodline_status`, `flag`, `memory` (unprotected), `set_rank`, `set_title`, `remove_title`, `heir_name`, `heir_summon`, `heir_educate`, `heir_adopt`, `set_taihou_illness` | — | direct calendar/location mutation from scenes |
+| **Characters** | `consort`, `official`, `elder` (太后: no 位分, no attributes, no standing) | wider roles | nested schedules, secrets gameplay (`secrets` must be empty) |
 | **Map** | data-driven `mapBoards` + `mapPortals`; `travel` nodes (cost AP, relocate) and `free` nodes (view only, optional one AP action) | per-area sub-graphs, time-gated portals | adjacency-restricted travel (it's fast-travel) |
 | **Calendar** | year / month / 上中下旬 period; `apMax` (6) action points; 时辰 time-of-day buckets driving background variants | seasonal events | sub-旬 scheduling |
 | **Memory** | append-only entries with tags; seeded from `initialMemories`; written by scene `memory` effects; queried via `hasMemoryTag` | retrieval / salience scoring / consolidation | LLM-driven memory retrieval |
 | **AI dialogue** | provider seam + stub remote provider | real provider, eval harness | unrestricted state mutation by the model |
-| **Save** | checksum, content-hash warning, missing-ref quarantine, autosave on scene-commit & travel; versioned format (v3) with laddered `MIGRATIONS[]` | — | automatic ID aliasing |
+| **Save** | checksum, content-hash warning, missing-ref quarantine, autosave on scene-commit & travel; versioned format (v4) with laddered `MIGRATIONS[]` | — | automatic ID aliasing |
 | **Resources** | court (authority/publicSupport/factionPressure), harem (harmony/jealousy), bloodline (legitimacy/menstrualStatus) — written by effects; read-only 国情面板 UI | faction simulation | resource-based event conditions (deliberately none) |
 | **Heirs** | full lifecycle: gestation → birth → 小名 → 百日宴正名 → 开蒙 → 上书房教育 → 奉先殿择养父; `Heir` state with petName/givenName/education/adoptiveFatherId; 4 heir effects (see below) | grown-up / succession events | LLM-driven heir dialogue |
 | **Location flags** | `actionFirstSlotOnly: boolean` — action disabled after first AP of the day, with hint text | — | — |
 | **Empress decree** | 凤后 auto-adjusts 贵人及以下 consort ranks per consumed AP (3% chance, seeded deterministic); `buildEmpressDecree` in `src/store/empressDecree.ts` | — | — |
+| **太后 (Empress Dowager)** | `elder` NPC at 慈宁宫; illness rolled per 旬 (5%+1%/yr, cap 25%; 50%/旬 self-heal); 侍疾 encounter (50%/旬 while ill → +恩宠, heals); 敲打 per-AP (5%, favor-weighted); selectable adoptive father. All in `src/store/taihou.ts`, seeded-deterministic | — | — |
 
 ## Hard rules content must obey
 
@@ -94,3 +95,24 @@ placeholder. Keep it that way until those systems are real.
 - **`actionFirstSlotOnly`** — optional boolean on location schema. When `true`, all
   actions in that location are disabled after the first AP of the day, with hint
   「朝时已过，请明日卯时早朝」. Used by 朝堂 (`chaotang`).
+- **太后系统 (Empress Dowager)** — new character `kind: "elder"` (`taihou`, no 位分 /
+  attributes / standing) living at **慈宁宫** (a 主图 travel node with its own
+  `CiningGongScreen`). New state `GameState.taihou.ill` + effect `set_taihou_illness`,
+  persisted at save **v4** (migration `3→4` backfills `{ill:false}`). All logic in
+  `src/store/taihou.ts`, seeded-deterministic via `gestationRoll`/`gestationRollRaw`:
+  - **对话** — fixed scripted scene `ev_taihou_converse` (1 AP). Uses
+    `checkpoint:"game_start"` as a manual-trigger marker so it never auto-fires; the
+    慈宁宫 button starts it directly. **Do not change to `location_enter`** (would force-pop).
+  - **生病** — `buildTaihouIllnessTick` rolls each 旬 rollover: not-ill → fall ill at
+    `taihouIllnessChance(year)` (5% + 1%/yr after 元年, cap 25%) with a 司礼官 prompt;
+    ill → self-heal at 50%/旬 (silent). Wired into every rollover path (`spendAp`,
+    `restAlone`, `onTravelled`, scene-commit) via a per-旬 `tickedPeriods` ref.
+  - **侍疾** — `buildShizhiEncounter`: entering 慈宁宫 while ill rolls 50%/旬 (seed pinned
+    per 旬, idempotent) to meet a 侍君/凤后 who tends her → +5 恩宠 and heals 太后.
+  - **敲打** — `buildTaihouRebuke`: each consumed AP, 5% (skipped while ill) to summon a
+    favor-weighted 侍君 (凤后 excluded) for admonishment → −5 恩宠 + 和睦 +2. Rolled in
+    `spendAp` alongside the decree via a `rebuke:`-prefixed `rolledSlots` key.
+  - **养父** — `eligibleAdoptiveFathers` includes the elder; `heir_adopt` accepts an
+    elder father (no standing checks); 太后 gives a single pleased line (no 谢恩, no 生父泪报).
+  - Note: `rolledSlots`/`tickedPeriods` refs are cleared on new-game / load
+    (`resetRollGuards`) so a prior session's keys never suppress the current game's rolls.
