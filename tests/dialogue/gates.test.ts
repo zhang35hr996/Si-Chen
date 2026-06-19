@@ -109,7 +109,7 @@ describe("authored content passes every gate (mock output is clean)", () => {
       for (const node of scene.nodes) {
         if (node.type === "line") {
           const speaker = db.characters[node.speaker]!;
-          const ctx = buildTextGateContext(db, speaker.initialStanding.rank);
+          const ctx = buildTextGateContext(db, speaker.initialStanding?.rank ?? "");
           expect(scanDialogueText(node.text, ctx)).toEqual([]);
         }
         if (node.type === "choice") {

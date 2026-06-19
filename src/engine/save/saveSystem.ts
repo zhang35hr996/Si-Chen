@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 3;
+export const SAVE_FORMAT_VERSION = 4;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -56,6 +56,12 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       if (h.education === undefined) h.education = { scholarship: 5, martial: 5, virtue: 5 };
     }
     return { ...env, formatVersion: 3, state, checksum: checksumOf(state) };
+  },
+  3: (old) => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (state.taihou === undefined) state.taihou = { ill: false };
+    return { ...env, formatVersion: 4, state, checksum: checksumOf(state) };
   },
 };
 

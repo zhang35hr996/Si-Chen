@@ -13,10 +13,10 @@ function nameOf(db: ContentDB, state: GameState, charId: string): string {
   return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
 }
 
-/** 养父候选：在宫(非冷宫)、非已故的侍君（含凤后）。 */
+/** 养父候选：在宫(非冷宫)、非已故的侍君（含凤后）及尊长（太后）。 */
 export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): CharacterContent[] {
   return Object.values(db.characters).filter((c) => {
-    if (c.kind !== "consort") return false;
+    if (c.kind !== "consort" && c.kind !== "elder") return false;
     if (c.defaultLocation === "lenggong") return false;
     if (state.standing[c.id]?.lifecycle === "deceased") return false;
     return true;
@@ -37,13 +37,26 @@ export interface AdoptionLine {
   lines: string[];
 }
 
-/** 择养父后的播报：养父谢恩；若生父尚在宫中，加司礼官「生父泪如雨下」。 */
+/** 择养父后的播报：养父谢恩；若生父尚在宫中，加司礼官「生父泪如雨下」。
+ *  若养父为尊长（太后），单段欣然，无谢恩、无生父泪报。
+ */
 export function buildAdoptionReaction(
   db: ContentDB,
   state: GameState,
   heir: Heir,
   fatherId: string,
 ): AdoptionLine[] {
+  const fatherChar = db.characters[fatherId];
+  if (fatherChar?.kind === "elder") {
+    const child = SEX_CHILD[heir.sex];
+    const pronoun = heir.sex === "daughter" ? "她" : "他";
+    return [
+      {
+        speakerId: fatherId,
+        lines: [`太后闻陛下择其抚育皇嗣，含笑颔首：好，这${child}就交给哀家，定当悉心教养，看着${pronoun}长大成人。`],
+      },
+    ];
+  }
   const child = SEX_CHILD[heir.sex];
   const adoptive = nameOf(db, state, fatherId);
   const thanks: AdoptionLine = {

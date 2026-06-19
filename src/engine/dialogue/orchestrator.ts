@@ -32,6 +32,9 @@ export function assembleDialogueRequest(
   }
   const relationship = state.relationships[speakerId] ?? character.initialRelationship;
   const standing = state.standing[speakerId] ?? character.initialStanding;
+  if (!standing) {
+    return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing (elder — use elder dialogue path)`));
+  }
   const rank = db.ranks[standing.rank];
   if (!rank) {
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" holds unknown rank "${standing.rank}"`));

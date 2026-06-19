@@ -15,8 +15,10 @@ import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/b
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
+import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
+import { CiningGongScreen } from "./screens/CiningGongScreen";
 import { buildAdoptionReaction } from "../store/adoption";
 import { ChildReactionScreen } from "./screens/ChildReactionScreen";
 import { buildBirth, dueGestation } from "../store/gestation";
@@ -25,6 +27,7 @@ import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
 import { HeirListModal } from "./components/HeirListModal";
+import { ConsortListModal } from "./components/ConsortListModal";
 import { HeirNameModal } from "./components/HeirNameModal";
 import { centennialDue } from "../engine/characters/heirs";
 import { randomPetName } from "../engine/characters/heirNames";
@@ -47,7 +50,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang" | "fengxiandian";
+type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang" | "fengxiandian" | "cining_gong";
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -81,12 +84,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [centennialDismissedMonth, setCentennialDismissedMonth] = useState<number | null>(null);
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
+  const [consortListOpen, setConsortListOpen] = useState(false);
+  const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
+  const tickedPeriods = useRef<Set<string>>(new Set());
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   if (!content.ok || !manifest.success) {
@@ -115,6 +121,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
+    if (loc === "cining_gong") { setView("cining_gong"); maybeShizhi(); return; }
     setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : "location");
   };
 
@@ -137,11 +144,18 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const canContinue =
     storage !== null && listSaves(storage).some((s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok");
 
+  /** 重置每旬/每行动点的去重 ref：新游戏或读档后必须清空，否则旧局的 key（rngSeed 固定为 1）会压制本局掷骰。 */
+  const resetRollGuards = () => {
+    rolledSlots.current.clear();
+    tickedPeriods.current.clear();
+  };
+
   const continueGame = () => {
     if (!storage) return;
     const result = loadWithRecovery(storage, db, { logger });
     if (result.ok) {
       store.loadState(result.value.state);
+      resetRollGuards();
       setContinueError(result.value.warnings.map((w) => w.message).join("；") || null);
       goHome();
     } else {
@@ -158,6 +172,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (pick) startEvent(pick.id);
     else if (store.getState().playerLocation === "shangshufang") setView("shangshufang");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
+    else if (store.getState().playerLocation === "cining_gong") { setView("cining_gong"); maybeShizhi(); }
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
@@ -181,11 +196,58 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return beats;
   };
 
-  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰。返回扣点结果与懿旨台词。 */
+  /** 每行动点掷太后敲打（独立于懿旨；至多一次/行动）。返回台词节拍。 */
+  const rollRebuke = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): DecreeReaction[] => {
+    const beats: DecreeReaction[] = [];
+    for (let i = 0; i < amount; i++) {
+      const slot = before.apMax - before.ap + i;
+      const key = `rebuke:${store.getState().rngSeed}:${before.dayIndex}:${slot}`;
+      if (rolledSlots.current.has(key)) continue;
+      rolledSlots.current.add(key);
+      const plan = buildTaihouRebuke(db, store.getState(), key);
+      if (plan) {
+        const applied = store.applyEffects(db, plan.effects);
+        if (applied.ok) { beats.push(...plan.beats); break; }
+      }
+    }
+    return beats;
+  };
+
+  /** 旬翻转：掷太后生病/自愈，应用效果并返回提示节拍（每旬至多一次）。 */
+  const rollTaihouIllness = (): DecreeReaction[] => {
+    const cal = store.getState().calendar;
+    const key = `${store.getState().rngSeed}:${cal.year}:${cal.month}:${cal.period}`;
+    if (tickedPeriods.current.has(key)) return [];
+    tickedPeriods.current.add(key);
+    const tick = buildTaihouIllnessTick(store.getState(), key);
+    if (!tick) return [];
+    const applied = store.applyEffects(db, tick.effects);
+    if (!applied.ok) return [];
+    return tick.beats;
+  };
+
+  /** 进慈宁宫且太后病中：掷侍疾遭遇，命中即应用并串播。返回是否已起反应。 */
+  const maybeShizhi = (): boolean => {
+    const cal = store.getState().calendar;
+    const key = `${cal.year}:${cal.month}:${cal.period}`;
+    const plan = buildShizhiEncounter(db, store.getState(), key);
+    if (!plan) return false;
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) return false;
+    doAutosave();
+    const [first, ...rest] = plan.beats;
+    setReactionQueue((q) => [...q, ...rest]);
+    if (first) setReaction(first);
+    return true;
+  };
+
+  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰。返回扣点结果与台词。 */
   const spendAp = (amount: number) => {
     const before = store.getState().calendar;
     const spend = store.dispatch({ type: "SPEND_AP", amount });
-    const decreeBeats = spend.ok ? rollDecree(before, amount) : [];
+    let decreeBeats = spend.ok ? rollDecree(before, amount) : [];
+    if (spend.ok) decreeBeats = [...decreeBeats, ...rollRebuke(before, amount)];
+    if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };
 
@@ -202,6 +264,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   const newGame = () => {
     store.newGame(db);
+    resetRollGuards();
     const pick = pickNextEvent(db, store.getState(), "game_start");
     if (pick) startEvent(pick.id);
     else goHome(); // 开局即在皇城主地图
@@ -226,6 +289,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!applied.ok) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
+    setSummonedConsortId(null);
     doAutosave();
     const firstNight = plan.isFirstNight && plan.charId !== "feng_hou";
     if (firstNight) {
@@ -336,11 +400,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     }
   };
 
-  const adjustHeirFavor = (heirId: string, delta: number) => {
-    const r = store.applyEffects(db, [{ type: "child_favor", heirId, delta }]);
-    if (r.ok) doAutosave();
-  };
-
   // 候选承嗣注释管理（御书房）：同时段只能一位候选；传嗣/流产会自动清除。
   const addCandidate = (charId: string) => {
     const r = store.applyEffects(db, [{ type: "heir_candidate", op: "add", char: charId }]);
@@ -353,6 +412,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   // 御书房·行动：批阅奏折（耗 2 行动点，提升朝堂资源）。
   const reviewMemorials = () => {
+    setSummonedConsortId(null);
     if (store.getState().calendar.ap < 2) return; // 行动点不足
     const applied = store.applyEffects(db, [
       { type: "resource", pillar: "court", field: "authority", delta: 5 },
@@ -371,10 +431,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
   const restAlone = () => {
+    setSummonedConsortId(null);
     const spend = store.dispatch({ type: "SKIP_REMAINDER" });
     if (!spend.ok) return;
     doAutosave();
-    runCheckpoints(true);
+    const beats = rollTaihouIllness();
+    if (beats.length) playReactions(beats, true);
+    else runCheckpoints(true);
   };
 
   // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。
@@ -437,6 +500,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!lines) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return;
+    setSummonedConsortId(null);
     doAutosave();
     playReactions([{ speakerId: charId, lines }, ...decreeBeats], spend.value.rolledOver);
   };
@@ -466,10 +530,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           onOpenMap={() => {
+            setSummonedConsortId(null);
             setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
             setView("map");
           }}
-          onOpenSave={() => setView("save")}
+          onOpenSave={() => {
+            setSummonedConsortId(null);
+            setView("save");
+          }}
           onStartEvent={startEvent}
           onManage={(id) => setManageCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
@@ -477,12 +545,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
           onSummonPhysician={() => setPhysicianOpen(true)}
           onOpenHeirs={() => setHeirListOpen(true)}
-          onAddCandidate={addCandidate}
-          onRemoveCandidate={removeCandidate}
+          onOpenConsorts={() => setConsortListOpen(true)}
           onReviewMemorials={reviewMemorials}
           onRestAlone={restAlone}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
+          summonedConsortId={summonedConsortId}
+          onDismissSummon={() => setSummonedConsortId(null)}
         />
       )}
       {view === "shangshufang" && (
@@ -509,6 +578,18 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onAdopt={adoptHeir}
         />
       )}
+      {view === "cining_gong" && (
+        <CiningGongScreen
+          db={db}
+          store={store}
+          registry={registry}
+          onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
+          onOpenSave={() => setView("save")}
+          // ev_taihou_converse 用 checkpoint:"game_start" 故永不自动触发，只由此按钮手动开启；勿改成 location_enter（会变强制弹出）。
+          onConverse={() => startEvent("ev_taihou_converse")}
+          onOpenResources={() => setResourcePanelOpen(true)}
+        />
+      )}
       {view === "save" && (
         <SaveLoadScreen
           db={db}
@@ -517,7 +598,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           logger={logger}
           gameStarted
           onClose={enterCurrentLocation}
-          onLoaded={enterCurrentLocation}
+          onLoaded={() => { resetRollGuards(); enterCurrentLocation(); }}
         />
       )}
       {view === "map" && (
@@ -539,6 +620,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
                 if (applied.ok) beats = plan.reactions;
               }
             }
+            if (rolledOver) beats = [...beats, ...rollTaihouIllness()];
             if (beats.length) playReactions(beats, rolledOver);
             else runCheckpoints(rolledOver);
           }}
@@ -590,6 +672,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               // 若本场景消耗行动点导致转旬/转月，立刻触发 time_advance 事件，
               // 不必等玩家转换地图再 trigger。
               if (rolledOver) {
+                // 场景提交导致转旬：补掷太后生病（其余转旬路径走 spendAp/travel/restAlone）。
+                const illnessBeats = rollTaihouIllness();
+                if (illnessBeats.length) {
+                  const [first, ...rest] = illnessBeats;
+                  setReactionQueue((q) => [...q, ...rest]);
+                  setReaction(first!);
+                }
                 const t = pickNextEvent(db, store.getState(), "time_advance");
                 if (t && chainDepth.current < MAX_EVENT_CHAIN) {
                   chainDepth.current += 1;
@@ -644,8 +733,27 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <BedchamberPicker
           db={db}
           state={store.getState()}
-          onPick={beginBedchamber}
+          onPick={(id) => {
+            setFlipOpen(false);
+            setSummonedConsortId(id);
+          }}
           onClose={() => setFlipOpen(false)}
+        />
+      )}
+      {consortListOpen && (
+        <ConsortListModal
+          db={db}
+          state={liveState}
+          registry={registry}
+          sovereignPregnant={preg.status !== "none"}
+          onManage={(id) => setManageCharId(id)}
+          onSummon={(id) => {
+            setConsortListOpen(false);
+            setSummonedConsortId(id);
+          }}
+          onAddCandidate={addCandidate}
+          onRemoveCandidate={removeCandidate}
+          onClose={() => setConsortListOpen(false)}
         />
       )}
       {bedchamberPickId && db.characters[bedchamberPickId] && (
@@ -743,7 +851,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <HeirListModal
           db={db}
           state={liveState}
-          onAdjust={adjustHeirFavor}
+          registry={registry}
           onSummon={summonHeir}
           canSummon={liveState.calendar.ap >= 1}
           onClose={() => setHeirListOpen(false)}

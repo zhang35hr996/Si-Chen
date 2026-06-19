@@ -1,6 +1,16 @@
-/** 御书房·子嗣列表：皇子/皇郎两表，显示承嗣者/年龄/生日/宠爱度 + ± 调整 + 嫡标记。 */
+/** 御书房·查看子嗣：皇子/皇郎两表；点名字钻取详情（立绘按年龄/属性/召见）。查看零行动点。 */
+import { useState } from "react";
+import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatGameTime } from "../../engine/calendar/time";
-import { listHeirsBySex, heirAge, isEnrolled } from "../../engine/characters/heirs";
+import {
+  heirAge,
+  heirAgeMonths,
+  heirPortraitSet,
+  heirStage,
+  isEnrolled,
+  listHeirsBySex,
+  type NamedHeir,
+} from "../../engine/characters/heirs";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState, Heir } from "../../engine/state/types";
@@ -8,19 +18,25 @@ import type { GameState, Heir } from "../../engine/state/types";
 export function HeirListModal({
   db,
   state,
-  onAdjust,
+  registry,
   onSummon,
   canSummon,
   onClose,
 }: {
   db: ContentDB;
   state: GameState;
-  onAdjust: (heirId: string, delta: number) => void;
+  registry: AssetRegistry;
   onSummon?: (heirId: string) => void;
   canSummon: boolean;
   onClose: () => void;
 }) {
   const heirs = state.resources.bloodline.heirs;
+  const named: NamedHeir[] = [
+    ...listHeirsBySex(heirs, "daughter"),
+    ...listHeirsBySex(heirs, "son"),
+  ];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = named.find((n) => n.heir.id === selectedId) ?? null;
 
   const nameOf = (charId: string): string => {
     const c = db.characters[charId];
@@ -39,7 +55,7 @@ export function HeirListModal({
   };
 
   const renderTable = (sex: "daughter" | "son", title: string) => {
-    const rows = listHeirsBySex(heirs, sex);
+    const rows = named.filter((n) => n.heir.sex === sex);
     return (
       <section className="heir-list__table">
         <h3>{title}</h3>
@@ -49,32 +65,17 @@ export function HeirListModal({
           <ul>
             {rows.map(({ heir, name }) => (
               <li key={heir.id} className="heir-list__row">
-                <span className="heir-list__name">
-                  {name}
-                  {heir.legitimate ? "（嫡）" : ""}：
-                  {heir.givenName ?? "—"}
-                  {heir.petName ? `（${heir.petName}）` : ""}
-                </span>
-                <span>承嗣：{bearerLabel(heir)}</span>
-                {heir.adoptiveFatherId && <span>养父：{nameOf(heir.adoptiveFatherId)}</span>}
-                <span>
-                  {heirAge(heir, state.calendar)}岁 · {formatGameTime(heir.birthAt)}
-                </span>
-                {isEnrolled(heir, state.calendar) && (
-                  <span className="heir-list__edu">
-                    学问{heir.education.scholarship}·骑射{heir.education.martial}·品行{heir.education.virtue}
+                <button
+                  type="button"
+                  className="heir-list__pick"
+                  onClick={() => setSelectedId(heir.id)}
+                >
+                  <span className="heir-list__name">
+                    {name}
+                    {heir.legitimate ? "（嫡）" : ""}：{heir.givenName ?? (heir.petName || "—")}
                   </span>
-                )}
-                {onSummon && (
-                  <button type="button" disabled={!canSummon} onClick={() => onSummon(heir.id)}>
-                    召见
-                  </button>
-                )}
-                <span className="heir-list__favor">
-                  宠爱 {heir.favor}
-                  <button type="button" onClick={() => onAdjust(heir.id, 5)}>＋</button>
-                  <button type="button" onClick={() => onAdjust(heir.id, -5)}>－</button>
-                </span>
+                  <span className="heir-list__age">{heirAge(heir, state.calendar)}岁</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -83,12 +84,68 @@ export function HeirListModal({
     );
   };
 
+  const renderDetail = (sel: NamedHeir) => {
+    const h = sel.heir;
+    const portrait = registry.portrait(heirPortraitSet(h, state.calendar), "neutral");
+    const stage = heirStage(h, state.calendar);
+    const ageLabel =
+      stage === "schooling"
+        ? `${heirAge(h, state.calendar)}岁`
+        : `${heirAge(h, state.calendar)}岁（${heirAgeMonths(h, state.calendar)}月龄）`;
+    return (
+      <div className="heir-detail">
+        <img
+          className="heir-detail__portrait"
+          src={portrait.url}
+          alt={sel.name}
+          data-fallback={portrait.isFallback || undefined}
+        />
+        <div className="heir-detail__body">
+          <h3 className="heir-detail__name">
+            {sel.name}
+            {h.legitimate ? "（嫡）" : ""}
+          </h3>
+          <p className="heir-detail__field">名讳：{h.givenName ?? "未赐名"}
+            {h.petName ? `（小名 ${h.petName}）` : ""}</p>
+          <p className="heir-detail__field">年龄：{ageLabel}</p>
+          <p className="heir-detail__field">生辰：{formatGameTime(h.birthAt)}</p>
+          <p className="heir-detail__field">承嗣：{bearerLabel(h)}</p>
+          {h.adoptiveFatherId && (
+            <p className="heir-detail__field">养父：{nameOf(h.adoptiveFatherId)}</p>
+          )}
+          <p className="heir-detail__field">宠爱：{h.favor}</p>
+          {isEnrolled(h, state.calendar) && (
+            <p className="heir-detail__field heir-list__edu">
+              学问{h.education.scholarship}·骑射{h.education.martial}·品行{h.education.virtue}
+            </p>
+          )}
+          <div className="heir-detail__actions">
+            {onSummon && (
+              <button type="button" disabled={!canSummon} onClick={() => onSummon(h.id)}>
+                召见
+              </button>
+            )}
+            <button type="button" onClick={() => setSelectedId(null)}>
+              返回
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="heir-list" onClick={(e) => e.stopPropagation()}>
         <h2>皇嗣</h2>
-        {renderTable("daughter", "皇子")}
-        {renderTable("son", "皇郎")}
+        {selected ? (
+          renderDetail(selected)
+        ) : (
+          <>
+            {renderTable("daughter", "皇子")}
+            {renderTable("son", "皇郎")}
+          </>
+        )}
         <button type="button" onClick={onClose}>
           关闭
         </button>

@@ -1,0 +1,59 @@
+{
+  "id": "sc_taihou_converse",
+  "locationId": "cining_gong",
+  "participants": ["taihou"],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "taihou",
+      "text": "皇帝来了。哀家这里清静，难得你还记挂着来坐坐。近日朝中可还安顺？",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        { "id": "c_filial", "text": "儿臣特来给母后请安。", "tone": "friendly", "next": "n_fx_filial" },
+        { "id": "c_heir", "text": "想请母后为皇嗣教养指点一二。", "tone": "neutral", "next": "n_fx_heir" }
+      ]
+    },
+    {
+      "type": "line",
+      "id": "n_fx_filial",
+      "speaker": "taihou",
+      "text": "好孩子。你身在万乘之位，也莫太亏了自己。哀家别无所求，只盼你保重。",
+      "expression": "neutral",
+      "next": "n_fx_apply"
+    },
+    {
+      "type": "line",
+      "id": "n_fx_heir",
+      "speaker": "taihou",
+      "text": "教养皇嗣，重在德行根基。你肯上心，是宗社之福。哀家也算放心了。",
+      "expression": "neutral",
+      "next": "n_fx_apply"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_apply",
+      "effects": [
+        { "type": "resource", "pillar": "bloodline", "field": "legitimacy", "delta": 2 },
+        {
+          "type": "memory",
+          "char": "taihou",
+          "entry": {
+            "kind": "event",
+            "summary": "皇帝来慈宁宫问安叙话，哀家心里宽慰。",
+            "salience": 45,
+            "tags": ["player", "taihou"],
+            "participants": ["player", "taihou"],
+            "locationId": "cining_gong"
+          }
+        }
+      ]
+    }
+  ]
+}

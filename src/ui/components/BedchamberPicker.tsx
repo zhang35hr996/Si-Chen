@@ -1,5 +1,6 @@
-/** 御书房「翻牌子」：列出全部侍君，选一人来御书房侍寝。 */
-import { effectiveOrder, resolveDisplayName } from "../../engine/characters/standing";
+/** 御书房「翻牌子」：托盘上排开宫中侍君的竖刻名牌，点牌即召见到御书房。 */
+import { inPalaceConsorts } from "../../engine/characters/presence";
+import { resolveDisplayName } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
 
@@ -14,37 +15,30 @@ export function BedchamberPicker({
   onPick: (charId: string) => void;
   onClose: () => void;
 }) {
-  const consorts = Object.values(db.characters)
-    .filter((c) => c.kind === "consort" && state.standing[c.id]?.lifecycle !== "deceased")
-    .sort((a, b) => {
-      const ra = state.standing[a.id], rb = state.standing[b.id];
-      if (!ra || !rb) return 0; // a consort without standing (e.g. added post-save) sorts neutrally
-      return (
-        effectiveOrder(db.ranks[rb.rank]!, rb.title !== undefined) -
-        effectiveOrder(db.ranks[ra.rank]!, ra.title !== undefined)
-      );
-    });
+  const consorts = inPalaceConsorts(db, state);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="bedchamber-picker" onClick={(e) => e.stopPropagation()}>
-        <h2>翻牌子</h2>
-        <ul className="bedchamber-picker__list">
+      <div className="tablet-tray" onClick={(e) => e.stopPropagation()}>
+        <h2 className="tablet-tray__title">翻牌子</h2>
+        <div className="tablet-tray__rack">
           {consorts.map((c) => {
             const st = state.standing[c.id]!;
             return (
-              <li key={c.id}>
-                <button type="button" onClick={() => onPick(c.id)}>
+              <button
+                key={c.id}
+                type="button"
+                className="tablet"
+                onClick={() => onPick(c.id)}
+              >
+                <span className="tablet__name">
                   {resolveDisplayName(c, st, db.ranks[st.rank])}
-                  <span className="bedchamber-picker__rank">
-                    {db.ranks[st.rank]?.name}
-                    {st.lifecycle === "carrying" ? "·承嗣君" : st.lifecycle === "delivered" ? "·育嗣君" : ""}
-                  </span>
-                </button>
-              </li>
+                </span>
+                <span className="tablet__rank">{db.ranks[st.rank]?.name}</span>
+              </button>
             );
           })}
-        </ul>
+        </div>
         <button type="button" className="bedchamber-picker__close" onClick={onClose}>
           关闭
         </button>

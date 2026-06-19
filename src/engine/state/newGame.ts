@@ -29,7 +29,9 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
       affinity: character.initialRelationship.affinity,
       flags: [...character.initialRelationship.flags],
     };
-    standing[character.id] = { ...character.initialStanding };
+    if (character.initialStanding) {
+      standing[character.id] = { ...character.initialStanding };
+    }
     memories[character.id] = {
       entries: character.initialMemories.map((draft, index) => ({
         id: memoryEntryId(character.id, index + 1),
@@ -53,6 +55,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   return {
     calendar,
     playerLocation: db.world.startingLocation,
+    taihou: { ill: false },
     resources: {
       court: { ...db.world.startingResources.court },
       harem: { ...db.world.startingResources.harem },

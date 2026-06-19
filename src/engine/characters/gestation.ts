@@ -42,6 +42,11 @@ export function gestationRoll(seedString: string): number {
   return parseInt(fnv1a64Hex(seedString).slice(0, 8), 16) % 100;
 }
 
+/** 确定性 32 位整数 roll（未取模 100）；用于权重区间大于 100 的加权抽取。 */
+export function gestationRollRaw(seedString: string): number {
+  return parseInt(fnv1a64Hex(seedString).slice(0, 8), 16);
+}
+
 /** 孕月数（受孕月=1）。 */
 export function gestationMonth(
   now: Pick<GameTime, "year" | "month">,

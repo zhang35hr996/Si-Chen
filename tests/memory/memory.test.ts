@@ -106,6 +106,7 @@ describe("inspection helpers", () => {
       { charId: "feng_hou", count: 1, protectedCount: 1 },
       { charId: "shen_chenghui", count: 1, protectedCount: 1 },
       { charId: "sili_nvguan", count: 1, protectedCount: 1 },
+      { charId: "taihou", count: 0, protectedCount: 0 },
       { charId: "wenya_shijun", count: 1, protectedCount: 1 },
     ]);
   });

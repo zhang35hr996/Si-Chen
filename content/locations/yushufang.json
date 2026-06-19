@@ -6,6 +6,6 @@
   "ambience": ["墨香", "铜漏滴答", "侍人屏息研墨"],
   "position": { "x": 0.3, "y": 0.35 },
   "zone": "palace",
-  "connections": ["yuhuayuan", "shangshufang", "fengxiandian"],
+  "connections": ["yuhuayuan", "shangshufang", "fengxiandian", "cining_gong"],
   "travelCost": { "ap": 1 }
 }

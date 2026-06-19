@@ -38,8 +38,8 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(22);
-    expect(result.placeholderCount).toBe(1); // wenya_shijun portrait is a placeholder pending real art
+    expect(result.entryCount).toBe(36);
+    expect(result.placeholderCount).toBe(1); // only wenya_shijun portrait remains a placeholder pending real art
   });
 
   it("manifest path missing on disk is an error", () => {

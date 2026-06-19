@@ -14,7 +14,7 @@ import { bedchamberConfig } from "../../store/bedchamber";
 import { toGameTime } from "../../engine/calendar/time";
 
 /** 侍君明面属性 — label order follows background §四.4.1. */
-const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes, string]> = [
+export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes, string]> = [
   ["appearance", "容貌"],
   ["talent", "才情"],
   ["family", "家世"],
@@ -60,7 +60,7 @@ export function CharacterCard({
       />
       <header className="char-card__header">
         <strong className="char-card__name">{displayName}</strong>
-        <span className="char-card__kind">{isConsort ? "侍君" : "官员"}</span>
+        <span className="char-card__kind">{character.kind === "consort" ? "侍君" : character.kind === "elder" ? "尊长" : "官员"}</span>
       </header>
       {rank && (
         <p className="char-card__rank">

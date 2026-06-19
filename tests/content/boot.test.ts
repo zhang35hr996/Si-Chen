@@ -18,14 +18,14 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 5 characters, 8 locations, 6 events, 6 scenes, 21 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 6 characters, 9 locations, 7 events, 7 scenes, 21 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
-      ["chu_jun", "feng_hou", "shen_chenghui", "sili_nvguan", "wenya_shijun"].sort(),
+      ["chu_jun", "feng_hou", "shen_chenghui", "sili_nvguan", "taihou", "wenya_shijun"].sort(),
     );
     expect(Object.keys(db.locations).sort()).toEqual(
-      ["chaotang", "fengxiandian", "kunninggong", "lenggong", "shangshufang", "xianfugong", "yushufang", "yuhuayuan"].sort(),
+      ["chaotang", "cining_gong", "fengxiandian", "kunninggong", "lenggong", "shangshufang", "xianfugong", "yushufang", "yuhuayuan"].sort(),
     );
     expect(Object.keys(db.events).sort()).toEqual(
       [
@@ -35,9 +35,10 @@ describe("real content/ boots", () => {
         "ev_fenghou_rules",
         "ev_menses_rite",
         "ev_shen_neglect",
+        "ev_taihou_converse",
       ].sort(),
     );
-    expect(Object.keys(db.scenes)).toHaveLength(6);
+    expect(Object.keys(db.scenes)).toHaveLength(7);
     expect(Object.keys(db.ranks)).toHaveLength(21);
   });
 
@@ -45,8 +46,8 @@ describe("real content/ boots", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(db.world.startingLocation).toBe("yushufang");
-    expect(db.ranks[db.characters["feng_hou"]!.initialStanding.rank]?.domain).toBe("harem");
-    expect(db.ranks[db.characters["sili_nvguan"]!.initialStanding.rank]?.domain).toBe("official");
+    expect(db.ranks[db.characters["feng_hou"]!.initialStanding!.rank]?.domain).toBe("harem");
+    expect(db.ranks[db.characters["sili_nvguan"]!.initialStanding!.rank]?.domain).toBe("official");
     expect(db.events["ev_menses_rite"]?.apCost).toBe(1); // 召对是轻行动；真正的大祭（3+ AP 重行动）是未来单独的事件
     expect(db.characters["shen_chenghui"]?.defaultLocation).toBe("yuhuayuan");
   });

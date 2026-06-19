@@ -65,6 +65,7 @@ export function validateEffects(
       case "resource":
       case "set_bloodline_status":
       case "flag":
+      case "set_taihou_illness":
         break; // fully constrained by the schema
       case "set_rank": {
         const ch = db.characters[e.char];
@@ -202,13 +203,17 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
         }
         const ch = db.characters[e.fatherId];
-        const st = state.standing[e.fatherId];
-        if (!ch || ch.kind !== "consort" || !st) {
-          bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort with standing: "${e.fatherId}"`, { char: e.fatherId });
-        } else if (st.lifecycle === "deceased") {
-          bad(index, "BAD_EFFECT_TARGET", `adoptive father is deceased: "${e.fatherId}"`, { char: e.fatherId });
-        } else if (ch.defaultLocation === "lenggong") {
-          bad(index, "BAD_EFFECT_TARGET", `adoptive father is in 冷宫: "${e.fatherId}"`, { char: e.fatherId });
+        if (!ch || (ch.kind !== "consort" && ch.kind !== "elder")) {
+          bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort or elder: "${e.fatherId}"`, { char: e.fatherId });
+        } else if (ch.kind === "consort") {
+          const st = state.standing[e.fatherId];
+          if (!st) {
+            bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort with standing: "${e.fatherId}"`, { char: e.fatherId });
+          } else if (st.lifecycle === "deceased") {
+            bad(index, "BAD_EFFECT_TARGET", `adoptive father is deceased: "${e.fatherId}"`, { char: e.fatherId });
+          } else if (ch.defaultLocation === "lenggong") {
+            bad(index, "BAD_EFFECT_TARGET", `adoptive father is in 冷宫: "${e.fatherId}"`, { char: e.fatherId });
+          }
         }
         break;
       }
@@ -454,6 +459,10 @@ export function applyEffects(
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         const applied = cappedDelta(`heir:${effect.heirId}`, effect.delta);
         heir.favor = clampPct(heir.favor + applied);
+        break;
+      }
+      case "set_taihou_illness": {
+        next.taihou.ill = effect.ill;
         break;
       }
       case "memory": {

@@ -6,7 +6,7 @@ file, this file wins. The ultimate source is the Zod schemas in
 [`src/engine/content/schemas.ts`](../../src/engine/content/schemas.ts) — content
 is **strict** (unknown keys fail validation), so a field absent here cannot be used.
 
-Last updated: content version `0.1.0`.
+Last updated: 2026-06-17. Save format version: **3**.
 
 ## Capability table
 
@@ -14,14 +14,17 @@ Last updated: content version `0.1.0`.
 |---|---|---|---|
 | **Scene nodes** | `line`, `choice`, `branch`, `effect` | `generate` (LLM node) | arbitrary scripts |
 | **Conditions** | `all`, `any`, `not`, `flagSet`, `eventFired`, `relationshipAtLeast`, `favorAtLeast`, `rankAtLeast`, `hasMemoryTag`, `periodIs`, `monthAtLeast`, `atLocation` | richer memory queries (count/recency) | `secretRevealed`, resource/bloodline predicates (scaffold guard) |
-| **Effects** | `relationship`, `favor`, `resource` (court/harem/bloodline), `set_bloodline_status`, `flag`, `memory` (unprotected) | lineage effects | direct calendar/location mutation from scenes |
+| **Effects** | `relationship`, `favor`, `resource` (court/harem/bloodline), `set_bloodline_status`, `flag`, `memory` (unprotected), `set_rank`, `set_title`, `remove_title`, `heir_name`, `heir_summon`, `heir_educate`, `heir_adopt` | — | direct calendar/location mutation from scenes |
 | **Characters** | `consort`, `official` | wider roles | nested schedules, secrets gameplay (`secrets` must be empty) |
 | **Map** | data-driven `mapBoards` + `mapPortals`; `travel` nodes (cost AP, relocate) and `free` nodes (view only, optional one AP action) | per-area sub-graphs, time-gated portals | adjacency-restricted travel (it's fast-travel) |
 | **Calendar** | year / month / 上中下旬 period; `apMax` (6) action points; 时辰 time-of-day buckets driving background variants | seasonal events | sub-旬 scheduling |
 | **Memory** | append-only entries with tags; seeded from `initialMemories`; written by scene `memory` effects; queried via `hasMemoryTag` | retrieval / salience scoring / consolidation | LLM-driven memory retrieval |
 | **AI dialogue** | provider seam + stub remote provider | real provider, eval harness | unrestricted state mutation by the model |
-| **Save** | checksum, content-hash warning, missing-ref quarantine, autosave on scene-commit & travel | save migrations | automatic ID aliasing |
-| **Resources** | court (authority/publicSupport/factionPressure), harem (harmony/jealousy), bloodline (legitimacy/menstrualStatus) — written by effects | faction simulation | resource-based event conditions (deliberately none) |
+| **Save** | checksum, content-hash warning, missing-ref quarantine, autosave on scene-commit & travel; versioned format (v3) with laddered `MIGRATIONS[]` | — | automatic ID aliasing |
+| **Resources** | court (authority/publicSupport/factionPressure), harem (harmony/jealousy), bloodline (legitimacy/menstrualStatus) — written by effects; read-only 国情面板 UI | faction simulation | resource-based event conditions (deliberately none) |
+| **Heirs** | full lifecycle: gestation → birth → 小名 → 百日宴正名 → 开蒙 → 上书房教育 → 奉先殿择养父; `Heir` state with petName/givenName/education/adoptiveFatherId; 4 heir effects (see below) | grown-up / succession events | LLM-driven heir dialogue |
+| **Location flags** | `actionFirstSlotOnly: boolean` — action disabled after first AP of the day, with hint text | — | — |
+| **Empress decree** | 凤后 auto-adjusts 贵人及以下 consort ranks per consumed AP (3% chance, seeded deterministic); `buildEmpressDecree` in `src/store/empressDecree.ts` | — | — |
 
 ## Hard rules content must obey
 
@@ -67,3 +70,27 @@ placeholder. Keep it that way until those systems are real.
   after each op the consort's reaction (谢恩 / 请罪 / 惶恐) is replayed through
   `ReactionScreen` via `DialogueProvider`. 凤后 is the 正宫 cap and is excluded from
   all rank/title ops.
+- **Heir lifecycle system** — `bloodline.heirs[]` tracks each born heir with `petName`
+  / `givenName` / `education {scholarship,martial,virtue}` / `adoptiveFatherId`. Four
+  effects: `heir_name` (set small or given name), `heir_summon` (+20 favor, bypasses
+  ±10 cap), `heir_educate` (attribute + favor delta, both clamped), `heir_adopt`
+  (set adoptive father). Growth stages derived at render time from birth date
+  (`infant` / `toddler` / `schooling`). Auto-modals: 小名 after birth; 百日宴 when
+  ≥3 months old and unnamed (dismissible per-month). New locations: **上书房**
+  (问功课 / 问先生, enrolled heirs only) and **奉先殿** (择养父), both 1-AP travel
+  from 御书房. Save format bumped to **v3** with `2→3` migration.
+- **凤后懿旨 (Empress Decree)** — each consumed AP has a 3% seeded-deterministic
+  chance to trigger a decree: 凤后 auto-promotes or demotes one eligible consort
+  (贵人 order 100 ↔ 官男子 order 40, based on favor ≥65 promote / <35 demote).
+  Candidate selection and gate roll use `gestationRoll(seedKey)`. Decree beats are
+  appended to `reactionQueue` and played after the action's own reaction. Entry point:
+  `buildEmpressDecree(db, state, seedKey)` in `src/store/empressDecree.ts`.
+- **AP centralization (`spendAp`)** — all action-point consumption funnels through
+  `spendAp(amount)` in App.tsx, which rolls the decree gate for each consumed slot and
+  appends any decree beats to `reactionQueue`. The queue is drained by `ReactionScreen`
+  and `ChildReactionScreen` `onDone` callbacks.
+- **国情面板 (ResourcePanel)** — read-only modal showing all `state.resources` values
+  (朝局/后宫/血脉). Triggered by 「国情」 HUD button on `LocationScreen` and `MapScreen`.
+- **`actionFirstSlotOnly`** — optional boolean on location schema. When `true`, all
+  actions in that location are disabled after the first AP of the day, with hint
+  「朝时已过，请明日卯时早朝」. Used by 朝堂 (`chaotang`).
