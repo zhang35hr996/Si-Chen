@@ -10,6 +10,10 @@ import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { GameShell } from "../components/GameShell";
 import { LocationInfoPanel, type LocationInfo } from "../components/LocationInfoPanel";
+import { HaremGrid } from "./HaremGrid";
+
+/** Boards rendered as a symmetric grid (§四) instead of absolute nodes on art. */
+const GRID_BOARDS = new Set(["hougong"]);
 
 const REASON_TEXT: Record<string, string> = {
   ALREADY_THERE: "当前所在",
@@ -250,24 +254,34 @@ export function MapScreen({
       className="map-shell"
     >
       <div className="map-layout">
-        <section
-          className="map-board"
-          aria-label={current.name}
-          style={{ backgroundImage: `url("${boardArt.url}")` }}
-        >
-          {regions.map((r) => (
-            <span
-              key={r.text}
-              className="map-region-label"
-              style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%` }}
-              aria-hidden="true"
-            >
-              {r.text}
-            </span>
-          ))}
-          {onBoard.map(renderNode)}
-          {boardPortals.map(renderPortal)}
-        </section>
+        {GRID_BOARDS.has(board) ? (
+          <HaremGrid
+            db={db}
+            state={state}
+            locations={onBoard}
+            selectedId={selected?.kind === "loc" ? selected.loc.id : null}
+            onSelect={(loc) => setSelected({ kind: "loc", loc })}
+          />
+        ) : (
+          <section
+            className="map-board"
+            aria-label={current.name}
+            style={{ backgroundImage: `url("${boardArt.url}")` }}
+          >
+            {regions.map((r) => (
+              <span
+                key={r.text}
+                className="map-region-label"
+                style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%` }}
+                aria-hidden="true"
+              >
+                {r.text}
+              </span>
+            ))}
+            {onBoard.map(renderNode)}
+            {boardPortals.map(renderPortal)}
+          </section>
+        )}
 
         <LocationInfoPanel info={infoFor(selected)} />
       </div>
