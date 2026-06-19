@@ -30,6 +30,7 @@ export function CharacterCard({
   onManage,
   onBedchamber,
   onConverse,
+  onViewProfile,
 }: {
   db: ContentDB;
   state: GameState;
@@ -38,6 +39,7 @@ export function CharacterCard({
   onManage?: () => void;
   onBedchamber?: () => void;
   onConverse?: () => void;
+  onViewProfile?: () => void;
 }) {
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
@@ -89,6 +91,11 @@ export function CharacterCard({
                 ? "候选承嗣"
                 : "已故"}
         </p>
+      )}
+      {onViewProfile && (
+        <button type="button" className="char-card__profile" onClick={onViewProfile}>
+          查看详情
+        </button>
       )}
       {canManage && (
         <button type="button" className="char-card__manage" onClick={onManage}>

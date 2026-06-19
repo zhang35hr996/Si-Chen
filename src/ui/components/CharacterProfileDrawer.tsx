@@ -1,0 +1,198 @@
+/**
+ * 侍君详情抽屉（§六）。右侧宽抽屉 + 标签页，取代居中小弹窗承担"查看详情"。
+ * 只绑定真实数据模型字段；不存在的属性（如野心）一律不臆造。
+ */
+import { useState } from "react";
+import type { ContentDB } from "../../engine/content/loader";
+import type { CharacterContent } from "../../engine/content/schemas";
+import type { GameState } from "../../engine/state/types";
+import { getCharacterLocation } from "../../engine/characters/presence";
+import { resolveDisplayName } from "../../engine/characters/standing";
+import { Drawer } from "./Drawer";
+
+type Tab = "overview" | "attrs" | "history" | "children" | "relations";
+
+const TABS: Array<[Tab, string]> = [
+  ["overview", "总览"],
+  ["attrs", "属性"],
+  ["history", "经历"],
+  ["children", "子嗣"],
+  ["relations", "关系"],
+];
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="profile-stat">
+      <span className="profile-stat__label">{label}</span>
+      <span className="profile-stat__bar">
+        <span className="profile-stat__fill" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+      </span>
+      <span className="profile-stat__val">{value}</span>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="profile-field">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+export function CharacterProfileDrawer({
+  db,
+  state,
+  character,
+  onClose,
+}: {
+  db: ContentDB;
+  state: GameState;
+  character: CharacterContent;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<Tab>("overview");
+  const standing = state.standing[character.id];
+  const rank = standing ? db.ranks[standing.rank] : undefined;
+  const rel = state.relationships[character.id];
+  const attrs = character.attributes;
+  const homeId = getCharacterLocation(db, state, character.id);
+  const home = homeId ? db.locations[homeId]?.name : undefined;
+  const displayName = resolveDisplayName(character, standing, rank);
+  const heirs = state.resources.bloodline.heirs.filter(
+    (h) => h.fatherId === character.id || h.adoptiveFatherId === character.id,
+  );
+  const memories = state.memories[character.id]?.entries ?? [];
+
+  const subtitle = `${rank ? rank.name : character.kind === "official" ? "官员" : "尊长"}${home ? ` · ${home}` : ""}`;
+
+  const tabsBar = (
+    <>
+      {TABS.map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          className="drawer__tab"
+          aria-selected={tab === id}
+          onClick={() => setTab(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </>
+  );
+
+  return (
+    <Drawer title={displayName} subtitle={subtitle} tabs={tabsBar} onClose={onClose}>
+      {tab === "overview" && (
+        <div className="profile-section">
+          <h3 className="profile-h">身份</h3>
+          <dl className="profile-fields">
+            <Field label="年龄" value={`${character.profile.age}`} />
+            {rank && <Field label="位分" value={rank.name} />}
+            {standing?.title && <Field label="封号" value={standing.title} />}
+            {home && <Field label="住处" value={home} />}
+            <Field label="身份" value={character.profile.role} />
+          </dl>
+          <h3 className="profile-h">性情</h3>
+          <div className="profile-tags">
+            {character.profile.personalityTraits.map((t) => (
+              <span key={t} className="profile-tag">
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "attrs" && (
+        <div className="profile-section">
+          {attrs ? (
+            <>
+              <h3 className="profile-h">才貌</h3>
+              <Stat label="容貌" value={attrs.appearance} />
+              <Stat label="才情" value={attrs.talent} />
+              <Stat label="家世" value={attrs.family} />
+              <h3 className="profile-h">身体</h3>
+              <Stat label="健康" value={attrs.health} />
+              <Stat label="承养" value={attrs.nurture} />
+            </>
+          ) : (
+            <p className="profile-empty">此人无养成属性。</p>
+          )}
+          <h3 className="profile-h">与皇帝</h3>
+          {standing ? <Stat label="恩宠" value={standing.favor} /> : <p className="profile-empty">尚未查明。</p>}
+          {rel ? (
+            <>
+              <Stat label="信任" value={rel.trust} />
+              <Stat label="亲和" value={rel.affinity} />
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {tab === "history" && (
+        <div className="profile-section">
+          {memories.length === 0 ? (
+            <p className="profile-empty">暂无记述。</p>
+          ) : (
+            <ul className="profile-log">
+              {[...memories]
+                .sort((a, b) => b.salience - a.salience)
+                .map((m) => (
+                  <li key={m.id} className="profile-log__item">
+                    {m.summary}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {tab === "children" && (
+        <div className="profile-section">
+          {heirs.length === 0 ? (
+            <p className="profile-empty">暂无子嗣。</p>
+          ) : (
+            <ul className="profile-children">
+              {heirs.map((h) => (
+                <li key={h.id} className="profile-children__item">
+                  <span className="profile-children__name">
+                    {h.givenName || h.petName || "未命名"}
+                  </span>
+                  <span className="profile-children__meta">
+                    {h.sex === "daughter" ? "皇子" : "皇郎"}
+                    {h.adoptiveFatherId === character.id ? " · 承养" : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {tab === "relations" && (
+        <div className="profile-section">
+          {rel ? (
+            <>
+              <Stat label="信任" value={rel.trust} />
+              <Stat label="亲和" value={rel.affinity} />
+              {rel.flags.length > 0 && (
+                <div className="profile-tags">
+                  {rel.flags.map((f) => (
+                    <span key={f} className="profile-tag">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="profile-empty">暂无关系记录。</p>
+          )}
+        </div>
+      )}
+    </Drawer>
+  );
+}

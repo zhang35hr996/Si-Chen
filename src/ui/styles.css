@@ -1273,6 +1273,312 @@ button:active:enabled {
 }
 
 /* ════════════════════════════════════════════════════════════════
+   人物视觉小说场景（§五）
+   ════════════════════════════════════════════════════════════════ */
+.char-scene {
+  position: relative;
+  height: 100%;
+  min-height: calc(100vh - 110px);
+  display: flex;
+  flex-direction: column;
+}
+.char-scene__switch {
+  position: absolute;
+  top: 0.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: 0.4rem;
+}
+.char-scene__chip {
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+  background: rgba(15, 11, 9, 0.7);
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  padding: 0.25rem 0.85rem;
+  cursor: pointer;
+}
+.char-scene__chip.is-active {
+  color: var(--c-gold);
+  border-color: var(--c-line-gold);
+}
+
+.char-scene__sprite-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+.char-scene__sprite {
+  height: 78%;
+  max-height: 78vh;
+  width: auto;
+  object-fit: contain;
+  object-position: bottom center;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.55));
+  animation: rise 0.4s ease both;
+}
+.char-scene__sprite[data-fallback] {
+  opacity: 0.7;
+}
+
+.char-scene__dialogue {
+  position: relative;
+  z-index: 4;
+  margin: -2.5rem 1.25rem 1.1rem;
+  padding: 1.1rem 1.4rem 1rem;
+  background: linear-gradient(180deg, rgba(26, 18, 14, 0.92), rgba(15, 11, 9, 0.96));
+  border: 1px solid var(--c-line-gold);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-body);
+}
+.char-scene__nameplate {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+.char-scene__name {
+  font-family: var(--font-title);
+  font-size: 1.35rem;
+  color: var(--c-gold-text);
+}
+.char-scene__sub {
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+}
+.char-scene__line {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--c-text);
+  min-height: 1.8em;
+  margin-bottom: 0.9rem;
+}
+
+/* ── 行为坞 ── */
+.action-dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.action-dock__primary {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.action-btn {
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  color: var(--c-text);
+  background: var(--c-panel-2);
+  border: 1px solid var(--c-line);
+  border-radius: 5px;
+  padding: 0.5rem 1.1rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.action-btn:hover {
+  color: var(--c-gold-text);
+  border-color: var(--c-line-gold);
+}
+/* 侍寝：条件性重点动作 */
+.action-btn--key {
+  color: var(--c-bg);
+  background: var(--c-gold);
+  border-color: var(--c-gold);
+  font-weight: 600;
+}
+.action-btn--key:hover {
+  color: var(--c-bg);
+  background: var(--c-gold-text);
+}
+.action-more {
+  position: relative;
+}
+.action-more__menu {
+  position: absolute;
+  bottom: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 6;
+  min-width: 11rem;
+  background: var(--c-panel-2);
+  border: 1px solid var(--c-line-gold);
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.action-more__menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  color: var(--c-text);
+  background: none;
+  border: none;
+  padding: 0.6rem 0.95rem;
+  cursor: pointer;
+}
+.action-more__menu button:hover {
+  background: var(--c-panel-3);
+  color: var(--c-gold-text);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   侍君详情抽屉内文（§六）
+   ════════════════════════════════════════════════════════════════ */
+.profile-section + .profile-section {
+  margin-top: 1.2rem;
+}
+.profile-h {
+  font-family: var(--font-title);
+  font-size: 0.92rem;
+  letter-spacing: 0.12em;
+  color: var(--c-gold);
+  margin: 1.1rem 0 0.6rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--c-line);
+}
+.profile-h:first-child {
+  margin-top: 0;
+}
+.profile-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+}
+.profile-field {
+  display: contents;
+}
+.profile-field dt {
+  color: var(--c-text-dim);
+  font-size: 0.86rem;
+}
+.profile-field dd {
+  color: var(--c-text);
+  font-size: 0.9rem;
+}
+.profile-stat {
+  display: grid;
+  grid-template-columns: 3rem 1fr 2rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0;
+}
+.profile-stat__label {
+  font-size: 0.85rem;
+  color: var(--c-text-dim);
+}
+.profile-stat__bar {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--c-panel-3);
+  overflow: hidden;
+}
+.profile-stat__fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--c-gold-soft, var(--c-gold)), var(--c-gold));
+  border-radius: 999px;
+}
+.profile-stat__val {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--c-gold-text);
+  text-align: right;
+}
+.profile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+.profile-tag {
+  font-size: 0.8rem;
+  color: var(--c-text);
+  background: var(--c-panel-2);
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  padding: 0.18rem 0.7rem;
+}
+.profile-empty {
+  color: var(--c-text-dim);
+  font-size: 0.88rem;
+  padding: 0.4rem 0;
+}
+.profile-log,
+.profile-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.profile-log__item {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--c-text);
+  padding: 0.6rem 0.8rem;
+  background: var(--c-panel-2);
+  border-left: 2px solid var(--c-line-gold);
+  border-radius: 0 4px 4px 0;
+}
+.profile-children__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0.8rem;
+  background: var(--c-panel-2);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+}
+.profile-children__name {
+  font-family: var(--font-title);
+  color: var(--c-gold-text);
+}
+.profile-children__meta {
+  font-size: 0.84rem;
+  color: var(--c-text-dim);
+}
+
+/* 卡片「查看详情」按钮（次于侍寝/对话） */
+.char-card__profile {
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.84rem;
+  color: var(--c-text-dim);
+  background: var(--c-panel-2);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  padding: 0.32rem 0.8rem;
+  cursor: pointer;
+}
+.char-card__profile:hover {
+  color: var(--c-gold-text);
+  border-color: var(--c-line-gold);
+}
+
+@media (max-width: 640px) {
+  .char-scene__sprite {
+    height: 62%;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
    对话画面 — galgame 布局（全幅背景 · 立绘 · 文本框）
    ════════════════════════════════════════════════════════════════ */
 

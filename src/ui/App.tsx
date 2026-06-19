@@ -37,6 +37,7 @@ import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
+import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
 import { ResourcePanel } from "./components/ResourcePanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
@@ -91,6 +92,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
+  const [profileCharId, setProfileCharId] = useState<string | null>(null);
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const tickedPeriods = useRef<Set<string>>(new Set());
@@ -553,6 +555,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onRestAlone={restAlone}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
+          onViewProfile={(id) => setProfileCharId(id)}
           summonedConsortId={summonedConsortId}
           onDismissSummon={() => setSummonedConsortId(null)}
         />
@@ -925,6 +928,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {resourcePanelOpen && (
         <ResourcePanel state={liveState} onClose={() => setResourcePanelOpen(false)} />
+      )}
+      {profileCharId && db.characters[profileCharId] && (
+        <CharacterProfileDrawer
+          db={db}
+          state={liveState}
+          character={db.characters[profileCharId]!}
+          onClose={() => setProfileCharId(null)}
+        />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
     </>
