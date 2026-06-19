@@ -211,7 +211,7 @@ export function validateEffects(
             bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort with standing: "${e.fatherId}"`, { char: e.fatherId });
           } else if (st.lifecycle === "deceased") {
             bad(index, "BAD_EFFECT_TARGET", `adoptive father is deceased: "${e.fatherId}"`, { char: e.fatherId });
-          } else if (ch.defaultLocation === "lenggong") {
+          } else if (ch.defaultLocation === "changmengong") {
             bad(index, "BAD_EFFECT_TARGET", `adoptive father is in 冷宫: "${e.fatherId}"`, { char: e.fatherId });
           }
         }

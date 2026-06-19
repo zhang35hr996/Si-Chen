@@ -13,7 +13,7 @@ const at = (locationId: string): GameState => ({ ...fresh(), playerLocation: loc
 
 describe("eligibility", () => {
   it("each slice event is eligible exactly at its own location", () => {
-    expect(getEligibleEvents(db, at("yushufang"), "location_enter").map((e) => e.event.id)).toEqual([
+    expect(getEligibleEvents(db, at("zichendian"), "location_enter").map((e) => e.event.id)).toEqual([
       "ev_menses_rite",
     ]);
     expect(getEligibleEvents(db, at("yuhuayuan"), "location_enter").map((e) => e.event.id)).toEqual([
@@ -26,14 +26,14 @@ describe("eligibility", () => {
 
   it("fired once-events drop out", () => {
     const state: GameState = {
-      ...at("yushufang"),
+      ...at("zichendian"),
       eventLog: [{ eventId: "ev_menses_rite", firedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } }],
     };
     expect(getEligibleEvents(db, state, "location_enter")).toEqual([]);
   });
 
   it("affordability is flagged engine-side and pickNextEvent skips unaffordable", () => {
-    const state = at("yushufang"); // rite costs 1 AP
+    const state = at("zichendian"); // rite costs 1 AP
     const broke: GameState = { ...state, calendar: { ...state.calendar, ap: 0 } };
     const eligible = getEligibleEvents(db, broke, "location_enter");
     expect(eligible).toHaveLength(1);
@@ -48,7 +48,7 @@ describe("priority, tiebreak, cooldown (synthetic events)", () => {
     title: "测试",
     sceneId: "sc_menses_rite",
     checkpoint: "location_enter",
-    condition: { atLocation: "yushufang" },
+    condition: { atLocation: "zichendian" },
     priority: 50,
     once: false,
     apCost: 1,

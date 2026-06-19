@@ -1,9 +1,9 @@
 {
   "id": "xianfugong",
   "name": "咸福宫",
-  "description": "初君新赐的居所，陈设尚簇新，廊下花木初栽，处处透着一股急于得宠的热切。",
+  "description": "朝向开阔，日光从早到晚都能落入前院。廊下悬着轻薄宫灯，殿前种满浅色芍药与西府海棠，每逢花期，香气甚至会越过宫墙。",
   "backgroundKey": "bg.hougong_zhudian",
-  "ambience": ["新漆气", "鸟雀啁啾", "婢子低声调笑"],
+  "ambience": ["高位侍君居所", "鸟雀啁啾", "隶儿低声调笑"],
   "position": { "x": 0.64, "y": 0.42 },
   "zone": "hougong",
   "connections": ["kunninggong"],

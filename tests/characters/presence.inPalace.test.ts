@@ -16,7 +16,7 @@ describe("inPalaceConsorts", () => {
 
   it("excludes 冷宫 consorts (defaultLocation lenggong)", () => {
     const list = inPalaceConsorts(db, createNewGameState(db));
-    expect(list.every((c) => c.defaultLocation !== "lenggong")).toBe(true);
+    expect(list.every((c) => c.defaultLocation !== "changmengong")).toBe(true);
   });
 
   it("excludes deceased consorts", () => {

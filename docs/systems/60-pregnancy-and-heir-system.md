@@ -58,12 +58,12 @@ Key derived functions in `src/engine/characters/heirs.ts`:
 - **百日宴** — auto-detected each render via `centennialDue`; dismissible per-month (「稍后再说」). Commits `heir_name {field:"given"}` + 司礼官 congratulation beat.
 
 ### Locations added for heir interaction
-- **上书房** (`shangshufang`) — 问先生 (tutor report, 1 AP) and 问功课 (lesson with `heir_educate`, 1 AP). Only `isEnrolled` heirs appear.
+- **文昭殿** (`shangshufang`) — 问先生 (tutor report, 1 AP) and 问功课 (lesson with `heir_educate`, 1 AP). Only `isEnrolled` heirs appear.
 - **奉先殿** (`fengxiandian`) — 择养父: pick heir → pick adoptive father from eligible pool → `heir_adopt` + scripted reaction (1 or 2 beats depending on whether bio-father is still in palace).
 
-Both connect to 御书房 (`yushufang`), cost 1 AP travel.
+Both connect to 紫宸殿 (`yushufang`), cost 1 AP travel.
 
-### 御书房 heir interaction
+### 紫宸殿 heir interaction
 `HeirListModal` (子嗣 button) lists all live heirs with format `大皇子（嫡）：长安（环环）`. Each row has a 召见 button (1 AP) → `heir_summon` + stage-appropriate scripted dialogue.
 
 ## 太后 (Empress Dowager) — implemented 2026-06-19

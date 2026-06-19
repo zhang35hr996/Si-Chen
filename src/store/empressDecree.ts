@@ -45,8 +45,8 @@ export function adjacentHaremRank(db: ContentDB, currentRankId: string, dir: Dir
 /** 选人 + 方向 + 相邻位分（不含概率门）。无合法懿旨返回 null。 */
 export function decideDecree(db: ContentDB, state: GameState, seedKey: string): DecreePlan | null {
   const candidates = Object.values(db.characters).filter((c) => {
-    if (c.kind !== "consort" || c.id === "feng_hou") return false;
-    if (c.defaultLocation === "lenggong") return false;
+    if (c.kind !== "consort" || c.id === "shen_zhibai") return false;
+    if (c.defaultLocation === "changmengong") return false;
     const st = state.standing[c.id];
     if (!st || st.lifecycle === "deceased") return false;
     const rank = db.ranks[st.rank];
@@ -76,13 +76,13 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
         summary,
         salience: dir === "demote" ? 70 : 55,
         tags: ["empress", dir],
-        participants: ["feng_hou", pick.id],
+        participants: ["shen_zhibai", pick.id],
       },
     },
   ];
   const verb = dir === "promote" ? "晋" : "贬";
   const reactions: DecreeReaction[] = [
-    { speakerId: "sili_nvguan", lines: [`司礼官启奏：凤后娘娘懿旨——${verb}${name}为${targetName}。`] },
+    { speakerId: "wei_sui", lines: [`司礼官启奏：凤后娘娘懿旨——${verb}${name}为${targetName}。`] },
     {
       speakerId: pick.id,
       lines: dir === "promote" ? [`${name}叩谢凤后娘娘恩典。`] : [`${name}默然领旨，不敢有怨。`],

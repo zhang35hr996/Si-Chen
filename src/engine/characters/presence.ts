@@ -39,7 +39,7 @@ export function inPalaceConsorts(db: ContentDB, state: GameState): CharacterCont
       (c) =>
         c.kind === "consort" &&
         state.standing[c.id]?.lifecycle !== "deceased" &&
-        c.defaultLocation !== "lenggong",
+        c.defaultLocation !== "changmengong",
     )
     .sort((a, b) => {
       const ra = state.standing[a.id];

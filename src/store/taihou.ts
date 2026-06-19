@@ -26,7 +26,7 @@ export function buildTaihouIllnessTick(state: GameState, seedKey: string): Taiho
     if (gestationRoll(`taihou:ill:${seedKey}`) % 100 >= chance) return null;
     return {
       effects: [{ type: "set_taihou_illness", ill: true }],
-      beats: [{ speakerId: "sili_nvguan", lines: ["司礼官急奏：太后凤体违和，太医已往慈宁宫诊视。"] }],
+      beats: [{ speakerId: "wei_sui", lines: ["司礼官急奏：太后凤体违和，太医已往慈宁宫诊视。"] }],
     };
   }
   if (gestationRoll(`taihou:recover:${seedKey}`) % 100 >= TAIHOU_RECOVER_CHANCE) return null;
@@ -46,7 +46,7 @@ function attendantPool(db: ContentDB, state: GameState): string[] {
   return Object.values(db.characters)
     .filter((c) => {
       if (c.kind !== "consort") return false;
-      if (c.defaultLocation === "lenggong") return false;
+      if (c.defaultLocation === "changmengong") return false;
       return state.standing[c.id]?.lifecycle !== "deceased";
     })
     .map((c) => c.id);
@@ -99,8 +99,8 @@ export interface RebukePlan {
 function rebukePool(db: ContentDB, state: GameState): { id: string; favor: number }[] {
   return Object.values(db.characters)
     .filter((c) => {
-      if (c.kind !== "consort" || c.id === "feng_hou") return false;
-      if (c.defaultLocation === "lenggong") return false;
+      if (c.kind !== "consort" || c.id === "shen_zhibai") return false;
+      if (c.defaultLocation === "changmengong") return false;
       return state.standing[c.id]?.lifecycle !== "deceased";
     })
     .map((c) => ({ id: c.id, favor: state.standing[c.id]?.favor ?? 0 }));

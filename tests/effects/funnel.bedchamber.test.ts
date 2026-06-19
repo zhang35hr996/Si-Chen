@@ -10,19 +10,19 @@ const db = content.value;
 describe("funnel: bedchamber", () => {
   it("appends an encounter at current time", () => {
     const state = createNewGameState(db);
-    const r = applyEffects(db, state, [{ type: "bedchamber", char: "shen_chenghui", mode: "passion" }]);
+    const r = applyEffects(db, state, [{ type: "bedchamber", char: "lu_huaijin", mode: "passion" }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const enc = r.value.bedchamber.shen_chenghui!.encounters;
+    const enc = r.value.bedchamber.lu_huaijin!.encounters;
     expect(enc).toHaveLength(1);
     expect(enc[0]!.mode).toBe("passion");
     expect(enc[0]!.at.month).toBe(state.calendar.month);
-    expect(state.bedchamber.shen_chenghui!.encounters).toHaveLength(0);
+    expect(state.bedchamber.lu_huaijin!.encounters).toHaveLength(0);
   });
 
   it("rejects bedchamber for an official (no record)", () => {
     const state = createNewGameState(db);
-    const errs = validateEffects(db, state, [{ type: "bedchamber", char: "sili_nvguan", mode: "passion" }]);
+    const errs = validateEffects(db, state, [{ type: "bedchamber", char: "wei_sui", mode: "passion" }]);
     expect(errs).toHaveLength(1);
   });
 });

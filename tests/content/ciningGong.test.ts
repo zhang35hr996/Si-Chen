@@ -24,8 +24,8 @@ describe("太后 + 慈宁宫 content", () => {
     expect(loc).toBeDefined();
     expect(loc!.zone).toBe("palace");
     expect(loc!.entry).toBe("travel");
-    expect(loc!.connections).toContain("yushufang");
-    expect(result.value.locations["yushufang"]!.connections).toContain("cining_gong");
+    expect(loc!.connections).toContain("zichendian");
+    expect(result.value.locations["zichendian"]!.connections).toContain("cining_gong");
   });
 
   it("太后对话 event/scene present, 1 AP, located at 慈宁宫", () => {

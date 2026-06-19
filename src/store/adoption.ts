@@ -17,7 +17,7 @@ function nameOf(db: ContentDB, state: GameState, charId: string): string {
 export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): CharacterContent[] {
   return Object.values(db.characters).filter((c) => {
     if (c.kind !== "consort" && c.kind !== "elder") return false;
-    if (c.defaultLocation === "lenggong") return false;
+    if (c.defaultLocation === "changmengong") return false;
     if (state.standing[c.id]?.lifecycle === "deceased") return false;
     return true;
   });
@@ -28,7 +28,7 @@ export function bioFatherAvailable(db: ContentDB, state: GameState, heir: Heir):
   if (heir.fatherId === null) return false;
   const c = db.characters[heir.fatherId];
   if (!c || c.kind !== "consort") return false;
-  if (c.defaultLocation === "lenggong") return false;
+  if (c.defaultLocation === "changmengong") return false;
   return state.standing[heir.fatherId]?.lifecycle !== "deceased";
 }
 
@@ -70,8 +70,8 @@ export function buildAdoptionReaction(
     return [
       thanks,
       {
-        speakerId: "sili_nvguan",
-        lines: [`司礼官低声回禀：择养父之事已告宗庙。臣听闻……生父闻讯，独坐宫中，泪如雨下。`],
+        speakerId: "wei_sui",
+        lines: [`司礼官低声回禀：择养父之事已告宗庙。臣听闻……那位侍君闻讯，独坐宫中，泪如雨下。`],
       },
     ];
   }

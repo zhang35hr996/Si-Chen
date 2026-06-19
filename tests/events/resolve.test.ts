@@ -16,8 +16,8 @@ const riteEffects: EventEffect[] = [
   { type: "flag", key: "rite_scheduled", value: true },
   {
     type: "memory",
-    char: "sili_nvguan",
-    entry: { kind: "event", summary: "祭仪已准。", salience: 60, tags: ["rite"], participants: ["player", "sili_nvguan"] },
+    char: "wei_sui",
+    entry: { kind: "event", summary: "祭仪已准。", salience: 60, tags: ["rite"], participants: ["player", "wei_sui"] },
   },
 ];
 
@@ -29,7 +29,7 @@ describe("resolveEvent — one transaction", () => {
     const { state, rolledOver } = result.value;
     expect(state.resources.bloodline.legitimacy).toBe(65);
     expect(state.flags["rite_scheduled"]).toBe(true);
-    expect(state.memories["sili_nvguan"]?.entries).toHaveLength(2);
+    expect(state.memories["wei_sui"]?.entries).toHaveLength(2);
     expect(state.calendar.ap).toBe(5); // 6 - apCost 1
     expect(rolledOver).toBe(false);
     expect(hasEventFired(state, "ev_menses_rite")).toBe(true);

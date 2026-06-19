@@ -16,7 +16,7 @@ inner motivation (see [`../systems/30-personality-archetypes.md`](../systems/30-
 
 ## Shipped seeds to build on
 
-- **沈承徽 (`shen_chenghui`)** — carries a `neglect` memory; a natural slow-burn /
+- **陆怀瑾 (`shen_chenghui`)** — carries a `neglect` memory; a natural slow-burn /
   reconciliation or resentment arc.
 - **楚君 (`chu_jun`)** — `favor`/`rivalry` flavored; ambition & competition.
 - **凤后 (`feng_hou`)** — 后宫 authority, 宫规, the rules event chain.

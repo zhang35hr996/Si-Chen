@@ -16,14 +16,14 @@ describe("heir lifecycle save round-trip", () => {
     const steps: EventEffect[][] = [
       [{ type: "pregnancy", op: "begin" }],
       [{ type: "pregnancy", op: "carry" }],
-      [{ type: "heir_designate", charIds: ["shen_chenghui"] }],
-      [{ type: "pregnancy_transfer", carrierId: "shen_chenghui", atMonth: 3 }],
+      [{ type: "heir_designate", charIds: ["lu_huaijin"] }],
+      [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }],
       [
         {
           type: "birth",
           sex: "daughter",
-          fatherId: "shen_chenghui",
-          bearer: "shen_chenghui",
+          fatherId: "lu_huaijin",
+          bearer: "lu_huaijin",
           legitimate: false,
           favor: 25,
           bearerOutcome: "safe",
@@ -37,8 +37,8 @@ describe("heir lifecycle save round-trip", () => {
       if (r.ok) s = r.value;
     }
     expect(s.resources.bloodline.heirs).toHaveLength(1);
-    expect(s.standing.shen_chenghui!.lifecycle).toBe("delivered");
-    expect(s.standing.shen_chenghui!.recoverUntilMonth).toBe(20);
+    expect(s.standing.lu_huaijin!.lifecycle).toBe("delivered");
+    expect(s.standing.lu_huaijin!.recoverUntilMonth).toBe(20);
     // The full state must still satisfy the persistence schema.
     expect(gameStateSchema.safeParse(s).success).toBe(true);
   });

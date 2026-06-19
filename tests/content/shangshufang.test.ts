@@ -7,11 +7,11 @@ const db = content.value;
 
 describe("上书房 location", () => {
   it("loads as a palace travel node connected to 御书房 (symmetric)", () => {
-    const loc = db.locations["shangshufang"];
+    const loc = db.locations["wenzhaodian"];
     expect(loc).toBeDefined();
     expect(loc!.zone).toBe("palace");
     expect(loc!.entry).toBe("travel");
-    expect(loc!.connections).toContain("yushufang");
-    expect(db.locations["yushufang"]!.connections).toContain("shangshufang");
+    expect(loc!.connections).toContain("zichendian");
+    expect(db.locations["zichendian"]!.connections).toContain("wenzhaodian");
   });
 });

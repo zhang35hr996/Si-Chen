@@ -10,23 +10,23 @@ const db = content.value;
 describe("funnel: heir_designate", () => {
   it("tags consorts candidate + records candidateIds", () => {
     const state = createNewGameState(db);
-    const r = applyEffects(db, state, [{ type: "heir_designate", charIds: ["shen_chenghui", "feng_hou"] }]);
+    const r = applyEffects(db, state, [{ type: "heir_designate", charIds: ["lu_huaijin", "shen_zhibai"] }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.standing.shen_chenghui!.lifecycle).toBe("candidate");
-    expect(r.value.standing.feng_hou!.lifecycle).toBe("candidate");
-    expect(r.value.resources.bloodline.pregnancy.candidateIds).toEqual(["shen_chenghui", "feng_hou"]);
+    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("candidate");
+    expect(r.value.standing.shen_zhibai!.lifecycle).toBe("candidate");
+    expect(r.value.resources.bloodline.pregnancy.candidateIds).toEqual(["lu_huaijin", "shen_zhibai"]);
   });
 
   it("rejects an official or unknown target", () => {
     const state = createNewGameState(db);
-    expect(validateEffects(db, state, [{ type: "heir_designate", charIds: ["sili_nvguan"] }])).toHaveLength(1);
+    expect(validateEffects(db, state, [{ type: "heir_designate", charIds: ["wei_sui"] }])).toHaveLength(1);
     expect(validateEffects(db, state, [{ type: "heir_designate", charIds: ["nobody"] }])).toHaveLength(1);
   });
 
   it("rejects a deceased consort", () => {
     const state = createNewGameState(db);
-    state.standing.shen_chenghui!.lifecycle = "deceased";
-    expect(validateEffects(db, state, [{ type: "heir_designate", charIds: ["shen_chenghui"] }])).toHaveLength(1);
+    state.standing.lu_huaijin!.lifecycle = "deceased";
+    expect(validateEffects(db, state, [{ type: "heir_designate", charIds: ["lu_huaijin"] }])).toHaveLength(1);
   });
 });

@@ -1,0 +1,22 @@
+{
+  "id": "yuqing_gong",
+  "name": "毓庆宫",
+  "description": "文昭殿后的一处幽静院落，专作未成年皇嗣起居之所。皇子年满五岁、皇郎年满七岁后迁居于此，由乳母、师傅悉心教养，待长成再各归本宫。",
+  "backgroundKey": "bg.yuqing_gong",
+  "ambience": [
+    "稚子读书",
+    "乳母低语",
+    "檐下风铃"
+  ],
+  "position": {
+    "x": 0.5,
+    "y": 0.78
+  },
+  "zone": "palace",
+  "connections": [
+    "wenzhaodian"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
+}

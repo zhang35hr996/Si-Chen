@@ -1,0 +1,22 @@
+{
+  "id": "jiyue_gong",
+  "name": "霁月宫",
+  "description": "取『光风霁月』为名，殿前空旷，夜来月色最盛，琉璃瓦上常凝清辉。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "月色最盛",
+    "琉璃凝辉",
+    "夜风清越"
+  ],
+  "position": {
+    "x": 0.82,
+    "y": 0.54
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
+}

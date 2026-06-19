@@ -45,14 +45,14 @@ describe("subjectivity (acceptance §13 #8)", () => {
     const state = store.getState();
 
     // 沈承徽 (present, rebuked) remembers it — her own POV wording
-    const shen = listMemories(state, "shen_chenghui");
+    const shen = listMemories(state, "lu_huaijin");
     expect(shen).toHaveLength(2);
-    expect(shen[1]?.summary).toContain("斥我放肆");
+    expect(shen[1]?.summary).toContain("不可窥伺帝踪");
 
     // 凤后 and 司礼女官 were absent: still only their authored seed
-    expect(listMemories(state, "feng_hou")).toHaveLength(1);
-    expect(listMemories(state, "feng_hou")[0]?.source).toBe("authored");
-    expect(listMemories(state, "sili_nvguan")).toHaveLength(1);
+    expect(listMemories(state, "shen_zhibai")).toHaveLength(1);
+    expect(listMemories(state, "shen_zhibai")[0]?.source).toBe("authored");
+    expect(listMemories(state, "wei_sui")).toHaveLength(1);
   });
 
   it("different choices leave different memories (divergent POV per branch)", async () => {
@@ -61,8 +61,8 @@ describe("subjectivity (acceptance §13 #8)", () => {
     const cold = startedStore();
     await playNeglect(cold, "c_cold");
 
-    const a = listMemories(comforted.getState(), "shen_chenghui")[1]!;
-    const b = listMemories(cold.getState(), "shen_chenghui")[1]!;
+    const a = listMemories(comforted.getState(), "lu_huaijin")[1]!;
+    const b = listMemories(cold.getState(), "lu_huaijin")[1]!;
     expect(a.summary).not.toBe(b.summary);
     expect(a.summary).toContain("疏忽了我");
   });
@@ -73,7 +73,7 @@ describe("origin trace (acceptance: source + writing scene)", () => {
     const store = startedStore();
     await playNeglect(store, "c_brush");
 
-    const [seed, written] = listMemories(store.getState(), "shen_chenghui");
+    const [seed, written] = listMemories(store.getState(), "lu_huaijin");
     expect(seed?.source).toBe("authored");
     expect(seed?.originSceneId).toBeUndefined();
     expect(memoryOriginLabel(seed!)).toBe("授定背景");
@@ -86,11 +86,11 @@ describe("origin trace (acceptance: source + writing scene)", () => {
     store.applyEffects(db, [
       {
         type: "memory",
-        char: "feng_hou",
+        char: "shen_zhibai",
         entry: { kind: "opinion", summary: "调试写入。", salience: 5, tags: ["debug"], participants: ["player"] },
       },
     ]);
-    const direct = listMemories(store.getState(), "feng_hou")[1]!;
+    const direct = listMemories(store.getState(), "shen_zhibai")[1]!;
     expect(direct.originSceneId).toBeUndefined();
     expect(memoryOriginLabel(direct)).toBe("效果批");
   });
@@ -102,18 +102,18 @@ describe("inspection helpers", () => {
     expect(listMemories(state, "char_ghost")).toEqual([]);
     const overview = memoryOverview(state).sort((a, b) => a.charId.localeCompare(b.charId));
     expect(overview).toEqual([
-      { charId: "chu_jun", count: 1, protectedCount: 1 },
-      { charId: "feng_hou", count: 1, protectedCount: 1 },
-      { charId: "shen_chenghui", count: 1, protectedCount: 1 },
-      { charId: "sili_nvguan", count: 1, protectedCount: 1 },
+      { charId: "lu_huaijin", count: 1, protectedCount: 1 },
+      { charId: "shen_zhibai", count: 1, protectedCount: 1 },
       { charId: "taihou", count: 0, protectedCount: 0 },
-      { charId: "wenya_shijun", count: 1, protectedCount: 1 },
+      { charId: "wei_sui", count: 1, protectedCount: 1 },
+      { charId: "wenya", count: 1, protectedCount: 1 },
+      { charId: "xu_qinghuan", count: 1, protectedCount: 1 },
     ]);
   });
 
   it("memoryAgeDays counts action-days, clamped at 0", () => {
     const state = createNewGameState(db);
-    const entry = listMemories(state, "feng_hou")[0]!;
+    const entry = listMemories(state, "shen_zhibai")[0]!;
     expect(memoryAgeDays(entry, { year: 1, month: 1, period: "early", dayIndex: 0 })).toBe(0);
     expect(memoryAgeDays(entry, { year: 1, month: 2, period: "mid", dayIndex: 4 })).toBe(4);
     expect(memoryAgeDays(entry, { year: 2, month: 1, period: "early", dayIndex: 36 })).toBe(36);

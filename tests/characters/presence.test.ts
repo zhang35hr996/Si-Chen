@@ -8,9 +8,9 @@ const state = createNewGameState(db);
 
 describe("presence v0 (defaultLocation rule)", () => {
   it("places each slice character at their own location", () => {
-    expect(getPresentAt(db, state, "kunninggong").map((c) => c.id)).toEqual(["feng_hou"]);
-    expect(getPresentAt(db, state, "yuhuayuan").map((c) => c.id)).toEqual(["shen_chenghui"]);
-    expect(getPresentAt(db, state, "yushufang").map((c) => c.id)).toEqual(["sili_nvguan"]);
+    expect(getPresentAt(db, state, "kunninggong").map((c) => c.id)).toEqual(["shen_zhibai"]);
+    expect(getPresentAt(db, state, "zhongcui_gong").map((c) => c.id)).toEqual(["lu_huaijin"]);
+    expect(getPresentAt(db, state, "zichendian").map((c) => c.id)).toEqual(["wei_sui"]);
   });
 
   it("returns [] for a location with no one and null for unknown characters", () => {
@@ -20,6 +20,6 @@ describe("presence v0 (defaultLocation rule)", () => {
 
   it("does not depend on where the player is", () => {
     const moved = { ...state, playerLocation: "yuhuayuan" };
-    expect(getPresentAt(db, moved, "yushufang").map((c) => c.id)).toEqual(["sili_nvguan"]);
+    expect(getPresentAt(db, moved, "zichendian").map((c) => c.id)).toEqual(["wei_sui"]);
   });
 });

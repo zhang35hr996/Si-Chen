@@ -30,8 +30,8 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
 
     const first = asFrame(unwrap(await runner.start(state, "ev_shen_neglect")));
     expect(first.awaiting).toBe("choice");
-    expect(first.line.speakerId).toBe("shen_chenghui");
-    expect(first.line.speakerName).toBe("沈承徽");
+    expect(first.line.speakerId).toBe("lu_huaijin");
+    expect(first.line.speakerName).toBe("陆承徽");
     // v0 ships only the shared "neutral" portrait per kind, so the scene's
     // authored expression ("frown") normalizes to neutral (orchestrator fallback).
     // Add per-expression art back to a character's `expressions` to restore it.
@@ -121,8 +121,8 @@ describe("quit drill (acceptance §13 #6)", () => {
     const commit = store.resolveEvent(db, end.eventId, end.effects);
     expect(commit.ok).toBe(true);
     const state = store.getState();
-    expect(state.relationships["shen_chenghui"]).toMatchObject({ affinity: 49, trust: 27 });
-    expect(state.memories["shen_chenghui"]?.entries).toHaveLength(2);
+    expect(state.relationships["lu_huaijin"]).toMatchObject({ affinity: 49, trust: 27 });
+    expect(state.memories["lu_huaijin"]?.entries).toHaveLength(2);
     expect(state.calendar.ap).toBe(5); // apCost spent at commit, not at entry
     expect(state.sceneHistory).toEqual(["sc_shen_neglect"]);
   });
@@ -133,7 +133,7 @@ describe("graph semantics (synthetic scenes)", () => {
     ({
       ...db,
       events: {
-        ev_t: { id: "ev_t", title: "测试", sceneId: scene.id, checkpoint: "location_enter", condition: { atLocation: "yushufang" }, priority: 1, once: false, apCost: 0 },
+        ev_t: { id: "ev_t", title: "测试", sceneId: scene.id, checkpoint: "location_enter", condition: { atLocation: "zichendian" }, priority: 1, once: false, apCost: 0 },
       },
       scenes: { [scene.id]: scene },
     }) as ContentDB;
@@ -141,14 +141,14 @@ describe("graph semantics (synthetic scenes)", () => {
   it("branch routes on PRE-scene state — pending flags are invisible mid-scene", async () => {
     const scene: SceneContent = {
       id: "sc_t",
-      locationId: "yushufang",
-      participants: ["sili_nvguan"],
+      locationId: "zichendian",
+      participants: ["wei_sui"],
       startNodeId: "n_fx",
       nodes: [
         { type: "effect", id: "n_fx", effects: [{ type: "flag", key: "mid_flag", value: true }], next: "n_br" },
         { type: "branch", id: "n_br", condition: { flagSet: "mid_flag" }, ifTrue: "n_yes", ifFalse: "n_no" },
-        { type: "line", id: "n_yes", speaker: "sili_nvguan", text: "看见了旗标。" },
-        { type: "line", id: "n_no", speaker: "sili_nvguan", text: "未见旗标。" },
+        { type: "line", id: "n_yes", speaker: "wei_sui", text: "看见了旗标。" },
+        { type: "line", id: "n_no", speaker: "wei_sui", text: "未见旗标。" },
       ],
     };
     const runner = new SceneRunner(sceneDb(scene), mockProvider);
@@ -159,11 +159,11 @@ describe("graph semantics (synthetic scenes)", () => {
   it("choice conditions filter visibility against pre-scene state", async () => {
     const scene: SceneContent = {
       id: "sc_t",
-      locationId: "yushufang",
-      participants: ["sili_nvguan"],
+      locationId: "zichendian",
+      participants: ["wei_sui"],
       startNodeId: "n_l",
       nodes: [
-        { type: "line", id: "n_l", speaker: "sili_nvguan", text: "请示。", next: "n_c" },
+        { type: "line", id: "n_l", speaker: "wei_sui", text: "请示。", next: "n_c" },
         {
           type: "choice",
           id: "n_c",
@@ -172,7 +172,7 @@ describe("graph semantics (synthetic scenes)", () => {
             { id: "c_locked", text: "需要旗标", condition: { flagSet: "ghost" }, next: "n_end" },
           ],
         },
-        { type: "line", id: "n_end", speaker: "sili_nvguan", text: "遵旨。" },
+        { type: "line", id: "n_end", speaker: "wei_sui", text: "遵旨。" },
       ],
     };
     const runner = new SceneRunner(sceneDb(scene), mockProvider);
@@ -185,8 +185,8 @@ describe("graph semantics (synthetic scenes)", () => {
   it("effect-node cycle trips the loop guard and discards the session", async () => {
     const scene: SceneContent = {
       id: "sc_t",
-      locationId: "yushufang",
-      participants: ["sili_nvguan"],
+      locationId: "zichendian",
+      participants: ["wei_sui"],
       startNodeId: "n_a",
       nodes: [
         { type: "effect", id: "n_a", effects: [{ type: "flag", key: "k", value: 1 }], next: "n_b" },

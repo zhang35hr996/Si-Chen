@@ -20,30 +20,30 @@ function carrying() {
 describe("funnel: pregnancy_transfer", () => {
   it("moves carrier to consort, sets status none + lifecycle carrying", () => {
     const state = carrying();
-    const r = applyEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "shen_chenghui", atMonth: 3 }]);
+    const r = applyEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.pregnancy.status).toBe("none");
     expect(r.value.resources.bloodline.gestations).toEqual([
       {
-        carrier: "shen_chenghui",
-        fatherId: "shen_chenghui",
+        carrier: "lu_huaijin",
+        fatherId: "lu_huaijin",
         transferredAtMonth: 3,
         conceivedAt: state.resources.bloodline.gestations[0]!.conceivedAt,
       },
     ]);
-    expect(r.value.standing.shen_chenghui!.lifecycle).toBe("carrying");
+    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("carrying");
   });
 
   it("rejects when sovereign is not carrying", () => {
     const state = createNewGameState(db); // status none, no gestation
-    expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "shen_chenghui", atMonth: 3 }])).toHaveLength(1);
+    expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }])).toHaveLength(1);
   });
 
   it("rejects a deceased / non-consort carrier", () => {
     const state = carrying();
-    state.standing.shen_chenghui!.lifecycle = "deceased";
-    expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "shen_chenghui", atMonth: 3 }])).toHaveLength(1);
-    expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "sili_nvguan", atMonth: 3 }])).toHaveLength(1);
+    state.standing.lu_huaijin!.lifecycle = "deceased";
+    expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }])).toHaveLength(1);
+    expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "wei_sui", atMonth: 3 }])).toHaveLength(1);
   });
 });

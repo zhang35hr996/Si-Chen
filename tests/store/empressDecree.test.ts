@@ -8,12 +8,12 @@ const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
-/** Put shen_chenghui at a given rank+favor; push other in-band consorts above the band. */
+/** Put lu_huaijin at a given rank+favor; push other in-band consorts above the band. */
 function oneConsortAt(rank: string, favor: number): GameState {
   const s = createNewGameState(db);
-  s.standing.shen_chenghui!.rank = rank;
-  s.standing.shen_chenghui!.favor = favor;
-  if (s.standing.chu_jun) s.standing.chu_jun.rank = "shichen"; // order 110 > 100, excluded
+  s.standing.lu_huaijin!.rank = rank;
+  s.standing.lu_huaijin!.favor = favor;
+  if (s.standing.xu_qinghuan) s.standing.xu_qinghuan.rank = "shichen"; // order 110 > 100, excluded
   return s;
 }
 
@@ -32,10 +32,10 @@ describe("decideDecree", () => {
     const plan = decideDecree(db, s, "seed-A");
     expect(plan).not.toBeNull();
     const setRank = plan!.effects.find((e) => e.type === "set_rank") as { type: "set_rank"; char: string; rank: string };
-    expect(setRank.char).toBe("shen_chenghui");
+    expect(setRank.char).toBe("lu_huaijin");
     expect(setRank.rank).toBe("guiren");
-    expect(plan!.reactions[0]!.speakerId).toBe("sili_nvguan");
-    expect(plan!.reactions[1]!.speakerId).toBe("shen_chenghui");
+    expect(plan!.reactions[0]!.speakerId).toBe("wei_sui");
+    expect(plan!.reactions[1]!.speakerId).toBe("lu_huaijin");
   });
 
   it("low favor → demote one step", () => {
@@ -59,10 +59,10 @@ describe("decideDecree", () => {
 
   it("excludes 冷宫 / official / 凤后 / above-贵人", () => {
     const s = createNewGameState(db);
-    s.standing.shen_chenghui!.rank = "shichen"; // 110, excluded
-    if (s.standing.chu_jun) s.standing.chu_jun.rank = "shichen";
-    s.standing.wenya_shijun!.rank = "meiren"; // in band BUT 冷宫 → excluded
-    s.standing.wenya_shijun!.favor = 90;
+    s.standing.lu_huaijin!.rank = "shichen"; // 110, excluded
+    if (s.standing.xu_qinghuan) s.standing.xu_qinghuan.rank = "shichen";
+    s.standing.wenya!.rank = "meiren"; // in band BUT 冷宫 → excluded
+    s.standing.wenya!.favor = 90;
     expect(decideDecree(db, s, "seed-A")).toBeNull();
   });
 

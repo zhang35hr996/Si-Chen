@@ -27,7 +27,7 @@ describe("funnel: pregnancy_abort", () => {
 
   it("rejects when carrier is a consort (承养不可弃)", () => {
     const transferred = applyEffects(db, carrying(), [
-      { type: "pregnancy_transfer", carrierId: "shen_chenghui", atMonth: 3 },
+      { type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 },
     ]);
     if (!transferred.ok) return;
     expect(validateEffects(db, transferred.value, [{ type: "pregnancy_abort" }])).toHaveLength(1);

@@ -1,0 +1,22 @@
+{
+  "id": "chenghui_gong",
+  "name": "承晖宫",
+  "description": "朝东而建，晨光最先临幸此处，檐角铜铃随风轻响，院中遍植木樨。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "晨光先临",
+    "铜铃轻响",
+    "木樨幽香"
+  ],
+  "position": {
+    "x": 0.36,
+    "y": 0.22
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
+}

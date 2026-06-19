@@ -6,24 +6,24 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 const db = loadRealContent();
 
 describe("buildRankOp", () => {
-  const state = createNewGameState(db); // shen_chenghui starts at 承徽
+  const state = createNewGameState(db); // lu_huaijin starts at 承徽
   it("promote to 君 emits set_rank + memory and 谢恩 lines", () => {
-    const op = buildRankOp(db, state, "shen_chenghui", { kind: "set_rank", rank: "jun" });
+    const op = buildRankOp(db, state, "lu_huaijin", { kind: "set_rank", rank: "jun" });
     expect(op).not.toBeNull();
     if (!op) return;
     expect(op.kind).toBe("promote");
-    expect(op.effects[0]).toEqual({ type: "set_rank", char: "shen_chenghui", rank: "jun" });
+    expect(op.effects[0]).toEqual({ type: "set_rank", char: "lu_huaijin", rank: "jun" });
     expect(op.effects.some((e) => e.type === "memory")).toBe(true);
     expect(op.lines[0]).toContain("臣侍");
   });
   it("selecting the SAME rank is a no-op (null)", () => {
-    expect(buildRankOp(db, state, "shen_chenghui", { kind: "set_rank", rank: "chenghui" })).toBeNull();
+    expect(buildRankOp(db, state, "lu_huaijin", { kind: "set_rank", rank: "chenghui" })).toBeNull();
   });
   it("strip_title classifies as strip_title and emits remove_title", () => {
     const titled = structuredClone(state);
-    titled.standing.shen_chenghui!.title = "婉";
-    const op = buildRankOp(db, titled, "shen_chenghui", { kind: "remove_title" });
+    titled.standing.lu_huaijin!.title = "婉";
+    const op = buildRankOp(db, titled, "lu_huaijin", { kind: "remove_title" });
     expect(op?.kind).toBe("strip_title");
-    expect(op?.effects[0]).toEqual({ type: "remove_title", char: "shen_chenghui" });
+    expect(op?.effects[0]).toEqual({ type: "remove_title", char: "lu_huaijin" });
   });
 });

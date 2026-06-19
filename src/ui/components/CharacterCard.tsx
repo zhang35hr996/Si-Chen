@@ -43,7 +43,7 @@ export function CharacterCard({
   const rank = standing ? db.ranks[standing.rank] : undefined;
   const isConsort = character.kind === "consort";
   const displayName = resolveDisplayName(character, standing, rank);
-  const canManage = isConsort && character.id !== "feng_hou" && onManage;
+  const canManage = isConsort && character.id !== "shen_zhibai" && onManage;
   const portrait = registry.portrait(character.portraitSet, "neutral");
   const favor =
     isConsort

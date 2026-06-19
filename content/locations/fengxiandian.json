@@ -1,11 +1,11 @@
 {
   "id": "fengxiandian",
   "name": "奉先殿",
-  "description": "殿内供奉历代先帝牌位，香烟缭绕，肃穆庄严。帝王于此祭祀祖先，亦在此为皇嗣择立养父，告于宗庙。",
+  "description": "殿内供奉历代先帝牌位，香烟缭绕，肃穆庄严。帝王于此祭祀祖先，告慰宗庙。",
   "backgroundKey": "bg.fengxiandian",
   "ambience": ["香烟缭绕", "牌位森然", "钟磬低回"],
   "position": { "x": 0.72, "y": 0.6 },
   "zone": "palace",
-  "connections": ["yushufang"],
+  "connections": ["zichendian"],
   "travelCost": { "ap": 1 }
 }

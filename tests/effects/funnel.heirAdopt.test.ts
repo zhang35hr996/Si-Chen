@@ -21,25 +21,25 @@ function heirState(): GameState {
 
 describe("funnel: heir_adopt", () => {
   it("sets adoptiveFatherId for an in-palace consort", () => {
-    const r = applyEffects(db, heirState(), [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "shen_chenghui" }]);
+    const r = applyEffects(db, heirState(), [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "lu_huaijin" }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.resources.bloodline.heirs[0]!.adoptiveFatherId).toBe("shen_chenghui");
+    expect(r.value.resources.bloodline.heirs[0]!.adoptiveFatherId).toBe("lu_huaijin");
   });
 
   it("rejects a deceased consort", () => {
     const s = heirState();
-    s.standing.shen_chenghui!.lifecycle = "deceased";
-    expect(validateEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "shen_chenghui" }])).toHaveLength(1);
+    s.standing.lu_huaijin!.lifecycle = "deceased";
+    expect(validateEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "lu_huaijin" }])).toHaveLength(1);
   });
 
   it("rejects a cold-palace consort (defaultLocation lenggong)", () => {
-    expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "wenya_shijun" }])).toHaveLength(1);
+    expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "wenya" }])).toHaveLength(1);
   });
 
   it("rejects unknown heir / non-consort", () => {
-    expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "x", fatherId: "shen_chenghui" }])).toHaveLength(1);
-    expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "sili_nvguan" }])).toHaveLength(1);
+    expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "x", fatherId: "lu_huaijin" }])).toHaveLength(1);
+    expect(validateEffects(db, heirState(), [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "wei_sui" }])).toHaveLength(1);
   });
 
   it("accepts elder 太后 as adoptive father, rejects official", () => {
@@ -51,7 +51,7 @@ describe("funnel: heir_adopt", () => {
     });
     const okR = applyEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "taihou" }]);
     expect(okR.ok).toBe(true);
-    const badR = applyEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "sili_nvguan" }]);
+    const badR = applyEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "wei_sui" }]);
     expect(badR.ok).toBe(false);
   });
 });

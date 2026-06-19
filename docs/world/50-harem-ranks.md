@@ -56,7 +56,7 @@ official rank **司礼 (`sili_zhang`)**. All ranks are defined in `world.json`
 `ranks[]` and mirrored in `lexicon.json` `rankAddressRules`.
 
 The player can **升/降位分** and **加/褫夺封号** for any consort from her palace
-card (管理 button → `RankAdminModal`) or from the 御书房 后宫名册 roster — except
+card (管理 button → `RankAdminModal`) or from the 紫宸殿 后宫名册 roster — except
 **凤后**（正宫，the cap, not adjustable). Add more ranks by extending `world.json`
 `ranks[]` **and** `lexicon.json` `rankAddressRules` together. See
 [`../content-authoring/20-character-template.md`](../content-authoring/20-character-template.md).

@@ -14,7 +14,7 @@ export function ShangshufangScreen({
   onLesson: (heirId: string) => void; onTutorReport: (heirId: string) => void;
 }) {
   const state = useGameState(store);
-  const location = db.locations["shangshufang"]!;
+  const location = db.locations["wenzhaodian"]!;
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const enrolled = [...listHeirsBySex(state.resources.bloodline.heirs, "daughter"), ...listHeirsBySex(state.resources.bloodline.heirs, "son")]
     .filter((r) => isEnrolled(r.heir, state.calendar));

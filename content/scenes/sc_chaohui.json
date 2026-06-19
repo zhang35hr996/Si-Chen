@@ -1,13 +1,13 @@
 {
   "id": "sc_chaohui",
-  "locationId": "chaotang",
-  "participants": ["sili_nvguan"],
+  "locationId": "xuanzhengdian",
+  "participants": ["wei_sui"],
   "startNodeId": "n_open",
   "nodes": [
     {
       "type": "line",
       "id": "n_open",
-      "speaker": "sili_nvguan",
+      "speaker": "wei_sui",
       "text": "陛下临朝。今有二事待裁：北境请增军饷，户部为难；又有世家联名，请为后族加封。臣谨奏，伏请圣裁。",
       "expression": "neutral",
       "next": "n_choice"
@@ -30,14 +30,14 @@
         { "type": "resource", "pillar": "court", "field": "factionPressure", "delta": 2 },
         {
           "type": "memory",
-          "char": "sili_nvguan",
+          "char": "wei_sui",
           "entry": {
             "kind": "event",
             "summary": "陛下临朝准了北境军饷。户部要紧一阵子，将士的心却稳了。",
             "salience": 55,
             "tags": ["player", "court", "army"],
-            "participants": ["player", "sili_nvguan"],
-            "locationId": "chaotang"
+            "participants": ["player", "wei_sui"],
+            "locationId": "xuanzhengdian"
           }
         }
       ],
@@ -46,7 +46,7 @@
     {
       "type": "line",
       "id": "n_end_army",
-      "speaker": "sili_nvguan",
+      "speaker": "wei_sui",
       "text": "臣领旨。即拟明发，着户部速议筹措。陛下圣明。",
       "expression": "neutral"
     },
@@ -56,17 +56,17 @@
       "effects": [
         { "type": "resource", "pillar": "court", "field": "factionPressure", "delta": 4 },
         { "type": "resource", "pillar": "court", "field": "authority", "delta": -1 },
-        { "type": "relationship", "char": "feng_hou", "field": "trust", "delta": 2 },
+        { "type": "relationship", "char": "shen_zhibai", "field": "trust", "delta": 2 },
         {
           "type": "memory",
-          "char": "sili_nvguan",
+          "char": "wei_sui",
           "entry": {
             "kind": "event",
             "summary": "陛下临朝准了后族加封。世家颜面有了，朝中却又添一重派系的分量。",
             "salience": 60,
             "tags": ["player", "court", "faction"],
-            "participants": ["player", "sili_nvguan"],
-            "locationId": "chaotang"
+            "participants": ["player", "wei_sui"],
+            "locationId": "xuanzhengdian"
           }
         }
       ],
@@ -75,7 +75,7 @@
     {
       "type": "line",
       "id": "n_end_clan",
-      "speaker": "sili_nvguan",
+      "speaker": "wei_sui",
       "text": "臣领旨。只是恩出于上，望陛下日后留意，勿使一姓独重。",
       "expression": "neutral"
     },
@@ -84,17 +84,17 @@
       "id": "n_fx_defer",
       "effects": [
         { "type": "resource", "pillar": "court", "field": "authority", "delta": -2 },
-        { "type": "favor", "char": "sili_nvguan", "delta": 1 },
+        { "type": "favor", "char": "wei_sui", "delta": 1 },
         {
           "type": "memory",
-          "char": "sili_nvguan",
+          "char": "wei_sui",
           "entry": {
             "kind": "opinion",
             "summary": "陛下临朝两事皆缓议。持重固然持重，只是悬而不决，朝议难免私论。",
             "salience": 50,
             "tags": ["player", "court", "caution"],
-            "participants": ["player", "sili_nvguan"],
-            "locationId": "chaotang"
+            "participants": ["player", "wei_sui"],
+            "locationId": "xuanzhengdian"
           }
         }
       ],
@@ -103,7 +103,7 @@
     {
       "type": "line",
       "id": "n_end_defer",
-      "speaker": "sili_nvguan",
+      "speaker": "wei_sui",
       "text": "臣谨记。二事暂缓，候陛下示下。退朝。",
       "expression": "neutral"
     }

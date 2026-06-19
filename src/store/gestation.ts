@@ -85,7 +85,7 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
   if (!gest) return null;
   const cfg = gestationConfig(db);
   const now = toGameTime(state.calendar);
-  const bearerIsFenghou = gest.carrier === "feng_hou";
+  const bearerIsFenghou = gest.carrier === "shen_zhibai";
 
   const verdict = resolveBirth({
     rngSeed: state.rngSeed,
@@ -135,12 +135,12 @@ function buildBirthLines(
   childNoun: string,
 ): string[] {
   if (carrier === "sovereign") {
-    return [`陛下临盆，诞下一位${childNoun}，母子均安，举宫称庆。`];
+    return [`陛下临盆，诞下一位${childNoun}，母子均安，举国称庆。`];
   }
   const name = displayName(db, state, carrier);
   switch (outcome) {
     case "safe":
-      return [`${name}临盆，顺利诞下一位${childNoun}，母子均安。`];
+      return [`${name}临盆，顺利诞下一位${childNoun}，父子均安。`];
     case "child_dies":
       return [`${name}难产，胎死腹中，太医勉力保住了${name}性命。噩耗传来，宫中一片缄默。`];
     case "bearer_dies":

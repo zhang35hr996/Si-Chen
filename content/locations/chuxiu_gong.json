@@ -1,0 +1,22 @@
+{
+  "id": "chuxiu_gong",
+  "name": "储秀宫",
+  "description": "新晋侍君多居于此，妆奁鲜亮，笑语时闻，处处透着初承恩泽的新气。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "新妆鲜亮",
+    "笑语时闻",
+    "熏香馥郁"
+  ],
+  "position": {
+    "x": 0.5,
+    "y": 0.62
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
+}

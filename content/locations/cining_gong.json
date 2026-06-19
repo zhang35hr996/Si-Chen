@@ -1,11 +1,11 @@
 {
   "id": "cining_gong",
   "name": "慈宁宫",
-  "description": "太后颐养之所。庭中古柏森然，廊下檀香袅袅，处处透着不预世事的清贵与沉静。",
+  "description": "太后颐养之所。庭中古柏森然，廊下檀香袅袅，处处透着看遍世事的清贵与沉静。",
   "backgroundKey": "bg.cining_gong",
   "ambience": ["檀香", "古柏苍翠", "宫人屏息侍立"],
   "position": { "x": 0.16, "y": 0.58 },
   "zone": "palace",
-  "connections": ["yushufang"],
+  "connections": ["zichendian"],
   "travelCost": { "ap": 1 }
 }

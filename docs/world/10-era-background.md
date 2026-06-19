@@ -29,7 +29,7 @@ men derive standing through marriage, service, blood-nursing, and household rank
 
 ## Imperial geography (as modeled in game)
 
-- **宫城 (palace)** — the sovereign's seat: 御书房, 御花园, 朝堂, 冷宫, etc.
+- **宫城 (palace)** — the sovereign's seat: 紫宸殿, 御花园, 朝堂, 冷宫, etc.
 - **后宫 (hougong)** — the inner-palace consort quarters (坤宁宫, 咸福宫…).
 - **京城 (jingcheng)** — the capital outside the palace walls, reached via 出宫.
 - **郊外 (jingjiao)** — the outskirts beyond the capital, reached from 京城.

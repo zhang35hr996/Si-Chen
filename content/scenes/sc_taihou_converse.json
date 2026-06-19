@@ -8,7 +8,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "taihou",
-      "text": "皇帝来了。哀家这里清静，难得你还记挂着来坐坐。近日朝中可还安顺？",
+      "text": "皇帝来了。皇帝日理万机，近日身体可还安顺？",
       "expression": "neutral",
       "next": "n_choice"
     },

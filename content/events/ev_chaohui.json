@@ -3,7 +3,7 @@
   "title": "上朝",
   "sceneId": "sc_chaohui",
   "checkpoint": "location_enter",
-  "condition": { "atLocation": "chaotang" },
+  "condition": { "atLocation": "xuanzhengdian" },
   "priority": 10,
   "once": false,
   "apCost": 1

@@ -34,15 +34,15 @@ describe("resolveBirth — consort carrier", () => {
     const v = resolveBirth({
       rngSeed: 1,
       now,
-      carrier: "shen_chenghui",
-      fatherId: "shen_chenghui",
+      carrier: "lu_huaijin",
+      fatherId: "lu_huaijin",
       transferredAtMonth: 3,
       bearerIsFenghou: false,
       carrierRecord: emptyRecord, // no encounters → tier none → 0
       thresholds: DEFAULT_TIERS,
       cfg: DEFAULT_GESTATION,
     });
-    expect(v.fatherId).toBe("shen_chenghui");
+    expect(v.fatherId).toBe("lu_huaijin");
     expect(v.legitimate).toBe(false);
     if (v.bearerOutcome === "safe") expect(v.favor).toBe(0);
   });
@@ -51,8 +51,8 @@ describe("resolveBirth — consort carrier", () => {
     const v = resolveBirth({
       rngSeed: 1,
       now,
-      carrier: "feng_hou",
-      fatherId: "feng_hou",
+      carrier: "shen_zhibai",
+      fatherId: "shen_zhibai",
       transferredAtMonth: 3,
       bearerIsFenghou: true,
       carrierRecord: emptyRecord, // tier none=0 → +30 = 30
@@ -68,8 +68,8 @@ describe("resolveBirth — consort carrier", () => {
     const v = resolveBirth({
       rngSeed: 5,
       now,
-      carrier: "shen_chenghui",
-      fatherId: "shen_chenghui",
+      carrier: "lu_huaijin",
+      fatherId: "lu_huaijin",
       transferredAtMonth: 3,
       bearerIsFenghou: false,
       carrierRecord: emptyRecord,
@@ -83,8 +83,8 @@ describe("resolveBirth — consort carrier", () => {
     const input = {
       rngSeed: 9,
       now,
-      carrier: "shen_chenghui",
-      fatherId: "shen_chenghui",
+      carrier: "lu_huaijin",
+      fatherId: "lu_huaijin",
       transferredAtMonth: 6,
       bearerIsFenghou: false,
       carrierRecord: emptyRecord,
