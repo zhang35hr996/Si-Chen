@@ -3,8 +3,15 @@
   "name": "宣政殿",
   "description": "晴日里，金瓦映着白光，整座殿宇如同悬在天际。丹陛巍巍，百官列班；御座之上，是大权在握的皇帝。钟鸣声里，军国大事自此而出。",
   "backgroundKey": "bg.xuanzhengdian",
-  "ambience": ["钟磬", "百官屏息", "金砖回声"],
-  "position": { "x": 0.5, "y": 0.16 },
+  "ambience": [
+    "钟磬",
+    "百官屏息",
+    "金砖回声"
+  ],
+  "position": {
+    "x": 0.5,
+    "y": 0.1
+  },
   "zone": "palace",
   "entry": "free",
   "actionEventId": "ev_chaohui",

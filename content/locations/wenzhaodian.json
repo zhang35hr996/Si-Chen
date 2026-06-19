@@ -3,9 +3,21 @@
   "name": "文昭殿",
   "description": "窗明几净，书声琅琅。皇子在此开蒙就学，先生执卷讲授，案上笔墨纸砚俱全。四壁皆是高大的书架，陈列经史、舆图与历代实录。",
   "backgroundKey": "bg.wenzhaodian",
-  "ambience": ["书声琅琅", "墨香清苦", "戒尺轻叩"],
-  "position": { "x": 0.5, "y": 0.55 },
+  "ambience": [
+    "书声琅琅",
+    "墨香清苦",
+    "戒尺轻叩"
+  ],
+  "position": {
+    "x": 0.26,
+    "y": 0.3
+  },
   "zone": "palace",
-  "connections": ["zichendian", "yuqing_gong"],
-  "travelCost": { "ap": 1 }
+  "connections": [
+    "zichendian",
+    "yuqing_gong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
 }

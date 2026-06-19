@@ -37,8 +37,8 @@
     { "id": "jingjiao", "name": "郊外", "art": { "key": "bg.jingjiao", "kind": "background" } }
   ],
   "mapPortals": [
-    { "from": "palace", "to": "hougong", "name": "后宫", "position": { "x": 0.62, "y": 0.4 } },
-    { "from": "palace", "to": "jingcheng", "name": "出宫", "position": { "x": 0.12, "y": 0.86 } },
+    { "from": "palace", "to": "hougong", "name": "后宫", "position": { "x": 0.74, "y": 0.3 } },
+    { "from": "palace", "to": "jingcheng", "name": "宫门", "position": { "x": 0.5, "y": 0.88 } },
     { "from": "jingcheng", "to": "jingjiao", "name": "郊外", "position": { "x": 0.85, "y": 0.52 } }
   ],
   "rankChangeReactions": {

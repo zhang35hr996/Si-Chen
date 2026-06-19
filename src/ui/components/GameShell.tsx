@@ -11,6 +11,7 @@ import { BreadcrumbBar } from "./BreadcrumbBar";
 export function GameShell({
   calendar,
   crumbs,
+  locationName,
   pregnant,
   onBack,
   onCrumb,
@@ -21,6 +22,10 @@ export function GameShell({
 }: {
   calendar: CalendarState;
   crumbs: string[];
+  /** Top-bar 当前地点. Defaults to the last crumb; override when the breadcrumb
+   *  tracks something other than the player's physical location (e.g. the map's
+   *  board path). */
+  locationName?: string;
   pregnant?: boolean;
   onBack?: () => void;
   onCrumb?: (index: number) => void;
@@ -29,12 +34,12 @@ export function GameShell({
   className?: string;
   children: ReactNode;
 }) {
-  const locationName = crumbs[crumbs.length - 1];
+  const topLocation = locationName ?? crumbs[crumbs.length - 1];
   return (
     <div className={className ? `shell ${className}` : "shell"}>
       <TopStatusBar
         calendar={calendar}
-        locationName={locationName}
+        locationName={topLocation}
         pregnant={pregnant}
         onOpenResources={onOpenResources}
         onOpenSave={onOpenSave}

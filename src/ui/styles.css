@@ -828,159 +828,244 @@ button:active:enabled {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   地图画面
+   地图画面 — 三层导航重构（节点选中→右侧信息栏→进入）
    ════════════════════════════════════════════════════════════════ */
 
-.map-screen {
-  min-height: 100vh;
+.map-shell .shell__body {
   display: flex;
-  flex-direction: column;
+}
+.map-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1rem;
+  padding: 1rem 1.25rem 1.25rem;
 }
 
-.map-screen__board {
+.map-board {
   position: relative;
   flex: 1;
-  margin: 1.5rem;
-  border: 1px solid var(--line);
-  background-color: var(--ink-800);
+  min-width: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background-color: var(--c-panel-1);
   background-size: cover;
   background-position: center;
-  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.55);
-  animation: fade 0.6s ease both;
+  box-shadow: inset 0 0 140px rgba(0, 0, 0, 0.6);
+  animation: fade 0.5s ease both;
+  overflow: hidden;
 }
 
-/* 棋盘四角描金角饰 */
-.map-screen__board::before,
-.map-screen__board::after {
-  content: "";
+/* 分区装饰标签：仅空间分组提示 */
+.map-region-label {
   position: absolute;
-  width: 26px;
-  height: 26px;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-title);
+  font-size: 0.92rem;
+  letter-spacing: 0.45em;
+  text-indent: 0.45em;
+  color: var(--c-gold-text);
+  opacity: 0.5;
   pointer-events: none;
-  z-index: 1;
-}
-.map-screen__board::before {
-  top: 10px;
-  left: 10px;
-  border-top: 2px solid var(--line-gold);
-  border-left: 2px solid var(--line-gold);
-}
-.map-screen__board::after {
-  bottom: 10px;
-  right: 10px;
-  border-bottom: 2px solid var(--line-gold);
-  border-right: 2px solid var(--line-gold);
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
 }
 
-.map-screen__board-title {
-  position: absolute;
-  top: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 0.35rem 1.6rem;
-  font-size: 1.5rem;
-  letter-spacing: 0.45rem;
-  text-indent: 0.45rem;
-  color: var(--parchment);
-  background: rgba(20, 16, 14, 0.7);
-  border: 1px solid var(--line-gold);
-  pointer-events: none;
-  z-index: 2;
-  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
-}
-
-/* 地点节点 — 漆底鎏金「匾额」 */
+/* ── 地点节点：圆点 + 名称 + 极细金轮廓（不再是膨胀黑按钮） ── */
 .map-node {
   position: absolute;
   transform: translate(-50%, -50%);
   font: inherit;
+  font-family: var(--font-body);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.7rem 1.5rem 0.75rem;
-  color: var(--cream);
-  background:
-    linear-gradient(180deg, rgba(34, 24, 17, 0.93), rgba(18, 13, 10, 0.95));
-  border: 1px solid var(--line-gold);
-  border-radius: 2px;
+  padding: 0.55rem 0.9rem;
+  background: none;
+  border: none;
   cursor: pointer;
-  /* 双线描金（外描金线 + 内细金线） */
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.5),
-    inset 0 0 0 2px rgba(217, 184, 124, 0.14),
-    var(--shadow-card);
-  transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease,
-    transform 0.16s ease, background 0.2s ease;
+  color: var(--c-text);
+  transition: transform 0.14s ease;
 }
-
-.map-node:hover:enabled {
-  border-color: var(--gold-bright);
-  color: var(--gold-bright);
-  transform: translate(-50%, calc(-50% - 2px));
-  background: linear-gradient(180deg, rgba(46, 33, 22, 0.96), rgba(26, 18, 13, 0.97));
-  box-shadow:
-    0 0 0 1px rgba(217, 184, 124, 0.5),
-    inset 0 0 0 2px rgba(217, 184, 124, 0.28),
-    0 8px 22px rgba(0, 0, 0, 0.55),
-    0 0 18px rgba(217, 184, 124, 0.22);
+.map-node__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(20, 14, 10, 0.7);
+  border: 1px solid var(--c-line-gold);
+  box-shadow: 0 0 0 4px rgba(15, 11, 9, 0.35);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
-
-.map-node:disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
-  filter: grayscale(0.3);
-}
-
-.map-node--here {
-  border-color: var(--gold);
-  animation: sealGlow 2.8s ease-in-out infinite;
-}
-
-/* 自由通道（后宫 / 朝会 / 冷宫）：不耗行动点，作门户呈现 */
-.map-node--portal {
-  background: linear-gradient(180deg, rgba(42, 31, 58, 0.94), rgba(26, 19, 38, 0.95));
-  border-color: #8a6fb0;
+.map-node__dot--portal {
   border-style: dashed;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.5),
-    inset 0 0 0 2px rgba(196, 166, 224, 0.12),
-    var(--shadow-card);
+  border-color: var(--c-jade);
 }
-
-.map-node--portal:hover:enabled {
-  border-color: #d3b9ec;
-  color: #ece0f7;
-  box-shadow:
-    0 0 0 1px rgba(196, 166, 224, 0.55),
-    inset 0 0 0 2px rgba(196, 166, 224, 0.25),
-    0 8px 22px rgba(0, 0, 0, 0.55),
-    0 0 18px rgba(196, 166, 224, 0.3);
-}
-
 .map-node__name {
-  letter-spacing: 0.32em;
-  text-indent: 0.32em;
-  font-weight: 600;
-  font-size: 1.02rem;
+  font-size: 0.92rem;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  color: var(--c-text);
+  background: rgba(15, 11, 9, 0.62);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0.12rem 0.55rem;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 
-/* 元信息 → 朱砂小印 */
-.map-node__meta {
-  font-size: 0.66rem;
-  letter-spacing: 0.12em;
-  color: var(--cinnabar-soft);
-  padding: 0.04rem 0.5rem;
-  border: 1px solid rgba(207, 84, 64, 0.55);
+.map-node:hover .map-node__name {
+  color: var(--c-gold-text);
+  border-color: var(--c-line-gold);
+}
+.map-node:hover .map-node__dot {
+  border-color: var(--c-gold);
+  box-shadow: 0 0 0 4px rgba(200, 161, 90, 0.16), 0 0 12px rgba(200, 161, 90, 0.3);
+}
+
+.map-node.is-selected .map-node__name {
+  color: var(--c-gold);
+  border-color: var(--c-gold);
+  background: rgba(20, 14, 10, 0.85);
+}
+.map-node.is-selected .map-node__dot {
+  background: var(--c-gold);
+  border-color: var(--c-gold);
+  box-shadow: 0 0 0 4px rgba(200, 161, 90, 0.22), 0 0 14px rgba(200, 161, 90, 0.4);
+}
+
+/* 当前所在：朱红小印 */
+.map-node--here .map-node__dot {
+  background: var(--c-cinnabar);
+  border-color: var(--c-cinnabar);
+}
+.map-node__seal {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.4rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  color: var(--parchment);
+  background: var(--c-cinnabar);
   border-radius: 2px;
-  background: rgba(163, 43, 34, 0.16);
+  padding: 0.02rem 0.3rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
-.map-node--portal .map-node__meta {
-  color: #cbb3e6;
-  border-color: rgba(196, 166, 224, 0.45);
-  background: rgba(122, 97, 150, 0.2);
+/* 有事件：右上角红点 + 金晕 */
+.map-node__event {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.2rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-cinnabar);
+  box-shadow: 0 0 0 2px rgba(15, 11, 9, 0.7), 0 0 8px rgba(152, 69, 59, 0.8);
+}
+
+/* 锁定：降低透明度 */
+.map-node--locked {
+  opacity: 0.5;
+}
+.map-node--locked .map-node__dot {
+  border-style: dotted;
+}
+
+/* ── 右侧地点信息栏 ── */
+.loc-info {
+  width: clamp(220px, 24vw, 300px);
+  flex-shrink: 0;
+  align-self: flex-start;
+  background: var(--c-panel-1);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  padding: 1.1rem 1.15rem 1.2rem;
+  font-family: var(--font-body);
+  animation: fade 0.25s ease;
+}
+.loc-info--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+.loc-info__hint {
+  color: var(--c-text-dim);
+  font-size: 0.86rem;
+  text-align: center;
+}
+.loc-info__title {
+  font-family: var(--font-title);
+  font-size: 1.2rem;
+  color: var(--c-gold-text);
+  margin-bottom: 0.3rem;
+}
+.loc-info__badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  padding: 0.05rem 0.45rem;
+  border-radius: 2px;
+  margin-bottom: 0.5rem;
+}
+.loc-info__badge--here {
+  color: var(--parchment);
+  background: var(--c-cinnabar);
+}
+.loc-info__desc {
+  font-size: 0.86rem;
+  line-height: 1.7;
+  color: var(--c-text);
+  margin: 0.4rem 0 0.7rem;
+}
+.loc-info__present {
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+  margin-bottom: 0.3rem;
+}
+.loc-info__event {
+  font-size: 0.82rem;
+  color: var(--c-cinnabar);
+  margin-bottom: 0.3rem;
+}
+.loc-info__blocked {
+  font-size: 0.82rem;
+  color: var(--c-cinnabar);
+  margin-bottom: 0.5rem;
+}
+.loc-info__action {
+  width: 100%;
+  margin-top: 0.8rem;
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  color: var(--c-bg);
+  background: var(--c-gold);
+  border: 1px solid var(--c-gold);
+  border-radius: 4px;
+  padding: 0.55rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.loc-info__action:hover:enabled {
+  background: var(--c-gold-text);
+}
+.loc-info__action:disabled {
+  cursor: not-allowed;
+  color: var(--c-text-dim);
+  background: var(--c-panel-2);
+  border-color: var(--c-line);
+}
+
+@media (max-width: 720px) {
+  .map-layout {
+    flex-direction: column;
+  }
+  .loc-info {
+    width: auto;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════

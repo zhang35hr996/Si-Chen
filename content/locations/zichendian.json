@@ -3,9 +3,21 @@
   "name": "紫宸殿",
   "description": "朱漆大案上奏章成叠，墙上悬历代先帝御笔，铜漏声里皆是军国事。",
   "backgroundKey": "bg.zichendian",
-  "ambience": ["女帝日常办公、召见近臣、处理机密政务"],
-  "position": { "x": 0.3, "y": 0.35 },
+  "ambience": [
+    "女帝日常办公、召见近臣、处理机密政务"
+  ],
+  "position": {
+    "x": 0.5,
+    "y": 0.46
+  },
   "zone": "palace",
-  "connections": ["yuhuayuan", "wenzhaodian", "fengxiandian", "cining_gong"],
-  "travelCost": { "ap": 1 }
+  "connections": [
+    "yuhuayuan",
+    "wenzhaodian",
+    "fengxiandian",
+    "cining_gong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
 }
