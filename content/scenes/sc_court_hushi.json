@@ -1,0 +1,94 @@
+{
+  "id": "sc_court_hushi",
+  "locationId": "xuanzhengdian",
+  "participants": [
+    "wei_sui"
+  ],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "wei_sui",
+      "text": "北邦遣使请开边市，互通有无，岁贡良马。伏请圣裁。",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        {
+          "id": "c_0",
+          "text": "准开互市，怀柔远人。",
+          "tone": "friendly",
+          "next": "n_fx_0"
+        },
+        {
+          "id": "c_1",
+          "text": "夷狄难信，互市不可轻许。",
+          "tone": "guarded",
+          "next": "n_fx_1"
+        }
+      ]
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_0",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": 2
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": 2
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "factionPressure",
+          "delta": 1
+        }
+      ],
+      "next": "n_end_0"
+    },
+    {
+      "type": "line",
+      "id": "n_end_0",
+      "speaker": "wei_sui",
+      "text": "臣领旨。边市一开，干戈或可暂息。",
+      "expression": "neutral"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_1",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": 2
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": -2
+        }
+      ],
+      "next": "n_end_1"
+    },
+    {
+      "type": "line",
+      "id": "n_end_1",
+      "speaker": "wei_sui",
+      "text": "臣领旨。严边固守，亦是老成之谋。",
+      "expression": "neutral"
+    }
+  ]
+}

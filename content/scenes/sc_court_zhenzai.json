@@ -1,0 +1,94 @@
+{
+  "id": "sc_court_zhenzai",
+  "locationId": "xuanzhengdian",
+  "participants": [
+    "wei_sui"
+  ],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "wei_sui",
+      "text": "河南大水，流民载道，地方请开仓赈济、蠲免钱粮。伏请圣裁。",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        {
+          "id": "c_0",
+          "text": "速开常平仓赈济，蠲免一年。",
+          "tone": "friendly",
+          "next": "n_fx_0"
+        },
+        {
+          "id": "c_1",
+          "text": "着地方自筹，朝廷略拨些许。",
+          "tone": "guarded",
+          "next": "n_fx_1"
+        }
+      ]
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_0",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": 4
+        },
+        {
+          "type": "resource",
+          "pillar": "bloodline",
+          "field": "legitimacy",
+          "delta": 2
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": -1
+        }
+      ],
+      "next": "n_end_0"
+    },
+    {
+      "type": "line",
+      "id": "n_end_0",
+      "speaker": "wei_sui",
+      "text": "臣领旨。即遣使驰赈，灾民有救矣。",
+      "expression": "neutral"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_1",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": 1
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": -2
+        }
+      ],
+      "next": "n_end_1"
+    },
+    {
+      "type": "line",
+      "id": "n_end_1",
+      "speaker": "wei_sui",
+      "text": "臣领旨。只恐地方仓廪不丰，杯水车薪。",
+      "expression": "neutral"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
 import { listHeirsBySex } from "../../engine/characters/heirs";
-import { resolveDisplayName } from "../../engine/characters/standing";
+import { resolveIdentityLabel } from "../../engine/characters/standing";
 import { eligibleAdoptiveFathers } from "../../store/adoption";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
@@ -28,7 +28,7 @@ export function FengxiandianScreen({
 
   const fatherName = (charId: string): string => {
     const st = state.standing[charId];
-    return resolveDisplayName(db.characters[charId]!, st, st ? db.ranks[st.rank] : undefined);
+    return resolveIdentityLabel(db.characters[charId]!, st, st ? db.ranks[st.rank] : undefined);
   };
 
   return (

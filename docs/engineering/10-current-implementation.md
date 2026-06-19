@@ -94,7 +94,21 @@ placeholder. Keep it that way until those systems are real.
   (朝局/后宫/血脉). Triggered by 「国情」 HUD button on `LocationScreen` and `MapScreen`.
 - **`actionFirstSlotOnly`** — optional boolean on location schema. When `true`, all
   actions in that location are disabled after the first AP of the day, with hint
-  「朝时已过，请明日卯时早朝」. Used by 宣政殿 (`xuanzhengdian`).
+  「朝时已过，请明日卯时早朝」. Used by 宣政殿 (`xuanzhengdian`). The 紫禁城 主图 also draws a
+  「可上朝」事件标注 on such free nodes while available (`courtAvailable` in `MapScreen`);
+  it clears the moment the day's first AP is spent.
+- **上朝会话 (Court session)** — entering 宣政殿 and choosing 上朝 opens a *session*, not a
+  single scene. Flow lives in `App.tsx`: `startEvent` intercepts `ev_chaohui` → `beginCourt`
+  spends **1 AP up front** (the whole session costs exactly one point; 卯时满点扣 1 不转旬),
+  then `pickCourtAffairs(db, "court:<rngSeed>:<dayIndex>")` draws **2–3 distinct affairs**
+  from a 10-item pool, played **one at a time** through the reused `DialogueScreen`
+  (`view:"court"`, keyed by index). Each affair is its own single-matter event/scene
+  (`ev_court_*` / `sc_court_*`, `checkpoint:"court"`, `apCost:0`, resource-only effects),
+  committed via `resolveEvent` as it completes (autosave each). The HUD shows a **「退朝」**
+  button (`quitLabel` prop): pressing it keeps already-resolved affairs, drops the rest, and
+  returns straight to the 紫禁城 主图 (the 1 AP is not refunded). The `"court"` checkpoint is
+  inert to every auto-checkpoint, so these events never auto-fire — only the session draws them.
+  Pure draw logic + tests: `src/engine/court/affairs.ts`, `tests/court/affairs.test.ts`.
 - **太后系统 (Empress Dowager)** — new character `kind: "elder"` (`taihou`, no 位分 /
   attributes / standing) living at **慈宁宫** (a 主图 travel node with its own
   `CiningGongScreen`). New state `GameState.taihou.ill` + effect `set_taihou_illness`,
@@ -123,7 +137,8 @@ placeholder. Keep it that way until those systems are real.
   霁月/储秀宫 (`zhaoning_gong` … `chuxiu_gong`); 陆怀瑾 now resides at 钟粹宫. New palace
   **毓庆宫** (`yuqing_gong`, behind 文昭殿): 未成年皇嗣居所 — 皇子(女)满 5 / 皇郎(男)满 7 迁入
   (`residesInYuqing`). Its `YuqingGongScreen` lists resident heirs and 召见 them
-  (`heir_summon`, 1 AP); the 紫宸殿 子嗣名册 can still summon as well.
+  (`heir_summon`, 1 AP); the 紫宸殿 子嗣名册 can still summon as well. On the 主图, 文昭殿 and
+  毓庆宫 node positions are swapped (文昭殿 now sits at the lower coordinate, 毓庆宫 at the upper).
 - **角色定名** — the existing roster's ids/names are finalized and references updated
   engine-wide: 凤后→**沈知白** (`shen_zhibai`), 沈承徽→**陆怀瑾** (`lu_huaijin`),
   初君→**徐清欢** (`xu_qinghuan`), 卫司礼→**卫绥** (`wei_sui`), 温雅 (`wenya`). (The `feng_hou`

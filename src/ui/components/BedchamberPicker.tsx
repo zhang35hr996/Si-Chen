@@ -1,6 +1,5 @@
 /** 御书房「翻牌子」：托盘上排开宫中侍君的竖刻名牌，点牌即召见到御书房。 */
 import { inPalaceConsorts } from "../../engine/characters/presence";
-import { resolveDisplayName } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
 
@@ -31,9 +30,7 @@ export function BedchamberPicker({
                 className="tablet"
                 onClick={() => onPick(c.id)}
               >
-                <span className="tablet__name">
-                  {resolveDisplayName(c, st, db.ranks[st.rank])}
-                </span>
+                <span className="tablet__name">{c.profile.name}</span>
                 <span className="tablet__rank">{db.ranks[st.rank]?.name}</span>
               </button>
             );

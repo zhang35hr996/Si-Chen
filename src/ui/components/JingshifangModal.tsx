@@ -1,6 +1,6 @@
 /** 孕二月敬事房上书：列「可能生父」，可即刻选定候选承嗣（全体在世侍君多选）。 */
 import { useState } from "react";
-import { resolveDisplayName } from "../../engine/characters/standing";
+import { resolveIdentityLabel } from "../../engine/characters/standing";
 import { canSummon } from "../../store/bedchamber";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
@@ -24,7 +24,7 @@ export function JingshifangModal({
   const name = (id: string) => {
     const c = db.characters[id]!;
     const st = state.standing[id];
-    return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
+    return resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined);
   };
   const fatherText = fatherCandidates.map(name).join(" 或 ");
 

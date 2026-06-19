@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_keju",
+  "title": "朝议 · 科举取士",
+  "sceneId": "sc_court_keju",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

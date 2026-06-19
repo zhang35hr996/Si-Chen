@@ -1,0 +1,94 @@
+{
+  "id": "sc_court_fengjiang",
+  "locationId": "xuanzhengdian",
+  "participants": [
+    "wei_sui"
+  ],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "wei_sui",
+      "text": "吏部奏，东南大郡刺史出缺，世家与寒门各荐其人。伏请圣裁。",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        {
+          "id": "c_0",
+          "text": "擢寒门干吏,以观后效。",
+          "tone": "neutral",
+          "next": "n_fx_0"
+        },
+        {
+          "id": "c_1",
+          "text": "用世家旧臣，以安人心。",
+          "tone": "guarded",
+          "next": "n_fx_1"
+        }
+      ]
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_0",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": 2
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "factionPressure",
+          "delta": -2
+        }
+      ],
+      "next": "n_end_0"
+    },
+    {
+      "type": "line",
+      "id": "n_end_0",
+      "speaker": "wei_sui",
+      "text": "臣领旨。新任孤直无党，正可为陛下耳目。",
+      "expression": "neutral"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_1",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "factionPressure",
+          "delta": 3
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": -1
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": 1
+        }
+      ],
+      "next": "n_end_1"
+    },
+    {
+      "type": "line",
+      "id": "n_end_1",
+      "speaker": "wei_sui",
+      "text": "臣领旨。世家既得偿所愿,东南可保无虞。",
+      "expression": "neutral"
+    }
+  ]
+}

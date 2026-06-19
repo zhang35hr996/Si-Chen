@@ -95,6 +95,16 @@ export function MapScreen({
   const boardPortals = portals.filter((p) => p.from === board);
   const currentHasEvent = getEligibleEvents(db, state, "location_enter").length > 0;
 
+  // 免行动点据点上的「可上朝」标注：宣政殿在当日卯时（行动点满）显示朝议标注，
+  // 一旦上朝/退朝耗去那 1 点（ap≠apMax），标注即消失，直到次日卯时再现。
+  const courtAvailable = (loc: LocationContent): boolean => {
+    if (loc.entry !== "free" || loc.actionEventId === undefined) return false;
+    const ev = db.events[loc.actionEventId];
+    if (!ev) return false;
+    const slotOk = loc.actionFirstSlotOnly !== true || state.calendar.ap === state.calendar.apMax;
+    return slotOk && state.calendar.ap >= ev.apCost;
+  };
+
   // When the viewed board changes, preselect the player's current location node
   // if it lives here, so the info panel opens with meaningful content.
   useEffect(() => {
@@ -128,17 +138,37 @@ export function MapScreen({
     if (result.ok) onTravelled(result.value.rolledOver);
   };
 
+  // 出宫（前往京城）扣 1 行动力，并复用 travel 的转旬/懿旨/敲打结算；
+  // 回宫与城内（进后宫等）导航免费，仅切换视图。
+  const exitPalace = (to: string) => {
+    if (state.calendar.ap < 1) return; // button is disabled; backstop only
+    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return;
+    enterBoard(to);
+    onTravelled(spend.value.rolledOver);
+  };
+
   // ── Build the right-panel info for the current selection ──────────────
   const infoFor = (sel: Selected | null): LocationInfo | null => {
     if (!sel) return null;
     if (sel.kind === "portal") {
       const p = sel.portal;
-      const label = p.to === "jingcheng" ? "出宫 · 前往京城" : `进入${boardOf(p.to).name}`;
+      if (p.to === "jingcheng") {
+        // 出宫：扣 1 行动力。行动力不足则禁用按钮（标签仍标明耗点，玩家可见原因）。
+        return {
+          title: p.name,
+          kind: "portal",
+          description: `出宫前往${boardOf(p.to).name}。`,
+          actionLabel: "出宫 · 前往京城（耗 1 行动力）",
+          actionDisabled: state.calendar.ap < 1,
+          onAction: () => exitPalace(p.to),
+        };
+      }
       return {
         title: p.name,
         kind: "portal",
         description: `通往${boardOf(p.to).name}。`,
-        actionLabel: label,
+        actionLabel: `进入${boardOf(p.to).name}`,
         onAction: () => enterBoard(p.to),
       };
     }
@@ -160,6 +190,7 @@ export function MapScreen({
         title: loc.name,
         kind: "free",
         description: loc.description,
+        hasEvent: courtAvailable(loc),
         actionLabel: "进入",
         onAction: () => onOpenView(loc.id),
       };
@@ -177,13 +208,13 @@ export function MapScreen({
         onAction: () => {},
       };
     }
-    const ap = loc.travelCost?.ap ?? 1;
+    const ap = loc.travelCost?.ap ?? 0;
     return {
       title: loc.name,
       kind: "travel",
       description: loc.description,
       presentCount: present,
-      actionLabel: `前往（耗 ${ap} 行动力）`,
+      actionLabel: ap > 0 ? `前往（耗 ${ap} 行动力）` : "前往",
       onAction: () => travel(loc.id),
     };
   };
@@ -192,7 +223,7 @@ export function MapScreen({
     const here = loc.id === state.playerLocation;
     const isSelected = selected?.kind === "loc" && selected.loc.id === loc.id;
     const blocked = !here && loc.entry !== "free" && !checkTravel(db, state, loc.id).ok;
-    const showEvent = here && currentHasEvent;
+    const showEvent = (here && currentHasEvent) || courtAvailable(loc);
     const classes = [
       "map-node",
       here && "map-node--here",

@@ -322,7 +322,7 @@ export const locationSchema = z
     zone: idSchema.default("palace"),
     entry: z.enum(["travel", "free"]).default("travel"),
     connections: z.array(idSchema).min(1).optional(),
-    travelCost: z.strictObject({ ap: z.number().int().min(1) }).optional(),
+    travelCost: z.strictObject({ ap: z.number().int().min(0) }).optional(), // 0 = 宫内移动免行动力
     actionEventId: idSchema.optional(),
     actionFirstSlotOnly: z.boolean().optional(),
   })
@@ -343,7 +343,9 @@ export const gameEventSchema = z
     id: idSchema,
     title: nonEmpty,
     sceneId: idSchema,
-    checkpoint: z.enum(["game_start", "location_enter", "time_advance", "scene_end"]),
+    // "court" 是上朝专用挂载点：不参与任何自动 checkpoint（game_start/
+    // location_enter/time_advance/scene_end），仅由上朝会话随机抽取播放。
+    checkpoint: z.enum(["game_start", "location_enter", "time_advance", "scene_end", "court"]),
     condition: triggerConditionSchema,
     priority: z.number().int(),
     once: z.boolean(),

@@ -48,8 +48,8 @@ export function buildTravelBatch(
 ): Result<GameCommand[], GameError> {
   const plan = checkTravel(db, state, to);
   if (!plan.ok) return plan;
-  return ok([
-    { type: "MOVE_TO_LOCATION", locationId: plan.value.to },
-    { type: "SPEND_AP", amount: plan.value.costAp },
-  ]);
+  const commands: GameCommand[] = [{ type: "MOVE_TO_LOCATION", locationId: plan.value.to }];
+  // 宫内移动免行动力（costAp 0）：只移动、不扣点。SPEND_AP 0 会被 reducer 拒绝，故跳过。
+  if (plan.value.costAp > 0) commands.push({ type: "SPEND_AP", amount: plan.value.costAp });
+  return ok(commands);
 }

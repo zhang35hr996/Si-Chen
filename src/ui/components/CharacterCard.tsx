@@ -8,7 +8,6 @@ import type { AssetRegistry } from "../../engine/assets/registry";
 import type { ContentDB } from "../../engine/content/loader";
 import type { ConsortAttributes, CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
-import { resolveDisplayName } from "../../engine/characters/standing";
 import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/favorTier";
 import { bedchamberConfig } from "../../store/bedchamber";
 import { toGameTime } from "../../engine/calendar/time";
@@ -44,7 +43,7 @@ export function CharacterCard({
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
   const isConsort = character.kind === "consort";
-  const displayName = resolveDisplayName(character, standing, rank);
+  const displayName = character.profile.name; // 界面标识用本名；位分由下方 char-card__rank 并列展示
   const canManage = isConsort && character.id !== "shen_zhibai" && onManage;
   const portrait = registry.portrait(character.portraitSet, "neutral");
   const favor =

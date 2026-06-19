@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_yantie",
+  "title": "朝议 · 盐铁榷利",
+  "sceneId": "sc_court_yantie",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

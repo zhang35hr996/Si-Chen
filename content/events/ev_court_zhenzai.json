@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_zhenzai",
+  "title": "朝议 · 河南赈灾",
+  "sceneId": "sc_court_zhenzai",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

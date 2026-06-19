@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_fengjiang",
+  "title": "朝议 · 封疆人事",
+  "sceneId": "sc_court_fengjiang",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

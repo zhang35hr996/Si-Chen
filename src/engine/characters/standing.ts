@@ -19,6 +19,22 @@ export function resolveDisplayName(
   return character.profile.name;
 }
 
+/**
+ * 界面标识用「本名·位分」并列（如「徐清欢·君」「陆怀瑾·承徽」）。仅供 UI 卡片/列表/
+ * 标题等标识场景；对话台词与旁白仍走 resolveDisplayName（守礼制的姓+位分/封号+位分）。
+ */
+export function resolveIdentityLabel(
+  character: CharacterContent,
+  standing: CharacterStanding | undefined,
+  rank: CharacterRank | undefined,
+): string {
+  if (character.kind === "consort" && rank) {
+    const tier = standing?.title ? standing.title + rank.name : rank.name;
+    return `${character.profile.name}·${tier}`;
+  }
+  return character.profile.name;
+}
+
 export function effectiveOrder(rank: CharacterRank, hasTitle: boolean): number {
   return rank.order + (hasTitle ? TITLE_BOOST : 0);
 }

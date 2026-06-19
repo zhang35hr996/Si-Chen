@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_hushi",
+  "title": "朝议 · 边境互市",
+  "sceneId": "sc_court_hushi",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

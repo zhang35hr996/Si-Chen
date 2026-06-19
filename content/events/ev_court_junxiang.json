@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_junxiang",
+  "title": "朝议 · 北境军饷",
+  "sceneId": "sc_court_junxiang",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

@@ -9,14 +9,14 @@
     "檐下风铃"
   ],
   "position": {
-    "x": 0.2,
-    "y": 0.46
+    "x": 0.26,
+    "y": 0.3
   },
   "zone": "palace",
   "connections": [
     "wenzhaodian"
   ],
   "travelCost": {
-    "ap": 1
+    "ap": 0
   }
 }

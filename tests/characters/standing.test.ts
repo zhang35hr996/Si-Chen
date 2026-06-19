@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveDisplayName, effectiveOrder } from "../../src/engine/characters/standing";
+import { resolveDisplayName, resolveIdentityLabel, effectiveOrder } from "../../src/engine/characters/standing";
 import type { CharacterContent, CharacterRank } from "../../src/engine/content/schemas";
 
 const chenghui = { id: "chenghui", name: "承徽", grade: "正三品", order: 134, domain: "harem", favorTerm: "恩宠", selfRefs: { toPlayer: ["侍", "侍身"], formal: ["本宫"], informal: ["我"] } } as CharacterRank;
@@ -17,6 +17,21 @@ describe("resolveDisplayName", () => {
   it("falls back to profile.name when there is no surname (凤后)", () => {
     const fenghou = { kind: "consort", profile: { name: "凤后" } } as unknown as CharacterContent;
     expect(resolveDisplayName(fenghou, { rank: "fenghou", favor: 25 }, { ...chenghui, name: "凤后" })).toBe("凤后");
+  });
+});
+
+describe("resolveIdentityLabel", () => {
+  it("界面标识用 本名·位分 并列（不影响对话守礼称呼）", () => {
+    const c = consort({ name: "徐清欢", surname: "徐" });
+    expect(resolveIdentityLabel(c, { rank: "chenghui", favor: 30 }, chenghui)).toBe("徐清欢·承徽");
+  });
+  it("有封号时拼 本名·封号位分", () => {
+    const c = consort({ name: "徐清欢", surname: "徐" });
+    expect(resolveIdentityLabel(c, { rank: "chenghui", favor: 30, title: "婉" }, chenghui)).toBe("徐清欢·婉承徽");
+  });
+  it("无位分时退化为本名", () => {
+    const fenghou = { kind: "consort", profile: { name: "凤后" } } as unknown as CharacterContent;
+    expect(resolveIdentityLabel(fenghou, { rank: "fenghou", favor: 25 }, undefined)).toBe("凤后");
   });
 });
 

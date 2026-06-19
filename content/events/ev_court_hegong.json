@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_hegong",
+  "title": "朝议 · 漕河修浚",
+  "sceneId": "sc_court_hegong",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

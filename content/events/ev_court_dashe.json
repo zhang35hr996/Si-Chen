@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_dashe",
+  "title": "朝议 · 大赦天下",
+  "sceneId": "sc_court_dashe",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

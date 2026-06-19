@@ -8,7 +8,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { LocationContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import { getPresentAt } from "../../engine/characters/presence";
-import { resolveDisplayName } from "../../engine/characters/standing";
+import { resolveIdentityLabel } from "../../engine/characters/standing";
 import { canSummon } from "../../store/bedchamber";
 
 const COLD_PALACE = "changmengong"; // 长门宫 · 冷宫
@@ -50,7 +50,7 @@ function viewOf(db: ContentDB, state: GameState, loc: LocationContent): PalaceVi
     }
     return {
       loc,
-      resident: resolveDisplayName(consort, standing, rank),
+      resident: resolveIdentityLabel(consort, standing, rank),
       statuses: statuses.slice(0, 2),
       empty: false,
     };

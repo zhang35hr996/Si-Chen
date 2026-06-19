@@ -1,0 +1,88 @@
+{
+  "id": "sc_court_dashe",
+  "locationId": "xuanzhengdian",
+  "participants": [
+    "wei_sui"
+  ],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "wei_sui",
+      "text": "刑部奏，狱讼积压，有司请循例大赦，以彰仁政。伏请圣裁。",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        {
+          "id": "c_0",
+          "text": "大赦天下，除十恶不赦者。",
+          "tone": "friendly",
+          "next": "n_fx_0"
+        },
+        {
+          "id": "c_1",
+          "text": "国有常法，岂可轻赦。驳了。",
+          "tone": "guarded",
+          "next": "n_fx_1"
+        }
+      ]
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_0",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": 3
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": -2
+        }
+      ],
+      "next": "n_end_0"
+    },
+    {
+      "type": "line",
+      "id": "n_end_0",
+      "speaker": "wei_sui",
+      "text": "臣领旨。明发赦书，普天同沐皇恩。",
+      "expression": "neutral"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_1",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": 3
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": -1
+        }
+      ],
+      "next": "n_end_1"
+    },
+    {
+      "type": "line",
+      "id": "n_end_1",
+      "speaker": "wei_sui",
+      "text": "臣领旨。法度森然，自是社稷之福。",
+      "expression": "neutral"
+    }
+  ]
+}

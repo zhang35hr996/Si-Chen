@@ -1,6 +1,6 @@
 /** 宗正寺·传嗣：在世侍君中择承嗣君（高亮候选）。凤后无嗣时提示优先凤后承嗣。 */
 import { useState } from "react";
-import { resolveDisplayName } from "../../engine/characters/standing";
+import { resolveIdentityLabel } from "../../engine/characters/standing";
 import { canSummon } from "../../store/bedchamber";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
@@ -26,7 +26,7 @@ export function SuccessorModal({
   const name = (id: string) => {
     const c = db.characters[id]!;
     const st = state.standing[id];
-    return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
+    return resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined);
   };
 
   return (

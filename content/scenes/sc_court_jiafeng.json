@@ -1,0 +1,88 @@
+{
+  "id": "sc_court_jiafeng",
+  "locationId": "xuanzhengdian",
+  "participants": [
+    "wei_sui"
+  ],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "wei_sui",
+      "text": "世家联名上奏，请为后族加封进爵。臣谨奏，伏请圣裁。",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        {
+          "id": "c_0",
+          "text": "世家所请，朕准了。",
+          "tone": "friendly",
+          "next": "n_fx_0"
+        },
+        {
+          "id": "c_1",
+          "text": "加封之事，朕自有计较，且缓。",
+          "tone": "guarded",
+          "next": "n_fx_1"
+        }
+      ]
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_0",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "factionPressure",
+          "delta": 4
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": -1
+        }
+      ],
+      "next": "n_end_0"
+    },
+    {
+      "type": "line",
+      "id": "n_end_0",
+      "speaker": "wei_sui",
+      "text": "臣领旨。只是恩出于上，望陛下勿使一姓独重。",
+      "expression": "neutral"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_1",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": 2
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "factionPressure",
+          "delta": -2
+        }
+      ],
+      "next": "n_end_1"
+    },
+    {
+      "type": "line",
+      "id": "n_end_1",
+      "speaker": "wei_sui",
+      "text": "臣领旨。世家那边，臣自当婉言回禀。",
+      "expression": "neutral"
+    }
+  ]
+}

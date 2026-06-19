@@ -1,0 +1,12 @@
+{
+  "id": "ev_court_jiafeng",
+  "title": "朝议 · 后族加封",
+  "sceneId": "sc_court_jiafeng",
+  "checkpoint": "court",
+  "condition": {
+    "monthAtLeast": 1
+  },
+  "priority": 0,
+  "once": false,
+  "apCost": 0
+}

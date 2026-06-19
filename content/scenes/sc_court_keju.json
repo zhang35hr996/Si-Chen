@@ -1,0 +1,94 @@
+{
+  "id": "sc_court_keju",
+  "locationId": "xuanzhengdian",
+  "participants": [
+    "wei_sui"
+  ],
+  "startNodeId": "n_open",
+  "nodes": [
+    {
+      "type": "line",
+      "id": "n_open",
+      "speaker": "wei_sui",
+      "text": "礼部奏请增设恩科，广取寒门，以充庶僚。伏请圣裁。",
+      "expression": "neutral",
+      "next": "n_choice"
+    },
+    {
+      "type": "choice",
+      "id": "n_choice",
+      "choices": [
+        {
+          "id": "c_0",
+          "text": "增设恩科，唯才是举。",
+          "tone": "neutral",
+          "next": "n_fx_0"
+        },
+        {
+          "id": "c_1",
+          "text": "循旧制即可，不必增科。",
+          "tone": "guarded",
+          "next": "n_fx_1"
+        }
+      ]
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_0",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": 3
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "factionPressure",
+          "delta": -3
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "publicSupport",
+          "delta": 1
+        }
+      ],
+      "next": "n_end_0"
+    },
+    {
+      "type": "line",
+      "id": "n_end_0",
+      "speaker": "wei_sui",
+      "text": "臣领旨。寒门得进，朝堂之上，自多一分清正。",
+      "expression": "neutral"
+    },
+    {
+      "type": "effect",
+      "id": "n_fx_1",
+      "effects": [
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "factionPressure",
+          "delta": 2
+        },
+        {
+          "type": "resource",
+          "pillar": "court",
+          "field": "authority",
+          "delta": -1
+        }
+      ],
+      "next": "n_end_1"
+    },
+    {
+      "type": "line",
+      "id": "n_end_1",
+      "speaker": "wei_sui",
+      "text": "臣领旨。世家子弟，想必欣然。",
+      "expression": "neutral"
+    }
+  ]
+}

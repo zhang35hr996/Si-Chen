@@ -8,7 +8,6 @@ import type { AssetRegistry } from "../../engine/assets/registry";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent, LocationContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
-import { resolveDisplayName } from "../../engine/characters/standing";
 import { canSummon } from "../../store/bedchamber";
 
 /** 恪守礼数的问候集；按 charId 确定性选取，避免僭越或失礼。 */
@@ -46,7 +45,7 @@ export function CharacterScene({
   const character = consorts.find((c) => c.id === activeId) ?? consorts[0]!;
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
-  const displayName = resolveDisplayName(character, standing, rank);
+  const displayName = character.profile.name; // 名牌显本名；位分见下方 char-scene__sub
   const portrait = registry.portrait(character.portraitSet, "neutral");
   // 对话/侍寝 与卡片同一门槛：有行动点且本旬可侍寝。
   const actionable = state.calendar.ap >= 1 && canSummon(state, character.id);

@@ -3,7 +3,7 @@
  * with its own confirm; each produces a reaction via onApply.
  */
 import { useState } from "react";
-import { effectiveOrder, resolveDisplayName } from "../../engine/characters/standing";
+import { effectiveOrder, resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { CharacterStanding } from "../../engine/state/types";
@@ -32,7 +32,7 @@ export function RankAdminModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="rank-modal" onClick={(e) => e.stopPropagation()}>
-        <h2>{resolveDisplayName(character, standing, db.ranks[standing.rank])}　管理位分 / 封号</h2>
+        <h2>{resolveIdentityLabel(character, standing, db.ranks[standing.rank])}　管理位分 / 封号</h2>
         <p className="rank-modal__current">
           当前：{db.ranks[standing.rank]?.name}
           {standing.title ? `　封号「${standing.title}」` : "　无封号"}

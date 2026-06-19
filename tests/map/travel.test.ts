@@ -6,7 +6,7 @@ import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
-const fresh = (): GameState => createNewGameState(db); // at yushufang, 6 AP
+const fresh = (): GameState => createNewGameState(db); // at zichendian, 6 AP
 
 const drainAp = (state: GameState, amount: number): GameState => {
   const r = applyCommand(state, { type: "SPEND_AP", amount });
@@ -15,12 +15,12 @@ const drainAp = (state: GameState, amount: number): GameState => {
 };
 
 describe("checkTravel", () => {
-  it("allows a connected, affordable destination", () => {
+  it("allows a connected destination at zero AP cost (宫内移动免行动力)", () => {
     const r = checkTravel(db, fresh(), "yuhuayuan");
-    expect(r).toEqual({ ok: true, value: { to: "yuhuayuan", costAp: 1 } });
+    expect(r).toEqual({ ok: true, value: { to: "yuhuayuan", costAp: 0 } });
   });
 
-  it("rejects the current location, unknown ids, and unaffordable travel", () => {
+  it("rejects the current location and unknown ids", () => {
     expect(checkTravel(db, fresh(), "zichendian")).toMatchObject({
       ok: false,
       error: { code: "ALREADY_THERE" },
@@ -29,19 +29,21 @@ describe("checkTravel", () => {
       ok: false,
       error: { code: "UNKNOWN_LOCATION" },
     });
-    const broke = drainAp(drainAp(fresh(), 2), 2); // 1 AP left… travel cost 1 is fine; drain to 0:
-    const zero = { ...broke, calendar: { ...broke.calendar, ap: 0 } };
-    expect(checkTravel(db, zero, "yuhuayuan")).toMatchObject({
-      ok: false,
-      error: { code: "AP_INSUFFICIENT" },
+  });
+
+  it("free travel stays legal even with no AP left (出门串宫不耗点)", () => {
+    const zero = { ...fresh(), calendar: { ...fresh().calendar, ap: 0 } };
+    expect(checkTravel(db, zero, "yuhuayuan")).toEqual({
+      ok: true,
+      value: { to: "yuhuayuan", costAp: 0 },
     });
   });
 
   it("fast-travel: any travel node is reachable regardless of adjacency", () => {
-    // From 御书房 (palace zone) straight to 坤宁宫 (hougong zone) — no edge between them.
+    // From 紫宸殿 (palace zone) straight to 坤宁宫 (hougong zone) — no edge between them.
     expect(checkTravel(db, fresh(), "kunninggong")).toEqual({
       ok: true,
-      value: { to: "kunninggong", costAp: 1 },
+      value: { to: "kunninggong", costAp: 0 },
     });
   });
 
@@ -58,31 +60,31 @@ describe("checkTravel", () => {
 });
 
 describe("buildTravelBatch + reducer", () => {
-  it("moves the player and spends AP atomically", () => {
+  it("moves the player without spending AP (no SPEND_AP command when free)", () => {
     const state = fresh();
     const batch = buildTravelBatch(db, state, "kunninggong");
     expect(batch.ok).toBe(true);
     if (!batch.ok) return;
+    expect(batch.value).toEqual([{ type: "MOVE_TO_LOCATION", locationId: "kunninggong" }]);
     const result = applyBatch(state, batch.value);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.state.playerLocation).toBe("kunninggong");
-    expect(result.value.state.calendar.ap).toBe(5);
+    expect(result.value.state.calendar.ap).toBe(6);
     expect(result.value.rolledOver).toBe(false);
   });
 
-  it("travel on the last AP rolls the action-day", () => {
-    let state = drainAp(fresh(), 5); // 1 AP left
+  it("free travel never rolls the action-day, even on the last AP", () => {
+    const state = drainAp(fresh(), 5); // 1 AP left
     const batch = buildTravelBatch(db, state, "yuhuayuan");
     expect(batch.ok).toBe(true);
     if (!batch.ok) return;
     const result = applyBatch(state, batch.value);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    state = result.value.state;
-    expect(result.value.rolledOver).toBe(true);
-    expect(state.playerLocation).toBe("yuhuayuan");
-    expect(state.calendar).toMatchObject({ period: "mid", ap: 6 });
+    expect(result.value.rolledOver).toBe(false);
+    expect(result.value.state.playerLocation).toBe("yuhuayuan");
+    expect(result.value.state.calendar.ap).toBe(1);
   });
 
   it("refuses to build a batch for illegal travel", () => {

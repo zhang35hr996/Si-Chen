@@ -7,7 +7,6 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import { getCharacterLocation } from "../../engine/characters/presence";
-import { resolveDisplayName } from "../../engine/characters/standing";
 import { Drawer } from "./Drawer";
 
 type Tab = "overview" | "attrs" | "history" | "children" | "relations";
@@ -59,7 +58,7 @@ export function CharacterProfileDrawer({
   const attrs = character.attributes;
   const homeId = getCharacterLocation(db, state, character.id);
   const home = homeId ? db.locations[homeId]?.name : undefined;
-  const displayName = resolveDisplayName(character, standing, rank);
+  const displayName = character.profile.name; // 抽屉标题显本名；位分见 subtitle
   const heirs = state.resources.bloodline.heirs.filter(
     (h) => h.fatherId === character.id || h.adoptiveFatherId === character.id,
   );

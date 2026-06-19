@@ -5,7 +5,6 @@ import { toGameTime } from "../../engine/calendar/time";
 import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/favorTier";
 import { listHeirsBySex } from "../../engine/characters/heirs";
 import { inPalaceConsorts } from "../../engine/characters/presence";
-import { resolveDisplayName } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
@@ -55,7 +54,7 @@ export function ConsortListModal({
     return (
       <li key={c.id} className="consort-list__row">
         <button type="button" className="consort-list__pick" onClick={() => setSelectedId(c.id)}>
-          <span className="consort-list__name">{resolveDisplayName(c, st, db.ranks[st.rank])}</span>
+          <span className="consort-list__name">{c.profile.name}</span>
           <span className="consort-list__rank">
             {db.ranks[st.rank]?.name}
             {st.title ? `·封号「${st.title}」` : ""}
@@ -86,7 +85,7 @@ export function ConsortListModal({
           data-fallback={portrait.isFallback || undefined}
         />
         <div className="consort-detail__body">
-          <h3 className="consort-detail__name">{resolveDisplayName(c, st, db.ranks[st.rank])}</h3>
+          <h3 className="consort-detail__name">{c.profile.name}</h3>
           <p className="consort-detail__field">
             位分：{db.ranks[st.rank]?.name}
             {st.title ? `　封号：${st.title}` : ""}

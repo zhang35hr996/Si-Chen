@@ -41,6 +41,7 @@ import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
 import { ResourcePanel } from "./components/ResourcePanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
+import { pickCourtAffairs } from "../engine/court/affairs";
 import { DialogueScreen } from "./screens/DialogueScreen";
 import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
@@ -52,7 +53,13 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong";
+type View = "title" | "location" | "map" | "freeview" | "event" | "court" | "save" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong";
+
+/** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
+interface CourtSession {
+  queue: string[];
+  index: number;
+}
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -66,6 +73,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   );
   const [view, setView] = useState<View>("title");
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [court, setCourt] = useState<CourtSession | null>(null);
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [manageCharId, setManageCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[] } | null>(null);
@@ -110,9 +118,37 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const db = content.value;
 
   const startEvent = (eventId: string) => {
+    // 上朝是一场会话而非单个事件：进殿即扣 1 行动点，随机抽 2–3 件事务逐件处理。
+    if (eventId === "ev_chaohui") {
+      beginCourt();
+      return;
+    }
     chainDepth.current = 0; // player-initiated start resets the chain budget
     setActiveEventId(eventId);
     setView("event");
+  };
+
+  /**
+   * 开启上朝会话：背书校验（卯时首个行动点且充足）→ 一次性扣 1 行动点 →
+   * 按 rngSeed+当日 抽取 2–3 件朝政事务 → 进入逐件处理。整场只此一次扣点；
+   * 卯时满点扣 1 不会转旬，故无需处理 rollover。
+   */
+  const beginCourt = () => {
+    const before = store.getState();
+    const ev = db.events["ev_chaohui"];
+    if (!ev || before.calendar.ap < ev.apCost || before.calendar.ap !== before.calendar.apMax) return;
+    const spend = store.dispatch({ type: "SPEND_AP", amount: ev.apCost });
+    if (!spend.ok) return;
+    const cal = store.getState().calendar;
+    const queue = pickCourtAffairs(db, `court:${store.getState().rngSeed}:${cal.dayIndex}`);
+    doAutosave(); // 行动点已扣，先落盘，再进事务
+    if (queue.length === 0) {
+      goHome();
+      return;
+    }
+    chainDepth.current = 0;
+    setCourt({ queue, index: 0 });
+    setView("court");
   };
 
   /** Return to the 皇城主地图 (home). Used by 新游戏 and after an event ends. */
@@ -708,6 +744,31 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             }
             // Abandoned mid-scene (零代价离开): back to the room you were in.
             setView("location");
+          }}
+        />
+      )}
+      {view === "court" && court && (
+        <DialogueScreen
+          key={`court:${court.index}`}
+          db={db}
+          store={store}
+          registry={registry}
+          eventId={court.queue[court.index]!}
+          logger={logger}
+          quitLabel="退朝"
+          quitTitle="退朝即回紫禁城；已处置之事照准（本次上朝已耗 1 行动点，不再退还）"
+          onDone={(committed) => {
+            // committed=true：本件事务已处置（效果已通过 resolveEvent 入账）。
+            // committed=false：玩家退朝——已处置之事保留，余下事务作罢。
+            const nextIndex = court.index + 1;
+            if (committed && nextIndex < court.queue.length) {
+              doAutosave(); // 每件事务提交后落盘
+              setCourt({ queue: court.queue, index: nextIndex });
+              return;
+            }
+            if (committed) doAutosave();
+            setCourt(null);
+            goHome(); // 上朝结束 / 退朝 → 直接回到紫禁城主地图
           }}
         />
       )}

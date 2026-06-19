@@ -11,7 +11,7 @@ import {
   listHeirsBySex,
   type NamedHeir,
 } from "../../engine/characters/heirs";
-import { resolveDisplayName } from "../../engine/characters/standing";
+import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState, Heir } from "../../engine/state/types";
 
@@ -42,7 +42,7 @@ export function HeirListModal({
     const c = db.characters[charId];
     if (!c) return charId;
     const st = state.standing[charId];
-    return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
+    return resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined);
   };
 
   const bearerLabel = (h: Heir): string => {
@@ -50,7 +50,7 @@ export function HeirListModal({
     const c = db.characters[h.fatherId];
     if (!c) return h.fatherId;
     const st = state.standing[h.fatherId];
-    const name = resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
+    const name = resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined);
     return st?.lifecycle === "deceased" ? `${name}（已故）` : name;
   };
 

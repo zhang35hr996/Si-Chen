@@ -22,6 +22,8 @@ export function DialogueScreen({
   eventId,
   logger,
   onDone,
+  quitLabel = "离开",
+  quitTitle = "中途离开不消耗行动点，亦无任何后果",
 }: {
   db: ContentDB;
   store: GameStore;
@@ -29,6 +31,9 @@ export function DialogueScreen({
   eventId: string;
   logger?: RingBufferLogger;
   onDone: (committed: boolean, rolledOver?: boolean) => void;
+  /** 退出按钮文案与悬浮提示（上朝会话复用本屏，标作「退朝」）。 */
+  quitLabel?: string;
+  quitTitle?: string;
 }) {
   const state = useGameState(store);
   const runnerRef = useRef<SceneRunner | null>(null);
@@ -101,8 +106,8 @@ export function DialogueScreen({
           {formatGameTime(state.calendar)} · {formatShichen(state.calendar)}
         </span>
         <span className="dialogue-screen__cost">{event?.title}</span>
-        <button type="button" className="hud__button" onClick={quit} title="中途离开不消耗行动点，亦无任何后果">
-          离开
+        <button type="button" className="hud__button" onClick={quit} title={quitTitle}>
+          {quitLabel}
         </button>
       </header>
 

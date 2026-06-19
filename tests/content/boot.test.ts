@@ -18,7 +18,7 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 6 characters, 17 locations, 7 events, 7 scenes, 21 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 6 characters, 17 locations, 17 events, 17 scenes, 21 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
@@ -41,9 +41,20 @@ describe("real content/ boots", () => {
         "ev_menses_rite",
         "ev_shen_neglect",
         "ev_taihou_converse",
+        // 宣政殿上朝：10 件随机朝政事务（每场抽 2–3 件，整场共 1 行动点）
+        "ev_court_junxiang",
+        "ev_court_jiafeng",
+        "ev_court_jianfu",
+        "ev_court_zhenzai",
+        "ev_court_dashe",
+        "ev_court_hegong",
+        "ev_court_keju",
+        "ev_court_hushi",
+        "ev_court_yantie",
+        "ev_court_fengjiang",
       ].sort(),
     );
-    expect(Object.keys(db.scenes)).toHaveLength(7);
+    expect(Object.keys(db.scenes)).toHaveLength(17);
     expect(Object.keys(db.ranks)).toHaveLength(21);
   });
 
