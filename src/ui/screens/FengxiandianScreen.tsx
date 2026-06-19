@@ -1,13 +1,15 @@
 /** 奉先殿：择一皇嗣 → 择一养父（在宫侍君+凤后），告于宗庙。1 AP。 */
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
-import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
+import { timeOfDay } from "../../engine/calendar/time";
 import { listHeirsBySex } from "../../engine/characters/heirs";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import { eligibleAdoptiveFathers } from "../../store/adoption";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { GameShell } from "../components/GameShell";
+import { breadcrumbFor } from "../components/breadcrumb";
 
 export function FengxiandianScreen({
   db, store, registry, onOpenMap, onOpenSave, onAdopt,
@@ -30,33 +32,33 @@ export function FengxiandianScreen({
   };
 
   return (
-    <main className="location-screen">
-      <header className="hud">
-        <span className="hud__time">{formatGameTime(state.calendar)} · {formatShichen(state.calendar)}</span>
-        <span className="hud__group">
-          <button type="button" className="hud__button" onClick={onOpenSave}>存档</button>
-          <button type="button" className="hud__button" onClick={onOpenMap}>宫城图</button>
-        </span>
-      </header>
-      <section className="location-screen__stage" style={{ backgroundImage: `url("${background.url}")` }} data-fallback={background.isFallback || undefined}>
-        <h1 className="location-screen__name">{location.name}</h1>
-        <p className="location-screen__desc">{location.description}</p>
-      </section>
-      <section className="location-screen__roster">
-        <h2>为皇嗣择养父</h2>
-        {heirs.length === 0 ? (
-          <p className="location-screen__empty">尚无皇嗣。</p>
-        ) : (
-          heirs.map(({ heir, name }) => (
-            <div key={heir.id} className="roster-row">
-              <span>{name}{heir.givenName ? `·${heir.givenName}` : ""}
-                {heir.adoptiveFatherId ? `（养父：${fatherName(heir.adoptiveFatherId)}）` : ""}
-              </span>
-              <button type="button" disabled={!canAct} onClick={() => setPicked(heir.id)}>择养父</button>
-            </div>
-          ))
-        )}
-      </section>
+    <GameShell
+      calendar={state.calendar}
+      crumbs={breadcrumbFor(db, location.id)}
+      onBack={onOpenMap}
+      onOpenSave={onOpenSave}
+    >
+      <main className="location-screen">
+        <section className="location-screen__stage" style={{ backgroundImage: `url("${background.url}")` }} data-fallback={background.isFallback || undefined}>
+          <h1 className="location-screen__name">{location.name}</h1>
+          <p className="location-screen__desc">{location.description}</p>
+        </section>
+        <section className="location-screen__roster">
+          <h2>为皇嗣择养父</h2>
+          {heirs.length === 0 ? (
+            <p className="location-screen__empty">尚无皇嗣。</p>
+          ) : (
+            heirs.map(({ heir, name }) => (
+              <div key={heir.id} className="roster-row">
+                <span>{name}{heir.givenName ? `·${heir.givenName}` : ""}
+                  {heir.adoptiveFatherId ? `（养父：${fatherName(heir.adoptiveFatherId)}）` : ""}
+                </span>
+                <button type="button" disabled={!canAct} onClick={() => setPicked(heir.id)}>择养父</button>
+              </div>
+            ))
+          )}
+        </section>
+      </main>
 
       {picked && (
         <div className="modal-backdrop" onClick={() => setPicked(null)}>
@@ -71,6 +73,6 @@ export function FengxiandianScreen({
           </div>
         </div>
       )}
-    </main>
+    </GameShell>
   );
 }

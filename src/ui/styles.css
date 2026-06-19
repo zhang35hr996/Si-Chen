@@ -455,7 +455,7 @@ button:active:enabled {
    ════════════════════════════════════════════════════════════════ */
 
 .location-screen {
-  min-height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1473,7 +1473,7 @@ button:active:enabled {
 }
 .profile-stat {
   display: grid;
-  grid-template-columns: 3rem 1fr 2rem;
+  grid-template-columns: 5.5rem 1fr 2.2rem;
   align-items: center;
   gap: 0.6rem;
   margin: 0.5rem 0;
@@ -1894,16 +1894,20 @@ button:active:enabled {
 
 .yushufang-actions button {
   font: inherit;
+  font-family: var(--font-body);
   padding: 0.48rem 1.1rem;
-  color: var(--gold-bright);
-  background: linear-gradient(180deg, var(--ink-600), var(--ink-700));
-  border: 1px solid var(--line-gold);
+  color: var(--c-gold-text);
+  background: var(--c-panel-2);
+  border: 1px solid var(--c-line-gold);
+  border-radius: 5px;
   cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
 .yushufang-actions button:hover:enabled {
-  border-color: var(--gold);
-  box-shadow: var(--glow-gold);
+  color: var(--c-gold);
+  border-color: var(--c-gold);
+  background: var(--c-panel-3);
 }
 
 .yushufang-actions button:disabled {

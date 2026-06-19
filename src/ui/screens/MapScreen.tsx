@@ -100,7 +100,6 @@ export function MapScreen({
   useEffect(() => {
     const here = onBoard.find((l) => l.id === state.playerLocation);
     setSelected(here ? { kind: "loc", loc: here } : null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board]);
 
   const enterBoard = (to: string) => {
