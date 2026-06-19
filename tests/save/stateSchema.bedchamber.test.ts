@@ -11,7 +11,7 @@ const db = content.value;
 describe("gameStateSchema persists bedchamber + pregnancy", () => {
   it("round-trips a state with encounters and a carrying pregnancy", () => {
     let state = createNewGameState(db);
-    const a = applyEffects(db, state, [{ type: "bedchamber", char: "shen_chenghui", mode: "passion" }]);
+    const a = applyEffects(db, state, [{ type: "bedchamber", char: "lu_huaijin", mode: "passion" }]);
     expect(a.ok).toBe(true);
     if (!a.ok) return;
     const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "begin" }]);

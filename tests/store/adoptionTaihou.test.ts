@@ -23,10 +23,10 @@ describe("养父池含太后", () => {
 
   it("太后养父：单段欣然，无谢恩、无生父泪报（即便生父尚在宫）", () => {
     const s = createNewGameState(db);
-    const h = heir({ fatherId: "chu_jun" }); // bio father in palace
+    const h = heir({ fatherId: "xu_qinghuan" }); // bio father in palace
     const beats = buildAdoptionReaction(db, s, h, "taihou");
     expect(beats.length).toBe(1);
     expect(beats[0]!.speakerId).toBe("taihou");
-    expect(beats.some((b) => b.speakerId === "sili_nvguan")).toBe(false);
+    expect(beats.some((b) => b.speakerId === "wei_sui")).toBe(false);
   });
 });

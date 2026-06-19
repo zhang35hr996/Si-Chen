@@ -1,14 +1,14 @@
 {
   "id": "sc_menses_rite",
-  "locationId": "yushufang",
-  "participants": ["sili_nvguan"],
+  "locationId": "zichendian",
+  "participants": ["wei_sui"],
   "startNodeId": "n_open",
   "nodes": [
     {
       "type": "line",
       "id": "n_open",
-      "speaker": "sili_nvguan",
-      "text": "陛下，本月下旬经血祭仪在即，坛场、礼器、祝文俱已备齐，只待御批。依典制，祭仪关乎国本，不可轻废。",
+      "speaker": "wei_sui",
+      "text": "陛下，本月下旬传月祭仪在即，坛场、礼器、祝文俱已备齐，只待御批。依典制，祭仪关乎国本，不可轻废。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -29,14 +29,14 @@
         { "type": "flag", "key": "rite_scheduled", "value": true },
         {
           "type": "memory",
-          "char": "sili_nvguan",
+          "char": "wei_sui",
           "entry": {
             "kind": "event",
-            "summary": "陛下御批准了经血祭仪，仪程如期。礼制有序，国本可安。",
+            "summary": "陛下御批准了传月祭仪，仪程如期。礼制有序，国本可安。",
             "salience": 60,
             "tags": ["rite", "approval"],
-            "participants": ["player", "sili_nvguan"],
-            "locationId": "yushufang"
+            "participants": ["player", "wei_sui"],
+            "locationId": "zichendian"
           }
         }
       ],
@@ -45,7 +45,7 @@
     {
       "type": "line",
       "id": "n_end_approve",
-      "speaker": "sili_nvguan",
+      "speaker": "wei_sui",
       "text": "臣领旨，即刻去办。祭仪毕，臣再呈仪录。",
       "expression": "neutral"
     },
@@ -58,14 +58,14 @@
         { "type": "flag", "key": "rite_delayed", "value": true },
         {
           "type": "memory",
-          "char": "sili_nvguan",
+          "char": "wei_sui",
           "entry": {
             "kind": "event",
-            "summary": "陛下以乏累为由推迟经血祭仪。典制有亏，朝野恐有非议，臣需设法转圜。",
+            "summary": "陛下以乏累为由推迟传月祭仪。典制有亏，朝野恐有非议，臣需设法转圜。",
             "salience": 70,
             "tags": ["rite", "delay", "concern"],
-            "participants": ["player", "sili_nvguan"],
-            "locationId": "yushufang"
+            "participants": ["player", "wei_sui"],
+            "locationId": "zichendian"
           }
         }
       ],
@@ -74,7 +74,7 @@
     {
       "type": "line",
       "id": "n_end_delay",
-      "speaker": "sili_nvguan",
+      "speaker": "wei_sui",
       "text": "……臣，遵旨。只是礼不可久废，伏望陛下三思。",
       "expression": "worried"
     }

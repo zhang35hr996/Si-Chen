@@ -1,7 +1,7 @@
 {
   "contentVersion": "0.1.0",
   "calendar": { "apMax": 6, "start": { "year": 1, "month": 1, "period": "early" } },
-  "startingLocation": "yushufang",
+  "startingLocation": "zichendian",
   "startingResources": {
     "court": { "authority": 50, "publicSupport": 50, "factionPressure": 20 },
     "harem": { "harmony": 60, "jealousy": 20 },
@@ -31,7 +31,7 @@
     { "id": "sili_zhang", "name": "司礼", "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" }
   ],
   "mapBoards": [
-    { "id": "palace", "name": "宫城图", "art": { "key": "map.palace", "kind": "map" } },
+    { "id": "palace", "name": "紫禁城", "art": { "key": "map.palace", "kind": "map" } },
     { "id": "hougong", "name": "后宫", "art": { "key": "bg.hougong", "kind": "background" } },
     { "id": "jingcheng", "name": "京城", "art": { "key": "bg.jingcheng", "kind": "background" } },
     { "id": "jingjiao", "name": "郊外", "art": { "key": "bg.jingjiao", "kind": "background" } }
@@ -44,7 +44,7 @@
   "rankChangeReactions": {
     "promote":     { "lines": ["谢陛下隆恩！{self}定当尽心侍奉，不负圣眷。"], "memory": "陛下晋我为{rank}，圣眷正隆。" },
     "demote":      { "lines": ["……{self}知罪。谢陛下教诲。"], "memory": "陛下贬我为{rank}，颜面无存。" },
-    "grant_title": { "lines": ["蒙陛下赐号，{self}惶恐领赏——谢陛下隆恩！"], "memory": "陛下赐我封号「{title}」，恩宠加身。" },
+    "grant_title": { "lines": ["蒙陛下赐号，{self}惶恐领赏。谢陛下隆恩！"], "memory": "陛下赐我封号「{title}」，恩宠加身。" },
     "strip_title": { "lines": ["陛下息怒……{self}知罪，惶恐请罪，恳请陛下开恩。"], "memory": "陛下褫夺我封号，我惶惶不可终日。" }
   },
   "bedchamber": {

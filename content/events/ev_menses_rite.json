@@ -1,10 +1,10 @@
 {
   "id": "ev_menses_rite",
-  "title": "司礼请示经血祭仪",
+  "title": "司礼请示传月祭仪",
   "sceneId": "sc_menses_rite",
   "checkpoint": "location_enter",
   "condition": {
-    "all": [{ "atLocation": "yushufang" }, { "not": { "eventFired": "ev_menses_rite" } }]
+    "all": [{ "atLocation": "zichendian" }, { "not": { "eventFired": "ev_menses_rite" } }]
   },
   "priority": 50,
   "once": true,

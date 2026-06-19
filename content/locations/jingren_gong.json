@@ -1,0 +1,22 @@
+{
+  "id": "jingren_gong",
+  "name": "景仁宫",
+  "description": "正殿轩敞，阶前一方青石照壁，宫人洒扫不绝，端方而不失温雅。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "青石照壁",
+    "端方静好",
+    "茶烟袅袅"
+  ],
+  "position": {
+    "x": 0.64,
+    "y": 0.22
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
+}

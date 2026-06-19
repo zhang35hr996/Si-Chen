@@ -1,20 +1,20 @@
 {
-  "id": "chu_jun",
+  "id": "xu_qinghuan",
   "kind": "consort",
   "attributes": { "appearance": 86, "talent": 62, "family": 70, "health": 85, "nurture": 74 },
   "profile": {
-    "name": "初君",
-    "surname": "初",
-    "age": 19,
+    "name": "徐清欢",
+    "surname": "徐",
+    "age": 17,
     "role": "新近入宫，武勋之家出身的新宠",
     "appearance": "明眸皓齿，身段轻盈，常着鲜妍石榴红衣，行止间难掩雀跃。",
     "personalityTraits": ["热切", "聪敏", "争强", "藏不住喜怒"],
-    "coreFacts": ["三月前选秀入宫，一入便破格封君", "出身新晋武勋之家，母家正盼她固宠", "初承雨露便自恃得宠，尚不知宫深似海"],
+    "coreFacts": ["三月前选秀入宫，一入便破格封贵人", "出身新晋武勋之家，母家正盼她固宠", "初承雨露便自恃得宠，尚不知宫深似海"],
     "goals": ["趁新宠正盛，多得陛下垂顾", "压过旧人，为母家挣一份体面"],
     "speechStyle": "语速轻快，爱用俏皮话试探；得意时眉飞色舞，受挫时立刻垮脸。"
   },
   "defaultLocation": "xianfugong",
-  "portraitSet": "chujun",
+  "portraitSet": "xu_qinghuan",
   "expressions": ["neutral"],
   "voice": {
     "register": "casual",
@@ -29,13 +29,13 @@
       "summary": "陛下近来常召臣侍侍奉，新宠正浓。只是旧人那边的目光，越来越冷了。",
       "salience": 60,
       "tags": ["player", "favor", "rivalry"],
-      "participants": ["player", "chu_jun"],
+      "participants": ["player", "xu_qinghuan"],
       "protected": true
     }
   ],
   "secrets": [],
   "stances": [
-    { "charId": "feng_hou", "attitude": "畏凤后掌印之威，面上恭谨，心里却不服管束" },
-    { "charId": "shen_chenghui", "attitude": "视沈承徽为失宠的前车，既怜且傲，暗自较劲" }
+    { "charId": "shen_zhibai", "attitude": "畏凤后掌印之威，面上恭谨，心里却不服管束" },
+    { "charId": "lu_huaijin", "attitude": "视沈承徽为失宠的前车，既怜且傲，暗自较劲" }
   ]
 }

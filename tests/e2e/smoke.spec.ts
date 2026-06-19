@@ -42,7 +42,7 @@ test("vertical slice: new game → event → choose → save → reload → pers
   expect(afterCommit.calendar.ap).toBe(5);
   expect(afterCommit.flags.rite_scheduled).toBe(true);
   expect(afterCommit.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
-  const siliMemories = afterCommit.memories.sili_nvguan?.entries ?? [];
+  const siliMemories = afterCommit.memories.wei_sui?.entries ?? [];
   expect(siliMemories.some((m) => m.tags.includes("rite"))).toBe(true);
   // the 准奏 branch raised 宗嗣合法性 and 圣威 (effect funnel applied)
   expect(afterCommit.resources.bloodline.legitimacy).toBeGreaterThan(0);
@@ -65,5 +65,5 @@ test("vertical slice: new game → event → choose → save → reload → pers
   expect(afterReload.calendar.ap).toBe(5);
   expect(afterReload.flags.rite_scheduled).toBe(true);
   expect(afterReload.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
-  expect((afterReload.memories.sili_nvguan?.entries ?? []).length).toBe(siliMemories.length);
+  expect((afterReload.memories.wei_sui?.entries ?? []).length).toBe(siliMemories.length);
 });

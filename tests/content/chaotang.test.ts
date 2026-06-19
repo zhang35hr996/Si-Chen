@@ -7,6 +7,6 @@ const db = content.value;
 
 describe("朝堂 上朝限时", () => {
   it("chaotang carries actionFirstSlotOnly = true", () => {
-    expect(db.locations["chaotang"]!.actionFirstSlotOnly).toBe(true);
+    expect(db.locations["xuanzhengdian"]!.actionFirstSlotOnly).toBe(true);
   });
 });

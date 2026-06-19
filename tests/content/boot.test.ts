@@ -18,19 +18,24 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 6 characters, 9 locations, 7 events, 7 scenes, 21 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 6 characters, 17 locations, 7 events, 7 scenes, 21 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
-      ["chu_jun", "feng_hou", "shen_chenghui", "sili_nvguan", "taihou", "wenya_shijun"].sort(),
+      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya"].sort(),
     );
     expect(Object.keys(db.locations).sort()).toEqual(
-      ["chaotang", "cining_gong", "fengxiandian", "kunninggong", "lenggong", "shangshufang", "xianfugong", "yushufang", "yuhuayuan"].sort(),
+      [
+        "xuanzhengdian", "cining_gong", "fengxiandian", "kunninggong", "changmengong",
+        "wenzhaodian", "xianfugong", "zichendian", "yuhuayuan", "yuqing_gong",
+        "zhaoning_gong", "chenghui_gong", "jingren_gong", "zhongcui_gong",
+        "yanhe_gong", "jiyue_gong", "chuxiu_gong",
+      ].sort(),
     );
     expect(Object.keys(db.events).sort()).toEqual(
       [
-        "arc_lenggong__ev_aftermath",
-        "arc_lenggong__ev_visit",
+        "arc_changmengong__ev_aftermath",
+        "arc_changmengong__ev_visit",
         "ev_chaohui",
         "ev_fenghou_rules",
         "ev_menses_rite",
@@ -45,10 +50,10 @@ describe("real content/ boots", () => {
   it("wires the slice correctly: domains, start location, heavy rite event", () => {
     if (!result.ok) return;
     const db = result.value;
-    expect(db.world.startingLocation).toBe("yushufang");
-    expect(db.ranks[db.characters["feng_hou"]!.initialStanding!.rank]?.domain).toBe("harem");
-    expect(db.ranks[db.characters["sili_nvguan"]!.initialStanding!.rank]?.domain).toBe("official");
+    expect(db.world.startingLocation).toBe("zichendian");
+    expect(db.ranks[db.characters["shen_zhibai"]!.initialStanding!.rank]?.domain).toBe("harem");
+    expect(db.ranks[db.characters["wei_sui"]!.initialStanding!.rank]?.domain).toBe("official");
     expect(db.events["ev_menses_rite"]?.apCost).toBe(1); // 召对是轻行动；真正的大祭（3+ AP 重行动）是未来单独的事件
-    expect(db.characters["shen_chenghui"]?.defaultLocation).toBe("yuhuayuan");
+    expect(db.characters["lu_huaijin"]?.defaultLocation).toBe("zhongcui_gong");
   });
 });

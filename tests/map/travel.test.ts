@@ -21,7 +21,7 @@ describe("checkTravel", () => {
   });
 
   it("rejects the current location, unknown ids, and unaffordable travel", () => {
-    expect(checkTravel(db, fresh(), "yushufang")).toMatchObject({
+    expect(checkTravel(db, fresh(), "zichendian")).toMatchObject({
       ok: false,
       error: { code: "ALREADY_THERE" },
     });
@@ -46,11 +46,11 @@ describe("checkTravel", () => {
   });
 
   it("refuses to travel to a free-view location (opened by UI, not dispatched)", () => {
-    expect(checkTravel(db, fresh(), "lenggong")).toMatchObject({
+    expect(checkTravel(db, fresh(), "changmengong")).toMatchObject({
       ok: false,
       error: { code: "NOT_TRAVELABLE" },
     });
-    expect(checkTravel(db, fresh(), "chaotang")).toMatchObject({
+    expect(checkTravel(db, fresh(), "xuanzhengdian")).toMatchObject({
       ok: false,
       error: { code: "NOT_TRAVELABLE" },
     });
@@ -86,6 +86,6 @@ describe("buildTravelBatch + reducer", () => {
   });
 
   it("refuses to build a batch for illegal travel", () => {
-    expect(buildTravelBatch(db, fresh(), "yushufang").ok).toBe(false);
+    expect(buildTravelBatch(db, fresh(), "zichendian").ok).toBe(false);
   });
 });

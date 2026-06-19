@@ -17,6 +17,7 @@ import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractio
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
+import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
 import { buildAdoptionReaction } from "../store/adoption";
@@ -50,7 +51,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "shangshufang" | "fengxiandian" | "cining_gong";
+type View = "title" | "location" | "map" | "freeview" | "event" | "save" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong";
 
 export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
   const content = useMemo(() => loadGameContent(), []);
@@ -122,7 +123,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
     if (loc === "cining_gong") { setView("cining_gong"); maybeShizhi(); return; }
-    setView(loc === "shangshufang" ? "shangshufang" : loc === "fengxiandian" ? "fengxiandian" : "location");
+    setView(loc === "wenzhaodian" ? "wenzhaodian" : loc === "yuqing_gong" ? "yuqing_gong" : loc === "fengxiandian" ? "fengxiandian" : "location");
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -170,7 +171,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       (rolledOver ? pickNextEvent(db, state, "time_advance") : null) ??
       pickNextEvent(db, state, "location_enter");
     if (pick) startEvent(pick.id);
-    else if (store.getState().playerLocation === "shangshufang") setView("shangshufang");
+    else if (store.getState().playerLocation === "wenzhaodian") setView("wenzhaodian");
+    else if (store.getState().playerLocation === "yuqing_gong") setView("yuqing_gong");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
     else if (store.getState().playerLocation === "cining_gong") { setView("cining_gong"); maybeShizhi(); }
     else setView("location"); // arrived somewhere with no event → show that room
@@ -291,7 +293,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
     setSummonedConsortId(null);
     doAutosave();
-    const firstNight = plan.isFirstNight && plan.charId !== "feng_hou";
+    const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
     if (firstNight) {
       setFirstNightPromptId(plan.charId);
       if (spend.value.rolledOver) setReactionRollover(true); // 初夜提示关闭后再补跑
@@ -365,9 +367,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     ? activeBirthPlan.bearer === "sovereign" ||
       activeBirthPlan.bearerOutcome === "bearer_dies" ||
       activeBirthPlan.bearerOutcome === "both"
-      ? "sili_nvguan"
+      ? "wei_sui"
       : activeBirthPlan.bearer
-    : "sili_nvguan";
+    : "wei_sui";
 
   const commitBirth = () => {
     const plan = activeBirthPlan;
@@ -380,14 +382,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (newborn && plan.bearerOutcome !== "child_dies" && plan.bearerOutcome !== "both") {
       setNamePetHeirId(newborn.id);
     }
-    if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && plan.bearer !== "feng_hou") {
+    if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && plan.bearer !== "shen_zhibai") {
       setReaction({
-        speakerId: "feng_hou",
+        speakerId: "shen_zhibai",
         lines: ["恭喜陛下喜得麟儿。立功侍君劳苦功高，可愿晋升以彰圣眷？"],
       });
       setPostBirthPromoteId(plan.bearer);
     } else if (plan.bearerOutcome === "safe") {
-      setReaction({ speakerId: "feng_hou", lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
+      setReaction({ speakerId: "shen_zhibai", lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
     }
   };
 
@@ -396,7 +398,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const r = store.applyEffects(db, [{ type: "pregnancy_abort" }]);
     if (r.ok) {
       doAutosave();
-      setReaction({ speakerId: "sili_nvguan", lines: ["太医奉旨调理，陛下凤体已无大碍。此事到此为止。"] });
+      setReaction({ speakerId: "wei_sui", lines: ["太医奉旨调理，陛下凤体已无大碍。此事到此为止。"] });
     }
   };
 
@@ -425,7 +427,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     doAutosave();
     const own: DecreeReaction[] = spend.value.rolledOver
       ? []
-      : [{ speakerId: "sili_nvguan", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] }];
+      : [{ speakerId: "wei_sui", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] }];
     playReactions([...own, ...decreeBeats], spend.value.rolledOver);
   };
 
@@ -476,7 +478,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return;
     doAutosave();
-    playReactions([{ speakerId: "sili_nvguan", lines }, ...decreeBeats], spend.value.rolledOver);
+    playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver);
   };
 
   const adoptHeir = (heirId: string, fatherId: string) => {
@@ -518,6 +520,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     <>
       {view === "title" && (
         <TitleScreen
+          registry={registry}
           onNewGame={newGame}
           onContinue={continueGame}
           canContinue={canContinue}
@@ -554,7 +557,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onDismissSummon={() => setSummonedConsortId(null)}
         />
       )}
-      {view === "shangshufang" && (
+      {view === "wenzhaodian" && (
         <ShangshufangScreen
           db={db}
           store={store}
@@ -566,6 +569,17 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenSave={() => setView("save")}
           onLesson={heirLesson}
           onTutorReport={tutorReport}
+        />
+      )}
+      {view === "yuqing_gong" && (
+        <YuqingGongScreen
+          db={db}
+          store={store}
+          registry={registry}
+          onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
+          onOpenSave={() => setView("save")}
+          onSummon={summonHeir}
+          onOpenResources={() => setResourcePanelOpen(true)}
         />
       )}
       {view === "fengxiandian" && (
@@ -880,7 +894,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             const r = store.applyEffects(db, [{ type: "heir_name", heirId: centennialHeir.id, field: "given", name }]);
             if (r.ok) {
               doAutosave();
-              setReaction({ speakerId: "sili_nvguan", lines: [`司礼官高唱：皇嗣赐名「${name}」，宗祠登册，举宫同贺。`] });
+              setReaction({ speakerId: "wei_sui", lines: [`司礼官高唱：皇嗣赐名「${name}」，宗祠登册，举宫同贺。`] });
             }
           }}
           onDismiss={() => setCentennialDismissedMonth(monthOrdinal(liveState.calendar))}

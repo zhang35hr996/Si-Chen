@@ -29,20 +29,20 @@ describe("predicate truth table", () => {
     ["monthAtLeast unmet", { monthAtLeast: 3 }, false],
     ["periodIs met", { periodIs: "early" }, true],
     ["periodIs unmet", { periodIs: "late" }, false],
-    ["atLocation met", { atLocation: "yushufang" }, true],
+    ["atLocation met", { atLocation: "zichendian" }, true],
     ["atLocation unmet", { atLocation: "yuhuayuan" }, false],
-    ["relationshipAtLeast met (sili trust 50)", { relationshipAtLeast: { char: "sili_nvguan", field: "trust", value: 50 } }, true],
-    ["relationshipAtLeast unmet", { relationshipAtLeast: { char: "sili_nvguan", field: "trust", value: 51 } }, false],
-    ["relationship affinity axis", { relationshipAtLeast: { char: "shen_chenghui", field: "affinity", value: 45 } }, true],
+    ["relationshipAtLeast met (sili trust 50)", { relationshipAtLeast: { char: "wei_sui", field: "trust", value: 50 } }, true],
+    ["relationshipAtLeast unmet", { relationshipAtLeast: { char: "wei_sui", field: "trust", value: 51 } }, false],
+    ["relationship affinity axis", { relationshipAtLeast: { char: "lu_huaijin", field: "affinity", value: 45 } }, true],
     ["relationship unknown char → 0", { relationshipAtLeast: { char: "char_ghost", field: "trust", value: 1 } }, false],
-    ["favorAtLeast met (sili 40)", { favorAtLeast: { char: "sili_nvguan", value: 40 } }, true],
-    ["favorAtLeast unmet", { favorAtLeast: { char: "sili_nvguan", value: 41 } }, false],
-    ["rankAtLeast: 凤后(100) ≥ 承徽(60)", { rankAtLeast: { char: "feng_hou", rank: "chenghui" } }, true],
-    ["rankAtLeast: 承徽(60) < 凤后(100)", { rankAtLeast: { char: "shen_chenghui", rank: "fenghou" } }, false],
-    ["rankAtLeast equal rank", { rankAtLeast: { char: "shen_chenghui", rank: "chenghui" } }, true],
-    ["rankAtLeast unknown rank", { rankAtLeast: { char: "feng_hou", rank: "rank_ghost" } }, false],
-    ["hasMemoryTag met (沈承徽 neglect)", { hasMemoryTag: { char: "shen_chenghui", tag: "neglect" } }, true],
-    ["hasMemoryTag wrong tag", { hasMemoryTag: { char: "shen_chenghui", tag: "favor" } }, false],
+    ["favorAtLeast met (sili 40)", { favorAtLeast: { char: "wei_sui", value: 40 } }, true],
+    ["favorAtLeast unmet", { favorAtLeast: { char: "wei_sui", value: 41 } }, false],
+    ["rankAtLeast: 凤后(100) ≥ 承徽(60)", { rankAtLeast: { char: "shen_zhibai", rank: "chenghui" } }, true],
+    ["rankAtLeast: 承徽(60) < 凤后(100)", { rankAtLeast: { char: "lu_huaijin", rank: "fenghou" } }, false],
+    ["rankAtLeast equal rank", { rankAtLeast: { char: "lu_huaijin", rank: "chenghui" } }, true],
+    ["rankAtLeast unknown rank", { rankAtLeast: { char: "shen_zhibai", rank: "rank_ghost" } }, false],
+    ["hasMemoryTag met (沈承徽 neglect)", { hasMemoryTag: { char: "lu_huaijin", tag: "neglect" } }, true],
+    ["hasMemoryTag wrong tag", { hasMemoryTag: { char: "lu_huaijin", tag: "favor" } }, false],
     ["hasMemoryTag unknown char → false", { hasMemoryTag: { char: "char_ghost", tag: "neglect" } }, false],
     ["eventFired met", { eventFired: "ev_menses_rite" }, true],
     ["eventFired unmet", { eventFired: "ev_shen_neglect" }, false],
@@ -51,7 +51,7 @@ describe("predicate truth table", () => {
   });
 
   it("nesting: all / any / not compose", () => {
-    expect(ev({ all: [{ flagSet: "rite_scheduled" }, { atLocation: "yushufang" }] })).toBe(true);
+    expect(ev({ all: [{ flagSet: "rite_scheduled" }, { atLocation: "zichendian" }] })).toBe(true);
     expect(ev({ all: [{ flagSet: "rite_scheduled" }, { atLocation: "yuhuayuan" }] })).toBe(false);
     expect(ev({ any: [{ atLocation: "yuhuayuan" }, { periodIs: "early" }] })).toBe(true);
     expect(ev({ not: { eventFired: "ev_shen_neglect" } })).toBe(true);

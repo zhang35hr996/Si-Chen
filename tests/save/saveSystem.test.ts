@@ -24,11 +24,11 @@ const db = loadRealContent();
 /** A "played" state: one event resolved through the funnel, memory written. */
 const playedState = (): GameState => {
   const result = applyEffects(db, createNewGameState(db), [
-    { type: "relationship", char: "feng_hou", field: "trust", delta: 3 },
+    { type: "relationship", char: "shen_zhibai", field: "trust", delta: 3 },
     { type: "flag", key: "rite_scheduled", value: true },
     {
       type: "memory",
-      char: "feng_hou",
+      char: "shen_zhibai",
       entry: { kind: "event", summary: "存档测试记忆。", salience: 30, tags: ["test"], participants: ["player"] },
     },
   ]);
@@ -60,8 +60,8 @@ describe("roundtrip", () => {
     expect(loaded.value.warnings).toEqual([]);
 
     // continues identically: same effect on saved-then-loaded state = same result
-    const a = applyEffects(db, state, [{ type: "favor", char: "feng_hou", delta: 2 }]);
-    const b = applyEffects(db, loaded.value.state, [{ type: "favor", char: "feng_hou", delta: 2 }]);
+    const a = applyEffects(db, state, [{ type: "favor", char: "shen_zhibai", delta: 2 }]);
+    const b = applyEffects(db, loaded.value.state, [{ type: "favor", char: "shen_zhibai", delta: 2 }]);
     expect(a).toEqual(b);
   });
 });
@@ -156,7 +156,7 @@ describe("autosave rotation + recovery ladder", () => {
     const auto = readSlot(storage, db, "auto", { logger });
     const prev = readSlot(storage, db, "auto.prev", { logger });
     expect(auto.ok && auto.value.state.playerLocation).toBe("yuhuayuan");
-    expect(prev.ok && prev.value.state.playerLocation).toBe("yushufang");
+    expect(prev.ok && prev.value.state.playerLocation).toBe("zichendian");
   });
 
   it("corrupt auto recovers from auto.prev with a warning", () => {

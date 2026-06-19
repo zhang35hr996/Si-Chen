@@ -75,7 +75,7 @@ export function ConsortListModal({
       bedchamberConfig(db).tiers,
     );
     const raised = heirs.filter((h) => h.fatherId === c.id || h.adoptiveFatherId === c.id);
-    const isEmpress = c.id === "feng_hou";
+    const isEmpress = c.id === "shen_zhibai";
     const lc = st.lifecycle;
     return (
       <div className="consort-detail">

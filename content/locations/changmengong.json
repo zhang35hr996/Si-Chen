@@ -1,0 +1,11 @@
+{
+  "id": "changmengong",
+  "name": "长门宫",
+  "description": "宫墙高而日照短，院中草木长期无人认真修剪。雨水从破损的瓦沟落下，在石阶边留下深色水痕。门环锈死。无人洒扫，亦无人提起这里曾住过谁。",
+  "backgroundKey": "bg.changmengong",
+  "ambience": ["枯叶", "穿堂阴风", "死一般的寂静"],
+  "position": { "x": 0.82, "y": 0.74 },
+  "zone": "palace",
+  "entry": "free",
+  "actionEventId": "arc_changmengong__ev_visit"
+}

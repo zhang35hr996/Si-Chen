@@ -18,10 +18,10 @@ describe("eligibleAdoptiveFathers", () => {
   it("includes in-palace consorts + 凤后, excludes 冷宫 + deceased + officials", () => {
     const s = createNewGameState(db);
     const ids = eligibleAdoptiveFathers(db, s).map((c) => c.id);
-    expect(ids).toContain("feng_hou");
-    expect(ids).toContain("shen_chenghui");
-    expect(ids).not.toContain("wenya_shijun"); // 冷宫
-    expect(ids).not.toContain("sili_nvguan"); // official
+    expect(ids).toContain("shen_zhibai");
+    expect(ids).toContain("lu_huaijin");
+    expect(ids).not.toContain("wenya"); // 冷宫
+    expect(ids).not.toContain("wei_sui"); // official
   });
 });
 
@@ -32,29 +32,29 @@ describe("bioFatherAvailable", () => {
   });
   it("false when bio father deceased or in 冷宫", () => {
     const s = createNewGameState(db);
-    s.standing.shen_chenghui!.lifecycle = "deceased";
-    expect(bioFatherAvailable(db, s, heir({ fatherId: "shen_chenghui" }))).toBe(false);
-    expect(bioFatherAvailable(db, createNewGameState(db), heir({ fatherId: "wenya_shijun" }))).toBe(false);
+    s.standing.lu_huaijin!.lifecycle = "deceased";
+    expect(bioFatherAvailable(db, s, heir({ fatherId: "lu_huaijin" }))).toBe(false);
+    expect(bioFatherAvailable(db, createNewGameState(db), heir({ fatherId: "wenya" }))).toBe(false);
   });
   it("true when bio father alive and in palace", () => {
     const s = createNewGameState(db);
-    expect(bioFatherAvailable(db, s, heir({ fatherId: "shen_chenghui" }))).toBe(true);
+    expect(bioFatherAvailable(db, s, heir({ fatherId: "lu_huaijin" }))).toBe(true);
   });
 });
 
 describe("buildAdoptionReaction", () => {
   it("no-bio-father path: adoptive father thanks (single speaker)", () => {
     const s = createNewGameState(db);
-    const out = buildAdoptionReaction(db, s, heir({ fatherId: null }), "shen_chenghui");
+    const out = buildAdoptionReaction(db, s, heir({ fatherId: null }), "lu_huaijin");
     expect(out).toHaveLength(1);
-    expect(out[0]!.speakerId).toBe("shen_chenghui");
+    expect(out[0]!.speakerId).toBe("lu_huaijin");
   });
   it("bio-father-alive path: adoptive thanks + 司礼官 reports bio father weeps", () => {
     const s = createNewGameState(db);
-    const out = buildAdoptionReaction(db, s, heir({ fatherId: "chu_jun" }), "shen_chenghui");
+    const out = buildAdoptionReaction(db, s, heir({ fatherId: "xu_qinghuan" }), "lu_huaijin");
     expect(out).toHaveLength(2);
-    expect(out[0]!.speakerId).toBe("shen_chenghui");
-    expect(out[1]!.speakerId).toBe("sili_nvguan");
-    expect(out[1]!.lines.join("")).toContain("生父");
+    expect(out[0]!.speakerId).toBe("lu_huaijin");
+    expect(out[1]!.speakerId).toBe("wei_sui");
+    expect(out[1]!.lines.join("")).toContain("泪如雨下");
   });
 });

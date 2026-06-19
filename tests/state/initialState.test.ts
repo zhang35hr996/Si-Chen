@@ -37,12 +37,12 @@ describe("createInitialState", () => {
   it("honors overrides", () => {
     const state = createInitialState({
       calendar: { year: 3, month: 6, period: "late", apMax: 4 },
-      playerLocation: "yushufang",
+      playerLocation: "zichendian",
       rngSeed: 42,
     });
     expect(formatGameTime(state.calendar)).toBe("三年六月下旬");
     expect(state.calendar.ap).toBe(4);
-    expect(state.playerLocation).toBe("yushufang");
+    expect(state.playerLocation).toBe("zichendian");
     expect(state.rngSeed).toBe(42);
   });
 });

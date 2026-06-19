@@ -14,7 +14,7 @@ function consortCarrying(): GameState {
   if (!a.ok) throw new Error();
   const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "carry" }]);
   if (!b.ok) throw new Error();
-  const c = applyEffects(db, b.value, [{ type: "pregnancy_transfer", carrierId: "shen_chenghui", atMonth: 3 }]);
+  const c = applyEffects(db, b.value, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]);
   if (!c.ok) throw new Error();
   return c.value;
 }
@@ -22,8 +22,8 @@ function consortCarrying(): GameState {
 const baseBirth = {
   type: "birth" as const,
   sex: "daughter" as const,
-  fatherId: "shen_chenghui",
-  bearer: "shen_chenghui",
+  fatherId: "lu_huaijin",
+  bearer: "lu_huaijin",
   legitimate: false,
   favor: 25,
   recoverUntilMonth: 20,
@@ -43,9 +43,9 @@ describe("funnel: birth", () => {
     expect(heirs[0]!.givenName).toBeUndefined();
     expect(heirs[0]!.education).toEqual({ scholarship: 5, martial: 5, virtue: 5 });
     expect(heirs[0]!.adoptiveFatherId).toBeUndefined();
-    expect(heirs[0]!.fatherId).toBe("shen_chenghui");
-    expect(r.value.standing.shen_chenghui!.lifecycle).toBe("delivered");
-    expect(r.value.standing.shen_chenghui!.recoverUntilMonth).toBe(20);
+    expect(heirs[0]!.fatherId).toBe("lu_huaijin");
+    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("delivered");
+    expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBe(20);
     expect(r.value.resources.bloodline.gestations).toEqual([]);
     expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
   });
@@ -54,25 +54,25 @@ describe("funnel: birth", () => {
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "child_dies" }]);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(0);
-    expect(r.value.standing.shen_chenghui!.lifecycle).toBe("normal");
-    expect(r.value.standing.shen_chenghui!.recoverUntilMonth).toBe(20);
+    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("normal");
+    expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBe(20);
   });
 
   it("bearer_dies → heir survives, carrier deceased (no recovery)", () => {
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "bearer_dies" }]);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(1);
-    expect(r.value.resources.bloodline.heirs[0]!.bearer).toBe("shen_chenghui");
-    expect(r.value.standing.shen_chenghui!.lifecycle).toBe("deceased");
-    expect(r.value.standing.shen_chenghui!.recoverUntilMonth).toBeUndefined();
+    expect(r.value.resources.bloodline.heirs[0]!.bearer).toBe("lu_huaijin");
+    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("deceased");
+    expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBeUndefined();
   });
 
   it("both → no heir, carrier deceased", () => {
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "both" }]);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(0);
-    expect(r.value.standing.shen_chenghui!.lifecycle).toBe("deceased");
-    expect(r.value.standing.shen_chenghui!.recoverUntilMonth).toBeUndefined();
+    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("deceased");
+    expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBeUndefined();
   });
 
   it("self-pregnancy birth (bearer sovereign) appends heir, no standing change", () => {
@@ -108,9 +108,9 @@ describe("funnel: birth", () => {
     if (!a.ok) return;
     const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "carry" }]);
     if (!b.ok) return;
-    const c = applyEffects(db, b.value, [{ type: "pregnancy_transfer", carrierId: "chu_jun", atMonth: 3 }]);
+    const c = applyEffects(db, b.value, [{ type: "pregnancy_transfer", carrierId: "xu_qinghuan", atMonth: 3 }]);
     if (!c.ok) return;
-    const second = applyEffects(db, c.value, [{ ...baseBirth, fatherId: "chu_jun", bearer: "chu_jun", bearerOutcome: "safe" }]);
+    const second = applyEffects(db, c.value, [{ ...baseBirth, fatherId: "xu_qinghuan", bearer: "xu_qinghuan", bearerOutcome: "safe" }]);
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     const ids = second.value.resources.bloodline.heirs.map((h) => h.id);

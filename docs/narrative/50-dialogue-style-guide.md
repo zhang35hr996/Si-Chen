@@ -19,6 +19,27 @@ For both AI generation and manual writing. The hard term rules live in
   贵君级 → 本宫; 驸/承徽/承仪 → 本位; 侍宸及以下 → 臣侍; before a much higher consort → 小侍.
   Officials → 臣/下官.
 
+## 礼数不可废 (etiquette is mandatory — hard rule)
+
+This overrides personality. A character's `voice.register` and
+`personalityTraits` shape *how* they speak, never *whether* they observe rites.
+
+- **请安 on arrival, 恭送 on departure.** When a 侍君/官员 first faces the
+  sovereign, their opening line is a greeting — e.g.「臣侍给陛下请安，陛下万安。」
+  When the sovereign rises to leave, they see her off —「恭送陛下。」No matter the
+  favor, intimacy, mood, or grievance, **礼不可废**.
+- **Always deferential, never 僭越.** However proud, jealous, naive, or aloof a
+  character is, speech to the sovereign stays respectful. Sulking/teasing
+  (吃醋撒娇) is allowed *only within bounds* — it must never cross 君臣之分 into
+  reproach or presumption.
+- **皇权不可侵犯.** The sovereign may rebuke, demote, strip titles, or send a
+  consort to 冷宫 at any moment. Characters write as people who know 伴君如伴虎 —
+  they hedge, they retreat, they beg pardon.
+
+> ❌ (旧·沈承徽 / 今·陆怀瑾)「侍身还以为这花只配侍身看。」— 挟怨讥讽、自矜失礼，已越
+>   吃醋撒娇之界，形同僭越；按律可直接入冷宫。
+> ✅ 怨而不僭：「陛下久未垂顾，侍身……一时失仪，望陛下恕罪。」— 哀而知礼，分寸不失。
+
 ## Rank affects tone
 
 - Higher rank ⇒ more composed, more entitled to initiate.

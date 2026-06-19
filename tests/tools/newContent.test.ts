@@ -9,12 +9,12 @@ import { buildScaffold } from "../../tools/new-content";
 
 describe("buildScaffold", () => {
   it("character stub is schema-valid and carries the id", () => {
-    const { dir, filename, data } = buildScaffold("character", "wenya_shijun");
+    const { dir, filename, data } = buildScaffold("character", "wenya");
     expect(dir).toBe("content/characters");
-    expect(filename).toBe("wenya_shijun.json");
+    expect(filename).toBe("wenya.json");
     const parsed = characterSchema.safeParse(data);
     expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
-    expect((data as { id: string }).id).toBe("wenya_shijun");
+    expect((data as { id: string }).id).toBe("wenya");
   });
 
   it("location stub is schema-valid", () => {

@@ -18,7 +18,7 @@ export function SuccessorModal({
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const candidateIds = state.resources.bloodline.pregnancy.candidateIds;
-  const fenghouChildless = !state.resources.bloodline.heirs.some((h) => h.bearer === "feng_hou");
+  const fenghouChildless = !state.resources.bloodline.heirs.some((h) => h.bearer === "shen_zhibai");
 
   const living = Object.values(db.characters)
     .filter((c) => c.kind === "consort" && canSummon(state, c.id))
@@ -44,7 +44,7 @@ export function SuccessorModal({
                 <input type="radio" name="successor" checked={picked === id} onChange={() => setPicked(id)} />
                 {name(id)}
                 {candidateIds.includes(id) ? "（候选承嗣）" : ""}
-                {id === "feng_hou" && fenghouChildless ? "（嫡子）" : ""}
+                {id === "shen_zhibai" && fenghouChildless ? "（嫡子）" : ""}
               </label>
             </li>
           ))}

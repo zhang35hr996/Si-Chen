@@ -105,7 +105,7 @@ describe("buildTaihouRebuke", () => {
     }
     expect(seed).not.toBe("");
     const plan = buildTaihouRebuke(db2, s, seed)!;
-    expect(plan.targetId).not.toBe("feng_hou");
+    expect(plan.targetId).not.toBe("shen_zhibai");
     expect(db2.characters[plan.targetId]!.kind).toBe("consort");
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.targetId && e.delta === -5)).toBe(true);
     expect(plan.effects.some((e) => e.type === "resource" && e.pillar === "harem" && e.field === "harmony" && e.delta === 2)).toBe(true);
@@ -122,7 +122,7 @@ describe("buildTaihouRebuke", () => {
       if (plan) { counts[plan.targetId] = (counts[plan.targetId] ?? 0) + 1; hits++; }
     }
     expect(hits).toBeGreaterThan(0);
-    expect(counts["feng_hou"]).toBeUndefined();
+    expect(counts["shen_zhibai"]).toBeUndefined();
   });
 
   it("deterministic", () => {
@@ -136,7 +136,7 @@ describe("buildTaihouRebuke", () => {
     s.taihou.ill = false;
     // Push favors so total > 99 and the last cumulative slice starts above 99.
     const pool = Object.values(db2.characters).filter(
-      (c) => c.kind === "consort" && c.id !== "feng_hou" && c.defaultLocation !== "lenggong",
+      (c) => c.kind === "consort" && c.id !== "shen_zhibai" && c.defaultLocation !== "changmengong",
     );
     expect(pool.length).toBeGreaterThanOrEqual(2);
     for (const c of pool) s.standing[c.id]!.favor = 60; // e.g. 3×60 = 180 total

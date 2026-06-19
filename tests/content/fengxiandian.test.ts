@@ -10,7 +10,7 @@ describe("奉先殿 location", () => {
     const loc = db.locations["fengxiandian"];
     expect(loc).toBeDefined();
     expect(loc!.zone).toBe("palace");
-    expect(loc!.connections).toContain("yushufang");
-    expect(db.locations["yushufang"]!.connections).toContain("fengxiandian");
+    expect(loc!.connections).toContain("zichendian");
+    expect(db.locations["zichendian"]!.connections).toContain("fengxiandian");
   });
 });

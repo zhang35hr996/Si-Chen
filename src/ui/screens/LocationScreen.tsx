@@ -62,7 +62,7 @@ export function LocationScreen({
   const canBedchamber = state.calendar.ap >= 1;
   // 召见到御书房：把被召见的侍君并入在场（仅御书房）。
   const summoned =
-    location.id === "yushufang" && summonedConsortId
+    location.id === "zichendian" && summonedConsortId
       ? db.characters[summonedConsortId]
       : undefined;
 
@@ -108,7 +108,7 @@ export function LocationScreen({
       </section>
 
 
-      {location.id === "yushufang" && (
+      {location.id === "zichendian" && (
         <section className="yushufang-menu">
           <div className="yushufang-actions">
             {onReviewMemorials && (

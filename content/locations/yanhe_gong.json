@@ -1,0 +1,22 @@
+{
+  "id": "yanhe_gong",
+  "name": "延和宫",
+  "description": "廊腰缦回，池水绕殿，夏日荷风可度墙而入，最宜消暑纳凉。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "池水绕殿",
+    "荷风入帘",
+    "蝉鸣隐隐"
+  ],
+  "position": {
+    "x": 0.18,
+    "y": 0.54
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
+}

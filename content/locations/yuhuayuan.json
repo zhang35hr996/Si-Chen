@@ -1,11 +1,11 @@
 {
   "id": "yuhuayuan",
   "name": "御花园",
-  "description": "曲径通幽，时有落花拂过水面；宫中私语，多半从这里传开。",
+  "description": "曲径通幽，时有落花拂过水面，万紫千红，生机盎然。偶有宫人经过，笑语盈盈",
   "backgroundKey": "bg.yuhuayuan",
-  "ambience": ["花气", "流水", "远处隐约的笑语"],
+  "ambience": ["花香", "流水", "远处隐约的笑语"],
   "position": { "x": 0.48, "y": 0.7 },
   "zone": "palace",
-  "connections": ["yushufang"],
+  "connections": ["zichendian"],
   "travelCost": { "ap": 1 }
 }

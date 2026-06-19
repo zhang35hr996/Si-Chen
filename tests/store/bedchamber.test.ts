@@ -19,37 +19,37 @@ describe("bedchamberConfig", () => {
 describe("buildBedchamber", () => {
   it("returns null for an official", () => {
     const state = createNewGameState(db);
-    expect(buildBedchamber(db, state, "sili_nvguan", "passion")).toBeNull();
+    expect(buildBedchamber(db, state, "wei_sui", "passion")).toBeNull();
   });
 
   it("first night flag is set when no prior encounters", () => {
     const state = createNewGameState(db);
-    const plan = buildBedchamber(db, state, "shen_chenghui", "pleasure");
+    const plan = buildBedchamber(db, state, "lu_huaijin", "pleasure");
     expect(plan).not.toBeNull();
     expect(plan!.isFirstNight).toBe(true);
     expect(plan!.lines.length).toBeGreaterThan(0);
-    expect(plan!.effects[0]).toMatchObject({ type: "bedchamber", char: "shen_chenghui", mode: "pleasure" });
+    expect(plan!.effects[0]).toMatchObject({ type: "bedchamber", char: "lu_huaijin", mode: "pleasure" });
   });
 
   it("not first night after a prior encounter", () => {
     const state = createNewGameState(db);
-    const a = applyEffects(db, state, [{ type: "bedchamber", char: "shen_chenghui", mode: "pleasure" }]);
+    const a = applyEffects(db, state, [{ type: "bedchamber", char: "lu_huaijin", mode: "pleasure" }]);
     expect(a.ok).toBe(true);
     if (!a.ok) return;
-    const plan = buildBedchamber(db, a.value, "shen_chenghui", "pleasure");
+    const plan = buildBedchamber(db, a.value, "lu_huaijin", "pleasure");
     expect(plan!.isFirstNight).toBe(false);
   });
 
   it("pleasure never conceives (no pregnancy effect)", () => {
     const state = createNewGameState(db);
-    const plan = buildBedchamber(db, state, "shen_chenghui", "pleasure");
+    const plan = buildBedchamber(db, state, "lu_huaijin", "pleasure");
     expect(plan!.conceived).toBe(false);
     expect(plan!.effects.some((e) => e.type === "pregnancy")).toBe(false);
   });
 
   it("passion conceives iff conception roll hits, adds pregnancy begin", () => {
     const state = createNewGameState(db);
-    const plan = buildBedchamber(db, state, "shen_chenghui", "passion");
+    const plan = buildBedchamber(db, state, "lu_huaijin", "passion");
     expect(plan!.effects.some((e) => e.type === "pregnancy" && (e as any).op === "begin")).toBe(plan!.conceived);
   });
 
@@ -59,7 +59,7 @@ describe("buildBedchamber", () => {
     expect(begun.ok).toBe(true);
     if (!begun.ok) return;
     state = begun.value;
-    const plan = buildBedchamber(db, state, "shen_chenghui", "passion");
+    const plan = buildBedchamber(db, state, "lu_huaijin", "passion");
     expect(plan!.conceived).toBe(false);
     expect(plan!.effects.some((e) => e.type === "pregnancy")).toBe(false);
   });
@@ -69,7 +69,7 @@ describe("陪伴 dialogue four-case branching", () => {
   const conceivedAt = { year: 1, month: 1, period: "early" as const, dayIndex: 0 };
 
   const lines = (s: ReturnType<typeof createNewGameState>) =>
-    buildBedchamber(db, s, "shen_chenghui", "companionship")!.lines.join("\n");
+    buildBedchamber(db, s, "lu_huaijin", "companionship")!.lines.join("\n");
 
   it("picks distinct lines for neither / sovereign / consort / both pregnant", () => {
     const neither = createNewGameState(db);
@@ -80,17 +80,17 @@ describe("陪伴 dialogue four-case branching", () => {
 
     const consort = createNewGameState(db);
     consort.resources.bloodline.gestations = [
-      { carrier: "shen_chenghui", conceivedAt, fatherId: "shen_chenghui", transferredAtMonth: 3 },
+      { carrier: "lu_huaijin", conceivedAt, fatherId: "lu_huaijin", transferredAtMonth: 3 },
     ];
-    consort.standing.shen_chenghui!.lifecycle = "carrying";
+    consort.standing.lu_huaijin!.lifecycle = "carrying";
 
     const both = createNewGameState(db);
     both.resources.bloodline.pregnancy = { status: "carrying", conceivedAt, candidateIds: [] };
     both.resources.bloodline.gestations = [
       { carrier: "sovereign", conceivedAt },
-      { carrier: "shen_chenghui", conceivedAt, fatherId: "shen_chenghui", transferredAtMonth: 3 },
+      { carrier: "lu_huaijin", conceivedAt, fatherId: "lu_huaijin", transferredAtMonth: 3 },
     ];
-    both.standing.shen_chenghui!.lifecycle = "carrying";
+    both.standing.lu_huaijin!.lifecycle = "carrying";
 
     const a = lines(neither), b = lines(sovereign), c = lines(consort), d = lines(both);
     expect(new Set([a, b, c, d]).size).toBe(4); // all four distinct
@@ -107,24 +107,24 @@ describe("bedchamber conception gate (multi-line gestation)", () => {
     s.resources.bloodline.gestations = [
       { carrier: "sovereign", conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } },
     ];
-    const plan = buildBedchamber(db, s, "shen_chenghui", "passion");
+    const plan = buildBedchamber(db, s, "lu_huaijin", "passion");
     expect(plan!.conceived).toBe(false);
     expect(plan!.effects.some((e) => e.type === "pregnancy")).toBe(false);
   });
 
   it("a consort carrying a transferred heir does NOT block the sovereign from conceiving", () => {
-    const baseline = buildBedchamber(db, createNewGameState(db), "shen_chenghui", "passion")!;
+    const baseline = buildBedchamber(db, createNewGameState(db), "lu_huaijin", "passion")!;
     const s = createNewGameState(db);
     s.resources.bloodline.gestations = [
       {
-        carrier: "wenya_shijun",
+        carrier: "wenya",
         conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
-        fatherId: "wenya_shijun",
+        fatherId: "wenya",
         transferredAtMonth: 3,
       },
     ];
     // pregnancy.status stays "none" (the sovereign's own body), so conception is unaffected.
-    const plan = buildBedchamber(db, s, "shen_chenghui", "passion")!;
+    const plan = buildBedchamber(db, s, "lu_huaijin", "passion")!;
     expect(plan.conceived).toBe(baseline.conceived);
   });
 });
@@ -132,33 +132,33 @@ describe("bedchamber conception gate (multi-line gestation)", () => {
 describe("passionAllowed / canSummon / hasActiveGestation", () => {
   it("carrying consort cannot use passion but can be summoned", () => {
     const s = createNewGameState(db);
-    s.standing.shen_chenghui!.lifecycle = "carrying";
-    expect(passionAllowed(s, "shen_chenghui")).toBe(false);
-    expect(canSummon(s, "shen_chenghui")).toBe(true);
+    s.standing.lu_huaijin!.lifecycle = "carrying";
+    expect(passionAllowed(s, "lu_huaijin")).toBe(false);
+    expect(canSummon(s, "lu_huaijin")).toBe(true);
   });
 
   it("recovering consort (recoverUntilMonth in future) cannot use passion", () => {
     const s = createNewGameState(db);
-    s.standing.shen_chenghui!.recoverUntilMonth = 999;
-    expect(passionAllowed(s, "shen_chenghui")).toBe(false);
+    s.standing.lu_huaijin!.recoverUntilMonth = 999;
+    expect(passionAllowed(s, "lu_huaijin")).toBe(false);
   });
 
   it("recovery expired (recoverUntilMonth <= now) allows passion again", () => {
     const s = createNewGameState(db);
-    s.standing.shen_chenghui!.recoverUntilMonth = 1; // now is monthOrdinal of 元年一月 = 1, not < 1
-    expect(passionAllowed(s, "shen_chenghui")).toBe(true);
+    s.standing.lu_huaijin!.recoverUntilMonth = 1; // now is monthOrdinal of 元年一月 = 1, not < 1
+    expect(passionAllowed(s, "lu_huaijin")).toBe(true);
   });
 
   it("deceased consort cannot be summoned", () => {
     const s = createNewGameState(db);
-    s.standing.shen_chenghui!.lifecycle = "deceased";
-    expect(canSummon(s, "shen_chenghui")).toBe(false);
+    s.standing.lu_huaijin!.lifecycle = "deceased";
+    expect(canSummon(s, "lu_huaijin")).toBe(false);
   });
 
   it("normal consort allows passion and summon", () => {
     const s = createNewGameState(db);
-    expect(passionAllowed(s, "shen_chenghui")).toBe(true);
-    expect(canSummon(s, "shen_chenghui")).toBe(true);
+    expect(passionAllowed(s, "lu_huaijin")).toBe(true);
+    expect(canSummon(s, "lu_huaijin")).toBe(true);
   });
 
   it("hasActiveGestation reflects pregnancy status or gestation presence", () => {

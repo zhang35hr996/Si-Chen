@@ -57,9 +57,17 @@ export function centennialDue(heir: Heir, now: Pick<GameTime, "year" | "month">)
   return heir.givenName === undefined && heirAgeMonths(heir, now) >= 3;
 }
 
-/** 是否已开蒙（≥5 周岁，可入上书房）。 */
+/** 是否已开蒙（≥5 周岁，可入文昭殿）。 */
 export function isEnrolled(heir: Heir, now: Pick<GameTime, "year">): boolean {
   return heirStage(heir, now) === "schooling";
+}
+
+/** 迁居毓庆宫的年龄门槛：皇子（女）满 5 岁、皇郎（男）满 7 岁。 */
+const YUQING_MOVE_AGE: Record<HeirSex, number> = { daughter: 5, son: 7 };
+
+/** 是否已迁居毓庆宫（按性别年龄门槛）。未达龄者仍由乳母照护，不在此列。 */
+export function residesInYuqing(heir: Heir, now: Pick<GameTime, "year">): boolean {
+  return heirAge(heir, now) >= YUQING_MOVE_AGE[heir.sex];
 }
 
 /** 阶段→立绘 portraitSet（婴幼共用襁褓立绘，开蒙后换学童立绘）。 */

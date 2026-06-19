@@ -15,9 +15,9 @@ function v1Blob(): { raw: string; carrier: string } {
   const v1State = structuredClone(v2.state) as unknown as Record<string, unknown>;
   const bloodline = (v1State.resources as { bloodline: Record<string, unknown> }).bloodline;
   const gest = {
-    carrier: "shen_chenghui",
+    carrier: "lu_huaijin",
     conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
-    fatherId: "shen_chenghui",
+    fatherId: "lu_huaijin",
     transferredAtMonth: 3,
   };
   delete bloodline.gestations;

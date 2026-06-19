@@ -36,7 +36,7 @@ export function buildHeirSummon(_db: ContentDB, state: GameState, heirId: string
   } else if (stage === "toddler") {
     lines = heir.favor >= 50
       ? [
-          `${name}迈着小短腿扑到陛下膝前，仰头脆生生道："父…父皇！"惹得满殿失笑。`,
+          `${name}迈着小短腿扑到陛下膝前，仰头脆生生道："母…母皇！"惹得满殿失笑。`,
           `奶声奶气说了半日宫里趣事，黏着陛下不肯走，天真烂漫。`,
         ]
       : [

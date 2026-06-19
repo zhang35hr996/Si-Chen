@@ -36,7 +36,7 @@ Both are valid; choose by intent:
 
 - **Flag** — a global story switch ("the rite has been scheduled"). Use
   `flag` effect + `flagSet` condition.
-- **Memory tag** — a *per-character* fact ("沈承徽 remembers being neglected").
+- **Memory tag** — a *per-character* fact ("陆怀瑾 remembers being neglected").
   Use a `memory` effect with a `tag` + `hasMemoryTag` condition. Prefer this when
   the unlock is about one character's experience, so it reads naturally and scales
   to many characters.

@@ -1,0 +1,10 @@
+{
+  "id": "arc_changmengong__ev_visit",
+  "title": "冷宫故人",
+  "sceneId": "arc_changmengong__sc_visit",
+  "checkpoint": "location_enter",
+  "condition": { "atLocation": "changmengong" },
+  "priority": 10,
+  "once": false,
+  "apCost": 1
+}

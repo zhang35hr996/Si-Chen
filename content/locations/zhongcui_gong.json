@@ -1,0 +1,22 @@
+{
+  "id": "zhongcui_gong",
+  "name": "钟粹宫",
+  "description": "殿名钟粹，取钟灵毓秀之意。窗下设琴案一张，墙悬旧谱，似有未尽的清音。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "琴案清音",
+    "素帘半卷",
+    "旧谱含尘"
+  ],
+  "position": {
+    "x": 0.82,
+    "y": 0.3
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 1
+  }
+}

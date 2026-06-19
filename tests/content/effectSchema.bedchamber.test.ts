@@ -3,7 +3,7 @@ import { eventEffectSchema } from "../../src/engine/content/schemas";
 
 describe("eventEffectSchema: bedchamber + pregnancy", () => {
   it("accepts a bedchamber effect", () => {
-    expect(eventEffectSchema.safeParse({ type: "bedchamber", char: "shen_chenghui", mode: "passion" }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "bedchamber", char: "lu_huaijin", mode: "passion" }).success).toBe(true);
   });
   it("rejects unknown bedchamber mode", () => {
     expect(eventEffectSchema.safeParse({ type: "bedchamber", char: "x", mode: "lust" }).success).toBe(false);
