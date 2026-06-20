@@ -120,7 +120,7 @@ describe("produceDialogueLine text gates (PR 11)", () => {
   it("rejects forbidden terms in a player choice (content gates apply to choices)", async () => {
     const result = await produceDialogueLine(
       db,
-      speaking("本宫有一事启奏。", [{ id: "c", text: "传旨给那娘娘。" }]),
+      speaking("本宫有一事启奏。", [{ id: "c", text: "传旨给那嫔妃。" }]),
       requestFor("shen_zhibai"),
     );
     expect(result.ok).toBe(false);

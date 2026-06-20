@@ -97,9 +97,9 @@ describe("choice text uses content gates only (skipIdentityGates)", () => {
   });
 
   it("but forbidden terms and template leaks still apply to choices", () => {
-    const findings = scanDialogueText("传旨给那娘娘。", fenghouCtx, { skipIdentityGates: true });
+    const findings = scanDialogueText("传旨给那嫔妃。", fenghouCtx, { skipIdentityGates: true });
     expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ gate: "forbidden_lexicon", matched: "娘娘" });
+    expect(findings[0]).toMatchObject({ gate: "forbidden_lexicon", matched: "嫔妃" });
   });
 });
 
