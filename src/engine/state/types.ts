@@ -170,6 +170,16 @@ export interface Resources {
 }
 
 // ── Per-character runtime state ───────────────────────────────────────
+
+/** 朝臣名册条目（轻量运行态）。权势不落字段——由 postId→品级 派生。 */
+export interface Official {
+  id: string;
+  surname: string;
+  givenName: string;
+  postId: string;
+  loyalty: number; // 忠心 0–100
+}
+
 export type ConsortLifecycle = "normal" | "candidate" | "carrying" | "delivered" | "deceased";
 
 /** 后宫居所内的宫室槽位（每殿至多 5 间，各住一名侍君）；缺省视作 "main"(主殿)。 */
@@ -256,6 +266,7 @@ export interface GameState {
   resources: Resources;
   flags: Record<string, FlagValue>;
   standing: Record<string, CharacterStanding>;
+  officials: Record<string, Official>;
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

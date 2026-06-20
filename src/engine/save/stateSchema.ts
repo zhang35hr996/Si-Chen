@@ -44,6 +44,14 @@ const memoryEntrySchema = z.strictObject({
   protected: z.boolean(),
 });
 
+const officialSchema = z.strictObject({
+  id: idSchema,
+  surname: z.string().min(1),
+  givenName: z.string().min(1),
+  postId: idSchema,
+  loyalty: percent,
+});
+
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
 
 export const gameStateSchema = z.strictObject({
@@ -128,6 +136,7 @@ export const gameStateSchema = z.strictObject({
   }),
   flags: z.record(z.string(), flagValueSchema),
   standing: z.record(idSchema, characterStandingSchema),
+  officials: z.record(z.string(), officialSchema),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),

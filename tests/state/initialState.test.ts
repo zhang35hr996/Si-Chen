@@ -25,6 +25,7 @@ describe("createInitialState", () => {
     const state = createInitialState();
     expect(state.flags).toEqual({});
     expect(state.standing).toEqual({});
+    expect(state.officials).toEqual({});
     expect(state.memories).toEqual({});
     expect(state.eventLog).toEqual([]);
     expect(state.sceneHistory).toEqual([]);
