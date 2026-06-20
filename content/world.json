@@ -28,7 +28,8 @@
     { "id": "daying", "name": "答应", "grade": "七品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 60, "domain": "harem", "favorTerm": "恩宠" },
     { "id": "gengyi", "name": "更衣", "grade": "八品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 50, "domain": "harem", "favorTerm": "恩宠" },
     { "id": "guannanzi", "name": "官男子", "grade": "九品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 40, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "sili_zhang", "name": "司礼", "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" }
+    { "id": "sili_zhang", "name": "司礼", "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" },
+    { "id": "shiwei_zhang", "name": "侍卫总管", "grade": "正三品", "selfRefs": { "toPlayer": ["臣"], "formal": ["属下"] }, "order": 130, "domain": "official", "favorTerm": "圣眷" }
   ],
   "mapBoards": [
     { "id": "palace", "name": "紫禁城", "art": { "key": "map.palace", "kind": "map" } },

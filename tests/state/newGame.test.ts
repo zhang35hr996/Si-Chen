@@ -27,7 +27,7 @@ describe("createNewGameState", () => {
 
   it("seeds relationship + standing for every character", () => {
     expect(Object.keys(state.relationships).sort()).toEqual(
-      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya"].sort(),
+      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya", "cheng_feng"].sort(),
     );
     expect(state.relationships["lu_huaijin"]).toEqual({ trust: 25, affinity: 45, flags: [] });
     expect(state.standing["shen_zhibai"]).toEqual({ rank: "fenghou", favor: 25 });

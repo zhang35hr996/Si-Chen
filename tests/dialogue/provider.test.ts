@@ -26,7 +26,7 @@ describe("assembleDialogueRequest carries the full future-AI context", () => {
     expect(request.speakerContext.relevantMemories).toEqual([]); // field rides along, v0 empty
     expect(request.speakerContext.stances?.[0]?.charId).toBe("lu_huaijin");
     expect(request.etiquette.forbiddenTerms).toContain("父皇");
-    expect(request.etiquette.addressRules).toHaveLength(21);
+    expect(request.etiquette.addressRules).toHaveLength(22);
     expect(request.time).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
     expect("ap" in request.time).toBe(false); // a speaker doesn't know the player's AP
     expect(assembleDialogueRequest(db, state, "char_ghost", "zichendian").ok).toBe(false);

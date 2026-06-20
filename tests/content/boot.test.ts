@@ -18,11 +18,11 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 6 characters, 17 locations, 17 events, 17 scenes, 21 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 7 characters, 17 locations, 17 events, 17 scenes, 22 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
-      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya"].sort(),
+      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya", "cheng_feng"].sort(),
     );
     expect(Object.keys(db.locations).sort()).toEqual(
       [
@@ -55,7 +55,7 @@ describe("real content/ boots", () => {
       ].sort(),
     );
     expect(Object.keys(db.scenes)).toHaveLength(17);
-    expect(Object.keys(db.ranks)).toHaveLength(21);
+    expect(Object.keys(db.ranks)).toHaveLength(22);
   });
 
   it("wires the slice correctly: domains, start location, heavy rite event", () => {

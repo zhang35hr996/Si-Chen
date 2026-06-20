@@ -7,6 +7,7 @@
     "portrait.wenya.neutral": { "path": "portraits/consort/wenya.png", "kind": "portrait", "placeholder": false },
     "portrait.taihou.neutral": { "path": "portraits/taihou.png", "kind": "portrait", "placeholder": false },
     "portrait.wei_sui.neutral": { "path": "portraits/official/wei_sui.png", "kind": "portrait", "placeholder": false },
+    "portrait.cheng_feng.neutral": { "path": "portraits/official/cheng_feng.png", "kind": "portrait", "placeholder": false },
     "portrait.child_baby.neutral": { "path": "portraits/child/baby.png", "kind": "portrait", "placeholder": false },
     "portrait.child_school.neutral": { "path": "portraits/child/child.png", "kind": "portrait", "placeholder": false },
     "bg.cining_gong": { "path": "backgrounds/cininggong_morning.png", "kind": "background", "placeholder": false },

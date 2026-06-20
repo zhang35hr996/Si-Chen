@@ -102,6 +102,7 @@ describe("inspection helpers", () => {
     expect(listMemories(state, "char_ghost")).toEqual([]);
     const overview = memoryOverview(state).sort((a, b) => a.charId.localeCompare(b.charId));
     expect(overview).toEqual([
+      { charId: "cheng_feng", count: 0, protectedCount: 0 },
       { charId: "lu_huaijin", count: 1, protectedCount: 1 },
       { charId: "shen_zhibai", count: 1, protectedCount: 1 },
       { charId: "taihou", count: 0, protectedCount: 0 },

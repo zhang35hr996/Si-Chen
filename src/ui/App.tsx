@@ -15,6 +15,7 @@ import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/b
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
+import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
 import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { audioController } from "./audio/AudioController";
 import { trackFor } from "./audio/trackFor";
@@ -109,6 +110,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
+  const lastBoardRef = useRef<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const tickedPeriods = useRef<Set<string>>(new Set());
@@ -267,6 +269,22 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return beats;
   };
 
+  /** 每行动点掷乘风八卦汇报（至多一条/行动）。返回台词节拍。 */
+  const rollChengFeng = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): DecreeReaction[] => {
+    for (let i = 0; i < amount; i++) {
+      const slot = before.apMax - before.ap + i;
+      const key = `chengfeng:${store.getState().rngSeed}:${before.dayIndex}:${slot}`;
+      if (rolledSlots.current.has(key)) continue;
+      rolledSlots.current.add(key);
+      const plan = buildChengFengGossip(db, store.getState(), key);
+      if (plan) {
+        const applied = store.applyEffects(db, plan.effects);
+        if (applied.ok) return [plan.beat];
+      }
+    }
+    return [];
+  };
+
   /** 旬翻转：掷太后生病/自愈，应用效果并返回提示节拍（每旬至多一次）。 */
   const rollTaihouIllness = (): DecreeReaction[] => {
     const cal = store.getState().calendar;
@@ -295,12 +313,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return true;
   };
 
-  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰。返回扣点结果与台词。 */
+  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰 + 乘风汇报。返回扣点结果与台词。 */
   const spendAp = (amount: number) => {
     const before = store.getState().calendar;
     const spend = store.dispatch({ type: "SPEND_AP", amount });
     let decreeBeats = spend.ok ? rollDecree(before, amount) : [];
     if (spend.ok) decreeBeats = [...decreeBeats, ...rollRebuke(before, amount)];
+    if (spend.ok) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
     if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };
@@ -711,7 +730,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onClose={() => { setFocusConsortId(null); setView("location"); }}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
-          onBoardChange={setCurrentBoard}
+          onBoardChange={(boardId) => {
+            setCurrentBoard(boardId);
+            if (boardId === "hougong" && lastBoardRef.current !== "hougong" && db.characters["cheng_feng"]) {
+              setReaction(chengFengHaremGreeting());
+            }
+            lastBoardRef.current = boardId;
+          }}
         />
       )}
       {view === "courtyard" && courtyardLocId && db.locations[courtyardLocId] && (

@@ -43,7 +43,8 @@
     { "rank": "daying", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "答应" },
     { "rank": "gengyi", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "更衣" },
     { "rank": "guannanzi", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "官男子" },
-    { "rank": "sili_zhang", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "addressedAs": "司礼" }
+    { "rank": "sili_zhang", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "addressedAs": "司礼" },
+    { "rank": "shiwei_zhang", "selfRefs": { "toPlayer": ["臣"], "formal": ["属下"] }, "addressedAs": "侍卫总管" }
   ],
   "kinshipTerms": [
     { "concept": "皇帝亲生子嗣统称", "term": "皇嗣" },
