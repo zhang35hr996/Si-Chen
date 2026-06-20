@@ -263,6 +263,15 @@ export const characterSchema = z
 
 export type CharacterContent = z.infer<typeof characterSchema>;
 
+// ── official posts (官职表 — world.json) ─────────────────────────────
+export const officialPostSchema = z.strictObject({
+  id: idSchema,
+  name: nonEmpty,
+  grade: nonEmpty,
+  gradeOrder: z.number().int().min(0).max(18),
+});
+export type OfficialPost = z.infer<typeof officialPostSchema>;
+
 // ── ranks (位分 table row — world.json) ───────────────────────────────
 export const selfRefsSchema = z.strictObject({
   toPlayer: z.array(nonEmpty).min(1),
@@ -496,6 +505,7 @@ export const worldSchema = z.strictObject({
     }),
   }),
   ranks: z.array(characterRankSchema).min(1),
+  officialPosts: z.array(officialPostSchema).min(1),
   /** Map boards (主图/子图). Optional: minimal content omits the map graph. */
   mapBoards: z.array(mapBoardSchema).min(1).optional(),
   /** Portal buttons linking boards (出宫/后宫/郊外). */

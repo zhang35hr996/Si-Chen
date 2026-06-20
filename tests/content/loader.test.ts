@@ -33,6 +33,9 @@ function makeRaw(): RawContent {
         favorTerm: "圣眷",
       },
     ],
+    officialPosts: [
+      { id: "commoner", name: "平民", grade: "无", gradeOrder: 0 },
+    ],
   };
   const lexicon = {
     approvedTerms: ["位分"],

@@ -205,11 +205,13 @@ describe("worldSchema / rankSchema", () => {
         bloodline: { menstrualStatus: "normal" },
       },
       ranks: [rank],
+      officialPosts: [{ id: "commoner", name: "平民", grade: "无", gradeOrder: 0 }],
     };
     accepts(worldSchema, world);
     rejects(worldSchema, { ...world, calendar: { apMax: 5, start: { year: 1, month: 13, period: "early" } } });
     rejects(worldSchema, { ...world, calendar: { apMax: 0, start: { year: 1, month: 1, period: "early" } } });
     rejects(worldSchema, { ...world, ranks: [] });
+    rejects(worldSchema, { ...world, officialPosts: [] });
   });
 });
 

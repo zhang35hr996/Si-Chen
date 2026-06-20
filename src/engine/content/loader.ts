@@ -18,6 +18,7 @@ import {
   type EventEffect,
   type GameEventContent,
   type LocationContent,
+  type OfficialPost,
   type SceneContent,
   type SceneNode,
   type TriggerCondition,
@@ -45,6 +46,7 @@ export interface ContentDB {
   world: WorldContent;
   lexicon: WorldLexicon;
   ranks: Record<string, CharacterRank>;
+  officialPosts: Record<string, OfficialPost>;
   characters: Record<string, CharacterContent>;
   locations: Record<string, LocationContent>;
   events: Record<string, GameEventContent>;
@@ -71,6 +73,16 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
         errors.push(dup(raw.world.source, "rank", rank.id));
       }
       ranks[rank.id] = rank;
+    }
+  }
+
+  const officialPosts: Record<string, OfficialPost> = {};
+  if (world) {
+    for (const post of world.officialPosts) {
+      if (officialPosts[post.id]) {
+        errors.push(contentError("DUPLICATE_ID", `world.json: duplicate official post id "${post.id}"`));
+      }
+      officialPosts[post.id] = post;
     }
   }
 
@@ -104,6 +116,7 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
       world,
       lexicon,
       ranks,
+      officialPosts,
       characters: characters.byId,
       locations: locations.byId,
       events: events.byId,
