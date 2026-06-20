@@ -5,6 +5,7 @@
  */
 import { createCalendar, toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
+import { generateOfficials } from "../officials/generate";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
 
 export function memoryEntryId(charId: string, seq: number): string {
@@ -62,7 +63,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     },
     flags: {},
     standing,
-    officials: {},
+    officials: generateOfficials(db, rngSeed),
     memories,
     bedchamber,
     eventLog: [],
