@@ -7,8 +7,7 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const fresh = (): GameState => createNewGameState(db);
-// slice starting values: shen_zhibai trust 35 / affinity 20 / favor 25;
-// sovereign prestige 50; shen_zhibai trust 35 / affinity 20; lu_huaijin favor 30.
+// slice starting values: shen_zhibai favor 25; lu_huaijin favor 30; sovereign prestige 50.
 
 const expectApplied = (state: GameState, effects: EventEffect[]): GameState => {
   const result = applyEffects(db, state, effects);
@@ -17,14 +16,13 @@ const expectApplied = (state: GameState, effects: EventEffect[]): GameState => {
 };
 
 describe("valid effects apply", () => {
-  it("relationship / favor / resource deltas with 0–100 value clamping", () => {
+  it("favor / resource deltas with 0–100 value clamping", () => {
     const next = expectApplied(fresh(), [
-      { type: "relationship", char: "shen_zhibai", field: "trust", delta: 3 },
-      { type: "relationship", char: "shen_zhibai", field: "affinity", delta: -10 },
+      { type: "favor", char: "shen_zhibai", delta: 3 },
       { type: "favor", char: "lu_huaijin", delta: 5 },
       { type: "resource", pillar: "sovereign", field: "prestige", delta: -4 },
     ]);
-    expect(next.relationships["shen_zhibai"]).toMatchObject({ trust: 38, affinity: 10 });
+    expect(next.standing["shen_zhibai"]?.favor).toBe(28);
     expect(next.standing["lu_huaijin"]?.favor).toBe(35);
     expect(next.resources.sovereign.prestige).toBe(46);
   });
@@ -33,26 +31,28 @@ describe("valid effects apply", () => {
     let state = fresh();
     state = {
       ...state,
-      relationships: {
-        ...state.relationships,
-        shen_zhibai: { ...state.relationships["shen_zhibai"]!, trust: 95, affinity: 4 },
+      standing: {
+        ...state.standing,
+        shen_zhibai: { ...state.standing["shen_zhibai"]!, favor: 95 },
+        lu_huaijin: { ...state.standing["lu_huaijin"]!, favor: 4 },
       },
     };
     const next = expectApplied(state, [
-      { type: "relationship", char: "shen_zhibai", field: "trust", delta: 10 },
-      { type: "relationship", char: "shen_zhibai", field: "affinity", delta: -10 },
+      { type: "favor", char: "shen_zhibai", delta: 10 },
+      { type: "favor", char: "lu_huaijin", delta: -10 },
     ]);
-    expect(next.relationships["shen_zhibai"]).toMatchObject({ trust: 100, affinity: 0 });
+    expect(next.standing["shen_zhibai"]?.favor).toBe(100);
+    expect(next.standing["lu_huaijin"]?.favor).toBe(0);
   });
 
   it("per-axis cumulative delta caps at ±AXIS_CAP per batch; other axes unaffected", () => {
     const next = expectApplied(fresh(), [
-      { type: "relationship", char: "shen_zhibai", field: "trust", delta: 8 },
-      { type: "relationship", char: "shen_zhibai", field: "trust", delta: 8 }, // only +2 more lands
-      { type: "relationship", char: "lu_huaijin", field: "trust", delta: 8 }, // separate axis
+      { type: "favor", char: "shen_zhibai", delta: 8 },
+      { type: "favor", char: "shen_zhibai", delta: 8 }, // only +2 more lands
+      { type: "favor", char: "lu_huaijin", delta: 8 }, // separate axis
     ]);
-    expect(next.relationships["shen_zhibai"]?.trust).toBe(35 + AXIS_CAP);
-    expect(next.relationships["lu_huaijin"]?.trust).toBe(25 + 8);
+    expect(next.standing["shen_zhibai"]?.favor).toBe(25 + AXIS_CAP);
+    expect(next.standing["lu_huaijin"]?.favor).toBe(30 + 8);
   });
 
   it("flag + set_bloodline_status", () => {
@@ -93,18 +93,17 @@ describe("valid effects apply", () => {
   it("never mutates the input state", () => {
     const state = fresh();
     const snapshot = structuredClone(state);
-    expectApplied(state, [{ type: "relationship", char: "shen_zhibai", field: "trust", delta: 5 }]);
+    expectApplied(state, [{ type: "favor", char: "shen_zhibai", delta: 5 }]);
     expect(state).toEqual(snapshot);
   });
 });
 
 describe("invalid effects reject", () => {
   const cases: [string, unknown][] = [
-    ["unknown relationship target", { type: "relationship", char: "char_ghost", field: "trust", delta: 2 }],
     ["unknown favor target", { type: "favor", char: "char_ghost", delta: 2 }],
     ["unknown memory target", { type: "memory", char: "char_ghost", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"] } }],
     ["illegal pillar/field pair", { type: "resource", pillar: "sovereign", field: "harmony", delta: 1 }],
-    ["oversized single delta", { type: "relationship", char: "shen_zhibai", field: "trust", delta: 40 }],
+    ["oversized single delta", { type: "favor", char: "shen_zhibai", delta: 40 }],
     ["protected runtime memory", { type: "memory", char: "shen_zhibai", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"], protected: true } }],
     ["empty flag key", { type: "flag", key: "", value: 1 }],
     ["set_rank to 凤后 cap (fenghou) is rejected", { type: "set_rank", char: "shen_zhibai", rank: "fenghou" }],
@@ -152,8 +151,8 @@ describe("atomicity", () => {
   it("one bad effect rejects the whole batch with ALL errors collected", () => {
     const state = fresh();
     const result = applyEffects(db, state, [
-      { type: "relationship", char: "shen_zhibai", field: "trust", delta: 2 },
-      { type: "relationship", char: "char_ghost", field: "trust", delta: 2 },
+      { type: "favor", char: "shen_zhibai", delta: 2 },
+      { type: "favor", char: "char_ghost", delta: 2 },
       { type: "favor", char: "also_ghost", delta: 1 },
     ]);
     expect(result.ok).toBe(false);
@@ -161,6 +160,6 @@ describe("atomicity", () => {
     expect(result.error).toHaveLength(2); // both bad effects reported, with indices
     expect(result.error[0]?.context?.["index"]).toBe(1);
     expect(result.error[1]?.context?.["index"]).toBe(2);
-    expect(state.relationships["shen_zhibai"]?.trust).toBe(35); // nothing landed
+    expect(state.standing["shen_zhibai"]?.favor).toBe(25); // nothing landed
   });
 });

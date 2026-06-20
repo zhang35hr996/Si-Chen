@@ -272,7 +272,6 @@ function validateSave(
     missing.push(`location:${state.playerLocation}`);
   }
   for (const charId of [
-    ...Object.keys(state.relationships),
     ...Object.keys(state.standing),
     ...Object.keys(state.memories),
   ]) {

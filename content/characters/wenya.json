@@ -18,7 +18,6 @@
   "portraitSet": "wenya",
   "expressions": ["neutral"],
   "voice": { "register": "formal", "quirks": ["话尾轻颤"], "tabooTopics": ["失宠缘由"] },
-  "initialRelationship": { "trust": 20, "affinity": 18, "flags": [] },
   "initialStanding": { "rank": "chenghui", "favor": 5 },
   "initialMemories": [
     {

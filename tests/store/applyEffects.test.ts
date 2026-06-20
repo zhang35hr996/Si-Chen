@@ -20,12 +20,12 @@ describe("GameStore.applyEffects — the single gameplay-state entry point", () 
     store.subscribe(() => notifications++);
 
     const result = store.applyEffects(db, [
-      { type: "relationship", char: "shen_zhibai", field: "trust", delta: 2 },
+      { type: "favor", char: "shen_zhibai", delta: 2 },
     ]);
 
     expect(result.ok).toBe(true);
     expect(store.getState()).not.toBe(before);
-    expect(store.getState().relationships["shen_zhibai"]?.trust).toBe(37);
+    expect(store.getState().standing["shen_zhibai"]?.favor).toBe(27);
     expect(notifications).toBe(1);
     expect(store.getLastEffectReport()).toMatchObject({ outcome: "applied", errors: [] });
   });
@@ -37,8 +37,8 @@ describe("GameStore.applyEffects — the single gameplay-state entry point", () 
     store.subscribe(() => notifications++);
 
     const result = store.applyEffects(db, [
-      { type: "relationship", char: "shen_zhibai", field: "trust", delta: 2 },
-      { type: "relationship", char: "char_ghost", field: "trust", delta: 2 },
+      { type: "favor", char: "shen_zhibai", delta: 2 },
+      { type: "favor", char: "char_ghost", delta: 2 },
     ]);
 
     expect(result.ok).toBe(false);

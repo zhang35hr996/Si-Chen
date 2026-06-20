@@ -47,14 +47,14 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
     const second = asFrame(unwrap(await runner.advance("c_comfort")));
     expect(second.awaiting).toBe("continue"); // closing line, effects pending
     expect(second.line.expression).toBe("neutral"); // "smile" normalizes — v0 ships neutral only
-    expect(runner.getSession()?.pendingEffects).toHaveLength(3);
+    expect(runner.getSession()?.pendingEffects).toHaveLength(1);
     expect(state.calendar.ap).toBe(6); // STILL untouched
 
     const end = unwrap(await runner.advance());
     expect(end.kind).toBe("end");
     if (end.kind !== "end") return;
     expect(end.eventId).toBe("ev_shen_neglect");
-    expect(end.effects).toHaveLength(3);
+    expect(end.effects).toHaveLength(1);
     expect(state.calendar.ap).toBe(6); // runner NEVER touches state — caller commits
   });
 
@@ -121,7 +121,6 @@ describe("quit drill (acceptance §13 #6)", () => {
     const commit = store.resolveEvent(db, end.eventId, end.effects);
     expect(commit.ok).toBe(true);
     const state = store.getState();
-    expect(state.relationships["lu_huaijin"]).toMatchObject({ affinity: 49, trust: 27 });
     expect(state.memories["lu_huaijin"]?.entries).toHaveLength(2);
     expect(state.calendar.ap).toBe(5); // apCost spent at commit, not at entry
     expect(state.sceneHistory).toEqual(["sc_shen_neglect"]);

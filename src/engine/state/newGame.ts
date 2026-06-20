@@ -5,7 +5,7 @@
  */
 import { createCalendar, toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
-import type { BedchamberRecord, CharacterMemoryStore, GameState, RelationshipState, CharacterStanding } from "./types";
+import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
 
 export function memoryEntryId(charId: string, seq: number): string {
   return `mem_${charId}_${String(seq).padStart(6, "0")}`;
@@ -18,17 +18,11 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   });
   const startTime = toGameTime(calendar);
 
-  const relationships: Record<string, RelationshipState> = {};
   const standing: Record<string, CharacterStanding> = {};
   const memories: Record<string, CharacterMemoryStore> = {};
   const bedchamber: Record<string, BedchamberRecord> = {};
 
   for (const character of Object.values(db.characters)) {
-    relationships[character.id] = {
-      trust: character.initialRelationship.trust,
-      affinity: character.initialRelationship.affinity,
-      flags: [...character.initialRelationship.flags],
-    };
     if (character.initialStanding) {
       standing[character.id] = { ...character.initialStanding };
     }
@@ -67,7 +61,6 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
       },
     },
     flags: {},
-    relationships,
     standing,
     memories,
     bedchamber,

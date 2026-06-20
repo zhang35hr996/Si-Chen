@@ -25,8 +25,6 @@
       "type": "effect",
       "id": "n_fx_comfort",
       "effects": [
-        { "type": "relationship", "char": "lu_huaijin", "field": "affinity", "delta": 4 },
-        { "type": "relationship", "char": "lu_huaijin", "field": "trust", "delta": 2 },
         {
           "type": "memory",
           "char": "lu_huaijin",
@@ -53,7 +51,6 @@
       "type": "effect",
       "id": "n_fx_brush",
       "effects": [
-        { "type": "relationship", "char": "lu_huaijin", "field": "affinity", "delta": -4 },
         {
           "type": "memory",
           "char": "lu_huaijin",
@@ -80,8 +77,6 @@
       "type": "effect",
       "id": "n_fx_cold",
       "effects": [
-        { "type": "relationship", "char": "lu_huaijin", "field": "affinity", "delta": -6 },
-        { "type": "relationship", "char": "lu_huaijin", "field": "trust", "delta": -2 },
         {
           "type": "memory",
           "char": "lu_huaijin",

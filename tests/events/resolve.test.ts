@@ -60,7 +60,7 @@ describe("resolveEvent — one transaction", () => {
   it("rejected effects: NOT fired, no AP spent", () => {
     const state = atRite();
     const result = resolveEvent(db, state, "ev_menses_rite", [
-      { type: "relationship", char: "char_ghost", field: "trust", delta: 2 },
+      { type: "favor", char: "char_ghost", delta: 2 },
     ]);
     expect(result.ok).toBe(false);
     expect(state.calendar.ap).toBe(6);

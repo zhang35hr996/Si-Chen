@@ -19,7 +19,6 @@
     "quirks": ["自称『臣』，有时说漏嘴叫『我』", "称玩家『陛下』，私下偶尔『主子』", "汇报时爱加一句自己的感想"],
     "tabooTopics": []
   },
-  "initialRelationship": { "trust": 85, "affinity": 80, "flags": [] },
   "initialStanding": { "rank": "shiwei_zhang", "favor": 70 },
   "initialMemories": [],
   "secrets": []

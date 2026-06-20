@@ -19,7 +19,6 @@
     "quirks": ["自称『臣』", "称玩家『陛下』", "言必称典制"],
     "tabooTopics": ["先帝末年的旧事"]
   },
-  "initialRelationship": { "trust": 50, "affinity": 30, "flags": [] },
   "initialStanding": { "rank": "sili_zhang", "favor": 40 },
   "initialMemories": [
     {

@@ -21,7 +21,6 @@
     "quirks": [],
     "tabooTopics": []
   },
-  "initialRelationship": { "trust": 30, "affinity": 30, "flags": [] },
   "initialStanding": { "rank": "chenghui", "favor": 20 },
   "initialMemories": [],
   "secrets": [],

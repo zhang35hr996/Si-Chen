@@ -24,7 +24,7 @@ const db = loadRealContent();
 /** A "played" state: one event resolved through the funnel, memory written. */
 const playedState = (): GameState => {
   const result = applyEffects(db, createNewGameState(db), [
-    { type: "relationship", char: "shen_zhibai", field: "trust", delta: 3 },
+    { type: "favor", char: "shen_zhibai", delta: 3 },
     { type: "flag", key: "rite_scheduled", value: true },
     {
       type: "memory",
@@ -75,7 +75,7 @@ describe("corruption ladder", () => {
   it("checksum mismatch (devtools-edited save) → CORRUPT + quarantine, original removed", () => {
     const { storage, logger } = setup();
     writeSave(storage, db, playedState(), "slot1", { logger });
-    tamper(storage, (raw) => raw.replace('"trust":38', '"trust":99'));
+    tamper(storage, (raw) => raw.replace('"rite_scheduled":true', '"rite_scheduled":false'));
 
     const result = readSlot(storage, db, "slot1", { logger, now: () => 1234 });
     expect(result.ok).toBe(false);

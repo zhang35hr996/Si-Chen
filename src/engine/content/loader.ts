@@ -354,7 +354,6 @@ function checkSceneRefs(
 
 function effectCharRefs(effect: EventEffect): string[] {
   switch (effect.type) {
-    case "relationship":
     case "favor":
     case "memory":
       return [effect.char];
@@ -456,10 +455,6 @@ function checkConditionRefs(
   } else if ("eventFired" in condition) {
     if (!universe.events[condition.eventFired]) {
       errors.push(missingRef(source, "event", condition.eventFired));
-    }
-  } else if ("relationshipAtLeast" in condition) {
-    if (!universe.characters[condition.relationshipAtLeast.char]) {
-      errors.push(missingRef(source, "character", condition.relationshipAtLeast.char));
     }
   } else if ("favorAtLeast" in condition) {
     if (!universe.characters[condition.favorAtLeast.char]) {

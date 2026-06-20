@@ -40,7 +40,6 @@ const validCharacter = {
   portraitSet: "char_a",
   expressions: ["neutral", "smile"],
   voice: { register: "formal", quirks: [], tabooTopics: [] },
-  initialRelationship: { trust: 10, affinity: 10, flags: [] },
   initialStanding: { rank: "rank_a", favor: 10 },
   initialMemories: [],
   secrets: [],
@@ -116,7 +115,6 @@ describe("triggerConditionSchema (closed DSL — scaffold guard)", () => {
         { atLocation: "loc_a" },
         { not: { eventFired: "ev_a" } },
         { any: [{ flagSet: "x" }, { monthAtLeast: 3 }, { periodIs: "late" }] },
-        { relationshipAtLeast: { char: "char_a", field: "affinity", value: 60 } },
         { favorAtLeast: { char: "char_a", value: 50 } },
         { rankAtLeast: { char: "char_a", rank: "rank_a" } },
         { hasMemoryTag: { char: "char_a", tag: "neglect" } },
@@ -127,7 +125,6 @@ describe("triggerConditionSchema (closed DSL — scaffold guard)", () => {
   it("rejects scaffold-field predicates and unknown predicates outright", () => {
     rejects(triggerConditionSchema, { resourceAtLeast: { pillar: "bloodline", field: "legitimacy", value: 50 } });
     rejects(triggerConditionSchema, { bloodlineLegitimacyAtLeast: 50 });
-    rejects(triggerConditionSchema, { relationshipAtLeast: { char: "char_a", field: "favor", value: 1 } });
     rejects(triggerConditionSchema, { hasMemoryTag: { char: "char_a", tag: "Bad Tag" } }); // tags are lowercase ascii
   });
 });
@@ -137,13 +134,13 @@ describe("eventEffectSchema (discriminated pillar/field pairs)", () => {
     accepts(eventEffectSchema, { type: "resource", pillar: "sovereign", field: "prestige", delta: 3 });
     accepts(eventEffectSchema, { type: "resource", pillar: "nation", field: "governance", delta: -3 });
     accepts(eventEffectSchema, { type: "set_bloodline_status", field: "menstrualStatus", value: "absent" });
-    accepts(eventEffectSchema, { type: "relationship", char: "char_a", field: "affinity", delta: -10 });
+    accepts(eventEffectSchema, { type: "favor", char: "char_a", delta: -10 });
   });
 
   it("rejects illegal pairs, oversized deltas, and bad enums", () => {
     rejects(eventEffectSchema, { type: "resource", pillar: "sovereign", field: "harmony", delta: 1 }); // wrong pair
     rejects(eventEffectSchema, { type: "resource", pillar: "bloodline", field: "menstrualStatus", delta: 1 });
-    rejects(eventEffectSchema, { type: "relationship", char: "char_a", field: "trust", delta: 40 }); // ±10 cap
+    rejects(eventEffectSchema, { type: "favor", char: "char_a", delta: 40 }); // ±10 cap
     rejects(eventEffectSchema, { type: "set_bloodline_status", field: "menstrualStatus", value: "pregnant" });
   });
 });

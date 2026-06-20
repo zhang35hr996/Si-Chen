@@ -21,7 +21,6 @@
     "quirks": ["对陛下自称『臣后』，仪式场合用『本宫』", "称玩家『陛下』，绝不直呼"],
     "tabooTopics": ["自己久不承宠之事"]
   },
-  "initialRelationship": { "trust": 35, "affinity": 20, "flags": [] },
   "initialStanding": { "rank": "fenghou", "favor": 25 },
   "initialMemories": [
     {

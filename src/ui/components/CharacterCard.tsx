@@ -1,8 +1,7 @@
 /**
  * Character card. kind drives the label: consorts show 位分, officials show 官职.
  * The card is the player-facing summary, so it omits engine-only detail
- * (自称/品级括注) and the runtime relationship numbers (恩宠/圣眷/信任/亲和):
- * just 位分/官职, role, and the 侍君 attribute block.
+ * (自称/品级括注): just 位分/官职, role, and the 侍君 attribute block.
  */
 import type { AssetRegistry } from "../../engine/assets/registry";
 import type { ContentDB } from "../../engine/content/loader";

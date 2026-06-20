@@ -36,10 +36,6 @@ export function evaluateCondition(condition: TriggerCondition, ctx: ConditionCon
   if ("monthAtLeast" in condition) return state.calendar.month >= condition.monthAtLeast;
   if ("periodIs" in condition) return state.calendar.period === condition.periodIs;
   if ("atLocation" in condition) return state.playerLocation === condition.atLocation;
-  if ("relationshipAtLeast" in condition) {
-    const { char, field, value } = condition.relationshipAtLeast;
-    return (state.relationships[char]?.[field] ?? 0) >= value;
-  }
   if ("favorAtLeast" in condition) {
     const { char, value } = condition.favorAtLeast;
     return (state.standing[char]?.favor ?? 0) >= value;

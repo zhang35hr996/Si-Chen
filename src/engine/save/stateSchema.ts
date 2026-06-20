@@ -8,7 +8,6 @@ import {
   characterStandingSchema,
   idSchema,
   memoryKindSchema,
-  relationshipStateSchema,
 } from "../content/schemas";
 import type { GameState } from "../state/types";
 
@@ -128,7 +127,6 @@ export const gameStateSchema = z.strictObject({
     }),
   }),
   flags: z.record(z.string(), flagValueSchema),
-  relationships: z.record(idSchema, relationshipStateSchema),
   standing: z.record(idSchema, characterStandingSchema),
   memories: z.record(
     idSchema,

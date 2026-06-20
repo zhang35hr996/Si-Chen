@@ -19,7 +19,6 @@
     "quirks": ["自称『哀家』", "称陛下『皇帝』而非『陛下』", "唤侍君多以位分相称"],
     "tabooTopics": []
   },
-  "initialRelationship": { "trust": 60, "affinity": 55, "flags": [] },
   "initialMemories": [],
   "secrets": []
 }

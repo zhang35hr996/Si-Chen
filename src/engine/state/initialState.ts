@@ -48,7 +48,6 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     },
     taihou: { ill: false },
     flags: {},
-    relationships: {},
     standing: {},
     memories: {},
     bedchamber: {},

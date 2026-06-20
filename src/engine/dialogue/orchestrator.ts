@@ -30,7 +30,6 @@ export function assembleDialogueRequest(
   if (!character) {
     return err(aiError("BAD_SPEAKER", `unknown speaker "${speakerId}"`));
   }
-  const relationship = state.relationships[speakerId] ?? character.initialRelationship;
   const standing = state.standing[speakerId] ?? character.initialStanding;
   if (!standing) {
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing (elder — use elder dialogue path)`));
@@ -47,7 +46,6 @@ export function assembleDialogueRequest(
     speakerContext: {
       profile: character.profile,
       voice: character.voice,
-      relationship,
       standing: { ...standing, selfRefs: rank.selfRefs },
       relevantMemories: [], // retrieval is post-skeleton; the field rides along
       stances: character.stances ?? [],

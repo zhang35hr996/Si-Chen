@@ -47,11 +47,6 @@ export function validateEffects(
     }
     const e = parsed.data;
     switch (e.type) {
-      case "relationship":
-        if (!db.characters[e.char] || !state.relationships[e.char]) {
-          bad(index, "BAD_EFFECT_TARGET", `unknown relationship target "${e.char}"`, { char: e.char });
-        }
-        break;
       case "favor":
         if (!db.characters[e.char] || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `unknown standing target "${e.char}"`, { char: e.char });
@@ -273,12 +268,6 @@ export function applyEffects(
 
   for (const effect of effects) {
     switch (effect.type) {
-      case "relationship": {
-        const target = next.relationships[effect.char]!;
-        const applied = cappedDelta(`rel:${effect.char}:${effect.field}`, effect.delta);
-        target[effect.field] = clampPct(target[effect.field] + applied);
-        break;
-      }
       case "favor": {
         const target = next.standing[effect.char]!;
         const applied = cappedDelta(`favor:${effect.char}`, effect.delta);

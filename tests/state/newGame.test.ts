@@ -25,11 +25,7 @@ describe("createNewGameState", () => {
     });
   });
 
-  it("seeds relationship + standing for every character", () => {
-    expect(Object.keys(state.relationships).sort()).toEqual(
-      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya", "cheng_feng"].sort(),
-    );
-    expect(state.relationships["lu_huaijin"]).toEqual({ trust: 25, affinity: 45, flags: [] });
+  it("seeds standing for characters with an initial standing", () => {
     expect(state.standing["shen_zhibai"]).toEqual({ rank: "fenghou", favor: 25 });
     expect(state.standing["wei_sui"]).toEqual({ rank: "sili_zhang", favor: 40 });
     expect(state.standing["taihou"]).toBeUndefined();
@@ -52,7 +48,7 @@ describe("createNewGameState", () => {
     const a = createNewGameState(db);
     const b = createNewGameState(db);
     expect(a).toEqual(b);
-    a.relationships["shen_zhibai"]!.flags.push("mutated");
-    expect(db.characters["shen_zhibai"]!.initialRelationship.flags).toEqual([]);
+    a.memories["lu_huaijin"]!.entries[0]!.tags.push("mutated");
+    expect(db.characters["lu_huaijin"]!.initialMemories[0]!.tags).not.toContain("mutated");
   });
 });

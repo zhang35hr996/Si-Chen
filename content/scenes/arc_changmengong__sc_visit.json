@@ -31,7 +31,6 @@
       "id": "n_warm_fx",
       "effects": [
         { "type": "favor", "char": "wenya", "delta": 4 },
-        { "type": "relationship", "char": "wenya", "field": "affinity", "delta": 3 },
         { "type": "flag", "key": "changmengong_visited", "value": true },
         {
           "type": "memory",
@@ -65,8 +64,7 @@
       "type": "effect",
       "id": "n_cold_fx",
       "effects": [
-        { "type": "flag", "key": "changmengong_visited", "value": true },
-        { "type": "relationship", "char": "wenya", "field": "affinity", "delta": -2 }
+        { "type": "flag", "key": "changmengong_visited", "value": true }
       ],
       "next": "n_cold_end"
     },

@@ -158,8 +158,8 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
     setLastRejection(result.ok ? null : `${formatErrorTag(result.error)} — ${result.error.message}`);
   };
 
-  const gameStarted = Object.keys(state.relationships).length > 0;
-  const firstCharId = Object.keys(state.relationships)[0];
+  const gameStarted = Object.keys(state.standing).length > 0;
+  const firstCharId = Object.keys(state.standing)[0];
 
   const fireEffects = (valid: boolean) => {
     if (!db || !firstCharId) return;
@@ -167,7 +167,7 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
       db,
       valid
         ? [
-            { type: "relationship", char: firstCharId, field: "trust", delta: 2 },
+            { type: "favor", char: firstCharId, delta: 2 },
             {
               type: "memory",
               char: firstCharId,
@@ -181,8 +181,8 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
             },
           ]
         : [
-            { type: "relationship", char: firstCharId, field: "trust", delta: 2 },
-            { type: "relationship", char: "char_ghost", field: "trust", delta: 2 },
+            { type: "favor", char: firstCharId, delta: 2 },
+            { type: "favor", char: "char_ghost", delta: 2 },
           ],
     );
     bumpReport((n) => n + 1); // rejected batches don't emit — refresh report display

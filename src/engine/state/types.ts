@@ -170,14 +170,6 @@ export interface Resources {
 }
 
 // ── Per-character runtime state ───────────────────────────────────────
-export interface RelationshipState {
-  /** 信任 0–100 */
-  trust: number;
-  /** 亲和 0–100 — 爱慕 for consorts, 亲附/敬慕 for officials */
-  affinity: number;
-  flags: string[];
-}
-
 export type ConsortLifecycle = "normal" | "candidate" | "carrying" | "delivered" | "deceased";
 
 /** 后宫居所内的宫室槽位（每殿至多 5 间，各住一名侍君）；缺省视作 "main"(主殿)。 */
@@ -263,7 +255,6 @@ export interface GameState {
   taihou: TaihouState;
   resources: Resources;
   flags: Record<string, FlagValue>;
-  relationships: Record<string, RelationshipState>;
   standing: Record<string, CharacterStanding>;
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */

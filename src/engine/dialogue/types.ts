@@ -1,6 +1,6 @@
 /**
  * Dialogue seam (skeleton-plan §8). The DialogueRequest already carries every
- * field the future AI needs (profile, voice, relationship, standing+selfRefs,
+ * field the future AI needs (profile, voice, standing+selfRefs,
  * memories, etiquette); MockProvider ignores most of it and echoes authored
  * lines — but the seam is exercised on every single line from day one.
  */
@@ -9,7 +9,7 @@ import type { GameTime } from "../calendar/time";
 import type { CharacterContent, CharacterRank } from "../content/schemas";
 import type { GameError } from "../infra/errors";
 import type { Result } from "../infra/result";
-import type { CharacterStanding, MemoryEntry, RelationshipState } from "../state/types";
+import type { CharacterStanding, MemoryEntry } from "../state/types";
 
 export interface DialogueRequest {
   speakerId: string;
@@ -19,7 +19,6 @@ export interface DialogueRequest {
   speakerContext: {
     profile: CharacterContent["profile"];
     voice: CharacterContent["voice"];
-    relationship: RelationshipState;
     standing: CharacterStanding & { selfRefs: CharacterRank["selfRefs"] };
     /** v0: always [] — retrieval lands with the real provider (plan §7). */
     relevantMemories: MemoryEntry[];

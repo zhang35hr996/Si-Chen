@@ -22,7 +22,6 @@
     "quirks": ["自称『侍身』", "称玩家『陛下』", "失落时偶尔会脱口而出『曾经』"],
     "tabooTopics": ["家中来信催问恩宠之事"]
   },
-  "initialRelationship": { "trust": 25, "affinity": 45, "flags": [] },
   "initialStanding": { "rank": "chenghui", "favor": 30 },
   "initialMemories": [
     {

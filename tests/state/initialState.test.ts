@@ -24,7 +24,6 @@ describe("createInitialState", () => {
   it("starts with empty collections and a deterministic rng seed", () => {
     const state = createInitialState();
     expect(state.flags).toEqual({});
-    expect(state.relationships).toEqual({});
     expect(state.standing).toEqual({});
     expect(state.memories).toEqual({});
     expect(state.eventLog).toEqual([]);

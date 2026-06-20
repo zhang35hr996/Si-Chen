@@ -22,7 +22,6 @@
     "quirks": ["自称『臣侍』，得意时漏出『本宫』", "称玩家『陛下』", "爱拿旧人作比"],
     "tabooTopics": ["母家逼她尽快诞下皇嗣之事"]
   },
-  "initialRelationship": { "trust": 30, "affinity": 40, "flags": [] },
   "initialStanding": { "rank": "jun", "favor": 45 },
   "initialMemories": [
     {

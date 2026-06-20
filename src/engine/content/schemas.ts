@@ -9,7 +9,7 @@
  * All shipped content/** files are strict JSON (no comments, no trailing commas).
  */
 import { z } from "zod";
-import type { CharacterStanding, RelationshipState } from "../state/types";
+import type { CharacterStanding } from "../state/types";
 
 // ── shared primitives ─────────────────────────────────────────────────
 export const idSchema = z
@@ -27,12 +27,6 @@ const participantSchema = z.union([z.literal("player"), idSchema]);
 export const monthPeriodSchema = z.enum(["early", "mid", "late"]);
 
 // ── per-character runtime fragments (bound to engine/state/types) ─────
-export const relationshipStateSchema = z.strictObject({
-  trust: percent,
-  affinity: percent,
-  flags: z.array(z.string()),
-}) satisfies z.ZodType<RelationshipState>;
-
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
@@ -84,7 +78,6 @@ export type TriggerCondition =
   | { monthAtLeast: number }
   | { periodIs: "early" | "mid" | "late" }
   | { atLocation: string }
-  | { relationshipAtLeast: { char: string; field: "trust" | "affinity"; value: number } }
   | { favorAtLeast: { char: string; value: number } }
   | { rankAtLeast: { char: string; rank: string } }
   | { hasMemoryTag: { char: string; tag: string } }
@@ -99,13 +92,6 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
     z.strictObject({ monthAtLeast: z.number().int().min(1).max(12) }),
     z.strictObject({ periodIs: monthPeriodSchema }),
     z.strictObject({ atLocation: idSchema }),
-    z.strictObject({
-      relationshipAtLeast: z.strictObject({
-        char: idSchema,
-        field: z.enum(["trust", "affinity"]),
-        value: percent,
-      }),
-    }),
     z.strictObject({ favorAtLeast: z.strictObject({ char: idSchema, value: percent }) }),
     z.strictObject({ rankAtLeast: z.strictObject({ char: idSchema, rank: idSchema }) }),
     z.strictObject({ hasMemoryTag: z.strictObject({ char: idSchema, tag: tagSchema }) }),
@@ -115,12 +101,6 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
 
 // ── effects (the single funnel — plan §6, fully discriminated) ────────
 export const eventEffectSchema = z.union([
-  z.strictObject({
-    type: z.literal("relationship"),
-    char: idSchema,
-    field: z.enum(["trust", "affinity"]),
-    delta,
-  }),
   z.strictObject({ type: z.literal("favor"), char: idSchema, delta }),
   z.strictObject({
     type: z.literal("resource"),
@@ -232,8 +212,7 @@ export const consortAttributesSchema = z.strictObject({
 export type ConsortAttributes = z.infer<typeof consortAttributesSchema>;
 
 // ── consort hidden attributes (侍君暗属性) ────────────────────────────
-// 开发期全显示；正式版 ??? 由血滴子解锁。情意≈relationships.affinity 的“真心”
-// 维度，此处作为 authored 初值；后期接入运行时。
+// 开发期全显示；正式版 ??? 由血滴子解锁。情意作为 authored 初值；后期接入运行时。
 export const consortHiddenSchema = z.strictObject({
   affection: percent, // 情意
   fear: percent, // 恐惧
@@ -272,7 +251,6 @@ export const characterSchema = z
       quirks: z.array(nonEmpty),
       tabooTopics: z.array(nonEmpty),
     }),
-    initialRelationship: relationshipStateSchema,
     initialStanding: characterStandingSchema.optional(),
     initialMemories: z.array(initialMemoryDraftSchema),
     secrets: z.array(z.never()).max(0), // schema present, empty in the skeleton (plan §4)

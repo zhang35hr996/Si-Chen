@@ -15,7 +15,6 @@
       "type": "effect",
       "id": "n_after_fx",
       "effects": [
-        { "type": "relationship", "char": "wenya", "field": "trust", "delta": 3 },
         {
           "type": "memory",
           "char": "wenya",

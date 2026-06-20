@@ -25,7 +25,6 @@
       "type": "effect",
       "id": "n_fx_adopt",
       "effects": [
-        { "type": "relationship", "char": "shen_zhibai", "field": "trust", "delta": 3 },
         {
           "type": "memory",
           "char": "shen_zhibai",
@@ -52,7 +51,6 @@
       "type": "effect",
       "id": "n_fx_vague",
       "effects": [
-        { "type": "relationship", "char": "shen_zhibai", "field": "trust", "delta": -1 },
         {
           "type": "memory",
           "char": "shen_zhibai",
@@ -79,7 +77,6 @@
       "type": "effect",
       "id": "n_fx_reject",
       "effects": [
-        { "type": "relationship", "char": "shen_zhibai", "field": "trust", "delta": -3 },
         {
           "type": "memory",
           "char": "shen_zhibai",
