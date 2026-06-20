@@ -12,9 +12,8 @@ import { bedchamberConfig } from "../../store/bedchamber";
 import { toGameTime } from "../../engine/calendar/time";
 
 /** 侍君明面数值属性 — 特长/喜好是标签，单独渲染。 */
-export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes & ("appearance" | "family" | "health" | "nurture"), string]> = [
+export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes & ("appearance" | "health" | "nurture"), string]> = [
   ["appearance", "容貌"],
-  ["family", "家世"],
   ["health", "健康"],
   ["nurture", "承养"],
 ];

@@ -8,6 +8,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import { getCharacterLocation } from "../../engine/characters/presence";
+import { familyText, maternalLoyalty, maternalPower } from "../../engine/officials/derive";
 import { Drawer } from "./Drawer";
 
 type Tab = "overview" | "attrs" | "history" | "children" | "relations";
@@ -111,7 +112,7 @@ export function CharacterProfileDrawer({
             <>
               <h3 className="profile-h">才貌</h3>
               <Stat label="容貌" value={attrs.appearance} />
-              <Stat label="家世" value={attrs.family} />
+              <Field label="家世" value={familyText(db, state, character)} />
               <dl className="profile-fields">
                 <Field label="特长" value={attrs.specialty} />
                 <Field label="喜好" value={attrs.likes.join("、")} />
@@ -128,8 +129,8 @@ export function CharacterProfileDrawer({
               <Stat label="情意" value={character.hidden.affection} />
               <Stat label="恐惧" value={character.hidden.fear} />
               <Stat label="野心" value={character.hidden.ambition} />
-              <Stat label="母家忠心" value={character.hidden.clanLoyalty} />
-              <Stat label="母家权势" value={character.hidden.clanPower} />
+              <Stat label="母家忠心" value={maternalLoyalty(state, character)} />
+              <Stat label="母家权势" value={maternalPower(db, state, character)} />
             </>
           )}
           <h3 className="profile-h">与皇帝</h3>

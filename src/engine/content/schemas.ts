@@ -202,7 +202,6 @@ export type EventEffect = z.infer<typeof eventEffectSchema>;
 // 特长(specialty) 是标签而非数值；喜好(likes) 是标签数组。
 export const consortAttributesSchema = z.strictObject({
   appearance: percent, // 容貌
-  family: percent, // 家世
   health: percent, // 健康
   nurture: percent, // 承养资质
   specialty: nonEmpty, // 特长（标签，如 古筝/舞蹈）
@@ -217,8 +216,6 @@ export const consortHiddenSchema = z.strictObject({
   affection: percent, // 情意
   fear: percent, // 恐惧
   ambition: percent, // 野心
-  clanLoyalty: percent, // 母家忠心
-  clanPower: percent, // 母家权势
 });
 
 export type ConsortHidden = z.infer<typeof consortHiddenSchema>;

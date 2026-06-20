@@ -1,8 +1,8 @@
 {
   "id": "lu_huaijin",
   "kind": "consort",
-  "attributes": { "appearance": 75, "family": 55, "health": 64, "nurture": 58, "specialty": "古筝", "likes": ["古籍", "琴谱"] },
-  "hidden": { "affection": 55, "fear": 45, "ambition": 35, "clanLoyalty": 70, "clanPower": 50 },
+  "attributes": { "appearance": 75, "health": 64, "nurture": 58, "specialty": "古筝", "likes": ["古籍", "琴谱"] },
+  "hidden": { "affection": 55, "fear": 45, "ambition": 35 },
   "profile": {
     "name": "陆怀瑾",
     "surname": "陆",

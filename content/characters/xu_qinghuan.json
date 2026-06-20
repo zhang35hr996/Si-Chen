@@ -1,8 +1,8 @@
 {
   "id": "xu_qinghuan",
   "kind": "consort",
-  "attributes": { "appearance": 86, "family": 70, "health": 85, "nurture": 74, "specialty": "舞蹈", "likes": ["玉器", "马具"] },
-  "hidden": { "affection": 65, "fear": 30, "ambition": 70, "clanLoyalty": 40, "clanPower": 75 },
+  "attributes": { "appearance": 86, "health": 85, "nurture": 74, "specialty": "舞蹈", "likes": ["玉器", "马具"] },
+  "hidden": { "affection": 65, "fear": 30, "ambition": 70 },
   "profile": {
     "name": "徐清欢",
     "surname": "徐",

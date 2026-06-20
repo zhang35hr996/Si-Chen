@@ -1,8 +1,8 @@
 {
   "id": "wenya",
   "kind": "consort",
-  "attributes": { "appearance": 60, "family": 40, "health": 42, "nurture": 48, "specialty": "歌喉", "likes": ["素帛", "旧物"] },
-  "hidden": { "affection": 60, "fear": 65, "ambition": 15, "clanLoyalty": 50, "clanPower": 15 },
+  "attributes": { "appearance": 60, "health": 42, "nurture": 48, "specialty": "歌喉", "likes": ["素帛", "旧物"] },
+  "hidden": { "affection": 60, "fear": 65, "ambition": 15 },
   "profile": {
     "name": "温雅",
     "surname": "温",

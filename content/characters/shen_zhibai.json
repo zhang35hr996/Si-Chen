@@ -1,8 +1,8 @@
 {
   "id": "shen_zhibai",
   "kind": "consort",
-  "attributes": { "appearance": 72, "family": 92, "health": 78, "nurture": 60, "specialty": "书法", "likes": ["古礼", "熏香"] },
-  "hidden": { "affection": 50, "fear": 25, "ambition": 45, "clanLoyalty": 60, "clanPower": 85 },
+  "attributes": { "appearance": 72, "health": 78, "nurture": 60, "specialty": "书法", "likes": ["古礼", "熏香"] },
+  "hidden": { "affection": 50, "fear": 25, "ambition": 45 },
   "profile": {
     "name": "沈知白",
     "surname": "沈",
