@@ -28,6 +28,7 @@ export function SaveLoadScreen({
   storage,
   logger,
   gameStarted,
+  mode = "load",
   onClose,
   onLoaded,
 }: {
@@ -36,6 +37,7 @@ export function SaveLoadScreen({
   storage: KVStorage | null;
   logger?: RingBufferLogger;
   gameStarted: boolean;
+  mode?: "load" | "save";
   onClose: () => void;
   onLoaded: () => void;
 }) {
@@ -122,7 +124,7 @@ export function SaveLoadScreen({
   return (
     <main className="save-screen">
       <header className="hud">
-        <span className="hud__time">存档 · 读档</span>
+        <span className="hud__time">{mode === "load" ? "读档" : "存档"}</span>
         <button type="button" className="hud__button" onClick={onClose}>
           返回
         </button>
@@ -131,7 +133,7 @@ export function SaveLoadScreen({
       {!storage && <p className="save-screen__banner">存档不可用——请使用导出备份进度。</p>}
       {message && <p className="save-screen__message">{message}</p>}
 
-      {pendingImport && (
+      {mode === "load" && pendingImport && (
         <div className="save-screen__import-preview">
           <p>
             待导入存档 · 创建于 {new Date(pendingImport.meta.createdAt).toLocaleString()} · 内容版本{" "}
@@ -174,12 +176,12 @@ export function SaveLoadScreen({
                   {info?.status === "ok" && (info.createdAt ? new Date(info.createdAt).toLocaleString() : "")}
                 </span>
                 <span className="save-screen__slot-actions">
-                  {manual && gameStarted && (
+                  {mode === "save" && manual && gameStarted && (
                     <button type="button" onClick={() => save(slot)}>
                       保存
                     </button>
                   )}
-                  {info?.status !== "empty" && (
+                  {mode === "load" && info?.status !== "empty" && (
                     <button type="button" onClick={() => load(slot)}>
                       读取
                     </button>
@@ -192,25 +194,29 @@ export function SaveLoadScreen({
       )}
 
       <div className="save-screen__io">
-        {gameStarted && (
+        {mode === "save" && gameStarted && (
           <button type="button" onClick={exportFile}>
             导出当前进度
           </button>
         )}
-        <button type="button" onClick={() => fileInput.current?.click()}>
-          从文件导入
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".json,application/json"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void importFile(file);
-            e.target.value = "";
-          }}
-        />
+        {mode === "load" && (
+          <>
+            <button type="button" onClick={() => fileInput.current?.click()}>
+              从文件导入
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void importFile(file);
+                e.target.value = "";
+              }}
+            />
+          </>
+        )}
       </div>
     </main>
   );

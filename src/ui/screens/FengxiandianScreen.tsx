@@ -12,10 +12,10 @@ import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 export function FengxiandianScreen({
-  db, store, registry, onOpenMap, onOpenSave, onAdopt,
+  db, store, registry, onOpenMap, onOpenSettings, onAdopt,
 }: {
   db: ContentDB; store: GameStore; registry: AssetRegistry;
-  onOpenMap: () => void; onOpenSave: () => void;
+  onOpenMap: () => void; onOpenSettings: () => void;
   onAdopt: (heirId: string, fatherId: string) => void;
 }) {
   const state = useGameState(store);
@@ -36,7 +36,7 @@ export function FengxiandianScreen({
       calendar={state.calendar}
       crumbs={breadcrumbFor(db, location.id)}
       onBack={onOpenMap}
-      onOpenSave={onOpenSave}
+      onOpenSettings={onOpenSettings}
     >
       <main className="location-screen">
         <section className="location-screen__stage" style={{ backgroundImage: `url("${background.url}")` }} data-fallback={background.isFallback || undefined}>

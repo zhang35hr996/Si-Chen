@@ -1,7 +1,6 @@
 /**
- * 顶部状态栏（固定）：日期·时辰 / 行动力 / 当前地点 / 国情 · 存档。
+ * 顶部状态栏（固定）：日期·时辰 / 行动力 / 当前地点 / 国情 · 设置。
  * 「返回」不在此处——它属于下方的面包屑（BreadcrumbBar），以免用户不知去向。
- * 「设置」暂无对应系统，故不列入。
  */
 import type { CalendarState } from "../../engine/calendar/time";
 import { formatGameTime, formatShichen } from "../../engine/calendar/time";
@@ -11,13 +10,13 @@ export function TopStatusBar({
   locationName,
   pregnant,
   onOpenResources,
-  onOpenSave,
+  onOpenSettings,
 }: {
   calendar: CalendarState;
   locationName?: string;
   pregnant?: boolean;
   onOpenResources?: () => void;
-  onOpenSave?: () => void;
+  onOpenSettings?: () => void;
 }) {
   return (
     <header className="topbar">
@@ -44,9 +43,9 @@ export function TopStatusBar({
             国情
           </button>
         )}
-        {onOpenSave && (
-          <button type="button" className="topbar__btn" onClick={onOpenSave}>
-            存档
+        {onOpenSettings && (
+          <button type="button" className="topbar__btn" onClick={onOpenSettings}>
+            设置
           </button>
         )}
       </nav>

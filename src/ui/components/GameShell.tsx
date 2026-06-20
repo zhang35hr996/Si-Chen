@@ -1,7 +1,7 @@
 /**
  * 全局游戏外壳：固定顶栏 + 面包屑 + 主内容区。
- * 各屏把自身内容作为 children 传入，统一日期/行动力/国情/存档与位置导航。
- * gameplay 回调（国情/存档/返回）由各屏从 App 透传，外壳只负责布局与呈现。
+ * 各屏把自身内容作为 children 传入，统一日期/行动力/国情/设置与位置导航。
+ * gameplay 回调（国情/设置/返回）由各屏从 App 透传，外壳只负责布局与呈现。
  */
 import type { ReactNode } from "react";
 import type { CalendarState } from "../../engine/calendar/time";
@@ -16,7 +16,7 @@ export function GameShell({
   onBack,
   onCrumb,
   onOpenResources,
-  onOpenSave,
+  onOpenSettings,
   className,
   children,
 }: {
@@ -30,7 +30,7 @@ export function GameShell({
   onBack?: () => void;
   onCrumb?: (index: number) => void;
   onOpenResources?: () => void;
-  onOpenSave?: () => void;
+  onOpenSettings?: () => void;
   className?: string;
   children: ReactNode;
 }) {
@@ -42,7 +42,7 @@ export function GameShell({
         locationName={topLocation}
         pregnant={pregnant}
         onOpenResources={onOpenResources}
-        onOpenSave={onOpenSave}
+        onOpenSettings={onOpenSettings}
       />
       <BreadcrumbBar crumbs={crumbs} onBack={onBack} onCrumb={onCrumb} />
       <div className="shell__body">{children}</div>

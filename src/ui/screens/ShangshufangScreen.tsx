@@ -9,10 +9,10 @@ import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 export function ShangshufangScreen({
-  db, store, registry, onOpenMap, onOpenSave, onLesson, onTutorReport,
+  db, store, registry, onOpenMap, onOpenSettings, onLesson, onTutorReport,
 }: {
   db: ContentDB; store: GameStore; registry: AssetRegistry;
-  onOpenMap: () => void; onOpenSave: () => void;
+  onOpenMap: () => void; onOpenSettings: () => void;
   onLesson: (heirId: string) => void; onTutorReport: (heirId: string) => void;
 }) {
   const state = useGameState(store);
@@ -27,7 +27,7 @@ export function ShangshufangScreen({
       calendar={state.calendar}
       crumbs={breadcrumbFor(db, location.id)}
       onBack={onOpenMap}
-      onOpenSave={onOpenSave}
+      onOpenSettings={onOpenSettings}
     >
       <main className="location-screen">
         <section className="location-screen__stage" style={{ backgroundImage: `url("${background.url}")` }} data-fallback={background.isFallback || undefined}>

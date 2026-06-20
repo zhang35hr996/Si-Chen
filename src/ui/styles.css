@@ -2829,3 +2829,12 @@ button:active:enabled {
 .courtyard-hall.is-empty { opacity: .55; cursor: default; }
 .courtyard-hall__name { font-weight: 600; }
 .courtyard-hall__occupant { font-size: .85rem; opacity: .85; }
+
+/* ── 设置菜单 ── */
+.settings-menu { position: fixed; inset: 0; z-index: 60; background-size: cover; background-position: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+.settings-menu__title { color: #f4ead8; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
+.settings-menu__close { position: absolute; top: 16px; right: 16px; }
+.settings-menu__list { display: flex; flex-direction: column; gap: 12px; min-width: 220px; }
+.settings-menu__list button { padding: 12px 18px; font-size: 1rem; }
+.settings-menu__audio { display: flex; flex-direction: column; gap: 14px; background: rgba(20,14,11,.6); padding: 22px 28px; border-radius: 12px; color: #f4ead8; }
+.settings-menu__audio label { display: flex; align-items: center; gap: 10px; }

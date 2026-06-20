@@ -31,7 +31,7 @@ export function MapScreen({
   onTravelled,
   onEnterCurrent,
   onOpenView,
-  onOpenSave,
+  onOpenSettings,
   onClose,
   onOpenResources,
   onOpenCourtyard,
@@ -47,7 +47,7 @@ export function MapScreen({
   onTravelled: (rolledOver: boolean, spentAp: boolean) => void;
   onEnterCurrent: () => void;
   onOpenView: (locationId: string) => void;
-  onOpenSave: () => void;
+  onOpenSettings: () => void;
   onClose: () => void;
   onOpenResources?: () => void;
   onOpenCourtyard: (loc: LocationContent) => void;
@@ -186,7 +186,7 @@ export function MapScreen({
       onBack={goBack}
       onCrumb={jumpToCrumb}
       onOpenResources={onOpenResources}
-      onOpenSave={onOpenSave}
+      onOpenSettings={onOpenSettings}
       className="map-shell"
     >
       <div className="map-layout">

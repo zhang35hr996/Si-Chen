@@ -18,7 +18,7 @@ export function LocationScreen({
   store,
   registry,
   onOpenMap,
-  onOpenSave,
+  onOpenSettings,
   onStartEvent,
   onManage,
   onBedchamber,
@@ -40,7 +40,7 @@ export function LocationScreen({
   store: GameStore;
   registry: AssetRegistry;
   onOpenMap: () => void;
-  onOpenSave: () => void;
+  onOpenSettings: () => void;
   onStartEvent: (eventId: string) => void;
   onManage?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
@@ -93,7 +93,7 @@ export function LocationScreen({
       pregnant={pregnant}
       onBack={onOpenMap}
       onOpenResources={onOpenResources}
-      onOpenSave={onOpenSave}
+      onOpenSettings={onOpenSettings}
       className="location-shell"
     >
       {showScene && onViewProfile ? (

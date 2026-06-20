@@ -51,13 +51,13 @@ import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
 import { MapScreen } from "./screens/MapScreen";
 import { ReactionScreen } from "./screens/ReactionScreen";
-import { SaveLoadScreen } from "./screens/SaveLoadScreen";
+import { SettingsMenu } from "./components/SettingsMenu";
 import { TitleScreen } from "./screens/TitleScreen";
 
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "court" | "save" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard";
+type View = "title" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -107,6 +107,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [profileCharId, setProfileCharId] = useState<string | null>(null);
   const [courtyardLocId, setCourtyardLocId] = useState<string | null>(null);
   const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
@@ -626,9 +627,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
             setView("map");
           }}
-          onOpenSave={() => {
+          onOpenSettings={() => {
             setSummonedConsortId(null);
-            setView("save");
+            setSettingsOpen(true);
           }}
           onStartEvent={startEvent}
           onManage={(id) => setManageCharId(id)}
@@ -657,7 +658,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
             setView("map");
           }}
-          onOpenSave={() => setView("save")}
+          onOpenSettings={() => setSettingsOpen(true)}
           onLesson={heirLesson}
           onTutorReport={tutorReport}
         />
@@ -668,7 +669,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
-          onOpenSave={() => setView("save")}
+          onOpenSettings={() => setSettingsOpen(true)}
           onSummon={summonHeir}
           onOpenResources={() => setResourcePanelOpen(true)}
         />
@@ -679,7 +680,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
-          onOpenSave={() => setView("save")}
+          onOpenSettings={() => setSettingsOpen(true)}
           onAdopt={adoptHeir}
         />
       )}
@@ -689,21 +690,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
-          onOpenSave={() => setView("save")}
+          onOpenSettings={() => setSettingsOpen(true)}
           // ev_taihou_converse 用 checkpoint:"game_start" 故永不自动触发，只由此按钮手动开启；勿改成 location_enter（会变强制弹出）。
           onConverse={() => startEvent("ev_taihou_converse")}
           onOpenResources={() => setResourcePanelOpen(true)}
-        />
-      )}
-      {view === "save" && (
-        <SaveLoadScreen
-          db={db}
-          store={store}
-          storage={storage}
-          logger={logger}
-          gameStarted
-          onClose={enterCurrentLocation}
-          onLoaded={() => { resetRollGuards(); enterCurrentLocation(); }}
         />
       )}
       {view === "map" && (
@@ -718,7 +708,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             setFreeViewId(locationId);
             setView("freeview");
           }}
-          onOpenSave={() => setView("save")}
+          onOpenSettings={() => setSettingsOpen(true)}
           onClose={() => { setFocusConsortId(null); setView("location"); }}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
@@ -1045,6 +1035,18 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           state={liveState}
           character={db.characters[profileCharId]!}
           onClose={() => setProfileCharId(null)}
+        />
+      )}
+      {settingsOpen && (
+        <SettingsMenu
+          db={db}
+          store={store}
+          storage={storage}
+          logger={logger}
+          registry={registry}
+          onLoaded={() => { resetRollGuards(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
