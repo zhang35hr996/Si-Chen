@@ -54,11 +54,12 @@ import { MapScreen } from "./screens/MapScreen";
 import { ReactionScreen } from "./screens/ReactionScreen";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { TitleScreen } from "./screens/TitleScreen";
+import { CoronationScreen } from "./screens/CoronationScreen";
 
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -335,12 +336,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (rolledOver) setReactionRollover(true);
   };
 
+  const proceedAfterNewGame = () => {
+    const pick = pickNextEvent(db, store.getState(), "game_start");
+    if (pick) startEvent(pick.id);
+    else goHome();
+  };
+
   const newGame = () => {
     store.newGame(db);
     resetRollGuards();
-    const pick = pickNextEvent(db, store.getState(), "game_start");
-    if (pick) startEvent(pick.id);
-    else goHome(); // 开局即在皇城主地图
+    setView("coronation");
   };
 
   const beginBedchamber = (charId: string) => {
@@ -632,6 +637,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onContinue={continueGame}
           canContinue={canContinue}
           continueError={continueError}
+        />
+      )}
+      {view === "coronation" && (
+        <CoronationScreen
+          registry={registry}
+          onConfirm={(era) => {
+            store.setEraName(era);
+            proceedAfterNewGame();
+          }}
         />
       )}
       {view === "location" && (

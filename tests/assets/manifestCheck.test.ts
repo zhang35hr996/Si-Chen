@@ -38,7 +38,7 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(46);
+    expect(result.entryCount).toBe(47);
     expect(result.placeholderCount).toBe(0); // all consort portraits now have real art
   });
 

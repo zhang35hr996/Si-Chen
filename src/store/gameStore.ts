@@ -71,6 +71,12 @@ export class GameStore {
     this.emit();
   }
 
+  /** 登基设定年号（写入 calendar.eraName）。 */
+  setEraName(name: string): void {
+    this.state = { ...this.state, calendar: { ...this.state.calendar, eraName: name } };
+    this.emit();
+  }
+
   /**
    * THE single entry point for gameplay-state changes (skeleton-plan §6):
    * relationships, favor, resources, memory, and flags change only here,
