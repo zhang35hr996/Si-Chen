@@ -26,6 +26,7 @@ export function CharacterScene({
   registry,
   location,
   consorts,
+  focusConsortId,
   onConverse,
   onBedchamber,
   onViewProfile,
@@ -37,6 +38,7 @@ export function CharacterScene({
   location: LocationContent;
   /** 该宫住客侍君（按位分降序）；首位为默认主角，>1 时提供切换。 */
   consorts: CharacterContent[];
+  focusConsortId?: string | null;
   onConverse?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
   onViewProfile: (charId: string) => void;
@@ -47,10 +49,11 @@ export function CharacterScene({
     consorts.find((c) => chamberOf(state.standing[c.id]) === id);
 
   // 分宫室殿按 chamber 选中；单居所按 consort id 选中。
+  const focus = focusConsortId ? consorts.find((c) => c.id === focusConsortId) : undefined;
   const [activeChamber, setActiveChamber] = useState<ChamberId>(
-    consorts[0] ? chamberOf(state.standing[consorts[0].id]) : "main",
+    (focus ? chamberOf(state.standing[focus.id]) : consorts[0] ? chamberOf(state.standing[consorts[0].id]) : "main"),
   );
-  const [activeId, setActiveId] = useState<string | null>(consorts[0]?.id ?? null);
+  const [activeId, setActiveId] = useState<string | null>(focus?.id ?? consorts[0]?.id ?? null);
   const [moreOpen, setMoreOpen] = useState(false);
 
   const character = chambered

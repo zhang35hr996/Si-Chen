@@ -34,6 +34,7 @@ export function LocationScreen({
   onViewProfile,
   summonedConsortId,
   onDismissSummon,
+  focusConsortId,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -55,6 +56,7 @@ export function LocationScreen({
   onViewProfile?: (charId: string) => void;
   summonedConsortId?: string | null;
   onDismissSummon?: () => void;
+  focusConsortId?: string | null;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -102,6 +104,7 @@ export function LocationScreen({
           registry={registry}
           location={location}
           consorts={sceneConsorts}
+          focusConsortId={focusConsortId}
           onConverse={onConverse}
           onBedchamber={onBedchamber}
           onViewProfile={onViewProfile}

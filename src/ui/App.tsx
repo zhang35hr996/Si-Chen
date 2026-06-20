@@ -16,6 +16,8 @@ import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
+import { CourtyardScreen } from "./screens/CourtyardScreen";
+import { buildTravelBatch } from "../engine/map/travel";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
@@ -53,7 +55,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "location" | "map" | "freeview" | "event" | "court" | "save" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong";
+type View = "title" | "location" | "map" | "freeview" | "event" | "court" | "save" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -101,6 +103,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   const [profileCharId, setProfileCharId] = useState<string | null>(null);
+  const [courtyardLocId, setCourtyardLocId] = useState<string | null>(null);
+  const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
+  const [_currentBoard, setCurrentBoard] = useState<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const tickedPeriods = useRef<Set<string>>(new Set());
@@ -554,6 +559,43 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     }
   };
 
+  /** 旅行结算（MapScreen.onTravelled 与院子 enterConsortQuarters 共用）。 */
+  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean) => {
+    doAutosave();
+    // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
+    if (!spentAp) return;
+    const cal = store.getState().calendar;
+    const key = `${store.getState().rngSeed}:${cal.dayIndex}:travel:${cal.ap}`;
+    let beats: DecreeReaction[] = [];
+    if (!rolledSlots.current.has(key)) {
+      rolledSlots.current.add(key);
+      const plan = buildEmpressDecree(db, store.getState(), key);
+      if (plan) {
+        const applied = store.applyEffects(db, plan.effects);
+        if (applied.ok) beats = plan.reactions;
+      }
+    }
+    if (rolledOver) beats = [...beats, ...rollTaihouIllness()];
+    if (beats.length) playReactions(beats, rolledOver);
+    else runCheckpoints(rolledOver);
+  };
+
+  const enterConsortQuarters = (palaceId: string, consortId: string) => {
+    setFocusConsortId(consortId);
+    setCourtyardLocId(null);
+    const here = store.getState().playerLocation === palaceId;
+    if (here) { enterCurrentLocation(); return; }
+    const batch = buildTravelBatch(db, store.getState(), palaceId);
+    if (!batch.ok) return;
+    const spentAp = batch.value.some((c) => c.type === "SPEND_AP");
+    const result = store.dispatchBatch(batch.value);
+    if (result.ok) {
+      doAutosave();
+      // 复用 MapScreen.onTravelled 的结算：懿旨/敲打/转旬 + 进入对应房间
+      onTravelledSettle(result.value.rolledOver, spentAp);
+    }
+  };
+
   return (
     <>
       {view === "title" && (
@@ -572,6 +614,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           registry={registry}
           onOpenMap={() => {
             setSummonedConsortId(null);
+            setFocusConsortId(null);
             setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
             setView("map");
           }}
@@ -594,6 +637,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onViewProfile={(id) => setProfileCharId(id)}
           summonedConsortId={summonedConsortId}
           onDismissSummon={() => setSummonedConsortId(null)}
+          focusConsortId={focusConsortId}
         />
       )}
       {view === "wenzhaodian" && (
@@ -660,34 +704,27 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           atRoot={mapAtRoot}
-          onTravelled={(rolledOver, spentAp) => {
-            doAutosave();
-            // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
-            if (!spentAp) return;
-            const cal = store.getState().calendar;
-            const key = `${store.getState().rngSeed}:${cal.dayIndex}:travel:${cal.ap}`;
-            let beats: DecreeReaction[] = [];
-            if (!rolledSlots.current.has(key)) {
-              rolledSlots.current.add(key);
-              const plan = buildEmpressDecree(db, store.getState(), key);
-              if (plan) {
-                const applied = store.applyEffects(db, plan.effects);
-                if (applied.ok) beats = plan.reactions;
-              }
-            }
-            if (rolledOver) beats = [...beats, ...rollTaihouIllness()];
-            if (beats.length) playReactions(beats, rolledOver);
-            else runCheckpoints(rolledOver);
-          }}
+          onTravelled={onTravelledSettle}
           onEnterCurrent={enterCurrentLocation}
           onOpenView={(locationId) => {
             setFreeViewId(locationId);
             setView("freeview");
           }}
           onOpenSave={() => setView("save")}
-          onClose={() => setView("location")}
+          onClose={() => { setFocusConsortId(null); setView("location"); }}
           onOpenResources={() => setResourcePanelOpen(true)}
-          onOpenCourtyard={() => {}}
+          onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
+          onBoardChange={setCurrentBoard}
+        />
+      )}
+      {view === "courtyard" && courtyardLocId && db.locations[courtyardLocId] && (
+        <CourtyardScreen
+          db={db}
+          state={liveState}
+          registry={registry}
+          location={db.locations[courtyardLocId]!}
+          onPickHall={(consortId) => enterConsortQuarters(courtyardLocId!, consortId)}
+          onBack={() => { setCourtyardLocId(null); setMapAtRoot(false); setView("map"); }}
         />
       )}
       {view === "freeview" && freeViewId && (
