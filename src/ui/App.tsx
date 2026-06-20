@@ -851,6 +851,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <BedchamberPicker
           db={db}
           state={store.getState()}
+          registry={registry}
           onPick={(id) => {
             setFlipOpen(false);
             setSummonedConsortId(id);
