@@ -1511,6 +1511,34 @@ button:active:enabled {
   color: var(--c-text-dim);
 }
 
+/* 关系 tab：与他人的关系（自由文本总结，非数值） */
+.profile-relations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.profile-relation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--c-panel-2);
+  border-left: 2px solid var(--c-line-gold);
+  border-radius: 0 4px 4px 0;
+}
+.profile-relation__who {
+  font-family: var(--font-title);
+  color: var(--c-gold-text);
+}
+.profile-relation__attitude {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--c-text);
+}
+
 /* 卡片「查看详情」按钮（次于侍寝/对话） */
 .char-card__profile {
   font: inherit;
@@ -2838,6 +2866,11 @@ button:active:enabled {
 .settings-menu__list button { padding: 12px 18px; font-size: 1rem; }
 .settings-menu__audio { display: flex; flex-direction: column; gap: 14px; background: rgba(20,14,11,.6); padding: 22px 28px; border-radius: 12px; color: #f4ead8; }
 .settings-menu__audio label { display: flex; align-items: center; gap: 10px; }
+
+/* 读档/存档嵌入设置背景：槽位取代中间按钮，沿用 .save-screen__* 槽位样式 */
+.settings-menu__saveload { display: flex; flex-direction: column; gap: 12px; width: min(560px, 88vw); max-height: 70vh; overflow-y: auto; background: rgba(20,14,11,.72); padding: 20px 24px; border-radius: 12px; color: #f4ead8; }
+.settings-menu__subtitle { margin: 0; color: #f4ead8; text-align: center; }
+.settings-menu__back { align-self: center; padding: 10px 20px; }
 
 /* ── 登基开场 ── */
 .coronation { position: fixed; inset: 0; z-index: 40; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; }

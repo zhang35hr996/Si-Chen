@@ -29,6 +29,7 @@ export function SaveLoadScreen({
   logger,
   gameStarted,
   mode = "load",
+  embedded = false,
   onClose,
   onLoaded,
 }: {
@@ -38,6 +39,8 @@ export function SaveLoadScreen({
   logger?: RingBufferLogger;
   gameStarted: boolean;
   mode?: "load" | "save";
+  /** 嵌入设置界面：省去 .save-screen 整页外壳/页眉，沿用设置背景，槽位取代中间按钮。 */
+  embedded?: boolean;
   onClose: () => void;
   onLoaded: () => void;
 }) {
@@ -121,15 +124,8 @@ export function SaveLoadScreen({
     onLoaded();
   };
 
-  return (
-    <main className="save-screen">
-      <header className="hud">
-        <span className="hud__time">{mode === "load" ? "读档" : "存档"}</span>
-        <button type="button" className="hud__button" onClick={onClose}>
-          返回
-        </button>
-      </header>
-
+  const body = (
+    <>
       {!storage && <p className="save-screen__banner">存档不可用——请使用导出备份进度。</p>}
       {message && <p className="save-screen__message">{message}</p>}
 
@@ -218,6 +214,30 @@ export function SaveLoadScreen({
           </>
         )}
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="settings-menu__saveload">
+        <h2 className="settings-menu__subtitle">{mode === "load" ? "读档" : "存档"}</h2>
+        {body}
+        <button type="button" className="settings-menu__back" onClick={onClose}>
+          返回
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <main className="save-screen">
+      <header className="hud">
+        <span className="hud__time">{mode === "load" ? "读档" : "存档"}</span>
+        <button type="button" className="hud__button" onClick={onClose}>
+          返回
+        </button>
+      </header>
+      {body}
     </main>
   );
 }

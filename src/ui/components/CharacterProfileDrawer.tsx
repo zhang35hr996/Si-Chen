@@ -55,7 +55,6 @@ export function CharacterProfileDrawer({
   const [tab, setTab] = useState<Tab>("overview");
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
-  const rel = state.relationships[character.id];
   const attrs = character.attributes;
   const homeId = getCharacterLocation(db, state, character.id);
   const home = homeId ? db.locations[homeId]?.name : undefined;
@@ -119,7 +118,6 @@ export function CharacterProfileDrawer({
               </dl>
               <h3 className="profile-h">身体</h3>
               <Stat label="健康" value={attrs.health} />
-              <Stat label="承养" value={attrs.nurture} />
             </>
           ) : (
             <p className="profile-empty">此人无养成属性。</p>
@@ -136,12 +134,6 @@ export function CharacterProfileDrawer({
           )}
           <h3 className="profile-h">与皇帝</h3>
           {standing ? <Stat label="恩宠" value={standing.favor} /> : <p className="profile-empty">尚未查明。</p>}
-          {rel ? (
-            <>
-              <Stat label="信任" value={rel.trust} />
-              <Stat label="亲和" value={rel.affinity} />
-            </>
-          ) : null}
         </div>
       )}
 
@@ -187,22 +179,26 @@ export function CharacterProfileDrawer({
 
       {tab === "relations" && (
         <div className="profile-section">
-          {rel ? (
-            <>
-              <Stat label="信任" value={rel.trust} />
-              <Stat label="亲和" value={rel.affinity} />
-              {rel.flags.length > 0 && (
-                <div className="profile-tags">
-                  {rel.flags.map((f) => (
-                    <span key={f} className="profile-tag">
-                      {f}
+          {character.stances && character.stances.length > 0 ? (
+            <ul className="profile-relations">
+              {character.stances.map((s) => {
+                const other = db.characters[s.charId];
+                const otherStanding = state.standing[s.charId] ?? other?.initialStanding;
+                const otherRank = otherStanding ? db.ranks[otherStanding.rank] : undefined;
+                const who = other?.profile.name ?? s.charId;
+                return (
+                  <li key={s.charId} className="profile-relation">
+                    <span className="profile-relation__who">
+                      {who}
+                      {otherRank ? ` · ${otherRank.name}` : ""}
                     </span>
-                  ))}
-                </div>
-              )}
-            </>
+                    <span className="profile-relation__attitude">{s.attitude}</span>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
-            <p className="profile-empty">暂无关系记录。</p>
+            <p className="profile-empty">暂无与他人的关系记述。</p>
           )}
         </div>
       )}

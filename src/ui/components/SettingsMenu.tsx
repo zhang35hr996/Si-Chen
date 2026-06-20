@@ -34,21 +34,6 @@ export function SettingsMenu({
   const [muted, setMuted] = useState(audioController.isMuted());
   const bg = registry.background("bg.game_setting");
 
-  if (pane === "load" || pane === "save") {
-    return (
-      <SaveLoadScreen
-        db={db}
-        store={store}
-        storage={storage}
-        logger={logger}
-        gameStarted
-        mode={pane}
-        onClose={() => setPane("menu")}
-        onLoaded={onLoaded}
-      />
-    );
-  }
-
   return (
     <div
       className="settings-menu"
@@ -65,6 +50,20 @@ export function SettingsMenu({
           <button type="button" onClick={() => setPane("audio")}>音乐</button>
           <button type="button" onClick={onReturnTitle}>返回游戏主界面</button>
         </nav>
+      )}
+
+      {(pane === "load" || pane === "save") && (
+        <SaveLoadScreen
+          db={db}
+          store={store}
+          storage={storage}
+          logger={logger}
+          gameStarted
+          mode={pane}
+          embedded
+          onClose={() => setPane("menu")}
+          onLoaded={onLoaded}
+        />
       )}
 
       {pane === "audio" && (
