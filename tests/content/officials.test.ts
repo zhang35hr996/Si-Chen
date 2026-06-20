@@ -23,3 +23,16 @@ describe("officialPosts table", () => {
     }
   });
 });
+
+describe("consort maternalClan", () => {
+  it("each consort with a surname declares a maternalClan referencing a real post", () => {
+    const db = loadRealContent();
+    const consorts = Object.values(db.characters).filter((c) => c.kind === "consort" && c.profile.surname);
+    expect(consorts.length).toBeGreaterThan(0);
+    for (const c of consorts) {
+      expect(c.maternalClan, c.id).toBeDefined();
+      expect(db.officialPosts[c.maternalClan!.postId], c.id).toBeDefined();
+      expect(c.maternalClan!.birthOrder).toBeGreaterThanOrEqual(1);
+    }
+  });
+});

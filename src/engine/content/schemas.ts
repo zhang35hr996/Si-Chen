@@ -255,6 +255,13 @@ export const characterSchema = z
     initialMemories: z.array(initialMemoryDraftSchema),
     secrets: z.array(z.never()).max(0), // schema present, empty in the skeleton (plan §4)
     stances: z.array(z.strictObject({ charId: idSchema, attitude: nonEmpty })).optional(),
+    maternalClan: z
+      .strictObject({
+        postId: idSchema,
+        legitimate: z.boolean(),
+        birthOrder: z.number().int().min(1),
+      })
+      .optional(),
   })
   .refine((c) => c.expressions.includes("neutral"), {
     message: 'expressions must include "neutral"',

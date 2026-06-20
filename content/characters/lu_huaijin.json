@@ -36,5 +36,6 @@
   "secrets": [],
   "stances": [
     { "charId": "shen_zhibai", "attitude": "敬畏凤后掌印之威，又暗怨其规矩繁苛" }
-  ]
+  ],
+  "maternalClan": { "postId": "guozijian_jijiu", "legitimate": true, "birthOrder": 3 }
 }

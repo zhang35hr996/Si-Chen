@@ -5,6 +5,7 @@
   "hidden": { "affection": 50, "fear": 25, "ambition": 45, "clanLoyalty": 60, "clanPower": 85 },
   "profile": {
     "name": "沈知白",
+    "surname": "沈",
     "age": 23,
     "role": "执掌凤印，总理后宫的世族之后",
     "appearance": "身量颀长，常服绯红凤纹礼衣，眉目端凝，不怒自威。",
@@ -35,5 +36,6 @@
   "secrets": [],
   "stances": [
     { "charId": "lu_huaijin", "attitude": "怜其失宠，亦虑其失仪，面上以礼相待" }
-  ]
+  ],
+  "maternalClan": { "postId": "chengxiang", "legitimate": true, "birthOrder": 1 }
 }

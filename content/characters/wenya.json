@@ -28,5 +28,6 @@
       "participants": ["player", "wenya"]
     }
   ],
-  "secrets": []
+  "secrets": [],
+  "maternalClan": { "postId": "zhifu", "legitimate": false, "birthOrder": 4 }
 }

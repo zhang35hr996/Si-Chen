@@ -37,5 +37,6 @@
   "stances": [
     { "charId": "shen_zhibai", "attitude": "畏凤后掌印之威，面上恭谨，心里却不服管束" },
     { "charId": "lu_huaijin", "attitude": "视沈承徽为失宠的前车，既怜且傲，暗自较劲" }
-  ]
+  ],
+  "maternalClan": { "postId": "bingbu_shangshu", "legitimate": true, "birthOrder": 2 }
 }
