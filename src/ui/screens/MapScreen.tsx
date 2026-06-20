@@ -3,25 +3,14 @@ import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import type { LocationContent, MapBoard, MapPortal } from "../../engine/content/schemas";
-import { getPresentAt } from "../../engine/characters/presence";
-import { getEligibleEvents } from "../../engine/events/engine";
 import { buildTravelBatch, checkTravel } from "../../engine/map/travel";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { GameShell } from "../components/GameShell";
-import { LocationInfoPanel, type LocationInfo } from "../components/LocationInfoPanel";
 import { HaremGrid } from "./HaremGrid";
 
 /** Boards rendered as a symmetric grid (§四) instead of absolute nodes on art. */
 const GRID_BOARDS = new Set(["hougong"]);
-
-const REASON_TEXT: Record<string, string> = {
-  ALREADY_THERE: "当前所在",
-  NOT_CONNECTED: "无路可达",
-  AP_INSUFFICIENT: "行动点不足",
-  UNKNOWN_LOCATION: "未知地点",
-  NOT_TRAVELABLE: "免行动点",
-};
 
 /** Legacy fallback when world.json predates the map graph (test/minimal content). */
 const DEFAULT_BOARD: MapBoard = { id: "palace", name: "宫城图", art: { key: "map.palace", kind: "map" } };
@@ -34,8 +23,6 @@ const REGION_LABELS: Record<string, Array<{ text: string; x: number; y: number }
   ],
 };
 
-type Selected = { kind: "loc"; loc: LocationContent } | { kind: "portal"; portal: MapPortal };
-
 export function MapScreen({
   db,
   store,
@@ -47,6 +34,8 @@ export function MapScreen({
   onOpenSave,
   onClose,
   onOpenResources,
+  onOpenCourtyard,
+  onBoardChange,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -61,6 +50,8 @@ export function MapScreen({
   onOpenSave: () => void;
   onClose: () => void;
   onOpenResources?: () => void;
+  onOpenCourtyard: (loc: LocationContent) => void;
+  onBoardChange?: (boardId: string) => void;
 }) {
   const state = useGameState(store);
   const boards = db.world.mapBoards ?? [DEFAULT_BOARD];
@@ -88,30 +79,14 @@ export function MapScreen({
   // The board we are looking at, plus the breadcrumb stack used by 返回.
   const [board, setBoard] = useState<string>(startBoard);
   const [stack, setStack] = useState<string[]>(() => ancestorsOf(startBoard));
-  const [selected, setSelected] = useState<Selected | null>(null);
 
   const current = boardOf(board);
   const boardArt = registry.resolveVariant(current.art.key, timeOfDay(state.calendar), current.art.kind);
   const onBoard = Object.values(db.locations).filter((l) => l.zone === board);
   const boardPortals = portals.filter((p) => p.from === board);
-  const currentHasEvent = getEligibleEvents(db, state, "location_enter").length > 0;
 
-  // 免行动点据点上的「可上朝」标注：宣政殿在当日卯时（行动点满）显示朝议标注，
-  // 一旦上朝/退朝耗去那 1 点（ap≠apMax），标注即消失，直到次日卯时再现。
-  const courtAvailable = (loc: LocationContent): boolean => {
-    if (loc.entry !== "free" || loc.actionEventId === undefined) return false;
-    const ev = db.events[loc.actionEventId];
-    if (!ev) return false;
-    const slotOk = loc.actionFirstSlotOnly !== true || state.calendar.ap === state.calendar.apMax;
-    return slotOk && state.calendar.ap >= ev.apCost;
-  };
-
-  // When the viewed board changes, preselect the player's current location node
-  // if it lives here, so the info panel opens with meaningful content.
-  useEffect(() => {
-    const here = onBoard.find((l) => l.id === state.playerLocation);
-    setSelected(here ? { kind: "loc", loc: here } : null);
-  }, [board]);
+  // Report board changes to parent (Task 4/6 integration).
+  useEffect(() => { onBoardChange?.(board); }, [board]);
 
   const enterBoard = (to: string) => {
     setStack((s) => [...s, board]);
@@ -150,88 +125,22 @@ export function MapScreen({
     onTravelled(spend.value.rolledOver, true);
   };
 
-  // ── Build the right-panel info for the current selection ──────────────
-  const infoFor = (sel: Selected | null): LocationInfo | null => {
-    if (!sel) return null;
-    if (sel.kind === "portal") {
-      const p = sel.portal;
-      if (p.to === "jingcheng") {
-        // 出宫：扣 1 行动力。行动力不足则禁用按钮（标签仍标明耗点，玩家可见原因）。
-        return {
-          title: p.name,
-          kind: "portal",
-          description: `出宫前往${boardOf(p.to).name}。`,
-          actionLabel: "出宫 · 前往京城",
-          actionDisabled: state.calendar.ap < 1,
-          onAction: () => exitPalace(p.to),
-        };
-      }
-      return {
-        title: p.name,
-        kind: "portal",
-        description: `通往${boardOf(p.to).name}。`,
-        actionLabel: `进入${boardOf(p.to).name}`,
-        onAction: () => enterBoard(p.to),
-      };
-    }
-    const loc = sel.loc;
-    const present = getPresentAt(db, state, loc.id).length;
-    if (loc.id === state.playerLocation) {
-      return {
-        title: loc.name,
-        kind: "here",
-        description: loc.description,
-        presentCount: present,
-        hasEvent: currentHasEvent,
-        actionLabel: "进入此处",
-        onAction: onEnterCurrent,
-      };
-    }
-    if (loc.entry === "free") {
-      return {
-        title: loc.name,
-        kind: "free",
-        description: loc.description,
-        hasEvent: courtAvailable(loc),
-        actionLabel: "进入",
-        onAction: () => onOpenView(loc.id),
-      };
-    }
-    const check = checkTravel(db, state, loc.id);
-    if (!check.ok) {
-      return {
-        title: loc.name,
-        kind: "blocked",
-        description: loc.description,
-        presentCount: present,
-        reason: REASON_TEXT[check.error.code] ?? check.error.message,
-        actionLabel: "无法前往",
-        actionDisabled: true,
-        onAction: () => {},
-      };
-    }
-    const ap = loc.travelCost?.ap ?? 0;
-    return {
-      title: loc.name,
-      kind: "travel",
-      description: loc.description,
-      presentCount: present,
-      actionLabel: ap > 0 ? `前往（耗 ${ap} 行动力）` : "前往",
-      onAction: () => travel(loc.id),
-    };
+  // 点击节点直接执行动作（无信息栏中转）。
+  const onNodeActivate = (loc: LocationContent) => {
+    if (loc.id === state.playerLocation) { onEnterCurrent(); return; }
+    if (loc.entry === "free") { onOpenView(loc.id); return; }
+    if (!checkTravel(db, state, loc.id).ok) return; // 不可达：点击无效
+    travel(loc.id);
   };
 
   const renderNode = (loc: LocationContent) => {
     const here = loc.id === state.playerLocation;
-    const isSelected = selected?.kind === "loc" && selected.loc.id === loc.id;
     const blocked = !here && loc.entry !== "free" && !checkTravel(db, state, loc.id).ok;
-    const showEvent = (here && currentHasEvent) || courtAvailable(loc);
     const classes = [
       "map-node",
       here && "map-node--here",
       loc.entry === "free" && "map-node--free",
       blocked && "map-node--locked",
-      isSelected && "is-selected",
     ]
       .filter(Boolean)
       .join(" ");
@@ -241,26 +150,22 @@ export function MapScreen({
         type="button"
         className={classes}
         style={{ left: `${loc.position.x * 100}%`, top: `${loc.position.y * 100}%` }}
-        aria-pressed={isSelected}
-        onClick={() => setSelected({ kind: "loc", loc })}
+        onClick={() => onNodeActivate(loc)}
       >
         <span className="map-node__dot" aria-hidden="true" />
         <span className="map-node__name">{loc.name}</span>
-        {showEvent && <span className="map-node__event" aria-label="有事件" />}
       </button>
     );
   };
 
   const renderPortal = (portal: MapPortal) => {
-    const isSelected = selected?.kind === "portal" && selected.portal.to === portal.to;
     return (
       <button
         key={`${portal.from}->${portal.to}`}
         type="button"
-        className={`map-node map-node--portal${isSelected ? " is-selected" : ""}`}
+        className="map-node map-node--portal"
         style={{ left: `${portal.position.x * 100}%`, top: `${portal.position.y * 100}%` }}
-        aria-pressed={isSelected}
-        onClick={() => setSelected({ kind: "portal", portal })}
+        onClick={() => (portal.to === "jingcheng" ? exitPalace(portal.to) : enterBoard(portal.to))}
       >
         <span className="map-node__dot map-node__dot--portal" aria-hidden="true" />
         <span className="map-node__name">{portal.name}</span>
@@ -290,8 +195,8 @@ export function MapScreen({
             db={db}
             state={state}
             locations={onBoard}
-            selectedId={selected?.kind === "loc" ? selected.loc.id : null}
-            onSelect={(loc) => setSelected({ kind: "loc", loc })}
+            selectedId={null}
+            onSelect={(loc) => onOpenCourtyard(loc)}
           />
         ) : (
           <section
@@ -313,8 +218,6 @@ export function MapScreen({
             {boardPortals.map(renderPortal)}
           </section>
         )}
-
-        <LocationInfoPanel info={infoFor(selected)} />
       </div>
     </GameShell>
   );

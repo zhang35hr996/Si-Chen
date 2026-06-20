@@ -687,6 +687,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenSave={() => setView("save")}
           onClose={() => setView("location")}
           onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenCourtyard={() => {}}
         />
       )}
       {view === "freeview" && freeViewId && (
