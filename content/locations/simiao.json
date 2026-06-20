@@ -1,0 +1,10 @@
+{
+  "id": "simiao",
+  "name": "寺庙",
+  "description": "古刹深藏郊野，松柏森森，香烟袅袅。钟声悠远，梵呗低回，红尘喧嚣到此皆息。",
+  "backgroundKey": "bg.simiao",
+  "ambience": ["钟声", "梵呗", "松风"],
+  "position": { "x": 0.4, "y": 0.5 },
+  "zone": "jingjiao",
+  "entry": "free"
+}

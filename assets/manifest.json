@@ -43,6 +43,7 @@
     "bg.gongdian_yuanzi.twilight": { "path": "backgrounds/gongdian_yuanzi_twilight.png", "kind": "background", "placeholder": false },
     "bg.gongdian_yuanzi.night": { "path": "backgrounds/gongdian_yuanzi_night.png", "kind": "background", "placeholder": false },
     "bg.fanpaizi": { "path": "backgrounds/fanpaizi.png", "kind": "background", "placeholder": false },
+    "bg.simiao": { "path": "backgrounds/simiao.png", "kind": "background", "placeholder": false },
     "bg.game_setting": { "path": "backgrounds/game_setting.png", "kind": "background", "placeholder": false },
     "bg.dengji": { "path": "cg/dengji.png", "kind": "background", "placeholder": false },
     "map.palace": { "path": "map/palace_morning.png", "kind": "map", "placeholder": false },
