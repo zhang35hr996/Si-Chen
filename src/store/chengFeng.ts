@@ -247,5 +247,6 @@ export function chengFengHaremGreeting(): DecreeReaction {
   return {
     speakerId: "cheng_feng",
     lines: ["不知陛下今日想去看哪位侍君呢？"],
+    backgroundKey: "bg.hougong",
   };
 }

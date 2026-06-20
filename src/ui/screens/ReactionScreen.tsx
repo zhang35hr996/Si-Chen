@@ -15,6 +15,7 @@ export function ReactionScreen({
   registry,
   speakerId,
   lines,
+  backgroundKey,
   onDone,
 }: {
   db: ContentDB;
@@ -22,6 +23,8 @@ export function ReactionScreen({
   registry: AssetRegistry;
   speakerId: string;
   lines: string[];
+  /** 覆盖背景（带时段变体）；缺省用玩家当前所在地点背景。 */
+  backgroundKey?: string;
   onDone: () => void;
 }) {
   const state = useGameState(store);
@@ -52,8 +55,9 @@ export function ReactionScreen({
   const portrait = registry.portrait(character?.portraitSet ?? speakerId, line.expression);
 
   const location = db.locations[state.playerLocation];
-  const background = location
-    ? registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background")
+  const bgKey = backgroundKey ?? location?.backgroundKey;
+  const background = bgKey
+    ? registry.resolveVariant(bgKey, timeOfDay(state.calendar), "background")
     : null;
 
   const next = () => (index + 1 < lines.length ? setIndex(index + 1) : onDone());

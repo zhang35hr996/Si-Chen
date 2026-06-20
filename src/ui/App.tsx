@@ -83,7 +83,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [court, setCourt] = useState<CourtSession | null>(null);
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [manageCharId, setManageCharId] = useState<string | null>(null);
-  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[] } | null>(null);
+  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   const [reactionRollover, setReactionRollover] = useState(false);
@@ -105,7 +105,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
-  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[] }[]>([]);
+  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   const [profileCharId, setProfileCharId] = useState<string | null>(null);
   const [courtyardLocId, setCourtyardLocId] = useState<string | null>(null);
@@ -638,9 +638,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!batch.ok) { setView("map"); return; }
     const spentAp = batch.value.some((c) => c.type === "SPEND_AP");
     const result = store.dispatchBatch(batch.value);
-    if (result.ok) {
-      // 复用 MapScreen.onTravelled 的结算：懿旨/敲打/转旬 + 进入对应房间
+    if (!result.ok) { setView("map"); return; } // 兜底：勿滞留在已置空的院子视图（黑屏）
+    if (spentAp) {
+      // 出宫等耗行动点的移动：复用 MapScreen.onTravelled 的结算（懿旨/敲打/转旬 + 进房）。
       onTravelledSettle(result.value.rolledOver, spentAp);
+    } else {
+      // 宫内免行动点移动：onTravelledSettle 对 !spentAp 仅落盘即返回，不设视图，
+      // 故此处显式进入该宫房间（否则 view 滞留 courtyard 而 courtyardLocId 已空 → 黑屏）。
+      doAutosave();
+      enterCurrentLocation();
     }
   };
 
@@ -882,6 +888,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           registry={registry}
           speakerId={reaction.speakerId}
           lines={reaction.lines}
+          backgroundKey={reaction.backgroundKey}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {

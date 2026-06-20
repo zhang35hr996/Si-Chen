@@ -16,6 +16,7 @@ class AudioController {
   private current: TrackId | null = null;
   private volume = 0.6;
   private muted = false;
+  private unlockArmed = false;
 
   private ensure(): HTMLAudioElement {
     if (!this.audio) {
@@ -27,16 +28,33 @@ class AudioController {
       a.volume = this.volume;
       a.muted = this.muted;
       this.audio = a;
+      this.armUnlock();
     }
     return this.audio;
   }
 
+  /** 浏览器在首次用户手势前会拦截 autoplay；首次 pointerdown/keydown 后补播当前曲目。 */
+  private armUnlock(): void {
+    if (this.unlockArmed || typeof window === "undefined") return;
+    this.unlockArmed = true;
+    const resume = () => {
+      const a = this.audio;
+      if (a && a.paused && a.src) void a.play().catch(() => { /* 仍被拦截则等下次手势 */ });
+    };
+    window.addEventListener("pointerdown", resume);
+    window.addEventListener("keydown", resume);
+  }
+
   play(track: TrackId): void {
     const a = this.ensure();
-    if (this.current === track) return;
+    // 切歌：换 src 重播。同曲目但已被 autoplay 拦截而暂停时也需补播一次。
+    if (this.current === track) {
+      if (a.paused && a.src) void a.play().catch(() => { /* 等用户手势解锁 */ });
+      return;
+    }
     this.current = track;
     a.src = TRACK_URLS[track];
-    void a.play().catch(() => { /* 自动播放被拦截：下次用户交互后的 play 会成功 */ });
+    void a.play().catch(() => { /* 自动播放被拦截：首次用户交互后的 resume 会补播 */ });
   }
 
   setVolume(v: number): void {

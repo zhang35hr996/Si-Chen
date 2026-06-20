@@ -14,6 +14,8 @@ export const DECREE_RANK_FLOOR = 40; // 官男子
 export interface DecreeReaction {
   speakerId: string;
   lines: string[];
+  /** 覆盖反应画面背景（资源 key，带时段变体）；缺省用玩家当前所在地点背景。 */
+  backgroundKey?: string;
 }
 export interface DecreePlan {
   effects: EventEffect[];
