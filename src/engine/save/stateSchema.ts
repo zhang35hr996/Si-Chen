@@ -25,6 +25,7 @@ const calendarStateSchema = gameTimeSchema
   .extend({
     ap: z.number().int().min(0),
     apMax: z.number().int().min(1),
+    eraName: z.string().default(""),
   })
   .refine((cal) => calendarInvariantViolation(cal as CalendarState) === null, {
     message: "impossible calendar state",

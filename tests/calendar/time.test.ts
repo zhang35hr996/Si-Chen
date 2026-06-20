@@ -19,7 +19,7 @@ import {
 describe("calendar core", () => {
   it("createCalendar defaults to 元年一月上旬 with AP 6/6", () => {
     const cal = createCalendar();
-    expect(cal).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0, ap: 6, apMax: 6 });
+    expect(cal).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0, ap: 6, apMax: 6, eraName: "" });
   });
 
   it.each([
@@ -47,6 +47,7 @@ describe("action-day rollover", () => {
     ...makeGameTime(year, month, period),
     ap: 0,
     apMax: 6,
+    eraName: "",
   });
 
   it.each([

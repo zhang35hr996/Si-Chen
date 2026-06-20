@@ -41,7 +41,7 @@ describe("birthDue", () => {
   });
   it("due once past the planned month", () => {
     const s = sovereignCarrying(1);
-    s.calendar = { ...makeGameTime(2, 1, "early"), ap: 6, apMax: 6 }; // monthOrdinal 13 > 10
+    s.calendar = { ...makeGameTime(2, 1, "early"), ap: 6, apMax: 6, eraName: "" }; // monthOrdinal 13 > 10
     expect(birthDue(db, s)).toBe(true);
   });
 });
@@ -49,7 +49,7 @@ describe("birthDue", () => {
 describe("buildBirth", () => {
   it("self-pregnancy → safe birth effect with favor 100 + lines; applying lands an heir", () => {
     const s = sovereignCarrying(1);
-    s.calendar = { ...makeGameTime(1, 10, "early"), ap: 6, apMax: 6 };
+    s.calendar = { ...makeGameTime(1, 10, "early"), ap: 6, apMax: 6, eraName: "" };
     const plan = buildBirth(db, s);
     expect(plan).not.toBeNull();
     expect(plan!.bearer).toBe("sovereign");

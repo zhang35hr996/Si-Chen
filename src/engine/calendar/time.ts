@@ -25,6 +25,8 @@ export interface CalendarState extends GameTime {
   /** Remaining action points this action-day: apMax → 0. */
   readonly ap: number;
   readonly apMax: number;
+  /** 年号（如「甘露」）；空串=未设，显示退回 元年/X年。 */
+  readonly eraName: string;
 }
 
 export const DEFAULT_AP_MAX = 6;
@@ -103,6 +105,7 @@ export interface CalendarStart {
   month?: number;
   period?: MonthPeriod;
   apMax?: number;
+  eraName?: string;
 }
 
 export function createCalendar(start: CalendarStart = {}): CalendarState {
@@ -110,7 +113,7 @@ export function createCalendar(start: CalendarStart = {}): CalendarState {
   const month = start.month ?? 1;
   const period = start.period ?? "early";
   const apMax = start.apMax ?? DEFAULT_AP_MAX;
-  return { ...makeGameTime(year, month, period), ap: apMax, apMax };
+  return { ...makeGameTime(year, month, period), ap: apMax, apMax, eraName: start.eraName ?? "" };
 }
 
 /** 上旬→中旬→下旬→次月上旬; 十二月下旬→次年一月上旬. AP refills to apMax. */
@@ -130,7 +133,7 @@ export function advanceActionDay(calendar: CalendarState): CalendarState {
       month += 1;
     }
   }
-  return { ...makeGameTime(year, month, period), ap: calendar.apMax, apMax: calendar.apMax };
+  return { ...makeGameTime(year, month, period), ap: calendar.apMax, apMax: calendar.apMax, eraName: calendar.eraName };
 }
 
 /** Structural invariant check — skeleton-plan §10 #10 (impossible calendar state). */
@@ -163,13 +166,14 @@ export function chineseNumeral(n: number): string {
   return ones === 0 ? tensPart : `${tensPart}${DIGITS[ones]}`;
 }
 
-export function formatYear(year: number): string {
-  return year === 1 ? "元年" : `${chineseNumeral(year)}年`;
+export function formatYear(year: number, eraName = ""): string {
+  const base = year === 1 ? "元年" : `${chineseNumeral(year)}年`;
+  return `${eraName}${base}`;
 }
 
-/** e.g. 元年一月上旬, 二年十二月下旬. */
-export function formatGameTime(time: GameTime): string {
-  return `${formatYear(time.year)}${chineseNumeral(time.month)}月${PERIOD_NAME[time.period]}`;
+/** e.g. 甘露元年一月上旬；无年号时 元年一月上旬. */
+export function formatGameTime(time: GameTime & { eraName?: string }): string {
+  return `${formatYear(time.year, time.eraName ?? "")}${chineseNumeral(time.month)}月${PERIOD_NAME[time.period]}`;
 }
 
 /** e.g. 行动点：5/5. */
