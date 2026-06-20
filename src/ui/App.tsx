@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import rawManifest from "../../assets/manifest.json";
 import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
@@ -16,6 +16,8 @@ import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
+import { audioController } from "./audio/AudioController";
+import { trackFor } from "./audio/trackFor";
 import { CourtyardScreen } from "./screens/CourtyardScreen";
 import { buildTravelBatch } from "../engine/map/travel";
 import { ShangshufangScreen } from "./screens/ShangshufangScreen";
@@ -105,7 +107,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [profileCharId, setProfileCharId] = useState<string | null>(null);
   const [courtyardLocId, setCourtyardLocId] = useState<string | null>(null);
   const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
-  const [_currentBoard, setCurrentBoard] = useState<string>("palace");
+  const [currentBoard, setCurrentBoard] = useState<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const tickedPeriods = useRef<Set<string>>(new Set());
@@ -579,6 +581,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (beats.length) playReactions(beats, rolledOver);
     else runCheckpoints(rolledOver);
   };
+
+  const playerZone = db.locations[liveState.playerLocation]?.zone;
+  useEffect(() => {
+    audioController.play(trackFor({ view, board: currentBoard, zone: playerZone }));
+  }, [view, currentBoard, playerZone]);
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
     setFocusConsortId(consortId);
