@@ -14,6 +14,7 @@ import { createInitialState, type InitialStateOverrides } from "../engine/state/
 import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState } from "../engine/state/types";
+import { changeOfficialGrade } from "../engine/officials/changeGrade";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -74,6 +75,12 @@ export class GameStore {
   /** 登基设定年号（写入 calendar.eraName）。 */
   setEraName(name: string): void {
     this.state = { ...this.state, calendar: { ...this.state.calendar, eraName: name } };
+    this.emit();
+  }
+
+  /** 改某官员官职（→品级→权势派生跟随）。v1 无 UI 调用方，仅留接口。 */
+  changeOfficialGrade(officialId: string, newPostId: string): void {
+    this.state = changeOfficialGrade(this.state, officialId, newPostId);
     this.emit();
   }
 
