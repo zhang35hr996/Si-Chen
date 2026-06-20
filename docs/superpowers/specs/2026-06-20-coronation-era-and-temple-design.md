@@ -57,15 +57,17 @@
 
 **求签**（`buildFortune`）：先按概率抽档，再在档内取随机量级。**整体偏正**：吉类增益总体略大于凶类减益。
 
+> 数值约束：funnel 的 `AXIS_CAP = 10` 会把单条资源轴每批增量钳到 ±10，故每项 delta 量级 ≤ 10。
+
 | 签 | 概率 | 效果 |
 |---|---|---|
-| 大吉 | 10% | `publicSupport += rand(10–12)`；`productivity += rand(10–12)`；额外随机一项：`prestige` 或 `treasury` `+= rand(4–6)` |
+| 大吉 | 10% | `publicSupport += rand(8–10)`；`productivity += rand(8–10)`；额外随机一项：`prestige` 或 `treasury` `+= rand(4–6)` |
 | 吉 | 25% | `publicSupport += rand(5–7)`；`productivity += rand(5–7)` |
 | 中平 | 30% | `publicSupport += rand(0–2)` |
-| 凶 | 25% | `publicSupport -= rand(3–5)` |
-| 大凶 | 10% | `publicSupport -= rand(7–9)`；额外随机一项：`rumor` 或 `clanDiscontent` `+= rand(3–5)` |
+| 凶 | 25% | `publicSupport -= rand(2–4)` |
+| 大凶 | 10% | `publicSupport -= rand(6–8)`；额外随机一项：`rumor` 或 `clanDiscontent` `+= rand(2–4)` |
 
-- 量级设定使 E[吉类净收益] > E[凶类净损失]（大吉/吉的正向幅度与额外 buff 明显高于 凶/大凶 的负向幅度）。
+- 量级设定使 E[吉类净收益] > E[凶类净损失]：大吉/吉的正向幅度与额外 buff 明显高于 凶/大凶 的负向幅度（均 ≤ AXIS_CAP=10）。
 - 反应：按抽中档位给出对应吉凶旁白（每档一组台词）。
 
 ### 组件边界
