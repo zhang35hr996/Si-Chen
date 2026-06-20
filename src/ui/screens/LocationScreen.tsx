@@ -7,6 +7,7 @@ import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { canSummon } from "../../store/bedchamber";
+import { hasChambers } from "../../engine/characters/chambers";
 import { CharacterCard } from "../components/CharacterCard";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
@@ -76,9 +77,9 @@ export function LocationScreen({
   const summoned =
     location.id === "zichendian" && summonedConsortId ? db.characters[summonedConsortId] : undefined;
 
-  // 居所宫殿（后宫）有住客侍君 → 视觉小说场景；否则走房间/菜单布局。
+  // 居所宫殿（后宫）有住客侍君 → 视觉小说场景；设宫室的居所即便空置也进场景（显示 5 宫室槽）。
   const sceneConsorts = location.zone === "hougong" ? present.filter((c) => c.kind === "consort") : [];
-  const showScene = sceneConsorts.length > 0;
+  const showScene = sceneConsorts.length > 0 || hasChambers(location.id);
 
   const crumbs = breadcrumbFor(db, location.id);
   const pregnant = state.resources.bloodline.gestations.some((g) => g.carrier === "sovereign");
@@ -95,6 +96,7 @@ export function LocationScreen({
     >
       {showScene && onViewProfile ? (
         <CharacterScene
+          key={location.id}
           db={db}
           state={state}
           registry={registry}

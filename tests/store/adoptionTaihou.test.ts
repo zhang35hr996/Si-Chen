@@ -11,7 +11,7 @@ const db = loaded.ok ? loaded.value : (() => { throw new Error("content failed")
 const heir = (over: Partial<Heir>): Heir => ({
   id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
   birthAt: makeGameTime(1, 1, "early"),
-  favor: 50, legitimate: false, petName: "", education: { scholarship: 5, martial: 5, virtue: 5 },
+  favor: 50, legitimate: false, petName: "", education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none",
   ...over,
 });
 

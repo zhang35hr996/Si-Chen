@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 4;
+export const SAVE_FORMAT_VERSION = 5;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -62,6 +62,54 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     const state = structuredClone(env.state) as Record<string, unknown>;
     if (state.taihou === undefined) state.taihou = { ill: false };
     return { ...env, formatVersion: 4, state, checksum: checksumOf(state) };
+  },
+  // v4 → v5: 属性系统重构。court 支柱拆为 sovereign+nation；皇嗣补明面/暗属性默认值。
+  4: (old) => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    const resources = (state.resources ?? {}) as Record<string, unknown>;
+    const court = resources.court as Record<string, number> | undefined;
+    if (court !== undefined) {
+      if (resources.sovereign === undefined) {
+        resources.sovereign = {
+          health: 70,
+          diligence: 50,
+          prestige: court.authority ?? 50,
+          martial: 50,
+          statecraft: 50,
+          cruelty: 20,
+          fatigue: 20,
+          regimeSecurity: 60,
+        };
+      }
+      if (resources.nation === undefined) {
+        resources.nation = {
+          military: 50,
+          treasury: 50,
+          publicSupport: court.publicSupport ?? 50,
+          productivity: 50,
+          governance: 50,
+          consortClanPower: 30,
+          ministerLoyalty: 50,
+          corruption: 20,
+          clanDiscontent: court.factionPressure ?? 20,
+          rumor: 10,
+        };
+      }
+      delete resources.court;
+    }
+    const bloodline = ((resources.bloodline ?? {}) as Record<string, unknown>);
+    const heirs = (bloodline.heirs as Record<string, unknown>[] | undefined) ?? [];
+    for (const h of heirs) {
+      if (h.health === undefined) h.health = 60;
+      if (h.talent === undefined) h.talent = 50;
+      if (h.diligence === undefined) h.diligence = 50;
+      if (h.ambition === undefined) h.ambition = 20;
+      if (h.closeness === undefined) h.closeness = 50;
+      if (h.support === undefined) h.support = 20;
+      if (h.faction === undefined) h.faction = "none";
+    }
+    return { ...env, formatVersion: 5, state, checksum: checksumOf(state) };
   },
 };
 

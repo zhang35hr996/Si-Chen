@@ -1,13 +1,15 @@
 /**
- * 人物视觉小说场景（§五）。进入有住客侍君的居所宫殿时取代商品卡：
- * 立绘居中大尺寸、底部裁切，背景用对应宫殿；下方对话框显示姓名 + 一句问候，
- * 底部 ActionDock 按优先级排布行为。问候为 UI 氛围文案（恪守礼数），非 gameplay 台词。
+ * 人物视觉小说场景（§五/§七）。进入后宫居所宫殿时取代商品卡：立绘居中大尺寸、底部裁切，
+ * 背景用对应宫殿。设宫室的 7 座居所顶部排 5 个宫室槽（主殿/东侧殿/西侧殿/东偏殿/西偏殿），
+ * 已住→进入该侍君场景，空置→显示「空置宫室」。坤宁宫/冷宫等单居所沿用侍君切换。
+ * 问候为 UI 氛围文案（恪守礼数），非 gameplay 台词。
  */
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent, LocationContent } from "../../engine/content/schemas";
-import type { GameState } from "../../engine/state/types";
+import type { ChamberId, GameState } from "../../engine/state/types";
+import { CHAMBERS, chamberOf, hasChambers } from "../../engine/characters/chambers";
 import { canSummon } from "../../store/bedchamber";
 
 /** 恪守礼数的问候集；按 charId 确定性选取，避免僭越或失礼。 */
@@ -40,102 +42,147 @@ export function CharacterScene({
   onViewProfile: (charId: string) => void;
   onManage?: (charId: string) => void;
 }) {
-  const [activeId, setActiveId] = useState(consorts[0]!.id);
+  const chambered = hasChambers(location.id);
+  const occupantOf = (id: ChamberId): CharacterContent | undefined =>
+    consorts.find((c) => chamberOf(state.standing[c.id]) === id);
+
+  // 分宫室殿按 chamber 选中；单居所按 consort id 选中。
+  const [activeChamber, setActiveChamber] = useState<ChamberId>(
+    consorts[0] ? chamberOf(state.standing[consorts[0].id]) : "main",
+  );
+  const [activeId, setActiveId] = useState<string | null>(consorts[0]?.id ?? null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const character = consorts.find((c) => c.id === activeId) ?? consorts[0]!;
-  const standing = state.standing[character.id];
+
+  const character = chambered
+    ? occupantOf(activeChamber)
+    : consorts.find((c) => c.id === activeId) ?? consorts[0];
+
+  const standing = character ? state.standing[character.id] : undefined;
   const rank = standing ? db.ranks[standing.rank] : undefined;
-  const displayName = character.profile.name; // 名牌显本名；位分见下方 char-scene__sub
-  const portrait = registry.portrait(character.portraitSet, "neutral");
+  const background = registry.resolveVariant(location.backgroundKey, "day", "background").url;
   // 对话/侍寝 与卡片同一门槛：有行动点且本旬可侍寝。
-  const actionable = state.calendar.ap >= 1 && canSummon(state, character.id);
+  const actionable = !!character && state.calendar.ap >= 1 && canSummon(state, character.id);
 
   return (
-    <section className="char-scene" aria-label={`${location.name} · ${displayName}`}>
-      {consorts.length > 1 && (
-        <div className="char-scene__switch">
-          {consorts.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={`char-scene__chip${c.id === activeId ? " is-active" : ""}`}
-              onClick={() => {
-                setActiveId(c.id);
-                setMoreOpen(false);
-              }}
-            >
-              {c.profile.name}
-            </button>
-          ))}
+    <section className="char-scene" aria-label={`${location.name} · ${character?.profile.name ?? "空置"}`}>
+      {chambered ? (
+        <div className="char-scene__switch char-scene__switch--chambers">
+          {CHAMBERS.map((ch) => {
+            const occ = occupantOf(ch.id);
+            return (
+              <button
+                key={ch.id}
+                type="button"
+                className={`char-scene__chip char-scene__chip--chamber${ch.id === activeChamber ? " is-active" : ""}${occ ? "" : " is-empty"}`}
+                onClick={() => {
+                  setActiveChamber(ch.id);
+                  setMoreOpen(false);
+                }}
+              >
+                <span className="char-scene__chip-room">{ch.name}</span>
+                <span className="char-scene__chip-occupant">{occ ? occ.profile.name : "空置"}</span>
+              </button>
+            );
+          })}
         </div>
+      ) : (
+        consorts.length > 1 && (
+          <div className="char-scene__switch">
+            {consorts.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`char-scene__chip${c.id === activeId ? " is-active" : ""}`}
+                onClick={() => {
+                  setActiveId(c.id);
+                  setMoreOpen(false);
+                }}
+              >
+                {c.profile.name}
+              </button>
+            ))}
+          </div>
+        )
       )}
 
-      <div
-        className="char-scene__sprite-wrap"
-        style={{ backgroundImage: `url("${registry.resolveVariant(location.backgroundKey, "day", "background").url}")` }}
-      >
-        <img
-          className="char-scene__sprite"
-          src={portrait.url}
-          alt={character.profile.name}
-          data-fallback={portrait.isFallback || undefined}
-        />
+      <div className="char-scene__sprite-wrap" style={{ backgroundImage: `url("${background}")` }}>
+        {character ? (
+          <img
+            className="char-scene__sprite"
+            src={registry.portrait(character.portraitSet, "neutral").url}
+            alt={character.profile.name}
+            data-fallback={registry.portrait(character.portraitSet, "neutral").isFallback || undefined}
+          />
+        ) : (
+          <div className="char-scene__empty" aria-hidden="true">
+            此宫室空置
+          </div>
+        )}
       </div>
 
       <div className="char-scene__dialogue">
-        <div className="char-scene__nameplate">
-          <span className="char-scene__name">{displayName}</span>
-          <span className="char-scene__sub">
-            {rank ? `${rank.name} · ` : ""}
-            {location.name}
-          </span>
-        </div>
-        <p className="char-scene__line">{greetingFor(character.id)}</p>
+        {character ? (
+          <>
+            <div className="char-scene__nameplate">
+              <span className="char-scene__name">{character.profile.name}</span>
+              <span className="char-scene__sub">
+                {rank ? `${rank.name} · ` : ""}
+                {location.name}
+              </span>
+            </div>
+            <p className="char-scene__line">{greetingFor(character.id)}</p>
 
-        <div className="action-dock">
-          <div className="action-dock__primary">
-            {onConverse && actionable && (
-              <button type="button" className="action-btn" onClick={() => onConverse(character.id)}>
-                对话
-              </button>
-            )}
-            <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
-              查看详情
-            </button>
-            {onManage && character.id !== "shen_zhibai" && (
-              <div className="action-more">
-                <button
-                  type="button"
-                  className="action-btn"
-                  aria-expanded={moreOpen}
-                  onClick={() => setMoreOpen((v) => !v)}
-                >
-                  更多 ▾
+            <div className="action-dock">
+              <div className="action-dock__primary">
+                {onConverse && actionable && (
+                  <button type="button" className="action-btn" onClick={() => onConverse(character.id)}>
+                    对话
+                  </button>
+                )}
+                <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
+                  查看详情
                 </button>
-                {moreOpen && (
-                  <div className="action-more__menu">
+                {onManage && character.id !== "shen_zhibai" && (
+                  <div className="action-more">
                     <button
                       type="button"
-                      onClick={() => {
-                        setMoreOpen(false);
-                        onManage(character.id);
-                      }}
+                      className="action-btn"
+                      aria-expanded={moreOpen}
+                      onClick={() => setMoreOpen((v) => !v)}
                     >
-                      管理位分 / 封号
+                      更多 ▾
                     </button>
+                    {moreOpen && (
+                      <div className="action-more__menu">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMoreOpen(false);
+                            onManage(character.id);
+                          }}
+                        >
+                          管理位分 / 封号
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+              <div className="action-dock__highlight">
+                {onBedchamber && actionable && (
+                  <button type="button" className="action-btn action-btn--key" onClick={() => onBedchamber(character.id)}>
+                    侍寝
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="char-scene__nameplate">
+            <span className="char-scene__name">空置宫室</span>
+            <span className="char-scene__sub">{location.name}</span>
           </div>
-          <div className="action-dock__highlight">
-            {onBedchamber && actionable && (
-              <button type="button" className="action-btn action-btn--key" onClick={() => onBedchamber(character.id)}>
-                侍寝
-              </button>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </section>
   );

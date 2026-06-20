@@ -38,20 +38,20 @@
       "effects": [
         {
           "type": "resource",
-          "pillar": "court",
+          "pillar": "nation",
           "field": "publicSupport",
           "delta": 2
         },
         {
           "type": "resource",
-          "pillar": "court",
-          "field": "authority",
+          "pillar": "sovereign",
+          "field": "prestige",
           "delta": 2
         },
         {
           "type": "resource",
-          "pillar": "court",
-          "field": "factionPressure",
+          "pillar": "nation",
+          "field": "clanDiscontent",
           "delta": 1
         }
       ],
@@ -70,13 +70,13 @@
       "effects": [
         {
           "type": "resource",
-          "pillar": "court",
-          "field": "authority",
+          "pillar": "sovereign",
+          "field": "prestige",
           "delta": 2
         },
         {
           "type": "resource",
-          "pillar": "court",
+          "pillar": "nation",
           "field": "publicSupport",
           "delta": -2
         }

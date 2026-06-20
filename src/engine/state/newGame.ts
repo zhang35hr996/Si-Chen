@@ -57,7 +57,8 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     playerLocation: db.world.startingLocation,
     taihou: { ill: false },
     resources: {
-      court: { ...db.world.startingResources.court },
+      sovereign: { ...db.world.startingResources.sovereign },
+      nation: { ...db.world.startingResources.nation },
       harem: { ...db.world.startingResources.harem },
       bloodline: {
         ...db.world.startingResources.bloodline,

@@ -22,12 +22,12 @@ describe("valid effects apply", () => {
       { type: "relationship", char: "shen_zhibai", field: "trust", delta: 3 },
       { type: "relationship", char: "shen_zhibai", field: "affinity", delta: -10 },
       { type: "favor", char: "lu_huaijin", delta: 5 },
-      { type: "resource", pillar: "court", field: "authority", delta: -4 },
+      { type: "resource", pillar: "sovereign", field: "prestige", delta: -4 },
       { type: "resource", pillar: "bloodline", field: "legitimacy", delta: 5 },
     ]);
     expect(next.relationships["shen_zhibai"]).toMatchObject({ trust: 38, affinity: 10 });
     expect(next.standing["lu_huaijin"]?.favor).toBe(35);
-    expect(next.resources.court.authority).toBe(46);
+    expect(next.resources.sovereign.prestige).toBe(46);
     expect(next.resources.bloodline.legitimacy).toBe(65);
   });
 
@@ -105,7 +105,7 @@ describe("invalid effects reject", () => {
     ["unknown relationship target", { type: "relationship", char: "char_ghost", field: "trust", delta: 2 }],
     ["unknown favor target", { type: "favor", char: "char_ghost", delta: 2 }],
     ["unknown memory target", { type: "memory", char: "char_ghost", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"] } }],
-    ["illegal pillar/field pair", { type: "resource", pillar: "court", field: "harmony", delta: 1 }],
+    ["illegal pillar/field pair", { type: "resource", pillar: "sovereign", field: "harmony", delta: 1 }],
     ["oversized single delta", { type: "relationship", char: "shen_zhibai", field: "trust", delta: 40 }],
     ["protected runtime memory", { type: "memory", char: "shen_zhibai", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"], protected: true } }],
     ["empty flag key", { type: "flag", key: "", value: 1 }],

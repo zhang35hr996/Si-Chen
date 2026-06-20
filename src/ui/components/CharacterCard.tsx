@@ -12,10 +12,9 @@ import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/fav
 import { bedchamberConfig } from "../../store/bedchamber";
 import { toGameTime } from "../../engine/calendar/time";
 
-/** 侍君明面属性 — label order follows background §四.4.1. */
-export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes, string]> = [
+/** 侍君明面数值属性 — 特长/喜好是标签，单独渲染。 */
+export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes & ("appearance" | "family" | "health" | "nurture"), string]> = [
   ["appearance", "容貌"],
-  ["talent", "才情"],
   ["family", "家世"],
   ["health", "健康"],
   ["nurture", "承养"],
@@ -119,6 +118,14 @@ export function CharacterCard({
               <dd>{character.attributes![key]}</dd>
             </div>
           ))}
+          <div>
+            <dt>特长</dt>
+            <dd>{character.attributes.specialty}</dd>
+          </div>
+          <div>
+            <dt>喜好</dt>
+            <dd>{character.attributes.likes.join("、")}</dd>
+          </div>
         </dl>
       )}
     </article>

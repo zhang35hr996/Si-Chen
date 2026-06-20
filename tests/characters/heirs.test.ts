@@ -15,7 +15,7 @@ const heir = (over: Partial<Heir>): Heir => ({
   favor: 50,
   legitimate: true,
   petName: "",
-  education: { scholarship: 5, martial: 5, virtue: 5 },
+  education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none",
   ...over,
 });
 

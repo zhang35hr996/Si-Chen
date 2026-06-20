@@ -287,8 +287,10 @@ export function applyEffects(
       }
       case "resource": {
         const applied = cappedDelta(`res:${effect.pillar}:${effect.field}`, effect.delta);
-        if (effect.pillar === "court") {
-          next.resources.court[effect.field] = clampPct(next.resources.court[effect.field] + applied);
+        if (effect.pillar === "sovereign") {
+          next.resources.sovereign[effect.field] = clampPct(next.resources.sovereign[effect.field] + applied);
+        } else if (effect.pillar === "nation") {
+          next.resources.nation[effect.field] = clampPct(next.resources.nation[effect.field] + applied);
         } else if (effect.pillar === "harem") {
           next.resources.harem[effect.field] = clampPct(next.resources.harem[effect.field] + applied);
         } else {
@@ -410,6 +412,14 @@ export function applyEffects(
             legitimate: effect.legitimate,
             petName: "",
             education: { scholarship: 5, martial: 5, virtue: 5 },
+            // 出生默认值（scaffold：初始化并持久化，逻辑暂不读取）。
+            health: 60,
+            talent: 50,
+            diligence: 50,
+            ambition: 20,
+            closeness: 50,
+            support: 20,
+            faction: "none",
           });
         }
         if (effect.bearer !== "sovereign") {

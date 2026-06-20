@@ -38,7 +38,7 @@
       "effects": [
         {
           "type": "resource",
-          "pillar": "court",
+          "pillar": "nation",
           "field": "publicSupport",
           "delta": 4
         },
@@ -50,8 +50,8 @@
         },
         {
           "type": "resource",
-          "pillar": "court",
-          "field": "authority",
+          "pillar": "sovereign",
+          "field": "prestige",
           "delta": -1
         }
       ],
@@ -70,13 +70,13 @@
       "effects": [
         {
           "type": "resource",
-          "pillar": "court",
-          "field": "authority",
+          "pillar": "sovereign",
+          "field": "prestige",
           "delta": 1
         },
         {
           "type": "resource",
-          "pillar": "court",
+          "pillar": "nation",
           "field": "publicSupport",
           "delta": -2
         }

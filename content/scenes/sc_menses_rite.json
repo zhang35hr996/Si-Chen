@@ -25,7 +25,7 @@
       "id": "n_fx_approve",
       "effects": [
         { "type": "resource", "pillar": "bloodline", "field": "legitimacy", "delta": 5 },
-        { "type": "resource", "pillar": "court", "field": "authority", "delta": 3 },
+        { "type": "resource", "pillar": "sovereign", "field": "prestige", "delta": 3 },
         { "type": "flag", "key": "rite_scheduled", "value": true },
         {
           "type": "memory",
@@ -54,7 +54,7 @@
       "id": "n_fx_delay",
       "effects": [
         { "type": "resource", "pillar": "bloodline", "field": "legitimacy", "delta": -3 },
-        { "type": "resource", "pillar": "court", "field": "factionPressure", "delta": 4 },
+        { "type": "resource", "pillar": "nation", "field": "clanDiscontent", "delta": 4 },
         { "type": "flag", "key": "rite_delayed", "value": true },
         {
           "type": "memory",

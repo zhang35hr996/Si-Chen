@@ -7,13 +7,51 @@
 import type { CalendarState, GameTime } from "../calendar/time";
 
 // ── Global resource pillars (scaffold values 0–100) ──────────────────
-export interface CourtState {
-  /** 圣威 */
-  authority: number;
+// 皇帝(玩家本人)属性。明面: health/diligence/prestige/martial/statecraft；
+// 暗属性: cruelty/fatigue/regimeSecurity。年龄/生日在 calendar，非此处。见
+// docs/systems/21-attribute-catalog.md。
+export interface SovereignState {
+  /** 健康 */
+  health: number;
+  /** 勤政 */
+  diligence: number;
+  /** 威望（原 court.authority 圣威） */
+  prestige: number;
+  /** 武力 */
+  martial: number;
+  /** 政略 */
+  statecraft: number;
+  /** 暴戾（暗） */
+  cruelty: number;
+  /** 疲劳（暗） */
+  fatigue: number;
+  /** 皇权安全（暗） */
+  regimeSecurity: number;
+}
+
+// 国家属性。明面: military/treasury/publicSupport/productivity/governance/
+// consortClanPower；暗属性: ministerLoyalty/corruption/clanDiscontent/rumor。
+export interface NationState {
+  /** 军力 */
+  military: number;
+  /** 国库（0–100 充盈度抽象） */
+  treasury: number;
   /** 民心 */
   publicSupport: number;
-  /** 派系压力 */
-  factionPressure: number;
+  /** 生产力 */
+  productivity: number;
+  /** 朝政（官僚效率，原“大臣能力”） */
+  governance: number;
+  /** 外戚权势 */
+  consortClanPower: number;
+  /** 大臣忠心（暗） */
+  ministerLoyalty: number;
+  /** 贪腐（暗） */
+  corruption: number;
+  /** 宗室不满（暗） */
+  clanDiscontent: number;
+  /** 谣言热度（暗） */
+  rumor: number;
 }
 
 export interface HaremState {
@@ -48,13 +86,30 @@ export interface GestationState {
 
 export type HeirSex = "daughter" | "son";
 
-/** 皇嗣养成属性（上书房问功课提升）。 */
+/**
+ * 皇嗣党羽倾向（暗属性，文本枚举而非数值）。见 21-attribute-catalog.md。
+ * none=无明显党羽 / empress=亲近皇后 / adoptive=依附承养人 / maternal=受母家扶持 /
+ * scholars=得清流称许 / generals=得武将拥护 / clan=与宗室往来 / wavering=朝臣观望 /
+ * foreign=暗结外臣。
+ */
+export type HeirFaction =
+  | "none"
+  | "empress"
+  | "adoptive"
+  | "maternal"
+  | "scholars"
+  | "generals"
+  | "clan"
+  | "wavering"
+  | "foreign";
+
+/** 皇嗣养成属性（上书房问功课提升）。政治=学问，复用 scholarship，不另设字段。 */
 export interface HeirEducation {
-  /** 学问 0–100 */
+  /** 学问（含政治/治术）0–100 */
   scholarship: number;
-  /** 骑射 0–100 */
+  /** 骑射/武力 0–100 */
   martial: number;
-  /** 品行 0–100 */
+  /** 品行/道德 0–100 */
   virtue: number;
 }
 
@@ -80,6 +135,22 @@ export interface Heir {
   education: HeirEducation;
   /** 养父 charId；未指定为 undefined。 */
   adoptiveFatherId?: string;
+  // ── 明面养成元参数 ──
+  /** 健康 0–100（夭折/生病）。 */
+  health: number;
+  /** 天赋 0–100（学习上限）。 */
+  talent: number;
+  /** 努力 0–100（成长速度）。 */
+  diligence: number;
+  // ── 暗属性 ──
+  /** 野心 0–100（是否主动争储）。 */
+  ambition: number;
+  /** 对皇帝亲近 0–100。 */
+  closeness: number;
+  /** 继位支持度 0–100。 */
+  support: number;
+  /** 党羽倾向（文本枚举）。 */
+  faction: HeirFaction;
 }
 
 export interface BloodlineState {
@@ -102,7 +173,8 @@ export interface BloodlineState {
 }
 
 export interface Resources {
-  court: CourtState;
+  sovereign: SovereignState;
+  nation: NationState;
   harem: HaremState;
   bloodline: BloodlineState;
 }
@@ -118,6 +190,9 @@ export interface RelationshipState {
 
 export type ConsortLifecycle = "normal" | "candidate" | "carrying" | "delivered" | "deceased";
 
+/** 后宫居所内的宫室槽位（每殿至多 5 间，各住一名侍君）；缺省视作 "main"(主殿)。 */
+export type ChamberId = "main" | "east_side" | "west_side" | "east_annex" | "west_annex";
+
 export interface CharacterStanding {
   /** Rank id from world.json's 位分 table. */
   rank: string;
@@ -129,6 +204,12 @@ export interface CharacterStanding {
   lifecycle?: ConsortLifecycle;
   /** 产后休养（虚弱）截止月序 monthOrdinal；未达则激情不可选。 */
   recoverUntilMonth?: number;
+  /** 所居宫室（缺省 "main" 主殿）。 */
+  chamber?: ChamberId;
+  /** 凤体违和（病）。 */
+  ill?: boolean;
+  /** 禁足。 */
+  confined?: boolean;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─

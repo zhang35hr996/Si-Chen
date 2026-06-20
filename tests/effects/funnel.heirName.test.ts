@@ -13,7 +13,7 @@ function withOneHeir(): GameState {
   s0.resources.bloodline.heirs.push({
     id: "heir_000001", sex: "daughter", fatherId: null, bearer: "sovereign",
     birthAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
-    favor: 50, legitimate: true, petName: "", education: { scholarship: 5, martial: 5, virtue: 5 },
+    favor: 50, legitimate: true, petName: "", education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none",
   });
   return s0;
 }

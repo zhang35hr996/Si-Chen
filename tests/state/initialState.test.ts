@@ -9,9 +9,10 @@ describe("createInitialState", () => {
     expect(formatAp(state.calendar)).toBe("行动点：6/6");
   });
 
-  it("initializes the three resource pillars with placeholder values", () => {
+  it("initializes the resource pillars with placeholder values", () => {
     const { resources } = createInitialState();
-    expect(resources.court).toEqual({ authority: 50, publicSupport: 50, factionPressure: 20 });
+    expect(resources.sovereign).toEqual({ health: 70, diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 });
+    expect(resources.nation).toEqual({ military: 50, treasury: 50, publicSupport: 50, productivity: 50, governance: 50, consortClanPower: 30, ministerLoyalty: 50, corruption: 20, clanDiscontent: 20, rumor: 10 });
     expect(resources.harem).toEqual({ harmony: 60, jealousy: 20 });
     expect(resources.bloodline).toEqual({
       legitimacy: 60,

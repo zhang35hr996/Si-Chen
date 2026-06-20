@@ -26,7 +26,6 @@ export function LocationInfoPanel({ info }: { info: LocationInfo | null }) {
   return (
     <aside className="loc-info">
       <h3 className="loc-info__title">{info.title}</h3>
-      {info.kind === "here" && <span className="loc-info__badge loc-info__badge--here">当前所在</span>}
       {info.description && <p className="loc-info__desc">{info.description}</p>}
 
       {info.presentCount !== undefined && info.kind !== "portal" && (

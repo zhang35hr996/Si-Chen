@@ -1,6 +1,7 @@
 /**
  * 侍君详情抽屉（§六）。右侧宽抽屉 + 标签页，取代居中小弹窗承担"查看详情"。
- * 只绑定真实数据模型字段；不存在的属性（如野心）一律不臆造。
+ * 只绑定真实数据模型字段。暗属性（情意/恐惧/野心/母家忠心/母家权势）开发期全显示，
+ * 正式版改 ??? 由血滴子解锁（见 docs/systems/21-attribute-catalog.md）。
  */
 import { useState } from "react";
 import type { ContentDB } from "../../engine/content/loader";
@@ -111,14 +112,27 @@ export function CharacterProfileDrawer({
             <>
               <h3 className="profile-h">才貌</h3>
               <Stat label="容貌" value={attrs.appearance} />
-              <Stat label="才情" value={attrs.talent} />
               <Stat label="家世" value={attrs.family} />
+              <dl className="profile-fields">
+                <Field label="特长" value={attrs.specialty} />
+                <Field label="喜好" value={attrs.likes.join("、")} />
+              </dl>
               <h3 className="profile-h">身体</h3>
               <Stat label="健康" value={attrs.health} />
               <Stat label="承养" value={attrs.nurture} />
             </>
           ) : (
             <p className="profile-empty">此人无养成属性。</p>
+          )}
+          {character.hidden && (
+            <>
+              <h3 className="profile-h">暗属性（开发期可见）</h3>
+              <Stat label="情意" value={character.hidden.affection} />
+              <Stat label="恐惧" value={character.hidden.fear} />
+              <Stat label="野心" value={character.hidden.ambition} />
+              <Stat label="母家忠心" value={character.hidden.clanLoyalty} />
+              <Stat label="母家权势" value={character.hidden.clanPower} />
+            </>
           )}
           <h3 className="profile-h">与皇帝</h3>
           {standing ? <Stat label="恩宠" value={standing.favor} /> : <p className="profile-empty">尚未查明。</p>}

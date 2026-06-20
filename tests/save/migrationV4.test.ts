@@ -8,8 +8,8 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 
 describe("save format v4", () => {
-  it("version is 4", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(4);
+  it("version is at least 5", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(5);
   });
 
   it("migration v3 → v4: backfills taihou:{ill:false} when absent", () => {

@@ -134,7 +134,8 @@ describe("triggerConditionSchema (closed DSL — scaffold guard)", () => {
 
 describe("eventEffectSchema (discriminated pillar/field pairs)", () => {
   it("accepts legal pillar/field combinations", () => {
-    accepts(eventEffectSchema, { type: "resource", pillar: "court", field: "authority", delta: 3 });
+    accepts(eventEffectSchema, { type: "resource", pillar: "sovereign", field: "prestige", delta: 3 });
+    accepts(eventEffectSchema, { type: "resource", pillar: "nation", field: "governance", delta: -3 });
     accepts(eventEffectSchema, { type: "resource", pillar: "harem", field: "jealousy", delta: -3 });
     accepts(eventEffectSchema, { type: "resource", pillar: "bloodline", field: "legitimacy", delta: 5 });
     accepts(eventEffectSchema, { type: "set_bloodline_status", field: "menstrualStatus", value: "absent" });
@@ -142,7 +143,7 @@ describe("eventEffectSchema (discriminated pillar/field pairs)", () => {
   });
 
   it("rejects illegal pairs, oversized deltas, and bad enums", () => {
-    rejects(eventEffectSchema, { type: "resource", pillar: "court", field: "harmony", delta: 1 }); // wrong pair
+    rejects(eventEffectSchema, { type: "resource", pillar: "sovereign", field: "harmony", delta: 1 }); // wrong pair
     rejects(eventEffectSchema, { type: "resource", pillar: "bloodline", field: "menstrualStatus", delta: 1 });
     rejects(eventEffectSchema, { type: "relationship", char: "char_a", field: "trust", delta: 40 }); // ±10 cap
     rejects(eventEffectSchema, { type: "set_bloodline_status", field: "menstrualStatus", value: "pregnant" });
@@ -204,7 +205,8 @@ describe("worldSchema / rankSchema", () => {
       calendar: { apMax: 5, start: { year: 1, month: 1, period: "early" } },
       startingLocation: "loc_a",
       startingResources: {
-        court: { authority: 50, publicSupport: 50, factionPressure: 20 },
+        sovereign: { health: 70, diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 },
+        nation: { military: 50, treasury: 50, publicSupport: 50, productivity: 50, governance: 50, consortClanPower: 30, ministerLoyalty: 50, corruption: 20, clanDiscontent: 20, rumor: 10 },
         harem: { harmony: 60, jealousy: 20 },
         bloodline: { legitimacy: 60, menstrualStatus: "normal" },
       },

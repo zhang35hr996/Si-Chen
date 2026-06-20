@@ -1,6 +1,8 @@
 {
   "id": "example_character",
   "kind": "consort",
+  "attributes": { "appearance": 60, "family": 50, "health": 60, "nurture": 50, "specialty": "TODO 特长，如 古筝", "likes": ["TODO 喜好"] },
+  "hidden": { "affection": 40, "fear": 30, "ambition": 30, "clanLoyalty": 50, "clanPower": 40 },
   "profile": {
     "name": "示例侍君",
     "age": 22,

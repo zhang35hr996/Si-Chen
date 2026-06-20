@@ -99,6 +99,14 @@ export function ConsortListModal({
                   <dd>{c.attributes![key]}</dd>
                 </div>
               ))}
+              <div>
+                <dt>特长</dt>
+                <dd>{c.attributes.specialty}</dd>
+              </div>
+              <div>
+                <dt>喜好</dt>
+                <dd>{c.attributes.likes.join("、")}</dd>
+              </div>
             </dl>
           )}
           <p className="consort-detail__field">

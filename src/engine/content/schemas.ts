@@ -39,6 +39,9 @@ export const characterStandingSchema = z.strictObject({
   title: nonEmpty.optional(),
   lifecycle: z.enum(["normal", "candidate", "carrying", "delivered", "deceased"]).optional(),
   recoverUntilMonth: z.number().int().min(1).optional(),
+  chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
+  ill: z.boolean().optional(),
+  confined: z.boolean().optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
@@ -121,8 +124,34 @@ export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("favor"), char: idSchema, delta }),
   z.strictObject({
     type: z.literal("resource"),
-    pillar: z.literal("court"),
-    field: z.enum(["authority", "publicSupport", "factionPressure"]),
+    pillar: z.literal("sovereign"),
+    field: z.enum([
+      "health",
+      "diligence",
+      "prestige",
+      "martial",
+      "statecraft",
+      "cruelty",
+      "fatigue",
+      "regimeSecurity",
+    ]),
+    delta,
+  }),
+  z.strictObject({
+    type: z.literal("resource"),
+    pillar: z.literal("nation"),
+    field: z.enum([
+      "military",
+      "treasury",
+      "publicSupport",
+      "productivity",
+      "governance",
+      "consortClanPower",
+      "ministerLoyalty",
+      "corruption",
+      "clanDiscontent",
+      "rumor",
+    ]),
     delta,
   }),
   z.strictObject({
@@ -199,18 +228,33 @@ export const eventEffectSchema = z.union([
 
 export type EventEffect = z.infer<typeof eventEffectSchema>;
 
-// ── consort attributes (侍君明面属性 — background §四.4.1) ──────────────
-// Static, card-facing养成 attributes. 年龄 lives in profile.age and 性格 in
-// profile.personalityTraits; these five are the numeric stats the card shows.
+// ── consort attributes (侍君明面属性 — docs/systems/21-attribute-catalog.md) ──
+// Static, card-facing养成 attributes. 年龄 lives in profile.age, 性格 in
+// profile.personalityTraits, 位分/恩宠 in standing, 住处 in standing.chamber.
+// 特长(specialty) 是标签而非数值；喜好(likes) 是标签数组。
 export const consortAttributesSchema = z.strictObject({
   appearance: percent, // 容貌
-  talent: percent, // 才情
   family: percent, // 家世
   health: percent, // 健康
   nurture: percent, // 承养资质
+  specialty: nonEmpty, // 特长（标签，如 古筝/舞蹈）
+  likes: z.array(nonEmpty), // 喜好（标签，如 玉器/马具）
 });
 
 export type ConsortAttributes = z.infer<typeof consortAttributesSchema>;
+
+// ── consort hidden attributes (侍君暗属性) ────────────────────────────
+// 开发期全显示；正式版 ??? 由血滴子解锁。情意≈relationships.affinity 的“真心”
+// 维度，此处作为 authored 初值；后期接入运行时。
+export const consortHiddenSchema = z.strictObject({
+  affection: percent, // 情意
+  fear: percent, // 恐惧
+  ambition: percent, // 野心
+  clanLoyalty: percent, // 母家忠心
+  clanPower: percent, // 母家权势
+});
+
+export type ConsortHidden = z.infer<typeof consortHiddenSchema>;
 
 // ── characters ────────────────────────────────────────────────────────
 export const characterSchema = z
@@ -219,6 +263,8 @@ export const characterSchema = z
     kind: z.enum(["consort", "official", "elder"]),
     /** 侍君明面属性. Optional: officials carry no养成 stat block. */
     attributes: consortAttributesSchema.optional(),
+    /** 侍君暗属性. Optional: officials carry none. */
+    hidden: consortHiddenSchema.optional(),
     profile: z.strictObject({
       name: nonEmpty,
       surname: nonEmpty.optional(),
@@ -457,10 +503,27 @@ export const worldSchema = z.strictObject({
   }),
   startingLocation: idSchema,
   startingResources: z.strictObject({
-    court: z.strictObject({
-      authority: percent,
+    sovereign: z.strictObject({
+      health: percent,
+      diligence: percent,
+      prestige: percent,
+      martial: percent,
+      statecraft: percent,
+      cruelty: percent,
+      fatigue: percent,
+      regimeSecurity: percent,
+    }),
+    nation: z.strictObject({
+      military: percent,
+      treasury: percent,
       publicSupport: percent,
-      factionPressure: percent,
+      productivity: percent,
+      governance: percent,
+      consortClanPower: percent,
+      ministerLoyalty: percent,
+      corruption: percent,
+      clanDiscontent: percent,
+      rumor: percent,
     }),
     harem: z.strictObject({ harmony: percent, jealousy: percent }),
     bloodline: z.strictObject({

@@ -1101,15 +1101,32 @@ button:active:enabled {
 
 .harem-grid {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  grid-auto-rows: min-content;
-  gap: 1rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   align-content: start;
   padding: 1.4rem;
   border: 1px solid var(--c-line);
   border-radius: 6px;
   background: var(--c-panel-1);
+}
+.harem-grid__empress {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px dashed var(--c-line);
+}
+.harem-grid__empress .harem-node {
+  width: min(360px, 80%);
+  border-color: var(--c-line-gold);
+  background: var(--c-panel-3);
+}
+.harem-grid__body {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-auto-rows: min-content;
+  gap: 0.85rem 1.4rem;
+  align-content: start;
 }
 .harem-grid__col {
   display: flex;
@@ -1138,25 +1155,21 @@ button:active:enabled {
   background: var(--c-panel-1);
   padding: 0.4rem 0;
 }
-.harem-grid__cold {
-  grid-column: 1 / -1;
+.harem-grid__bottom {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
+  gap: 1.4rem;
   margin-top: 0.6rem;
   padding-top: 1rem;
   border-top: 1px dashed var(--c-line);
 }
-.harem-grid__cold-label {
-  font-size: 0.74rem;
-  letter-spacing: 0.2em;
-  color: var(--c-text-dim);
-  opacity: 0.7;
+.harem-grid__bottom .harem-node {
+  flex: 1;
 }
-.harem-grid__cold .harem-node {
-  width: min(240px, 70%);
+.harem-node--cold {
   opacity: 0.78;
+}
+.harem-node--candidate {
+  border-style: dashed;
 }
 
 /* ── 宫殿节点 ── */
@@ -1188,10 +1201,30 @@ button:active:enabled {
   opacity: 0.6;
 }
 .harem-node__name {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   font-family: var(--font-title);
   font-size: 1.05rem;
   letter-spacing: 0.1em;
   color: var(--c-gold-text);
+}
+.harem-node__role {
+  font-family: var(--font-body);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  color: var(--c-text-dim);
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  padding: 0 0.3rem;
+}
+.harem-node__occupancy {
+  margin-left: auto;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  letter-spacing: normal;
+  color: var(--c-text-dim);
 }
 .harem-node__resident {
   font-size: 0.82rem;
@@ -1264,11 +1297,14 @@ button:active:enabled {
 }
 
 @media (max-width: 640px) {
-  .harem-grid {
+  .harem-grid__body {
     grid-template-columns: 1fr;
   }
   .harem-grid__axis {
     display: none;
+  }
+  .harem-grid__bottom {
+    flex-direction: column;
   }
 }
 
@@ -1305,6 +1341,45 @@ button:active:enabled {
 .char-scene__chip.is-active {
   color: var(--c-gold);
   border-color: var(--c-line-gold);
+}
+
+/* ── 宫室槽位切换（设宫室的 7 座居所，§七）── */
+.char-scene__switch--chambers {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(92%, 640px);
+}
+.char-scene__chip--chamber {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  border-radius: 8px;
+  padding: 0.3rem 0.7rem;
+  line-height: 1.3;
+}
+.char-scene__chip--chamber.is-empty {
+  opacity: 0.6;
+}
+.char-scene__chip-room {
+  font-family: var(--font-title);
+  letter-spacing: 0.1em;
+}
+.char-scene__chip-occupant {
+  font-size: 0.72rem;
+  color: var(--c-text-dim);
+}
+.char-scene__chip--chamber.is-active .char-scene__chip-occupant {
+  color: var(--c-gold);
+}
+.char-scene__empty {
+  align-self: center;
+  margin-bottom: 12%;
+  font-family: var(--font-title);
+  font-size: 1.1rem;
+  letter-spacing: 0.3em;
+  color: var(--c-text-dim);
+  opacity: 0.65;
 }
 
 .char-scene__sprite-wrap {

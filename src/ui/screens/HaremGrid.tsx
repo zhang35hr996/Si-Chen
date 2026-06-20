@@ -1,23 +1,23 @@
 /**
- * 后宫对称网格（§四）。取代散点宫道图：左右两列 + 中央宫道主轴，
- * 长门宫置底部「冷宫·偏僻区」。每个宫殿只显示名称 + 住客(位分) + 至多两枚状态图标，
- * 不把人物卡/完整数据放进地图。点击宫殿→选中（右侧信息栏负责「进入」）。
+ * 后宫对称网格（§四/§七）。坤宁宫（皇后居所）置顶；中部 7 座居所分两列 + 中央宫道主轴；
+ * 底部一排：长门宫（冷宫）｜储秀宫（待选秀男）。每座居所只显示名称 + 住客(本名·位分) +
+ * 至多 3 枚状态图标（病/禁足/孕 及 育/候/故），不把人物卡/完整数据放进地图。
+ * 点击宫殿→选中（右侧信息栏负责「进入」）。
  */
 import { useState } from "react";
 import type { ContentDB } from "../../engine/content/loader";
 import type { LocationContent } from "../../engine/content/schemas";
-import type { GameState } from "../../engine/state/types";
+import type { CharacterStanding, GameState } from "../../engine/state/types";
 import { getPresentAt } from "../../engine/characters/presence";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
-import { canSummon } from "../../store/bedchamber";
 
+const EMPRESS_PALACE = "kunninggong"; // 坤宁宫 · 皇后（凤后）居所，置顶
 const COLD_PALACE = "changmengong"; // 长门宫 · 冷宫
-/** 偏好排布顺序（仅视觉对称，无玩法含义）；未列出的宫殿排在其后。 */
-const PREFERRED = [
+const CANDIDATE_PALACE = "chuxiu_gong"; // 储秀宫 · 待选秀男
+/** 7 座设宫室的居所排序（景仁宫置于原储秀宫位）。 */
+const RESIDENTIAL_ORDER = [
   "zhaoning_gong",
   "yanhe_gong",
-  "kunninggong",
-  "chuxiu_gong",
   "jingren_gong",
   "zhongcui_gong",
   "xianfugong",
@@ -25,57 +25,87 @@ const PREFERRED = [
   "chenghui_gong",
 ];
 
-interface PalaceView {
-  loc: LocationContent;
-  resident?: string;
-  statuses: Array<{ icon: string; label: string; tone: string }>;
-  empty: boolean;
+interface Status {
+  icon: string;
+  label: string;
+  tone: string;
 }
 
-function viewOf(db: ContentDB, state: GameState, loc: LocationContent): PalaceView {
-  const present = getPresentAt(db, state, loc.id);
-  const consort = present.find((c) => c.kind === "consort");
-  const statuses: PalaceView["statuses"] = [];
-  if (consort) {
-    const standing = state.standing[consort.id];
-    const rank = standing ? db.ranks[standing.rank] : undefined;
-    const lifecycle = standing?.lifecycle;
-    if (lifecycle === "carrying") statuses.push({ icon: "孕", label: "怀胎", tone: "warn" });
-    else if (lifecycle === "delivered") statuses.push({ icon: "育", label: "育嗣", tone: "jade" });
-    else if (lifecycle === "candidate") statuses.push({ icon: "候", label: "候选承嗣", tone: "jade" });
-    else if (lifecycle === "deceased") statuses.push({ icon: "故", label: "已故", tone: "dim" });
-    if (lifecycle !== "deceased") {
-      if (canSummon(state, consort.id)) statuses.push({ icon: "寝", label: "可侍寝", tone: "gold" });
-      else statuses.push({ icon: "话", label: "可对话", tone: "gold" });
+/** 单名侍君的状态标：仅 病 / 禁足 / 孕。不标注「可侍寝/可对话」，也不标 育/候/故。 */
+function statusesOf(standing: CharacterStanding | undefined): Status[] {
+  const out: Status[] = [];
+  if (standing?.lifecycle === "carrying") out.push({ icon: "孕", label: "怀胎", tone: "warn" });
+  if (standing?.ill) out.push({ icon: "病", label: "凤体违和", tone: "warn" });
+  if (standing?.confined) out.push({ icon: "禁", label: "禁足", tone: "dim" });
+  return out;
+}
+
+interface PalaceView {
+  loc: LocationContent;
+  /** 住客（按位分降序）。 */
+  residents: { id: string; label: string }[];
+  statuses: Status[];
+  /** 角色标签：冷宫 / 待选秀男 / 皇后居所 / undefined。 */
+  role?: string;
+  /** 设宫室居所的容量（5）；否则 undefined。 */
+  capacity?: number;
+}
+
+function viewOf(db: ContentDB, state: GameState, loc: LocationContent, role?: string, capacity?: number): PalaceView {
+  const consorts = getPresentAt(db, state, loc.id).filter((c) => c.kind === "consort");
+  const residents = consorts.map((c) => ({
+    id: c.id,
+    label: resolveIdentityLabel(c, state.standing[c.id], state.standing[c.id] ? db.ranks[state.standing[c.id]!.rank] : undefined),
+  }));
+  // 汇总住客状态标，去重后至多 3 枚。
+  const seen = new Set<string>();
+  const statuses: Status[] = [];
+  for (const c of consorts) {
+    for (const s of statusesOf(state.standing[c.id])) {
+      if (seen.has(s.icon)) continue;
+      seen.add(s.icon);
+      statuses.push(s);
     }
-    return {
-      loc,
-      resident: resolveIdentityLabel(consort, standing, rank),
-      statuses: statuses.slice(0, 2),
-      empty: false,
-    };
   }
-  return { loc, statuses: [{ icon: "空", label: "无人居住", tone: "dim" }], empty: true };
+  return { loc, residents, statuses: statuses.slice(0, 3), role, capacity };
+}
+
+function residentText(view: PalaceView): string {
+  if (view.role === "待选秀男") return "待选秀男";
+  if (view.residents.length === 0) return "暂无侍君";
+  if (view.residents.length === 1) return view.residents[0]!.label;
+  return `${view.residents[0]!.label} 等 ${view.residents.length} 人`;
 }
 
 function PalaceCard({
   view,
   selected,
   onSelect,
+  className,
 }: {
   view: PalaceView;
   selected: boolean;
   onSelect: () => void;
+  className?: string;
 }) {
+  const empty = view.residents.length === 0 && view.role !== "待选秀男";
   return (
     <button
       type="button"
-      className={`harem-node${selected ? " is-selected" : ""}${view.empty ? " harem-node--empty" : ""}`}
+      className={`harem-node${selected ? " is-selected" : ""}${empty ? " harem-node--empty" : ""}${className ? ` ${className}` : ""}`}
       aria-pressed={selected}
       onClick={onSelect}
     >
-      <span className="harem-node__name">{view.loc.name}</span>
-      <span className="harem-node__resident">{view.resident ?? "暂无侍君"}</span>
+      <span className="harem-node__name">
+        {view.loc.name}
+        {view.role && <span className="harem-node__role">{view.role}</span>}
+        {view.capacity && (
+          <span className="harem-node__occupancy">
+            {view.residents.length}/{view.capacity}
+          </span>
+        )}
+      </span>
+      <span className="harem-node__resident">{residentText(view)}</span>
       <span className="harem-node__status">
         {view.statuses.map((s) => (
           <i key={s.icon} className={`harem-status harem-status--${s.tone}`} title={s.label}>
@@ -101,21 +131,34 @@ export function HaremGrid({
   onSelect: (loc: LocationContent) => void;
 }) {
   const [view, setView] = useState<"grid" | "list">("grid");
+  const byId = (id: string) => locations.find((l) => l.id === id);
 
-  const cold = locations.find((l) => l.id === COLD_PALACE);
-  const rest = locations
-    .filter((l) => l.id !== COLD_PALACE)
-    .sort((a, b) => {
-      const ia = PREFERRED.indexOf(a.id);
-      const ib = PREFERRED.indexOf(b.id);
-      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-    });
-  const half = Math.ceil(rest.length / 2);
-  const left = rest.slice(0, half);
-  const right = rest.slice(half);
-  const card = (loc: LocationContent) => (
-    <PalaceCard key={loc.id} view={viewOf(db, state, loc)} selected={selectedId === loc.id} onSelect={() => onSelect(loc)} />
+  const empress = byId(EMPRESS_PALACE);
+  const cold = byId(COLD_PALACE);
+  const candidate = byId(CANDIDATE_PALACE);
+
+  const residential = RESIDENTIAL_ORDER.map(byId).filter((l): l is LocationContent => l !== undefined);
+  const half = Math.ceil(residential.length / 2);
+  const left = residential.slice(0, half);
+  const right = residential.slice(half);
+
+  const card = (loc: LocationContent, role?: string, capacity?: number, className?: string) => (
+    <PalaceCard
+      key={loc.id}
+      view={viewOf(db, state, loc, role, capacity)}
+      selected={selectedId === loc.id}
+      onSelect={() => onSelect(loc)}
+      className={className}
+    />
   );
+
+  // 列表视图：坤宁宫 → 7 居所 → 冷宫 → 储秀宫。
+  const listOrder: Array<{ loc: LocationContent; role?: string; capacity?: number }> = [
+    ...(empress ? [{ loc: empress, role: "皇后居所" }] : []),
+    ...residential.map((loc) => ({ loc, capacity: 5 })),
+    ...(cold ? [{ loc: cold, role: "冷宫" }] : []),
+    ...(candidate ? [{ loc: candidate, role: "待选秀男" }] : []),
+  ];
 
   return (
     <section className="harem" aria-label="后宫">
@@ -138,22 +181,25 @@ export function HaremGrid({
 
       {view === "grid" ? (
         <div className="harem-grid">
-          <div className="harem-grid__col">{left.map(card)}</div>
-          <div className="harem-grid__axis" aria-hidden="true">
-            <span className="harem-grid__axis-label">宫道</span>
+          {empress && <div className="harem-grid__empress">{card(empress, "皇后居所")}</div>}
+          <div className="harem-grid__body">
+            <div className="harem-grid__col">{left.map((loc) => card(loc, undefined, 5))}</div>
+            <div className="harem-grid__axis" aria-hidden="true">
+              <span className="harem-grid__axis-label">宫道</span>
+            </div>
+            <div className="harem-grid__col">{right.map((loc) => card(loc, undefined, 5))}</div>
           </div>
-          <div className="harem-grid__col">{right.map(card)}</div>
-          {cold && (
-            <div className="harem-grid__cold">
-              <span className="harem-grid__cold-label">冷宫 · 偏僻区</span>
-              {card(cold)}
+          {(cold || candidate) && (
+            <div className="harem-grid__bottom">
+              {cold && card(cold, "冷宫", undefined, "harem-node--cold")}
+              {candidate && card(candidate, "待选秀男", undefined, "harem-node--candidate")}
             </div>
           )}
         </div>
       ) : (
         <ul className="harem-list">
-          {[...rest, ...(cold ? [cold] : [])].map((loc) => {
-            const v = viewOf(db, state, loc);
+          {listOrder.map(({ loc, role, capacity }) => {
+            const v = viewOf(db, state, loc, role, capacity);
             return (
               <li key={loc.id}>
                 <button
@@ -161,8 +207,11 @@ export function HaremGrid({
                   className={`harem-list__row${selectedId === loc.id ? " is-selected" : ""}`}
                   onClick={() => onSelect(loc)}
                 >
-                  <span className="harem-list__name">{loc.name}</span>
-                  <span className="harem-list__resident">{v.resident ?? "暂无侍君"}</span>
+                  <span className="harem-list__name">
+                    {loc.name}
+                    {role && <span className="harem-node__role">{role}</span>}
+                  </span>
+                  <span className="harem-list__resident">{residentText(v)}</span>
                   <span className="harem-node__status">
                     {v.statuses.map((s) => (
                       <i key={s.icon} className={`harem-status harem-status--${s.tone}`} title={s.label}>

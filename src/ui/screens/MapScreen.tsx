@@ -54,7 +54,8 @@ export function MapScreen({
   /** Open on the 皇城主地图 (root board) — true after 新游戏 / 事件结束 (hub return);
    *  false when opened from a location's 宫城图 button (start on that board). */
   atRoot: boolean;
-  onTravelled: (rolledOver: boolean) => void;
+  /** spentAp=false 表示宫内免行动点移动（不掷懿旨/敲打、不跑转旬）。 */
+  onTravelled: (rolledOver: boolean, spentAp: boolean) => void;
   onEnterCurrent: () => void;
   onOpenView: (locationId: string) => void;
   onOpenSave: () => void;
@@ -134,8 +135,9 @@ export function MapScreen({
   const travel = (to: string) => {
     const batch = buildTravelBatch(db, state, to);
     if (!batch.ok) return; // button is disabled; backstop only
+    const spentAp = batch.value.some((c) => c.type === "SPEND_AP");
     const result = store.dispatchBatch(batch.value);
-    if (result.ok) onTravelled(result.value.rolledOver);
+    if (result.ok) onTravelled(result.value.rolledOver, spentAp);
   };
 
   // 出宫（前往京城）扣 1 行动力，并复用 travel 的转旬/懿旨/敲打结算；
@@ -145,7 +147,7 @@ export function MapScreen({
     const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
     if (!spend.ok) return;
     enterBoard(to);
-    onTravelled(spend.value.rolledOver);
+    onTravelled(spend.value.rolledOver, true);
   };
 
   // ── Build the right-panel info for the current selection ──────────────
@@ -159,7 +161,7 @@ export function MapScreen({
           title: p.name,
           kind: "portal",
           description: `出宫前往${boardOf(p.to).name}。`,
-          actionLabel: "出宫 · 前往京城（耗 1 行动力）",
+          actionLabel: "出宫 · 前往京城",
           actionDisabled: state.calendar.ap < 1,
           onAction: () => exitPalace(p.to),
         };
@@ -244,7 +246,6 @@ export function MapScreen({
       >
         <span className="map-node__dot" aria-hidden="true" />
         <span className="map-node__name">{loc.name}</span>
-        {here && <span className="map-node__seal">当前</span>}
         {showEvent && <span className="map-node__event" aria-label="有事件" />}
       </button>
     );

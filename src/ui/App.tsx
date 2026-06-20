@@ -455,9 +455,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     setSummonedConsortId(null);
     if (store.getState().calendar.ap < 2) return; // 行动点不足
     const applied = store.applyEffects(db, [
-      { type: "resource", pillar: "court", field: "authority", delta: 5 },
-      { type: "resource", pillar: "court", field: "publicSupport", delta: 3 },
-      { type: "resource", pillar: "court", field: "factionPressure", delta: -3 },
+      { type: "resource", pillar: "sovereign", field: "diligence", delta: 5 },
+      { type: "resource", pillar: "nation", field: "governance", delta: 3 },
+      { type: "resource", pillar: "nation", field: "publicSupport", delta: 3 },
     ]);
     if (!applied.ok) return;
     const { spend, decreeBeats } = spendAp(2);
@@ -660,8 +660,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           atRoot={mapAtRoot}
-          onTravelled={(rolledOver) => {
+          onTravelled={(rolledOver, spentAp) => {
             doAutosave();
+            // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
+            if (!spentAp) return;
             const cal = store.getState().calendar;
             const key = `${store.getState().rngSeed}:${cal.dayIndex}:travel:${cal.ap}`;
             let beats: DecreeReaction[] = [];

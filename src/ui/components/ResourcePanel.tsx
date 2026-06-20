@@ -18,14 +18,32 @@ function Bar({ label, value }: { label: string; value: number }) {
 }
 
 export function ResourcePanel({ state, onClose }: { state: GameState; onClose: () => void }) {
-  const { court, harem, bloodline } = state.resources;
+  const { sovereign, nation, harem, bloodline } = state.resources;
   return (
     <Drawer title="国情" subtitle="朝野上下，尽在圣览" onClose={onClose}>
       <div className="profile-section">
-        <h3 className="profile-h">朝局</h3>
-        <Bar label="圣威" value={court.authority} />
-        <Bar label="民心" value={court.publicSupport} />
-        <Bar label="派系压力" value={court.factionPressure} />
+        <h3 className="profile-h">皇帝</h3>
+        <Bar label="健康" value={sovereign.health} />
+        <Bar label="勤政" value={sovereign.diligence} />
+        <Bar label="威望" value={sovereign.prestige} />
+        <Bar label="武力" value={sovereign.martial} />
+        <Bar label="政略" value={sovereign.statecraft} />
+        <Bar label="暴戾" value={sovereign.cruelty} />
+        <Bar label="疲劳" value={sovereign.fatigue} />
+        <Bar label="皇权安全" value={sovereign.regimeSecurity} />
+      </div>
+      <div className="profile-section">
+        <h3 className="profile-h">国家</h3>
+        <Bar label="军力" value={nation.military} />
+        <Bar label="国库" value={nation.treasury} />
+        <Bar label="民心" value={nation.publicSupport} />
+        <Bar label="生产力" value={nation.productivity} />
+        <Bar label="朝政" value={nation.governance} />
+        <Bar label="外戚权势" value={nation.consortClanPower} />
+        <Bar label="大臣忠心" value={nation.ministerLoyalty} />
+        <Bar label="贪腐" value={nation.corruption} />
+        <Bar label="宗室不满" value={nation.clanDiscontent} />
+        <Bar label="谣言热度" value={nation.rumor} />
       </div>
       <div className="profile-section">
         <h3 className="profile-h">后宫</h3>
