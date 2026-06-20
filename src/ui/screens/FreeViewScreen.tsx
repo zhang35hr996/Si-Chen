@@ -17,6 +17,8 @@ export function FreeViewScreen({
   locationId,
   onStartEvent,
   onClose,
+  onOfferIncense,
+  onDrawFortune,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -24,6 +26,8 @@ export function FreeViewScreen({
   locationId: string;
   onStartEvent: (eventId: string) => void;
   onClose: () => void;
+  onOfferIncense?: () => void;
+  onDrawFortune?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[locationId];
@@ -58,7 +62,12 @@ export function FreeViewScreen({
       </section>
 
       <section className="location-screen__events">
-        {action ? (
+        {location.id === "simiao" ? (
+          <div className="temple-menu">
+            <button type="button" disabled={state.calendar.ap < 1} onClick={onOfferIncense}>上香</button>
+            <button type="button" disabled={state.calendar.ap < 1} onClick={onDrawFortune}>求签</button>
+          </div>
+        ) : action ? (
           <>
             <button
               type="button"

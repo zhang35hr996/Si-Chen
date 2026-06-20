@@ -2845,3 +2845,7 @@ button:active:enabled {
 .coronation__narrative { font-size: 1.1rem; line-height: 1.9; }
 .coronation__era { font-size: 1.3rem; letter-spacing: .2em; color: #f0d8a8; }
 .coronation__input { font-size: 1.2rem; text-align: center; padding: 8px 12px; width: 8em; }
+
+/* ── 寺庙菜单 ── */
+.temple-menu { display: flex; gap: 12px; justify-content: center; padding: 12px; }
+.temple-menu button { padding: 10px 22px; font-size: 1rem; }

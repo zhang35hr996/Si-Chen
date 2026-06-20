@@ -16,6 +16,7 @@ import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
+import { buildIncense, buildFortune } from "../store/temple";
 import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { audioController } from "./audio/AudioController";
 import { trackFor } from "./audio/trackFor";
@@ -572,6 +573,21 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (first) setReaction(first);
   };
 
+  // 寺庙·上香/求签（各耗 1 行动点）：确定性随机 effects + 旁白，复用 spendAp/playReactions。
+  const templeAction = (kind: "incense" | "fortune") => {
+    const before = store.getState();
+    if (before.calendar.ap < 1) return;
+    const cal = before.calendar;
+    const key = `temple:${kind}:${before.rngSeed}:${cal.dayIndex}:${cal.ap}`;
+    const plan = kind === "incense" ? buildIncense(db, before, key) : buildFortune(db, before, key);
+    const { spend, decreeBeats } = spendAp(1);
+    if (!spend.ok) return;
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) return;
+    doAutosave();
+    playReactions([{ speakerId: "wei_sui", lines: plan.lines }, ...decreeBeats], spend.value.rolledOver);
+  };
+
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
@@ -771,6 +787,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           locationId={freeViewId}
           onStartEvent={startEvent}
           onClose={() => setView("map")}
+          onOfferIncense={() => templeAction("incense")}
+          onDrawFortune={() => templeAction("fortune")}
         />
       )}
       {view === "event" && activeEventId && (
