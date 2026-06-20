@@ -204,6 +204,50 @@ describe("cross-reference checks", () => {
     const errors = expectErrors(raw, "ASYMMETRIC_MAP", "no return edge");
     expect(errors.some((e) => e.message.includes("connects to itself"))).toBe(true);
   });
+
+  it("maternalClan referencing an unknown post is reported", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      postId: "post_ghost",
+      legitimate: true,
+      birthOrder: 1,
+    };
+    expectErrors(raw, "MISSING_REF", "post_ghost");
+  });
+
+  it("two same-surname consorts with conflicting maternalClan.postId is reported", () => {
+    const raw = makeRaw();
+    // Add a second officialPost to the world fixture so both postIds are "valid" individually
+    (raw.world.data as Record<string, unknown>)["officialPosts"] = [
+      { id: "commoner", name: "平民", grade: "无", gradeOrder: 0 },
+      { id: "post_b", name: "侍郎", grade: "正四品", gradeOrder: 4 },
+    ];
+    // Give char_a surname + maternalClan pointing to "commoner"
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      postId: "commoner",
+      legitimate: true,
+      birthOrder: 1,
+    };
+    // Push a second character with the same surname but a different postId
+    const char2 = structuredClone(raw.characters[0]!);
+    (char2.data as Record<string, unknown>)["id"] = "char_b";
+    (char2.data as Record<string, unknown>)["maternalClan"] = {
+      postId: "post_b",
+      legitimate: false,
+      birthOrder: 2,
+    };
+    char2.source = "characters/char_b.json";
+    raw.characters.push(char2);
+    expectErrors(raw, "BAD_REF", "林");
+  });
 });
 
 describe("map board graph checks", () => {

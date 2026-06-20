@@ -90,7 +90,7 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
   // on whatever parsed, so one broken file doesn't hide ref errors in others.
   if (world) checkWorldRefs(world, raw.world.source, locations.byId, errors);
   if (world) checkMapGraph(world, raw.world.source, locations, errors);
-  checkCharacterRefs(characters, ranks, locations.byId, errors);
+  checkCharacterRefs(characters, ranks, locations.byId, officialPosts, errors);
   checkLocationGraph(locations, errors);
   checkEventRefs(events, scenes.byId, errors);
   for (const { value, source } of scenes.items) {
@@ -246,8 +246,12 @@ function checkCharacterRefs(
   characters: Parsed<CharacterContent>,
   ranks: Record<string, CharacterRank>,
   locations: Record<string, LocationContent>,
+  officialPosts: Record<string, OfficialPost>,
   errors: GameError[],
 ): void {
+  // surname → first-seen postId; checked across all characters for consistency.
+  const surnamePost = new Map<string, string>();
+
   for (const { value: character, source } of characters.items) {
     if (character.initialStanding) {
       const rank = ranks[character.initialStanding.rank];
@@ -281,6 +285,27 @@ function checkCharacterRefs(
       for (const participant of memory.participants) {
         if (participant !== "player" && !characters.byId[participant]) {
           errors.push(missingRef(source, "character", participant));
+        }
+      }
+    }
+    if (character.maternalClan) {
+      const { postId } = character.maternalClan;
+      if (!officialPosts[postId]) {
+        errors.push(missingRef(source, "officialPost", postId));
+      }
+      const surname = character.profile.surname;
+      if (surname) {
+        const prev = surnamePost.get(surname);
+        if (prev === undefined) {
+          surnamePost.set(surname, postId);
+        } else if (prev !== postId) {
+          errors.push(
+            contentError(
+              "BAD_REF",
+              `${source}: 同姓「${surname}」母家官职冲突（${prev} vs ${postId}）`,
+              { context: { file: source } },
+            ),
+          );
         }
       }
     }
