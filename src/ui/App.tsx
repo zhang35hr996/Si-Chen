@@ -113,6 +113,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const tickedPeriods = useRef<Set<string>>(new Set());
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
+  // BGM effect: compute zone defensively (content may not be ok)
+  const bgmZone = content.ok ? content.value.locations[store.getState().playerLocation]?.zone : undefined;
+  useEffect(() => {
+    audioController.play(trackFor({ view, board: currentBoard, zone: bgmZone }));
+  }, [view, currentBoard, bgmZone]);
+
   if (!content.ok || !manifest.success) {
     const errors = [
       ...(content.ok ? [] : content.error),
@@ -581,11 +587,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (beats.length) playReactions(beats, rolledOver);
     else runCheckpoints(rolledOver);
   };
-
-  const playerZone = db.locations[liveState.playerLocation]?.zone;
-  useEffect(() => {
-    audioController.play(trackFor({ view, board: currentBoard, zone: playerZone }));
-  }, [view, currentBoard, playerZone]);
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
     setFocusConsortId(consortId);
