@@ -51,7 +51,7 @@ export function CharacterScene({
   // 分宫室殿按 chamber 选中；单居所按 consort id 选中。
   const focus = focusConsortId ? consorts.find((c) => c.id === focusConsortId) : undefined;
   const [activeChamber, setActiveChamber] = useState<ChamberId>(
-    (focus ? chamberOf(state.standing[focus.id]) : consorts[0] ? chamberOf(state.standing[consorts[0].id]) : "main"),
+    focus ? chamberOf(state.standing[focus.id]) : consorts[0] ? chamberOf(state.standing[consorts[0].id]) : "main",
   );
   const [activeId, setActiveId] = useState<string | null>(focus?.id ?? consorts[0]?.id ?? null);
   const [moreOpen, setMoreOpen] = useState(false);

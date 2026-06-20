@@ -46,6 +46,7 @@ test("vertical slice: new game → event → choose → save → reload → pers
   expect(siliMemories.some((m) => m.tags.includes("rite"))).toBe(true);
 
   // ── manual save to a slot ───────────────────────────────────────────
+  await page.getByRole("button", { name: "设置" }).click();
   await page.getByRole("button", { name: "存档" }).click();
   await page
     .locator(".save-screen__slot", { hasText: "slot1" })

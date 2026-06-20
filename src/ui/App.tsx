@@ -595,11 +595,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const here = store.getState().playerLocation === palaceId;
     if (here) { enterCurrentLocation(); return; }
     const batch = buildTravelBatch(db, store.getState(), palaceId);
-    if (!batch.ok) return;
+    if (!batch.ok) { setView("map"); return; }
     const spentAp = batch.value.some((c) => c.type === "SPEND_AP");
     const result = store.dispatchBatch(batch.value);
     if (result.ok) {
-      doAutosave();
       // 复用 MapScreen.onTravelled 的结算：懿旨/敲打/转旬 + 进入对应房间
       onTravelledSettle(result.value.rolledOver, spentAp);
     }

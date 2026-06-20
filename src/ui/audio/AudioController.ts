@@ -21,7 +21,8 @@ class AudioController {
     if (!this.audio) {
       const a = new Audio();
       a.loop = true;
-      this.volume = Number(localStorage.getItem(VOL_KEY) ?? "0.6");
+      const v = Number(localStorage.getItem(VOL_KEY));
+      this.volume = Number.isFinite(v) ? v : 0.6;
       this.muted = localStorage.getItem(MUTE_KEY) === "1";
       a.volume = this.volume;
       a.muted = this.muted;
