@@ -72,9 +72,7 @@ export const gameStateSchema = z.strictObject({
       clanDiscontent: percent,
       rumor: percent,
     }),
-    harem: z.strictObject({ harmony: percent, jealousy: percent }),
     bloodline: z.strictObject({
-      legitimacy: percent,
       menstrualStatus: z.enum(["normal", "irregular", "absent"]),
       lastRiteAt: gameTimeSchema.optional(),
       pregnancy: z.strictObject({

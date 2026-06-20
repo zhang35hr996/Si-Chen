@@ -54,13 +54,6 @@ export interface NationState {
   rumor: number;
 }
 
-export interface HaremState {
-  /** 和睦 */
-  harmony: number;
-  /** 妒意 */
-  jealousy: number;
-}
-
 export type MenstrualStatus = "normal" | "irregular" | "absent";
 
 export type PregnancyStatus = "none" | "pending" | "carrying";
@@ -154,8 +147,6 @@ export interface Heir {
 }
 
 export interface BloodlineState {
-  /** 宗嗣合法性 */
-  legitimacy: number;
   /** 经血状态 */
   menstrualStatus: MenstrualStatus;
   /** 经血祭仪 scaffold */
@@ -175,7 +166,6 @@ export interface BloodlineState {
 export interface Resources {
   sovereign: SovereignState;
   nation: NationState;
-  harem: HaremState;
   bloodline: BloodlineState;
 }
 

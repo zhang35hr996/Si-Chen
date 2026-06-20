@@ -54,7 +54,6 @@
       "id": "n_fx_brush",
       "effects": [
         { "type": "relationship", "char": "lu_huaijin", "field": "affinity", "delta": -4 },
-        { "type": "resource", "pillar": "harem", "field": "jealousy", "delta": 3 },
         {
           "type": "memory",
           "char": "lu_huaijin",
@@ -83,7 +82,6 @@
       "effects": [
         { "type": "relationship", "char": "lu_huaijin", "field": "affinity", "delta": -6 },
         { "type": "relationship", "char": "lu_huaijin", "field": "trust", "delta": -2 },
-        { "type": "resource", "pillar": "harem", "field": "jealousy", "delta": 5 },
         {
           "type": "memory",
           "char": "lu_huaijin",

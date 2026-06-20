@@ -8,7 +8,7 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 const fresh = (): GameState => createNewGameState(db);
 // slice starting values: shen_zhibai trust 35 / affinity 20 / favor 25;
-// harem {harmony 60, jealousy 20}; bloodline legitimacy 60.
+// sovereign prestige 50; shen_zhibai trust 35 / affinity 20; lu_huaijin favor 30.
 
 const expectApplied = (state: GameState, effects: EventEffect[]): GameState => {
   const result = applyEffects(db, state, effects);
@@ -23,12 +23,10 @@ describe("valid effects apply", () => {
       { type: "relationship", char: "shen_zhibai", field: "affinity", delta: -10 },
       { type: "favor", char: "lu_huaijin", delta: 5 },
       { type: "resource", pillar: "sovereign", field: "prestige", delta: -4 },
-      { type: "resource", pillar: "bloodline", field: "legitimacy", delta: 5 },
     ]);
     expect(next.relationships["shen_zhibai"]).toMatchObject({ trust: 38, affinity: 10 });
     expect(next.standing["lu_huaijin"]?.favor).toBe(35);
     expect(next.resources.sovereign.prestige).toBe(46);
-    expect(next.resources.bloodline.legitimacy).toBe(65);
   });
 
   it("values clamp at the 0–100 floor/ceiling", () => {

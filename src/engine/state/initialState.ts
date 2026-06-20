@@ -39,9 +39,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
         clanDiscontent: 20,
         rumor: 10,
       },
-      harem: { harmony: 60, jealousy: 20 },
       bloodline: {
-        legitimacy: 60,
         menstrualStatus: "normal",
         pregnancy: { status: "none", candidateIds: [] },
         gestations: [],

@@ -25,7 +25,6 @@
       "type": "effect",
       "id": "n_fx_adopt",
       "effects": [
-        { "type": "resource", "pillar": "harem", "field": "harmony", "delta": 4 },
         { "type": "relationship", "char": "shen_zhibai", "field": "trust", "delta": 3 },
         {
           "type": "memory",
@@ -80,7 +79,6 @@
       "type": "effect",
       "id": "n_fx_reject",
       "effects": [
-        { "type": "resource", "pillar": "harem", "field": "harmony", "delta": -4 },
         { "type": "relationship", "char": "shen_zhibai", "field": "trust", "delta": -3 },
         {
           "type": "memory",

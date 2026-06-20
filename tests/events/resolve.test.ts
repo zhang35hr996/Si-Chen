@@ -12,7 +12,6 @@ const db = loadRealContent();
 const atRite = (): GameState => createNewGameState(db); // yushufang; ev_menses_rite costs 1 AP (召对)
 
 const riteEffects: EventEffect[] = [
-  { type: "resource", pillar: "bloodline", field: "legitimacy", delta: 5 },
   { type: "flag", key: "rite_scheduled", value: true },
   {
     type: "memory",
@@ -27,7 +26,6 @@ describe("resolveEvent — one transaction", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const { state, rolledOver } = result.value;
-    expect(state.resources.bloodline.legitimacy).toBe(65);
     expect(state.flags["rite_scheduled"]).toBe(true);
     expect(state.memories["wei_sui"]?.entries).toHaveLength(2);
     expect(state.calendar.ap).toBe(5); // 6 - apCost 1

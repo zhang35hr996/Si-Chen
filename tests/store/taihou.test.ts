@@ -95,7 +95,7 @@ describe("buildTaihouRebuke", () => {
     expect(any).toBe(false);
   });
 
-  it("on hit: targets a non-凤后 consort, -5 favor + harem harmony +2", () => {
+  it("on hit: targets a non-凤后 consort, -5 favor + memory entry", () => {
     const s = createNewGameState(db2);
     s.taihou.ill = false;
     let seed = "";
@@ -108,7 +108,6 @@ describe("buildTaihouRebuke", () => {
     expect(plan.targetId).not.toBe("shen_zhibai");
     expect(db2.characters[plan.targetId]!.kind).toBe("consort");
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.targetId && e.delta === -5)).toBe(true);
-    expect(plan.effects.some((e) => e.type === "resource" && e.pillar === "harem" && e.field === "harmony" && e.delta === 2)).toBe(true);
     expect(plan.beats.length).toBe(2);
   });
 

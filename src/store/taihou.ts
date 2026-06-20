@@ -134,7 +134,6 @@ export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: stri
     targetId: pickId,
     effects: [
       { type: "favor", char: pickId, delta: -5 },
-      { type: "resource", pillar: "harem", field: "harmony", delta: 2 },
       {
         type: "memory",
         char: pickId,

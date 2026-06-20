@@ -59,7 +59,6 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     resources: {
       sovereign: { ...db.world.startingResources.sovereign },
       nation: { ...db.world.startingResources.nation },
-      harem: { ...db.world.startingResources.harem },
       bloodline: {
         ...db.world.startingResources.bloodline,
         pregnancy: { status: "none", candidateIds: [] },

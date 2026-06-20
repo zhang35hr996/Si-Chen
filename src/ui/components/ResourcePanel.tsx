@@ -18,7 +18,7 @@ function Bar({ label, value }: { label: string; value: number }) {
 }
 
 export function ResourcePanel({ state, onClose }: { state: GameState; onClose: () => void }) {
-  const { sovereign, nation, harem, bloodline } = state.resources;
+  const { sovereign, nation } = state.resources;
   return (
     <Drawer title="国情" subtitle="朝野上下，尽在圣览" onClose={onClose}>
       <div className="profile-section">
@@ -44,15 +44,6 @@ export function ResourcePanel({ state, onClose }: { state: GameState; onClose: (
         <Bar label="贪腐" value={nation.corruption} />
         <Bar label="宗室不满" value={nation.clanDiscontent} />
         <Bar label="谣言热度" value={nation.rumor} />
-      </div>
-      <div className="profile-section">
-        <h3 className="profile-h">后宫</h3>
-        <Bar label="和睦" value={harem.harmony} />
-        <Bar label="妒意" value={harem.jealousy} />
-      </div>
-      <div className="profile-section">
-        <h3 className="profile-h">血脉</h3>
-        <Bar label="宗嗣合法性" value={bloodline.legitimacy} />
       </div>
     </Drawer>
   );

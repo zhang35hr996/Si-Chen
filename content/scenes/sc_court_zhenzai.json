@@ -44,12 +44,6 @@
         },
         {
           "type": "resource",
-          "pillar": "bloodline",
-          "field": "legitimacy",
-          "delta": 2
-        },
-        {
-          "type": "resource",
           "pillar": "sovereign",
           "field": "prestige",
           "delta": -1

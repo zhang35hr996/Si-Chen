@@ -136,8 +136,6 @@ describe("eventEffectSchema (discriminated pillar/field pairs)", () => {
   it("accepts legal pillar/field combinations", () => {
     accepts(eventEffectSchema, { type: "resource", pillar: "sovereign", field: "prestige", delta: 3 });
     accepts(eventEffectSchema, { type: "resource", pillar: "nation", field: "governance", delta: -3 });
-    accepts(eventEffectSchema, { type: "resource", pillar: "harem", field: "jealousy", delta: -3 });
-    accepts(eventEffectSchema, { type: "resource", pillar: "bloodline", field: "legitimacy", delta: 5 });
     accepts(eventEffectSchema, { type: "set_bloodline_status", field: "menstrualStatus", value: "absent" });
     accepts(eventEffectSchema, { type: "relationship", char: "char_a", field: "affinity", delta: -10 });
   });
@@ -207,8 +205,7 @@ describe("worldSchema / rankSchema", () => {
       startingResources: {
         sovereign: { health: 70, diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 },
         nation: { military: 50, treasury: 50, publicSupport: 50, productivity: 50, governance: 50, consortClanPower: 30, ministerLoyalty: 50, corruption: 20, clanDiscontent: 20, rumor: 10 },
-        harem: { harmony: 60, jealousy: 20 },
-        bloodline: { legitimacy: 60, menstrualStatus: "normal" },
+        bloodline: { menstrualStatus: "normal" },
       },
       ranks: [rank],
     };

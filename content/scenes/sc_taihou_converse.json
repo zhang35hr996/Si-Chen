@@ -40,7 +40,6 @@
       "type": "effect",
       "id": "n_fx_apply",
       "effects": [
-        { "type": "resource", "pillar": "bloodline", "field": "legitimacy", "delta": 2 },
         {
           "type": "memory",
           "char": "taihou",

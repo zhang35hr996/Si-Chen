@@ -289,12 +289,8 @@ export function applyEffects(
         const applied = cappedDelta(`res:${effect.pillar}:${effect.field}`, effect.delta);
         if (effect.pillar === "sovereign") {
           next.resources.sovereign[effect.field] = clampPct(next.resources.sovereign[effect.field] + applied);
-        } else if (effect.pillar === "nation") {
-          next.resources.nation[effect.field] = clampPct(next.resources.nation[effect.field] + applied);
-        } else if (effect.pillar === "harem") {
-          next.resources.harem[effect.field] = clampPct(next.resources.harem[effect.field] + applied);
         } else {
-          next.resources.bloodline.legitimacy = clampPct(next.resources.bloodline.legitimacy + applied);
+          next.resources.nation[effect.field] = clampPct(next.resources.nation[effect.field] + applied);
         }
         break;
       }

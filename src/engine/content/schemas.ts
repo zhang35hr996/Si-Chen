@@ -155,18 +155,6 @@ export const eventEffectSchema = z.union([
     delta,
   }),
   z.strictObject({
-    type: z.literal("resource"),
-    pillar: z.literal("harem"),
-    field: z.enum(["harmony", "jealousy"]),
-    delta,
-  }),
-  z.strictObject({
-    type: z.literal("resource"),
-    pillar: z.literal("bloodline"),
-    field: z.literal("legitimacy"),
-    delta,
-  }),
-  z.strictObject({
     type: z.literal("set_bloodline_status"),
     field: z.literal("menstrualStatus"),
     value: z.enum(["normal", "irregular", "absent"]),
@@ -525,9 +513,7 @@ export const worldSchema = z.strictObject({
       clanDiscontent: percent,
       rumor: percent,
     }),
-    harem: z.strictObject({ harmony: percent, jealousy: percent }),
     bloodline: z.strictObject({
-      legitimacy: percent,
       menstrualStatus: z.enum(["normal", "irregular", "absent"]),
     }),
   }),

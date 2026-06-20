@@ -17,9 +17,7 @@ describe("createNewGameState", () => {
   it("copies starting resources from world.json (bloodline gains empty heirs)", () => {
     expect(state.resources.sovereign).toEqual({ health: 70, diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 });
     expect(state.resources.nation).toEqual({ military: 50, treasury: 50, publicSupport: 50, productivity: 50, governance: 50, consortClanPower: 30, ministerLoyalty: 50, corruption: 20, clanDiscontent: 20, rumor: 10 });
-    expect(state.resources.harem).toEqual({ harmony: 60, jealousy: 20 });
     expect(state.resources.bloodline).toEqual({
-      legitimacy: 60,
       menstrualStatus: "normal",
       pregnancy: { status: "none", candidateIds: [] },
       gestations: [],

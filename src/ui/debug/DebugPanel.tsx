@@ -168,7 +168,6 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
       valid
         ? [
             { type: "relationship", char: firstCharId, field: "trust", delta: 2 },
-            { type: "resource", pillar: "harem", field: "harmony", delta: 1 },
             {
               type: "memory",
               char: firstCharId,

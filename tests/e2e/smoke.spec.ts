@@ -44,8 +44,6 @@ test("vertical slice: new game → event → choose → save → reload → pers
   expect(afterCommit.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
   const siliMemories = afterCommit.memories.wei_sui?.entries ?? [];
   expect(siliMemories.some((m) => m.tags.includes("rite"))).toBe(true);
-  // the 准奏 branch raised 宗嗣合法性 and 圣威 (effect funnel applied)
-  expect(afterCommit.resources.bloodline.legitimacy).toBeGreaterThan(0);
 
   // ── manual save to a slot ───────────────────────────────────────────
   await page.getByRole("button", { name: "存档" }).click();
