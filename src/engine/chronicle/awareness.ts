@@ -7,24 +7,21 @@
  * 且谁都能「预知」尚未发生的事件。
  */
 import { compareGameTime, toGameTime } from "../calendar/time";
+import { isCurrentlyPresent, characterEntryTime } from "./presence";
 import type { CourtEvent, GameState } from "../state/types";
 
 export function canKnowEvent(state: GameState, charId: string, event: CourtEvent): boolean {
-  const standing = state.standing[charId];
-  if (!standing) return false; // 未知/不存在角色：一律不知道
-
+  // 闸1：不存在 / 已逝 / 尚未入场 → 一律不知情（isCurrentlyPresent 三者皆拦）
+  if (!isCurrentlyPresent(state, charId)) return false;
   const now = toGameTime(state.calendar);
-  // 闸1：尚未入宫的未来角色 → 对所有 scope 都不知情
-  if (standing.palaceEnteredAt && compareGameTime(standing.palaceEnteredAt, now) > 0) return false;
   // 闸2：编年史只载已发生；未来事件谁都不知道
   if (compareGameTime(event.occurredAt, now) > 0) return false;
 
   const p = event.publicity;
   if (p.scope === "circle") return p.circleIds.includes(charId);
-  if (p.scope === "realm") return true; // v1: realm 必为 institutional
-
-  // palace：须在宫
-  const enteredAt = standing.palaceEnteredAt;
-  if (!enteredAt) return false;
-  return p.persistence === "institutional" || compareGameTime(enteredAt, event.occurredAt) <= 0;
+  if (p.scope === "realm") return true;
+  // palace：须有入场时刻（官员无 → 宫内事不在可知范围）
+  const entry = characterEntryTime(state, charId);
+  if (!entry) return false;
+  return p.persistence === "institutional" || compareGameTime(entry, event.occurredAt) <= 0;
 }

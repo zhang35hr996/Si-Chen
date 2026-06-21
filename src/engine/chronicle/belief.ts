@@ -4,8 +4,8 @@
  * 必经 CurrentFactVisibility；接入 rumor/certainty 后只替换实现，本接口不变。
  * 系统效果（applyEffects）永远只用 ground truth，不经此处。
  */
-import { compareGameTime, toGameTime } from "../calendar/time";
 import type { GameState } from "../state/types";
+import { isCurrentlyPresent } from "./presence";
 
 export type FactPredicate = "resides_at" | "holds_rank";
 export interface FactKey {
@@ -21,13 +21,7 @@ export interface CurrentFactVisibility {
   canSee(state: GameState, viewerId: string, key: FactKey): boolean;
 }
 
-/** 「此刻在场」：有 standing 且 palaceEnteredAt ≤ now（尚未入宫的未来角色不算）。 */
-export function isCurrentlyPresent(state: GameState, charId: string): boolean {
-  const st = state.standing[charId];
-  if (!st) return false;
-  if (st.palaceEnteredAt && compareGameTime(st.palaceEnteredAt, toGameTime(state.calendar)) > 0) return false;
-  return true;
-}
+export { isCurrentlyPresent };
 
 /** MVP：当前位分/住处是宫廷公开事实——viewer 与 subject 均须【此刻在场】。 */
 export const courtMemberVisibility: CurrentFactVisibility = {
