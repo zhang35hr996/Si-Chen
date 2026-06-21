@@ -15,7 +15,8 @@ import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState } from "../engine/state/types";
 import { changeOfficialGrade } from "../engine/officials/changeGrade";
-import { bestow, type RecipientKind, type BestowResult } from "./treasury";
+import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
+import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -90,6 +91,49 @@ export class GameStore {
     const result = bestow(this.state, db, itemId, recipient);
     if (result.ok) { this.state = result.state; this.emit(); }
     return result;
+  }
+
+  /** 直接入库指定物品。 */
+  applyGrantItem(itemId: string, count = 1): void {
+    this.state = grantItem(this.state, itemId, count);
+    this.emit();
+  }
+
+  /** 扣钱后入库；钱不足返回 false，state 不变。 */
+  buyItem(itemId: string, price: number): boolean {
+    const paid = spendCoins(this.state, price);
+    if (!paid.ok) return false;
+    this.state = grantItem(paid.state, itemId, 1);
+    this.emit();
+    return true;
+  }
+
+  /** 按当前武力掷皮毛入库 + 设年度 flag；返回所得物品 id 列表。 */
+  applyAutumnHunt(seedKey: string): string[] {
+    const furs = huntFurs(this.state.resources.sovereign.martial, seedKey);
+    let next = this.state;
+    for (const id of furs) next = grantItem(next, id, 1);
+    next = { ...next, flags: { ...next.flags, [autumnHuntFlagKey(next.calendar.year)]: true } };
+    this.state = next;
+    this.emit();
+    return furs;
+  }
+
+  /** 拒绝秋猎，仅设年度 flag。 */
+  declineAutumnHunt(): void {
+    const year = this.state.calendar.year;
+    this.state = { ...this.state, flags: { ...this.state.flags, [autumnHuntFlagKey(year)]: true } };
+    this.emit();
+  }
+
+  /** 先入库 1 件再赏赐；bestow 失败返回 false，state 不变。 */
+  giftTribute(db: ContentDB, itemId: string, recipient: { kind: RecipientKind; id: string }): boolean {
+    const granted = grantItem(this.state, itemId, 1);
+    const result = bestow(granted, db, itemId, recipient);
+    if (!result.ok) return false;
+    this.state = result.state;
+    this.emit();
+    return true;
   }
 
   /**
