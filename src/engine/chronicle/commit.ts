@@ -50,7 +50,7 @@ export function executeCourtEvent(
   const vErrs = rule.validate(state, draft);
   if (vErrs.length > 0) return err(vErrs);
   let cur = state;
-  const we = rule.worldEffects(state, draft);
+  const we = rule.worldEffects(cur, draft);
   if (we.length > 0) {
     const a = applyEffects(db, cur, we);
     if (!a.ok) return err(a.error);

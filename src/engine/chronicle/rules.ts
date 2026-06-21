@@ -143,8 +143,65 @@ const heirBorn: RecordAfterEventRule = {
   applyRelationshipEffects: () => [],
 };
 
+/** 丧亲父母：按 charId 去重，guilt 取各角色最大值（adoptive 90 / birth 40）。 */
+function bereavedParents(event: CourtEvent): Map<string, number> {
+  const byRole: Record<string, number> = { adoptive_father: 90, birth_father: 40 };
+  const map = new Map<string, number>();
+  for (const [role, guilt] of Object.entries(byRole)) {
+    const id = participantId(event, role);
+    if (id) map.set(id, Math.max(map.get(id) ?? 0, guilt));
+  }
+  return map;
+}
+
+const heirDied: ExecuteEventRule = {
+  mode: "execute",
+  validate(state, draft) {
+    const errs: GameError[] = [];
+    const heirId = draft.payload.heirId;
+    if (typeof heirId !== "string") errs.push(stateError("RULE_BAD", "heir_died payload.heirId missing"));
+    else {
+      const heir = state.resources.bloodline.heirs.find((h) => h.id === heirId);
+      if (!heir) errs.push(stateError("RULE_BAD", "heir_died heirId not in bloodline.heirs"));
+      else if (heir.lifecycle === "deceased") errs.push(stateError("RULE_BAD", "heir already deceased"));
+    }
+    const dec = roleId(draft.participants, "deceased");
+    if (dec && typeof heirId === "string" && dec !== heirId) errs.push(stateError("RULE_BAD", "heir_died deceased participant must match payload.heirId"));
+    return errs;
+  },
+  worldEffects(_state, draft) {
+    return [{ type: "heir_died", heirId: String(draft.payload.heirId) }];
+  },
+  createPersonalMemories(state, event) {
+    const heirId = typeof event.payload.heirId === "string" ? event.payload.heirId : "";
+    const out: EventEffect[] = [];
+    for (const [id, guilt] of bereavedParents(event)) {
+      if (!state.memories[id]) continue;
+      out.push({
+        type: "memory", char: id,
+        entry: {
+          kind: "trauma", summary: `皇嗣夭折，痛失骨血。`, strength: 100, retention: "permanent",
+          subjectIds: [heirId], perspective: "parent",
+          triggerTags: ["death", "heir", "anniversary"], unresolved: true,
+          emotions: { grief: 95, guilt }, sourceEventId: event.id,
+        },
+      });
+    }
+    return out;
+  },
+  applyRelationshipEffects: () => [],
+  applyConditions(state, event) {
+    const out: EmotionalConditionDraft[] = [];
+    for (const [id] of bereavedParents(event)) {
+      if (state.memories[id]) out.push({ ownerId: id, type: "acute_grief", sourceEventId: event.id, severity: 95, startedAt: event.occurredAt, recoveryProfile: "slow" });
+    }
+    return out;
+  },
+};
+
 export const eventMemoryRules: Partial<Record<CourtEventType, EventMemoryRule>> = {
   rank_changed: rankChanged,
   residence_changed: residenceChanged,
   heir_born: heirBorn,
+  heir_died: heirDied,
 };
