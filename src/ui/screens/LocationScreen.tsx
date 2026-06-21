@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
-import { timeOfDay } from "../../engine/calendar/time";
+import { timeOfDay, isGreetingSlot } from "../../engine/calendar/time";
 import { getPresentAt, presentAt, absentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import { getEligibleEvents } from "../../engine/events/engine";
@@ -36,6 +36,9 @@ export function LocationScreen({
   summonedConsortId,
   onDismissSummon,
   focusConsortId,
+  greetingAttendeeCount,
+  onEnterGreeting,
+  onExitGreeting,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -59,6 +62,9 @@ export function LocationScreen({
   summonedConsortId?: string | null;
   onDismissSummon?: () => void;
   focusConsortId?: string | null;
+  greetingAttendeeCount?: number;
+  onEnterGreeting?: () => void;
+  onExitGreeting?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -79,6 +85,10 @@ export function LocationScreen({
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const eligible = getEligibleEvents(db, state, "location_enter");
   const canBedchamber = state.calendar.ap >= 1;
+  const greetingHere =
+    location.id === "kunninggong" &&
+    isGreetingSlot(state.calendar) &&
+    (greetingAttendeeCount ?? 0) > 0;
   // 召见到御书房：把被召见的侍君并入在场（仅御书房）。
   const summoned =
     location.id === "zichendian" && summonedConsortId ? db.characters[summonedConsortId] : undefined;
@@ -233,6 +243,22 @@ export function LocationScreen({
         </main>
       )}
 
+      {greetingHere && onEnterGreeting && onExitGreeting && (
+        <div className="modal-backdrop">
+          <div className="event-overlay" onClick={(e) => e.stopPropagation()}>
+            <h2 className="event-overlay__title">坤宁宫　晨省</h2>
+            <p className="event-overlay__hint">乘风躬身：「众侍君正给皇后请安，陛下是否去看看？」</p>
+            <div className="event-overlay__choices">
+              <button type="button" onClick={onEnterGreeting}>
+                进入主殿（耗一个行动点）
+              </button>
+            </div>
+            <button type="button" className="event-overlay__later" onClick={onExitGreeting}>
+              退出坤宁宫
+            </button>
+          </div>
+        </div>
+      )}
       {eligible.length > 0 && !eventsDismissed && (
         <div className="modal-backdrop">
           <div className="event-overlay" onClick={(e) => e.stopPropagation()}>

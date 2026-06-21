@@ -8,6 +8,7 @@ import { assetError, stateError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
+import { greetingAttendees } from "../engine/characters/greeting";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import { monthOrdinal } from "../engine/calendar/time";
@@ -716,6 +717,22 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     playReactions(decreeBeats, false);
   };
 
+  const [ceremonyOpen, setCeremonyOpen] = useState(false);
+  void ceremonyOpen; // Task 9 will render this; declared here for state ownership
+
+  const enterGreeting = () => {
+    const { spend, decreeBeats } = spendAp(1);
+    if (!spend.ok) return;
+    doAutosave();
+    setCeremonyOpen(true);
+    // 懿旨等转旬反应入队，待 ceremony 关闭后随正常流程消化（此处仅记一旬动作）。
+    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
+  };
+
+  const exitGreeting = () => {
+    goHome(); // 退出坤宁宫，回地图；不耗行动点
+  };
+
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
@@ -889,6 +906,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           summonedConsortId={summonedConsortId}
           onDismissSummon={() => setSummonedConsortId(null)}
           focusConsortId={focusConsortId}
+          greetingAttendeeCount={greetingAttendees(db, store.getState()).length}
+          onEnterGreeting={enterGreeting}
+          onExitGreeting={exitGreeting}
         />
       )}
       {view === "wenzhaodian" && (
