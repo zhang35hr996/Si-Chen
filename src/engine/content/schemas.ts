@@ -526,6 +526,9 @@ export const worldSchema = z.strictObject({
     }),
   }),
   startingLocation: idSchema,
+  sovereign: z.strictObject({
+    startingAge: z.number().int().min(0),
+  }),
   startingResources: z.strictObject({
     sovereign: z.strictObject({
       health: percent,
