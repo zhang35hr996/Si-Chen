@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("promote a summoned consort and see the new 称呼", async ({ page }) => {
+test("promote a consort from 查看侍君 list and return to her detail with new 称呼", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "新游戏" }).click();
   // 登基改元
@@ -12,13 +12,12 @@ test("promote a summoned consort and see the new 称呼", async ({ page }) => {
   await page.getByRole("button", { name: "紫宸殿" }).click();
   await page.getByRole("button", { name: "稍后再说" }).click();
 
-  // 查看侍君 → 陆怀瑾（承徽）→ 召见 到紫宸殿（避开列表叠层，单一弹窗管理）
+  // 查看侍君 → 陆怀瑾（承徽）→ 封号管理（直接从列表进；列表会先收起，弹窗不再被遮挡）
   await page.getByRole("button", { name: "查看侍君" }).click();
   await page.getByRole("button", { name: "陆怀瑾 承徽" }).click();
-  await page.getByRole("button", { name: "召见", exact: true }).click();
+  await page.getByRole("button", { name: "封号管理" }).click();
 
-  // 召见卡片上「管理位分 / 封号」→ 选 君（value "jun"）→ 确认
-  await page.getByRole("button", { name: "管理位分 / 封号" }).click();
+  // 选 君（value "jun"）→ 确认（修复前此处被列表叠层拦截而点不动）
   await page.locator(".rank-modal select").selectOption("jun");
   await page.getByRole("button", { name: "确认调整" }).click();
 
@@ -26,6 +25,7 @@ test("promote a summoned consort and see the new 称呼", async ({ page }) => {
   await expect(page.locator(".dialogue-screen__speaker", { hasText: "陆君" })).toBeVisible();
   await page.getByRole("button", { name: "（继续）" }).click();
 
-  // 召见卡片显示新位分
+  // 反应结束后自动回到「查看侍君」并定位回陆怀瑾详情，位分已更新为 君
   await expect(page.getByText("位分：君")).toBeVisible();
+  await expect(page.getByRole("button", { name: "封号管理" })).toBeVisible();
 });

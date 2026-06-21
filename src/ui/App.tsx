@@ -124,6 +124,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
   const [consortListOpen, setConsortListOpen] = useState(false);
+  // 从「查看侍君」列表进入封号管理/搬迁时记录该侍君：先关列表（两个弹窗叠层会互相遮挡点击），
+  // 操作（或取消）结束后据此重开列表并定位回同一位侍君。非列表入口（紫宸殿卡片/召见）保持 null。
+  const [consortListReturnId, setConsortListReturnId] = useState<string | null>(null);
   const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
@@ -230,23 +233,37 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (storage) autosave(storage, db, store.getState(), { logger });
   };
 
+  /** 若管理/搬迁是从「查看侍君」列表进入的，操作结束后重开列表（定位到该侍君）。 */
+  const reopenConsortListIfReturning = () => {
+    if (consortListReturnId) setConsortListOpen(true);
+  };
+
   const applyRankOp = (charId: string, req: RankOpRequest) => {
     const op = buildRankOp(db, store.getState(), charId, req);
     setManageCharId(null);
-    if (!op) return; // no change
+    if (!op) {
+      reopenConsortListIfReturning(); // 无变化：直接回到列表
+      return;
+    }
     const result = store.applyEffects(db, op.effects);
     if (result.ok) {
       doAutosave();
-      setReaction({ speakerId: charId, lines: op.lines });
+      setReaction({ speakerId: charId, lines: op.lines }); // 列表在反应播完后（onDone）重开
+    } else {
+      reopenConsortListIfReturning();
     }
   };
 
   const applyRelocate = (charId: string, location: string, chamber: ChamberId) => {
     const effects = buildRelocate(db, store.getState(), charId, location, chamber);
     setRelocateCharId(null);
-    if (!effects) return; // 无变化 / 非法目标
+    if (!effects) {
+      reopenConsortListIfReturning(); // 无变化 / 非法目标
+      return;
+    }
     const result = store.applyEffects(db, effects);
     if (result.ok) doAutosave();
+    reopenConsortListIfReturning(); // 搬迁无反应，立即回到列表
   };
 
   const canContinue =
@@ -928,7 +945,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
           onSummonPhysician={() => setPhysicianOpen(true)}
           onOpenHeirs={() => setHeirListOpen(true)}
-          onOpenConsorts={() => setConsortListOpen(true)}
+          onOpenConsorts={() => {
+            setConsortListReturnId(null); // 新开列表：从列表根开始（非管理返回）
+            setConsortListOpen(true);
+          }}
           onReviewMemorials={reviewMemorials}
           onRestAlone={restAlone}
           onConverse={converse}
@@ -1141,7 +1161,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           character={db.characters[manageCharId]!}
           standing={store.getState().standing[manageCharId]!}
           onApply={(req) => applyRankOp(manageCharId, req)}
-          onClose={() => setManageCharId(null)}
+          onClose={() => {
+            setManageCharId(null);
+            reopenConsortListIfReturning(); // 取消也回到列表
+          }}
         />
       )}
       {relocateCharId && db.characters[relocateCharId] && store.getState().standing[relocateCharId] && (
@@ -1150,7 +1173,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           state={liveState}
           character={db.characters[relocateCharId]!}
           onRelocate={(location, chamber) => applyRelocate(relocateCharId, location, chamber)}
-          onClose={() => setRelocateCharId(null)}
+          onClose={() => {
+            setRelocateCharId(null);
+            reopenConsortListIfReturning(); // 取消也回到列表
+          }}
         />
       )}
       {reaction && (
@@ -1169,6 +1195,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               setReaction(nextLine!);
               return;
             }
+            // 封号管理（自列表进入）的反应播完 → 回到列表并定位回该侍君。
+            // 仅列表入口会置 consortListReturnId，故不影响其它反应来源。
+            reopenConsortListIfReturning();
             if (postBirthPromoteId) {
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
@@ -1208,15 +1237,28 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           state={liveState}
           registry={registry}
           sovereignPregnant={preg.status !== "none"}
-          onManage={(id) => setManageCharId(id)}
-          onRelocate={(id) => setRelocateCharId(id)}
+          initialSelectedId={consortListReturnId}
+          onManage={(id) => {
+            setConsortListReturnId(id); // 操作后回到列表并定位回此侍君
+            setConsortListOpen(false); // 先关列表，避免与封号管理弹窗叠层互相遮挡
+            setManageCharId(id);
+          }}
+          onRelocate={(id) => {
+            setConsortListReturnId(id);
+            setConsortListOpen(false);
+            setRelocateCharId(id);
+          }}
           onSummon={(id) => {
+            setConsortListReturnId(null);
             setConsortListOpen(false);
             setSummonedConsortId(id);
           }}
           onAddCandidate={addCandidate}
           onRemoveCandidate={removeCandidate}
-          onClose={() => setConsortListOpen(false)}
+          onClose={() => {
+            setConsortListReturnId(null);
+            setConsortListOpen(false);
+          }}
         />
       )}
       {bedchamberPickId && db.characters[bedchamberPickId] && (
