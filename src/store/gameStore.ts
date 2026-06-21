@@ -17,6 +17,7 @@ import type { GameState } from "../engine/state/types";
 import { changeOfficialGrade } from "../engine/officials/changeGrade";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
+import { addGeneratedConsort, initialFavorForRank, type Candidate, type KeptConsort } from "./grandSelection";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -123,6 +124,30 @@ export class GameStore {
   declineAutumnHunt(): void {
     const year = this.state.calendar.year;
     this.state = { ...this.state, flags: { ...this.state.flags, [autumnHuntFlagKey(year)]: true } };
+    this.emit();
+  }
+
+  /** 设/清一个布尔 flag（大选一次性标记）。 */
+  setFlag(key: string, value: boolean): void {
+    this.state = { ...this.state, flags: { ...this.state.flags, [key]: value } };
+    this.emit();
+  }
+
+  /** 殿选留牌子：按所选位分落库一位秀男（恩宠随位分缩放）。 */
+  commitDaxuanConsort(db: ContentDB, candidate: Candidate, rank: string): void {
+    const favor = initialFavorForRank(db.ranks[rank]?.order ?? 50);
+    this.state = addGeneratedConsort(this.state, candidate.content, rank, favor);
+    this.emit();
+  }
+
+  /** 批量落库 NPC 留下的秀男（按各自推荐位分）。 */
+  commitDaxuanKept(db: ContentDB, kept: KeptConsort[]): void {
+    let next = this.state;
+    for (const k of kept) {
+      const favor = initialFavorForRank(db.ranks[k.rank]?.order ?? 50);
+      next = addGeneratedConsort(next, k.candidate.content, k.rank, favor);
+    }
+    this.state = next;
     this.emit();
   }
 

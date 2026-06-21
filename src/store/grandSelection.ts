@@ -6,7 +6,8 @@ import type { ContentDB } from "../engine/content/loader";
 import type { CharacterRank, CharacterContent, EventEffect } from "../engine/content/schemas";
 import { characterSchema } from "../engine/content/schemas";
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
-import { chineseNumeral, MORNING_SLOT, shichenSlot } from "../engine/calendar/time";
+import { chineseNumeral, MORNING_SLOT, shichenSlot, monthOrdinal, toGameTime } from "../engine/calendar/time";
+import { memoryEntryId } from "../engine/state/newGame";
 import {
   ARISTOCRATIC_SURNAME_POOL,
   ARISTOCRATIC_MALE_GIVEN_NAME_POOL,
@@ -240,4 +241,48 @@ export function npcKeepOnLeave(remaining: Candidate[], _state: GameState, year: 
   const idx = gestationRollRaw(`daxuan:npc:leave:pick:${year}`) % remaining.length;
   const cand = remaining[idx]!;
   return { candidate: cand, rank: recommendRank(cand.grade) };
+}
+
+/** 把一位殿选中选秀男落库：generatedConsorts + standing + memories + bedchamber（不可变）。
+ *  favor 由调用方按位分算好传入（见 GameStore.commitDaxuanConsort）。 */
+export function addGeneratedConsort(
+  state: GameState,
+  content: CharacterContent,
+  rank: string,
+  favor: number,
+): GameState {
+  const id = content.id;
+  const now = toGameTime(state.calendar);
+  return {
+    ...state,
+    generatedConsorts: { ...state.generatedConsorts, [id]: content },
+    standing: {
+      ...state.standing,
+      [id]: {
+        rank,
+        favor,
+        residence: "chuxiu_gong",
+        chamber: "main",
+        availableFromMonth: monthOrdinal({ year: state.calendar.year, month: 5 }),
+      },
+    },
+    memories: {
+      ...state.memories,
+      [id]: {
+        entries: [{
+          id: memoryEntryId(id, 1),
+          kind: "event",
+          summary: "殿选承恩，蒙陛下留牌子，迁入储秀宫。",
+          salience: 60,
+          createdAt: now,
+          tags: ["daxuan", "player"],
+          participants: ["player", id],
+          source: "scene_outcome",
+          protected: false,
+        }],
+        nextSeq: 2,
+      },
+    },
+    bedchamber: { ...state.bedchamber, [id]: { encounters: [] } },
+  };
 }
