@@ -15,7 +15,9 @@
  *     the caller keeps the original state reference
  */
 import { toGameTime } from "../calendar/time";
+import { chamberOf, hasChambers } from "../characters/chambers";
 import { nextHeirId } from "../characters/heirs";
+import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
 import { eventEffectSchema, type EventEffect } from "../content/schemas";
 import { stateError, type GameError } from "../infra/errors";
@@ -218,6 +220,33 @@ export function validateEffects(
         }
         break;
       }
+      case "relocate": {
+        const ch = db.characters[e.char];
+        if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
+          bad(index, "BAD_EFFECT_TARGET", `relocate needs a consort with standing: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "fenghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not relocatable: "${e.char}"`, { char: e.char });
+        } else if (!hasChambers(e.location)) {
+          bad(index, "BAD_EFFECT", `relocate target "${e.location}" is not a 设宫室 palace`, { location: e.location });
+        } else {
+          // 目标宫室不可已被「他人」占用（搬回原位/换宫室自身允许）。
+          const occupied = Object.values(db.characters).some(
+            (c) =>
+              c.id !== e.char &&
+              c.kind === "consort" &&
+              state.standing[c.id]?.lifecycle !== "deceased" &&
+              getCharacterLocation(db, state, c.id) === e.location &&
+              chamberOf(state.standing[c.id]) === e.chamber,
+          );
+          if (occupied) {
+            bad(index, "BAD_EFFECT", `chamber "${e.chamber}" of "${e.location}" is occupied`, {
+              location: e.location,
+              chamber: e.chamber,
+            });
+          }
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -301,6 +330,12 @@ export function applyEffects(
       }
       case "remove_title": {
         delete next.standing[effect.char]!.title;
+        break;
+      }
+      case "relocate": {
+        const target = next.standing[effect.char]!;
+        target.residence = effect.location;
+        target.chamber = effect.chamber;
         break;
       }
       case "bedchamber": {

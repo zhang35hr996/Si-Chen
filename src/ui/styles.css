@@ -1757,6 +1757,113 @@ button:active:enabled {
   cursor: default;
 }
 
+/* ── 搬迁侍君弹窗 ── */
+
+.relocate-modal {
+  position: relative;
+  animation: rise 0.3s ease both;
+  box-shadow: var(--shadow-deep);
+  background: linear-gradient(170deg, var(--ink-700), var(--ink-750));
+  border: 1px solid var(--line-gold);
+  border-radius: 6px;
+  padding: 1.3rem 1.6rem;
+  color: var(--cream);
+  max-width: min(46rem, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.relocate-modal__current {
+  color: #b8aa90;
+  margin: 0.3rem 0 1rem;
+}
+
+.relocate-modal__palaces {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.9rem;
+}
+
+.relocate-palace {
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem 0.6rem;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.relocate-palace__name {
+  margin: 0 0 0.45rem;
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  color: var(--gold-bright);
+}
+
+.relocate-palace__chambers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.relocate-chamber {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+  cursor: pointer;
+  font: inherit;
+  color: var(--cream);
+  background: var(--ink-600);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+}
+
+.relocate-chamber:hover:enabled {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+
+.relocate-chamber:disabled {
+  cursor: default;
+}
+
+.relocate-chamber.is-occupied {
+  opacity: 0.45;
+}
+
+.relocate-chamber.is-current {
+  border-color: var(--gold);
+  opacity: 0.85;
+}
+
+.relocate-chamber__room {
+  font-family: var(--font-title);
+  letter-spacing: 0.06em;
+}
+
+.relocate-chamber__occupant {
+  font-size: 0.74rem;
+  color: var(--c-text-dim);
+}
+
+.relocate-modal__close {
+  margin-top: 1rem;
+  cursor: pointer;
+  font: inherit;
+  color: var(--cream);
+  background: var(--ink-600);
+  border: 1px solid var(--line-strong);
+  padding: 0.3rem 0.9rem;
+  border-radius: 3px;
+}
+
+.relocate-modal__close:hover {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+
 /* ── 事件对话浮层（阻塞式） ── */
 
 .event-overlay {

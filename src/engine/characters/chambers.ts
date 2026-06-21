@@ -13,16 +13,21 @@ export const CHAMBERS: ReadonlyArray<{ id: ChamberId; name: string }> = [
   { id: "west_annex", name: "西偏殿" },
 ];
 
-/** 设 5 宫室的 7 座居所（坤宁宫/长门宫/储秀宫除外）。 */
-export const CHAMBERED_PALACES: ReadonlySet<string> = new Set([
-  "chenghui_gong",
-  "jingren_gong",
-  "jiyue_gong",
-  "xianfugong",
-  "yanhe_gong",
+/** 设 5 宫室的居所（坤宁宫/长门宫/储秀宫除外）。 */
+export const CHAMBERED_PALACE_ORDER: readonly string[] = [
   "zhaoning_gong",
+  "yanhe_gong",
+  "jingren_gong",
   "zhongcui_gong",
-]);
+  "xianfugong",
+  "jiyue_gong",
+  "chenghui_gong",
+  "chengqian_gong",
+  "yongshou_gong",
+  "yikun_gong",
+];
+
+export const CHAMBERED_PALACES: ReadonlySet<string> = new Set(CHAMBERED_PALACE_ORDER);
 
 export function hasChambers(locationId: string): boolean {
   return CHAMBERED_PALACES.has(locationId);

@@ -41,8 +41,10 @@ import { randomPetName } from "../engine/characters/heirNames";
 import { PhysicianModal } from "./components/PhysicianModal";
 import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
-import type { BedchamberMode } from "../engine/state/types";
+import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
+import { RelocateModal } from "./components/RelocateModal";
+import { buildRelocate } from "../store/relocate";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
 import { ResourcePanel } from "./components/ResourcePanel";
@@ -83,6 +85,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [court, setCourt] = useState<CourtSession | null>(null);
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [manageCharId, setManageCharId] = useState<string | null>(null);
+  const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
@@ -196,6 +199,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       doAutosave();
       setReaction({ speakerId: charId, lines: op.lines });
     }
+  };
+
+  const applyRelocate = (charId: string, location: string, chamber: ChamberId) => {
+    const effects = buildRelocate(db, store.getState(), charId, location, chamber);
+    setRelocateCharId(null);
+    if (!effects) return; // 无变化 / 非法目标
+    const result = store.applyEffects(db, effects);
+    if (result.ok) doAutosave();
   };
 
   const canContinue =
@@ -687,6 +698,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           }}
           onStartEvent={startEvent}
           onManage={(id) => setManageCharId(id)}
+          onRelocate={(id) => setRelocateCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
           onFlipTablet={() => setFlipOpen(true)}
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
@@ -881,6 +893,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onClose={() => setManageCharId(null)}
         />
       )}
+      {relocateCharId && db.characters[relocateCharId] && store.getState().standing[relocateCharId] && (
+        <RelocateModal
+          db={db}
+          state={liveState}
+          character={db.characters[relocateCharId]!}
+          onRelocate={(location, chamber) => applyRelocate(relocateCharId, location, chamber)}
+          onClose={() => setRelocateCharId(null)}
+        />
+      )}
       {reaction && (
         <ReactionScreen
           db={db}
@@ -927,6 +948,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           registry={registry}
           sovereignPregnant={preg.status !== "none"}
           onManage={(id) => setManageCharId(id)}
+          onRelocate={(id) => setRelocateCharId(id)}
           onSummon={(id) => {
             setConsortListOpen(false);
             setSummonedConsortId(id);

@@ -1,0 +1,22 @@
+{
+  "id": "yongshou_gong",
+  "name": "永寿宫",
+  "description": "殿名永寿，取福寿绵长之意。檐下悬铜磬，阶前栽万年青，静穆而安详。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "铜磬轻悬",
+    "万年青翠",
+    "静穆安详"
+  ],
+  "position": {
+    "x": 0.7,
+    "y": 0.46
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 0
+  }
+}

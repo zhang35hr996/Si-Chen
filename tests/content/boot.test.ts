@@ -29,7 +29,8 @@ describe("real content/ boots", () => {
         "xuanzhengdian", "cining_gong", "fengxiandian", "kunninggong", "changmengong",
         "wenzhaodian", "xianfugong", "zichendian", "yuhuayuan", "yuqing_gong",
         "zhaoning_gong", "chenghui_gong", "jingren_gong", "zhongcui_gong",
-        "yanhe_gong", "jiyue_gong", "chuxiu_gong", "simiao",
+        "yanhe_gong", "jiyue_gong", "chengqian_gong", "yongshou_gong", "yikun_gong",
+        "chuxiu_gong", "simiao",
       ].sort(),
     );
     expect(Object.keys(db.events).sort()).toEqual(

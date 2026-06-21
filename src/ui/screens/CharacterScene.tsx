@@ -31,6 +31,7 @@ export function CharacterScene({
   onBedchamber,
   onViewProfile,
   onManage,
+  onRelocate,
 }: {
   db: ContentDB;
   state: GameState;
@@ -43,6 +44,7 @@ export function CharacterScene({
   onBedchamber?: (charId: string) => void;
   onViewProfile: (charId: string) => void;
   onManage?: (charId: string) => void;
+  onRelocate?: (charId: string) => void;
 }) {
   const chambered = hasChambers(location.id);
   const occupantOf = (id: ChamberId): CharacterContent | undefined =>
@@ -145,7 +147,7 @@ export function CharacterScene({
                 <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
                   查看详情
                 </button>
-                {onManage && character.id !== "shen_zhibai" && (
+                {(onManage || onRelocate) && character.id !== "shen_zhibai" && (
                   <div className="action-more">
                     <button
                       type="button"
@@ -157,15 +159,28 @@ export function CharacterScene({
                     </button>
                     {moreOpen && (
                       <div className="action-more__menu">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMoreOpen(false);
-                            onManage(character.id);
-                          }}
-                        >
-                          管理位分 / 封号
-                        </button>
+                        {onManage && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMoreOpen(false);
+                              onManage(character.id);
+                            }}
+                          >
+                            管理位分 / 封号
+                          </button>
+                        )}
+                        {onRelocate && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMoreOpen(false);
+                              onRelocate(character.id);
+                            }}
+                          >
+                            搬迁
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

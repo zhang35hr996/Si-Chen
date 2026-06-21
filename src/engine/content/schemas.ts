@@ -33,6 +33,7 @@ export const characterStandingSchema = z.strictObject({
   title: nonEmpty.optional(),
   lifecycle: z.enum(["normal", "candidate", "carrying", "delivered", "deceased"]).optional(),
   recoverUntilMonth: z.number().int().min(1).optional(),
+  residence: idSchema.optional(),
   chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
   ill: z.boolean().optional(),
   confined: z.boolean().optional(),
@@ -192,6 +193,12 @@ export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("heir_adopt"), heirId: nonEmpty, fatherId: idSchema }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
   z.strictObject({ type: z.literal("set_taihou_illness"), ill: z.boolean() }),
+  z.strictObject({
+    type: z.literal("relocate"),
+    char: idSchema,
+    location: idSchema,
+    chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]),
+  }),
 ]);
 
 export type EventEffect = z.infer<typeof eventEffectSchema>;

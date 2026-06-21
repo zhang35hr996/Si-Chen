@@ -23,3 +23,25 @@ describe("presence v0 (defaultLocation rule)", () => {
     expect(getPresentAt(db, moved, "zichendian").map((c) => c.id).sort()).toEqual(["cheng_feng", "wei_sui"].sort());
   });
 });
+
+describe("presence: 搬迁 (standing.residence override)", () => {
+  it("standing.residence overrides the authored defaultLocation", () => {
+    const relocated = {
+      ...state,
+      standing: {
+        ...state.standing,
+        lu_huaijin: { ...state.standing.lu_huaijin!, residence: "chengqian_gong" },
+      },
+    };
+    expect(getCharacterLocation(db, relocated, "lu_huaijin")).toBe("chengqian_gong");
+    expect(getPresentAt(db, relocated, "chengqian_gong").map((c) => c.id)).toEqual(["lu_huaijin"]);
+    expect(getPresentAt(db, relocated, "zhongcui_gong")).toEqual([]);
+  });
+
+  it("ships the three new 侍君 palaces", () => {
+    for (const id of ["chengqian_gong", "yongshou_gong", "yikun_gong"]) {
+      expect(db.locations[id]).toBeDefined();
+      expect(db.locations[id]!.zone).toBe("hougong");
+    }
+  });
+});

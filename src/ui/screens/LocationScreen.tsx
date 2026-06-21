@@ -21,6 +21,7 @@ export function LocationScreen({
   onOpenSettings,
   onStartEvent,
   onManage,
+  onRelocate,
   onBedchamber,
   onFlipTablet,
   onSummonZongzheng,
@@ -43,6 +44,7 @@ export function LocationScreen({
   onOpenSettings: () => void;
   onStartEvent: (eventId: string) => void;
   onManage?: (charId: string) => void;
+  onRelocate?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
   onFlipTablet?: () => void;
   onSummonZongzheng?: () => void;
@@ -109,6 +111,7 @@ export function LocationScreen({
           onBedchamber={onBedchamber}
           onViewProfile={onViewProfile}
           onManage={onManage}
+          onRelocate={onRelocate}
         />
       ) : (
         <main className="location-screen">

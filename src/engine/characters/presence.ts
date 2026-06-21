@@ -1,8 +1,8 @@
 /**
  * Presence v0 (skeleton-plan §3): a character is at their defaultLocation
- * every action-day. Schedules/presence-overrides are the designed-but-deferred
- * upgrade; this function's signature already takes GameState so callers won't
- * change when they land.
+ * every action-day, unless 搬迁 has moved them — standing.residence overrides
+ * the authored defaultLocation. Schedules/presence-overrides remain the
+ * designed-but-deferred upgrade.
  */
 import type { ContentDB } from "../content/loader";
 import type { CharacterContent } from "../content/schemas";
@@ -11,10 +11,12 @@ import { effectiveOrder } from "./standing";
 
 export function getCharacterLocation(
   db: ContentDB,
-  _state: GameState,
+  state: GameState,
   charId: string,
 ): string | null {
-  return db.characters[charId]?.defaultLocation ?? null;
+  if (!db.characters[charId]) return null;
+  // 搬迁后 standing.residence 覆盖 content 的 defaultLocation。
+  return state.standing[charId]?.residence ?? db.characters[charId]!.defaultLocation ?? null;
 }
 
 /** Characters present at a location, sorted by rank order (highest first). */

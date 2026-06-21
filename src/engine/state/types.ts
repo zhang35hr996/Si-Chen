@@ -203,6 +203,8 @@ export interface CharacterStanding {
   lifecycle?: ConsortLifecycle;
   /** 产后休养（虚弱）截止月序 monthOrdinal；未达则激情不可选。 */
   recoverUntilMonth?: number;
+  /** 所居宫殿（locationId）；缺省回退 content 的 defaultLocation。搬迁改写此处。 */
+  residence?: string;
   /** 所居宫室（缺省 "main" 主殿）。 */
   chamber?: ChamberId;
   /** 凤体违和（病）。 */

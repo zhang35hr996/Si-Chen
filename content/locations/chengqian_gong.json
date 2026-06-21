@@ -1,0 +1,22 @@
+{
+  "id": "chengqian_gong",
+  "name": "承乾宫",
+  "description": "殿名承乾，取承天乾健之意。庭中古柏苍翠，正殿匾额端凝，气象贵重。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "古柏苍翠",
+    "匾额端凝",
+    "气象贵重"
+  ],
+  "position": {
+    "x": 0.3,
+    "y": 0.46
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 0
+  }
+}

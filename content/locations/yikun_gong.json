@@ -1,0 +1,22 @@
+{
+  "id": "yikun_gong",
+  "name": "翊坤宫",
+  "description": "殿名翊坤，取辅翼坤德之意。回廊曲折，廊下挂鸟笼数只，时有清啭相闻。",
+  "backgroundKey": "bg.hougong_zhudian",
+  "ambience": [
+    "回廊曲折",
+    "鸟啭清越",
+    "锦帘低垂"
+  ],
+  "position": {
+    "x": 0.5,
+    "y": 0.54
+  },
+  "zone": "hougong",
+  "connections": [
+    "kunninggong"
+  ],
+  "travelCost": {
+    "ap": 0
+  }
+}

@@ -19,6 +19,7 @@ export function ConsortListModal({
   registry,
   sovereignPregnant,
   onManage,
+  onRelocate,
   onSummon,
   onAddCandidate,
   onRemoveCandidate,
@@ -29,6 +30,7 @@ export function ConsortListModal({
   registry: AssetRegistry;
   sovereignPregnant: boolean;
   onManage: (charId: string) => void;
+  onRelocate: (charId: string) => void;
   onSummon: (charId: string) => void;
   onAddCandidate: (charId: string) => void;
   onRemoveCandidate: (charId: string) => void;
@@ -128,6 +130,11 @@ export function ConsortListModal({
             {!isEmpress && (
               <button type="button" onClick={() => onManage(c.id)}>
                 封号管理
+              </button>
+            )}
+            {!isEmpress && (
+              <button type="button" onClick={() => onRelocate(c.id)}>
+                搬迁
               </button>
             )}
             {sovereignPregnant && lc === "candidate" && (

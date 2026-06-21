@@ -9,21 +9,14 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { LocationContent } from "../../engine/content/schemas";
 import type { CharacterStanding, GameState } from "../../engine/state/types";
 import { getPresentAt } from "../../engine/characters/presence";
+import { CHAMBERED_PALACE_ORDER } from "../../engine/characters/chambers";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 
 const EMPRESS_PALACE = "kunninggong"; // 坤宁宫 · 皇后（凤后）居所，置顶
 const COLD_PALACE = "changmengong"; // 长门宫 · 冷宫
 const CANDIDATE_PALACE = "chuxiu_gong"; // 储秀宫 · 待选秀男
-/** 7 座设宫室的居所排序（景仁宫置于原储秀宫位）。 */
-const RESIDENTIAL_ORDER = [
-  "zhaoning_gong",
-  "yanhe_gong",
-  "jingren_gong",
-  "zhongcui_gong",
-  "xianfugong",
-  "jiyue_gong",
-  "chenghui_gong",
-];
+/** 设宫室的居所排序（与 chambers.ts 同一来源）。 */
+const RESIDENTIAL_ORDER = CHAMBERED_PALACE_ORDER;
 
 interface Status {
   icon: string;
