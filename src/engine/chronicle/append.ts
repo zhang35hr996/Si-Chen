@@ -3,6 +3,8 @@
  * 拒绝未来事件——编年史只记「已发生」。返回新 state，不改入参。
  */
 import { compareGameTime, toGameTime } from "../calendar/time";
+import { stateError, type GameError } from "../infra/errors";
+import { err, ok, type Result } from "../infra/result";
 import type { CourtEvent, GameState } from "../state/types";
 
 const ID_RE = /^evt_(\d{6})$/;
@@ -25,10 +27,10 @@ function maxSeq(chronicle: readonly CourtEvent[]): number {
 export function appendCourtEvent(
   state: GameState,
   draft: Omit<CourtEvent, "id">,
-): { state: GameState; event: CourtEvent } {
+): Result<{ state: GameState; event: CourtEvent }, GameError[]> {
   if (compareGameTime(draft.occurredAt, toGameTime(state.calendar)) > 0) {
-    throw new Error(`appendCourtEvent: 拒绝未来事件 occurredAt=${JSON.stringify(draft.occurredAt)}`);
+    return err([stateError("FUTURE_EVENT", `cannot append a future CourtEvent`, { context: { occurredAt: draft.occurredAt } })]);
   }
   const event: CourtEvent = { id: courtEventId(maxSeq(state.chronicle) + 1), ...draft };
-  return { state: { ...state, chronicle: [...state.chronicle, event] }, event };
+  return ok({ state: { ...state, chronicle: [...state.chronicle, event] }, event });
 }
