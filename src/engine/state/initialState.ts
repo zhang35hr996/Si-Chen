@@ -29,7 +29,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
       },
       nation: {
         military: 50,
-        treasury: 50,
+        treasury: 10000,
         publicSupport: 50,
         productivity: 50,
         governance: 50,

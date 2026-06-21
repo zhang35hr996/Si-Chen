@@ -34,7 +34,7 @@ export interface SovereignState {
 export interface NationState {
   /** 军力 */
   military: number;
-  /** 国库（0–100 充盈度抽象） */
+  /** 国库（铜钱，单位：两） */
   treasury: number;
   /** 民心 */
   publicSupport: number;

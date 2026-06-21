@@ -70,7 +70,7 @@ export const gameStateSchema = z.strictObject({
     }),
     nation: z.strictObject({
       military: percent,
-      treasury: percent,
+      treasury: z.number().int().min(0),
       publicSupport: percent,
       productivity: percent,
       governance: percent,

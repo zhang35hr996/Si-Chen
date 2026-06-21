@@ -85,7 +85,7 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       if (resources.nation === undefined) {
         resources.nation = {
           military: 50,
-          treasury: 50,
+          treasury: 10000,
           publicSupport: court.publicSupport ?? 50,
           productivity: 50,
           governance: 50,

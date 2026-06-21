@@ -63,11 +63,7 @@ export function buildFortune(
   if (tier === "大吉") {
     effects.push(nat("publicSupport", mag(key, "ps", 8, 10)));
     effects.push(nat("productivity", mag(key, "pd", 8, 10)));
-    effects.push(
-      gestationRoll(`${key}:extra`) % 2 === 0
-        ? sov("prestige", mag(key, "ex", 4, 6))
-        : nat("treasury", mag(key, "ex", 4, 6)),
-    );
+    effects.push(sov("prestige", mag(key, "ex", 4, 6)));
   } else if (tier === "吉") {
     effects.push(nat("publicSupport", mag(key, "ps", 5, 7)));
     effects.push(nat("productivity", mag(key, "pd", 5, 7)));
