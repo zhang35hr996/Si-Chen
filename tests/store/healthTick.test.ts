@@ -38,8 +38,16 @@ describe("projectMonthlyHealth branches", () => {
     expect(o.nextStatus).toBe("sick");         // baked seed MUST hit onset
     expect(o.nextHealth).toBe(20);             // no 病损 the month of onset
   });
-  it("sick single mutually-exclusive transition lands in exactly one bucket", () => {
-    const o = projectMonthlyHealth({ ...base, health: 50, status: "sick", seedKey: "t" });
-    expect(["sick","critical","healthy"]).toContain(o.nextStatus);
+  it("sick→critical transition: single-roll branch hits critical bucket — UNCONDITIONAL", () => {
+    // age:20 → criticalRate = clamp(1+ageOver35(20),1,30) = 1; roll<1 means roll===0
+    // SEED_CRIT="108": healthRoll("108:transition")=0 < criticalRate(1) → critical
+    const o = projectMonthlyHealth({ ...base, age: 20, health: 50, status: "sick", seedKey: "108" });
+    expect(o.nextStatus).toBe("critical");   // no `if` — baked seed MUST hit
+  });
+  it("sick→healthy transition: single-roll branch hits healthy bucket — UNCONDITIONAL", () => {
+    // age:20 → criticalRate=1; roll in [1,51) → healthy
+    // SEED_HEALTHY="8": healthRoll("8:transition")=1; 1 >= criticalRate(1) && 1 < 51 → healthy
+    const o = projectMonthlyHealth({ ...base, age: 20, health: 50, status: "sick", seedKey: "8" });
+    expect(o.nextStatus).toBe("healthy");    // no `if` — baked seed MUST hit
   });
 });

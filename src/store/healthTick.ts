@@ -15,23 +15,23 @@ export function monthlyIllnessRate(health: number, age: number): number {
 
 export function projectMonthlyHealth(ctx: MonthlyHealthContext): MonthlyHealthOutcome {
   const previousHealth = ctx.health, previousStatus = ctx.status, k = ctx.seedKey;
-  let h = ctx.health, status = ctx.status;
+  let h = ctx.health, nextStatus = ctx.status;
   if (ctx.pregnancyMonthlyCost) h -= healthRollRange(`${k}:preg`, 0, 5);
   if (ctx.isYearStart && ctx.age >= 35) h -= 1 + Math.floor(ageOver35(ctx.age) / 10);
   if (previousStatus === "sick") h -= healthRollRange(`${k}:sickdmg`, 1, 2);
   else if (previousStatus === "critical") h -= healthRollRange(`${k}:critdmg`, 3, 5);
   h = clampPct(h);
-  if (h <= 0) return { previousHealth, nextHealth: 0, previousStatus, nextStatus: status, died: true, deathCause: "illness" };
+  if (h <= 0) return { previousHealth, nextHealth: 0, previousStatus, nextStatus: previousStatus, died: true, deathCause: "illness" };
   if (previousStatus === "critical" && healthRoll(`${k}:sudden`) < 5)
-    return { previousHealth, nextHealth: h, previousStatus, nextStatus: status, died: true, deathCause: "critical_sudden" };
+    return { previousHealth, nextHealth: h, previousStatus, nextStatus: previousStatus, died: true, deathCause: "critical_sudden" };
   if (previousStatus === "healthy") {
     // onset uses POST-decay/POST-cost health `h` (not month-start ctx.health)
-    if (healthRollBasisPoints(`${k}:onset`) < monthlyIllnessRate(h, ctx.age) * 10000) status = "sick";
+    if (healthRollBasisPoints(`${k}:onset`) < monthlyIllnessRate(h, ctx.age) * 10000) nextStatus = "sick";
   } else if (previousStatus === "sick") {
     const criticalRate = Math.min(30, Math.max(1, 1 + ageOver35(ctx.age)));
     const r = healthRoll(`${k}:transition`);
-    if (r < criticalRate) status = "critical";
-    else if (r < criticalRate + 50) status = "healthy";
+    if (r < criticalRate) nextStatus = "critical";
+    else if (r < criticalRate + 50) nextStatus = "healthy";
   }
-  return { previousHealth, nextHealth: h, previousStatus, nextStatus: status, died: false };
+  return { previousHealth, nextHealth: h, previousStatus, nextStatus, died: false };
 }
