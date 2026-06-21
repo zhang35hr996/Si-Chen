@@ -1398,7 +1398,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       {ceremonyOpen && (
         <GreetingCeremonyOverlay
           empressName={db.characters.shen_zhibai?.profile.name ?? "皇后"}
-          onDone={() => setCeremonyOpen(false)}
+          onDone={() => {
+            setCeremonyOpen(false);
+            if (reactionQueue.length > 0) {
+              const [first, ...rest] = reactionQueue;
+              setReaction(first!);
+              setReactionQueue(rest);
+            }
+          }}
         />
       )}
       {morningAfterOpen && morningAfterCharId && (
