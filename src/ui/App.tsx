@@ -323,6 +323,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         setPrompt(null);
         break;
       case "huntJoin":
+        store.dispatch({ type: "SPEND_AP", amount: 1 });
         store.applyAutumnHunt(`hunt:${store.getState().rngSeed}:${store.getState().calendar.year}`);
         setPrompt(null);
         break;
