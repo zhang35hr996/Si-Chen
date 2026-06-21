@@ -556,7 +556,7 @@ export function applyEffects(
       }
       case "heir_decease": {
         const h = next.resources.bloodline.heirs.find((x) => x.id === effect.heirId);
-        if (h) { h.deceased = true; h.diedAt = effect.at; }
+        if (h) { h.lifecycle = "deceased"; h.deceasedAt = effect.at; }
         break;
       }
       case "taihou_decease": {

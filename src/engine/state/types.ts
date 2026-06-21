@@ -166,10 +166,6 @@ export interface Heir {
   deceasedAt?: GameTime;
   /** 病情状态（出生置 healthy；旧存档可能无此字段）。 */
   healthStatus?: HealthStatus;
-  /** 是否夭折（新身后事系统；与 lifecycle="deceased" 并行）。 */
-  deceased?: boolean;
-  /** 夭折时刻（新身后事系统；与 deceasedAt 并行）。 */
-  diedAt?: GameTime;
 }
 
 export interface BloodlineState {
