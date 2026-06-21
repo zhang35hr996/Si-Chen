@@ -1427,35 +1427,6 @@ button:active:enabled {
   color: var(--c-text);
   font-size: 0.9rem;
 }
-.profile-stat {
-  display: grid;
-  grid-template-columns: 5.5rem 1fr 2.2rem;
-  align-items: center;
-  gap: 0.6rem;
-  margin: 0.5rem 0;
-}
-.profile-stat__label {
-  font-size: 0.85rem;
-  color: var(--c-text-dim);
-}
-.profile-stat__bar {
-  height: 7px;
-  border-radius: 999px;
-  background: var(--c-panel-3);
-  overflow: hidden;
-}
-.profile-stat__fill {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--c-gold-soft, var(--c-gold)), var(--c-gold));
-  border-radius: 999px;
-}
-.profile-stat__val {
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  color: var(--c-gold-text);
-  text-align: right;
-}
 .profile-tags {
   display: flex;
   flex-wrap: wrap;
