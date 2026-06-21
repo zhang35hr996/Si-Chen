@@ -42,7 +42,7 @@ import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
 import { buildAdoptionReaction } from "../store/adoption";
-import { ChildReactionScreen } from "./screens/ChildReactionScreen";
+import { CharacterReactionScreen } from "./screens/CharacterReactionScreen";
 import { buildBirth, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
@@ -1377,7 +1377,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         />
       )}
       {childReaction && (
-        <ChildReactionScreen
+        <CharacterReactionScreen
           db={db}
           store={store}
           registry={registry}
