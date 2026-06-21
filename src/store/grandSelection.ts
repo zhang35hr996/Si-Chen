@@ -146,7 +146,9 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
     };
 
     const parsed = characterSchema.safeParse(content);
-    if (!parsed.success) continue; // 极端取样下不合法则跳过该位
+    if (!parsed.success) {
+      throw new Error(`generateCandidates produced an invalid candidate ${content.id}: ${parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`);
+    }
     out.push({ content: parsed.data, fatherOfficialId, grade, announce });
   }
   return out;
