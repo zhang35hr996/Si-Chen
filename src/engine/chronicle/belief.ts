@@ -4,16 +4,16 @@
  * 必经 CurrentFactVisibility；接入 rumor/certainty 后只替换实现，本接口不变。
  * 系统效果（applyEffects）永远只用 ground truth，不经此处。
  */
-import { compareGameTime, toGameTime } from "../calendar/time";
 import type { GameState } from "../state/types";
+import { isCurrentlyPresent, characterExists } from "./presence";
 
-export type FactPredicate = "resides_at" | "holds_rank";
+export type FactPredicate = "resides_at" | "holds_rank" | "alive";
 export interface FactKey {
   predicate: FactPredicate;
   subjectId: string;
 }
 export interface BelievedFact {
-  value: string;
+  value: string | boolean;
   certainty: number; // 0–100
 }
 
@@ -21,18 +21,16 @@ export interface CurrentFactVisibility {
   canSee(state: GameState, viewerId: string, key: FactKey): boolean;
 }
 
-/** 「此刻在场」：有 standing 且 palaceEnteredAt ≤ now（尚未入宫的未来角色不算）。 */
-export function isCurrentlyPresent(state: GameState, charId: string): boolean {
-  const st = state.standing[charId];
-  if (!st) return false;
-  if (st.palaceEnteredAt && compareGameTime(st.palaceEnteredAt, toGameTime(state.calendar)) > 0) return false;
-  return true;
-}
+export { isCurrentlyPresent };
 
-/** MVP：当前位分/住处是宫廷公开事实——viewer 与 subject 均须【此刻在场】。 */
+/** MVP：当前位分/住处是宫廷公开事实——viewer 须在场；subject 视谓词而定。 */
 export const courtMemberVisibility: CurrentFactVisibility = {
   canSee(state, viewerId, key) {
-    return isCurrentlyPresent(state, viewerId) && isCurrentlyPresent(state, key.subjectId);
+    if (!isCurrentlyPresent(state, viewerId)) return false; // viewer 须在场
+    // alive 可查死者（死者仍存在）；现状类谓词只查在场者
+    return key.predicate === "alive"
+      ? characterExists(state, key.subjectId)
+      : isCurrentlyPresent(state, key.subjectId);
   },
 };
 
@@ -48,6 +46,14 @@ export class GroundTruthBeliefProjection implements BeliefProjection {
 
   getFact(charId: string, key: FactKey): BelievedFact | undefined {
     if (!this.visibility.canSee(this.state, charId, key)) return undefined;
+    // alive 谓词：先查 standing，再查 heirs（支持皇嗣 subject）
+    if (key.predicate === "alive") {
+      const standing = this.state.standing[key.subjectId];
+      if (standing) return { value: standing.lifecycle !== "deceased", certainty: 100 };
+      const heirEntry = this.state.resources.bloodline.heirs.find((h) => h.id === key.subjectId);
+      return heirEntry ? { value: heirEntry.lifecycle !== "deceased", certainty: 100 } : undefined;
+    }
+    // 现状类谓词：subject 须有 standing（已由 canSee 保证在场）
     const st = this.state.standing[key.subjectId];
     if (!st) return undefined;
     switch (key.predicate) {

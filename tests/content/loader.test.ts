@@ -100,7 +100,7 @@ function makeRaw(): RawContent {
         type: "effect",
         id: "n2",
         effects: [
-          { type: "memory", char: "char_a", entry: { kind: "event", summary: "记。", salience: 10, tags: [], participants: ["char_a"] } },
+          { type: "memory", char: "char_a", entry: { kind: "episodic", summary: "记。", strength: 10, retention: "fast", subjectIds: ["char_a"], perspective: "witness", triggerTags: [], unresolved: false, emotions: {} } },
         ],
       },
     ],

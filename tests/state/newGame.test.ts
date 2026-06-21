@@ -31,15 +31,17 @@ describe("createNewGameState", () => {
     expect(state.standing["taihou"]).toBeUndefined();
   });
 
-  it("seeds authored initial memories: monotonic ids, authored source, protected", () => {
+  it("seeds authored initial memories: monotonic ids, ownerId, new fields", () => {
     const store = state.memories["lu_huaijin"];
     expect(store).toBeDefined();
     expect(store!.entries).toHaveLength(1);
     const entry = store!.entries[0]!;
     expect(entry.id).toBe(memoryEntryId("lu_huaijin", 1));
     expect(entry.id).toBe("mem_lu_huaijin_000001");
-    expect(entry.source).toBe("authored"); // 既有背景记忆 — protected allowed
-    expect(entry.protected).toBe(true);
+    expect(entry.ownerId).toBe("lu_huaijin");
+    expect(entry.strength).toBe(70);
+    expect(entry.retention).toBe("permanent");
+    expect(entry.triggerTags).toEqual(["neglect"]);
     expect(entry.createdAt).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
     expect(store!.nextSeq).toBe(2);
   });
@@ -48,7 +50,7 @@ describe("createNewGameState", () => {
     const a = createNewGameState(db);
     const b = createNewGameState(db);
     expect(a).toEqual(b);
-    a.memories["lu_huaijin"]!.entries[0]!.tags.push("mutated");
-    expect(db.characters["lu_huaijin"]!.initialMemories[0]!.tags).not.toContain("mutated");
+    a.memories["lu_huaijin"]!.entries[0]!.triggerTags.push("mutated");
+    expect(db.characters["lu_huaijin"]!.initialMemories[0]!.triggerTags).not.toContain("mutated");
   });
 });

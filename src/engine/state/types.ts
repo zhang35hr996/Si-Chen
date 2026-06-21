@@ -80,6 +80,8 @@ export interface GestationState {
 
 export type HeirSex = "daughter" | "son";
 
+export type HeirLifecycle = "alive" | "deceased";
+
 /**
  * 皇嗣党羽倾向（暗属性，文本枚举而非数值）。见 21-attribute-catalog.md。
  * none=无明显党羽 / empress=亲近皇后 / adoptive=依附承养人 / maternal=受母家扶持 /
@@ -145,6 +147,10 @@ export interface Heir {
   support: number;
   /** 党羽倾向（文本枚举）。 */
   faction: HeirFaction;
+  /** 生死状态（出生置 alive；heir_died 转 deceased）。 */
+  lifecycle: HeirLifecycle;
+  /** 夭折时刻；存活时 undefined。 */
+  deceasedAt?: GameTime;
 }
 
 export interface BloodlineState {
@@ -220,32 +226,52 @@ export interface CharacterStanding {
   availableFromMonth?: number;
 }
 
-// ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
-export type MemoryKind = "event" | "fact_learned" | "opinion" | "promise" | "conversation_summary";
+// ── Memory (PR2: 活人感形状) ──────────────────────────────────────────
+export type MemoryKind =
+  | "episodic" | "trauma" | "grievance" | "gratitude" | "promise" | "secret" | "impression";
+export type MemoryPerspective =
+  | "actor" | "target" | "witness" | "parent" | "ally" | "enemy" | "relative";
+export type MemoryEmotion =
+  | "joy" | "grief" | "fear" | "anger" | "envy" | "shame" | "guilt" | "relief";
 
 export interface MemoryEntry {
-  /** "mem_<charId>_000001" — monotonic per character. */
   id: string;
+  ownerId: string;
   kind: MemoryKind;
-  /** ≤240 chars, third person, this character's POV. */
+  /** 关联 chronicle CourtEvent（可空）。 */
+  sourceEventId?: string;
+  /** 涉及的当事人（取代 participants）。 */
+  subjectIds: string[];
+  perspective: MemoryPerspective;
+  /** ≤240，POV。 */
   summary: string;
-  /** 0–100 */
-  salience: number;
+  /** 0–100，记忆牢固度（取代 salience）。 */
+  strength: number;
+  /** permanent 取代 protected。 */
+  retention: MemoryRetention;
+  emotions: Partial<Record<MemoryEmotion, number>>;
+  /** 取代 tags（≤5）。 */
+  triggerTags: string[];
+  unresolved: boolean;
   createdAt: GameTime;
-  /** ≤5, lowercased. */
-  tags: string[];
-  /** Character ids incl. "player". */
-  participants: string[];
-  locationId?: string;
-  source: "authored" | "scene_outcome";
-  /** Which scene's commit wrote this entry — the debug trace. Absent for authored seeds and non-scene batches. */
-  originSceneId?: string;
-  protected: boolean;
 }
 
 export interface CharacterMemoryStore {
   entries: MemoryEntry[];
   nextSeq: number;
+}
+
+export type EmotionalConditionType =
+  | "acute_grief" | "prolonged_grief" | "resentment" | "anxiety" | "infatuation" | "humiliation";
+
+export interface EmotionalCondition {
+  id: string;                 // "cond_<ownerId>_000001"
+  ownerId: string;
+  type: EmotionalConditionType;
+  sourceEventId: string;
+  severity: number;           // 0–100
+  startedAt: GameTime;
+  recoveryProfile: "fast" | "normal" | "slow" | "stuck";
 }
 
 export type BedchamberMode = "passion" | "pleasure" | "companionship";
@@ -341,6 +367,8 @@ export interface GameState {
   eventLog: EventLogEntry[];
   /** 客观事件编年史（append-only，剧情事实；与 eventLog 的触发记账分离）。 */
   chronicle: CourtEvent[];
+  /** 角色情绪状态（与永久创伤记忆分离；PR2c 只存储，自动恢复留待后续）。 */
+  emotionalConditions: EmotionalCondition[];
   sceneHistory: string[];
   rngSeed: number;
 }

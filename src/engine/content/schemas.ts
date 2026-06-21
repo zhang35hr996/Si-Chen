@@ -53,30 +53,40 @@ export const characterStandingSchema = z.strictObject({
 
 // ── memory drafts ─────────────────────────────────────────────────────
 export const memoryKindSchema = z.enum([
-  "event",
-  "fact_learned",
-  "opinion",
-  "promise",
-  "conversation_summary",
+  "episodic", "trauma", "grievance", "gratitude", "promise", "secret", "impression",
 ]);
+export const memoryEmotionSchema = z.enum(["joy","grief","fear","anger","envy","shame","guilt","relief"]);
+const memoryPerspectiveSchema = z.enum(["actor","target","witness","parent","ally","enemy","relative"]);
+
+/** Partial record of emotion intensities — only present emotions need to be listed. */
+const emotionsSchema = z.object({
+  joy: z.number().optional(),
+  grief: z.number().optional(),
+  fear: z.number().optional(),
+  anger: z.number().optional(),
+  envy: z.number().optional(),
+  shame: z.number().optional(),
+  guilt: z.number().optional(),
+  relief: z.number().optional(),
+}).default({});
 
 const memoryDraftBase = z.strictObject({
   kind: memoryKindSchema,
   summary: z.string().min(1).max(240),
-  salience: percent,
-  tags: z.array(tagSchema).max(5),
-  participants: z.array(participantSchema).min(1),
-  locationId: idSchema.optional(),
+  subjectIds: z.array(participantSchema).min(1),
+  perspective: memoryPerspectiveSchema,
+  strength: percent,
+  triggerTags: z.array(tagSchema).max(5),
+  unresolved: z.boolean().default(false),
+  emotions: emotionsSchema,
+  sourceEventId: z.string().regex(/^evt_\d{6}$/).optional(), // 格式 evt_NNNNNN（content 层不能 import 上层 courtEventIdSchema，内联同正则）
 });
 
-/** Authored initial memories may be protected (default true — DESIGN §4.8). */
 export const initialMemoryDraftSchema = memoryDraftBase.extend({
-  protected: z.boolean().default(true),
+  retention: z.enum(["fast", "slow", "permanent"]).default("slow"),
 });
-
-/** In-scene memory effects can NEVER be protected (plan §6). */
 export const effectMemoryDraftSchema = memoryDraftBase.extend({
-  protected: z.literal(false).optional(),
+  retention: z.enum(["fast", "slow", "permanent"]),
 });
 
 export type InitialMemoryDraft = z.infer<typeof initialMemoryDraftSchema>;
@@ -203,6 +213,7 @@ export const eventEffectSchema = z.union([
   }),
   z.strictObject({ type: z.literal("heir_adopt"), heirId: nonEmpty, fatherId: idSchema }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
+  z.strictObject({ type: z.literal("heir_died"), heirId: nonEmpty }),
   z.strictObject({ type: z.literal("set_taihou_illness"), ill: z.boolean() }),
   z.strictObject({
     type: z.literal("relocate"),

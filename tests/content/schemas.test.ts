@@ -85,26 +85,30 @@ describe("characterSchema", () => {
 
 describe("memory drafts", () => {
   const draft = {
-    kind: "event",
+    kind: "episodic",
     summary: "一条记忆。",
-    salience: 50,
-    tags: ["player"],
-    participants: ["player", "char_a"],
+    strength: 50,
+    subjectIds: ["player", "char_a"],
+    perspective: "witness",
+    triggerTags: ["player"],
+    unresolved: false,
+    emotions: {},
   };
 
-  it("initial drafts default protected to true; effect drafts may never be protected", () => {
+  it("initial drafts default retention to slow; effect drafts require explicit retention", () => {
     const parsed = initialMemoryDraftSchema.parse(draft);
-    expect(parsed.protected).toBe(true);
-    accepts(effectMemoryDraftSchema, draft);
-    accepts(effectMemoryDraftSchema, { ...draft, protected: false });
-    rejects(effectMemoryDraftSchema, { ...draft, protected: true }); // plan §6
+    expect(parsed.retention).toBe("slow");
+    // effect drafts require explicit retention
+    rejects(effectMemoryDraftSchema, draft); // missing retention
+    accepts(effectMemoryDraftSchema, { ...draft, retention: "fast" });
+    accepts(effectMemoryDraftSchema, { ...draft, retention: "permanent" }); // permanent allowed for effects
   });
 
-  it("rejects out-of-range salience, long summaries, too many / non-ascii tags", () => {
-    rejects(initialMemoryDraftSchema, { ...draft, salience: 200 });
+  it("rejects out-of-range strength, long summaries, too many / non-ascii triggerTags", () => {
+    rejects(initialMemoryDraftSchema, { ...draft, strength: 200 });
     rejects(initialMemoryDraftSchema, { ...draft, summary: "长".repeat(241) });
-    rejects(initialMemoryDraftSchema, { ...draft, tags: ["a", "b", "c", "d", "e", "f"] });
-    rejects(initialMemoryDraftSchema, { ...draft, tags: ["御花园"] });
+    rejects(initialMemoryDraftSchema, { ...draft, triggerTags: ["a", "b", "c", "d", "e", "f"] });
+    rejects(initialMemoryDraftSchema, { ...draft, triggerTags: ["御花园"] });
   });
 });
 

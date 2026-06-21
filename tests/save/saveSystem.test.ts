@@ -29,7 +29,7 @@ const playedState = (): GameState => {
     {
       type: "memory",
       char: "shen_zhibai",
-      entry: { kind: "event", summary: "存档测试记忆。", salience: 30, tags: ["test"], participants: ["player"] },
+      entry: { kind: "episodic", summary: "存档测试记忆。", strength: 30, retention: "slow", subjectIds: ["player"], perspective: "witness", triggerTags: ["test"], unresolved: false, emotions: {} },
     },
   ]);
   if (!result.ok) throw new Error("fixture failed");

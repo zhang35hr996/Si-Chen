@@ -21,11 +21,15 @@
   "initialStanding": { "rank": "chenghui", "favor": 5 },
   "initialMemories": [
     {
-      "kind": "opinion",
+      "kind": "impression",
       "summary": "陛下已三年未踏入冷宫，温雅自知早被遗忘。",
-      "salience": 55,
-      "tags": ["player", "forgotten"],
-      "participants": ["player", "wenya"]
+      "strength": 55,
+      "retention": "slow",
+      "subjectIds": ["player", "wenya"],
+      "perspective": "witness",
+      "triggerTags": ["forgotten"],
+      "unresolved": true,
+      "emotions": { "grief": 50 }
     }
   ],
   "secrets": [],

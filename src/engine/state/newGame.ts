@@ -59,15 +59,18 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     memories[character.id] = {
       entries: character.initialMemories.map((draft, index) => ({
         id: memoryEntryId(character.id, index + 1),
+        ownerId: character.id,
         kind: draft.kind,
+        ...(draft.sourceEventId !== undefined ? { sourceEventId: draft.sourceEventId } : {}),
+        subjectIds: [...draft.subjectIds],
+        perspective: draft.perspective,
         summary: draft.summary,
-        salience: draft.salience,
+        strength: draft.strength,
+        retention: draft.retention,
+        emotions: { ...draft.emotions },
+        triggerTags: [...draft.triggerTags],
+        unresolved: draft.unresolved,
         createdAt: startTime,
-        tags: [...draft.tags],
-        participants: [...draft.participants],
-        ...(draft.locationId !== undefined ? { locationId: draft.locationId } : {}),
-        source: "authored" as const, // 既有背景记忆 — may be protected
-        protected: draft.protected,
       })),
       nextSeq: character.initialMemories.length + 1,
     };
@@ -99,6 +102,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     bedchamber,
     eventLog: [],
     chronicle: [],
+    emotionalConditions: [],
     sceneHistory: [],
     rngSeed,
   };

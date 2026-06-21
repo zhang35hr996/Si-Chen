@@ -29,12 +29,15 @@
           "type": "memory",
           "char": "lu_huaijin",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "陛下在御花园亲口说，是政务缠身疏忽了我。这句话，我等了三旬。",
-            "salience": 70,
-            "tags": ["player", "comfort", "yuhuayuan"],
-            "participants": ["player", "lu_huaijin"],
-            "locationId": "yuhuayuan"
+            "strength": 70,
+            "retention": "permanent",
+            "subjectIds": ["player", "lu_huaijin"],
+            "perspective": "witness",
+            "triggerTags": ["comfort", "yuhuayuan"],
+            "unresolved": false,
+            "emotions": { "relief": 50, "joy": 30 }
           }
         }
       ],
@@ -55,12 +58,15 @@
           "type": "memory",
           "char": "lu_huaijin",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "陛下说只是路过。三旬不见，等来一句『你自便』。",
-            "salience": 65,
-            "tags": ["player", "neglect", "yuhuayuan"],
-            "participants": ["player", "lu_huaijin"],
-            "locationId": "yuhuayuan"
+            "strength": 65,
+            "retention": "slow",
+            "subjectIds": ["player", "lu_huaijin"],
+            "perspective": "witness",
+            "triggerTags": ["neglect", "yuhuayuan"],
+            "unresolved": true,
+            "emotions": { "grief": 40 }
           }
         }
       ],
@@ -81,12 +87,15 @@
           "type": "memory",
           "char": "lu_huaijin",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "陛下说我话不老实，不可窥伺帝踪。希望陛下不会降罪。",
-            "salience": 75,
-            "tags": ["player", "rebuke", "yuhuayuan"],
-            "participants": ["player", "lu_huaijin"],
-            "locationId": "yuhuayuan"
+            "strength": 75,
+            "retention": "permanent",
+            "subjectIds": ["player", "lu_huaijin"],
+            "perspective": "witness",
+            "triggerTags": ["rebuke", "yuhuayuan"],
+            "unresolved": true,
+            "emotions": { "fear": 45, "shame": 30 }
           }
         }
       ],

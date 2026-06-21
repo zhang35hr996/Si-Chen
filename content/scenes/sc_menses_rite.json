@@ -30,12 +30,15 @@
           "type": "memory",
           "char": "wei_sui",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "陛下御批准了传月祭仪，仪程如期。礼制有序，国本可安。",
-            "salience": 60,
-            "tags": ["rite", "approval"],
-            "participants": ["player", "wei_sui"],
-            "locationId": "zichendian"
+            "strength": 60,
+            "retention": "slow",
+            "subjectIds": ["player", "wei_sui"],
+            "perspective": "witness",
+            "triggerTags": ["rite", "approval"],
+            "unresolved": false,
+            "emotions": { "relief": 40 }
           }
         }
       ],
@@ -58,12 +61,15 @@
           "type": "memory",
           "char": "wei_sui",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "陛下以乏累为由推迟传月祭仪。典制有亏，朝野恐有非议，臣需设法转圜。",
-            "salience": 70,
-            "tags": ["rite", "delay", "concern"],
-            "participants": ["player", "wei_sui"],
-            "locationId": "zichendian"
+            "strength": 70,
+            "retention": "slow",
+            "subjectIds": ["player", "wei_sui"],
+            "perspective": "witness",
+            "triggerTags": ["rite", "delay", "concern"],
+            "unresolved": true,
+            "emotions": { "fear": 20 }
           }
         }
       ],

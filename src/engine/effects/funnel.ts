@@ -10,7 +10,7 @@
  *   - targets must exist in BOTH content and current state
  *   - numeric clamping lives here only: per-axis cumulative delta is capped
  *     to ±AXIS_CAP per batch, resulting values clamped 0–100
- *   - runtime memory is append-only, source "scene_outcome", never protected
+ *   - runtime memory is append-only; retention is author/effect-supplied (permanent allowed)
  *   - reject-one-reject-all: any invalid effect rejects the whole batch and
  *     the caller keeps the original state reference
  */
@@ -220,6 +220,15 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_died": {
+        const heir = state.resources.bloodline.heirs.find((h) => h.id === e.heirId);
+        if (!heir) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        } else if (heir.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT", `heir "${e.heirId}" already deceased`, { heir: e.heirId });
+        }
+        break;
+      }
       case "relocate": {
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
@@ -266,7 +275,7 @@ export function applyEffects(
   db: ContentDB,
   state: GameState,
   effects: readonly EventEffect[],
-  context: EffectContext = {},
+  _context: EffectContext = {},
 ): Result<GameState, GameError[]> {
   const errors = validateEffects(db, state, effects);
   if (errors.length > 0) return err(errors);
@@ -440,6 +449,7 @@ export function applyEffects(
             closeness: 50,
             support: 20,
             faction: "none",
+            lifecycle: "alive",
           });
         }
         if (effect.bearer !== "sovereign") {
@@ -491,24 +501,33 @@ export function applyEffects(
         heir.favor = clampPct(heir.favor + applied);
         break;
       }
+      case "heir_died": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        heir.lifecycle = "deceased";
+        heir.deceasedAt = now;
+        break;
+      }
       case "set_taihou_illness": {
         next.taihou.ill = effect.ill;
         break;
       }
       case "memory": {
         const store = next.memories[effect.char]!;
+        const d = effect.entry;
         store.entries.push({
           id: memoryEntryId(effect.char, store.nextSeq),
-          kind: effect.entry.kind,
-          summary: effect.entry.summary,
-          salience: effect.entry.salience,
-          createdAt: now, // GameTime — never carries AP
-          tags: [...effect.entry.tags],
-          participants: [...effect.entry.participants],
-          ...(effect.entry.locationId !== undefined ? { locationId: effect.entry.locationId } : {}),
-          source: "scene_outcome", // runtime memory is never "authored"
-          ...(context.sceneId !== undefined ? { originSceneId: context.sceneId } : {}),
-          protected: false, // and never protected (schema already forbids true)
+          ownerId: effect.char,
+          kind: d.kind,
+          ...(d.sourceEventId !== undefined ? { sourceEventId: d.sourceEventId } : {}),
+          subjectIds: [...d.subjectIds],
+          perspective: d.perspective,
+          summary: d.summary,
+          strength: d.strength,
+          retention: d.retention,
+          emotions: { ...d.emotions },
+          triggerTags: [...d.triggerTags],
+          unresolved: d.unresolved,
+          createdAt: now,
         });
         store.nextSeq += 1;
         break;

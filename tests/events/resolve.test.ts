@@ -16,7 +16,7 @@ const riteEffects: EventEffect[] = [
   {
     type: "memory",
     char: "wei_sui",
-    entry: { kind: "event", summary: "祭仪已准。", salience: 60, tags: ["rite"], participants: ["player", "wei_sui"] },
+    entry: { kind: "episodic", summary: "祭仪已准。", strength: 60, retention: "slow", subjectIds: ["player", "wei_sui"], perspective: "witness", triggerTags: ["rite"], unresolved: false, emotions: {} },
   },
 ];
 

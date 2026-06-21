@@ -24,7 +24,7 @@ export function hasEventFired(state: GameState, eventId: string): boolean {
 
 /** True when `char` holds at least one memory entry carrying `tag`. */
 export function hasMemoryTag(state: GameState, char: string, tag: string): boolean {
-  return state.memories[char]?.entries.some((entry) => entry.tags.includes(tag)) ?? false;
+  return state.memories[char]?.entries.some((entry) => entry.triggerTags.includes(tag)) ?? false;
 }
 
 export function evaluateCondition(condition: TriggerCondition, ctx: ConditionContext): boolean {
