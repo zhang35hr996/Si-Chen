@@ -82,6 +82,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     memories,
     bedchamber,
     eventLog: [],
+    chronicle: [],
     sceneHistory: [],
     rngSeed,
   };
