@@ -7,10 +7,13 @@
 import { z } from "zod";
 import type { GameTime } from "../calendar/time";
 import type { CharacterContent, CharacterRank } from "../content/schemas";
+import type { BeliefProjection } from "../chronicle/belief";
 import type { GameError } from "../infra/errors";
 import type { Result } from "../infra/result";
 import type { CharacterStanding, MemoryEntry } from "../state/types";
 import { proposedClaimSchema, type ProposedClaim } from "./claims";
+import type { DialogueAudienceContext } from "./audience";
+import type { ReactionPlan } from "./reactionTypes";
 
 export interface DialogueRequest {
   speakerId: string;
@@ -73,10 +76,6 @@ export interface DialogueLine {
   choices: { id: string; text: string; tone?: string }[];
   meta: { generated: boolean; degraded: boolean };
 }
-
-import type { BeliefProjection } from "../chronicle/belief";
-import type { DialogueAudienceContext } from "./audience";
-import type { ReactionPlan } from "./reactionTypes";
 
 export interface DialoguePolicyContext {
   audience: DialogueAudienceContext;

@@ -57,6 +57,8 @@ export function assembleDialogueRequest(
       relevantMemories: buildMemoryContext(
         state,
         { speakerId },
+        // audienceId 与 targetId 字段须保持一致（此处 targetId 硬编码为 "player"，audienceId 同步）。
+        // 若将来 assembleDialogueRequest 接收动态 targetId 参数，须同步更新此处。
         { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId, locationId },
       ).activatedMemories,
       stances: character.stances ?? [],
@@ -196,10 +198,10 @@ export function buildDialoguePolicyContext(
     { speakerId },
     { now, topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
   );
-  const offeredContextIds = new Set<string>([
-    ...memCtx.activatedMemories.map((m) => m.id),
-    ...memCtx.knownEvents.map((e) => e.id),
-  ]);
+  // offeredContextIds = 仅 activatedMemories（= DialogueRequest.relevantMemories 实际下发给 provider 的内容）。
+  // knownEvents 尚未进 DialogueRequest（见 memoryContext.ts），待其有对应字段后再并入，
+  // 否则 gate 会放行 provider 从未拿到的来源。
+  const offeredContextIds = new Set<string>(memCtx.activatedMemories.map((m) => m.id));
   const audience = buildAudienceContext(state, db, { speakerId, targetId });
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
