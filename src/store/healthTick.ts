@@ -1,7 +1,13 @@
 /** 纯月度健康投影（设计 §3.3）。顺序：怀孕成本→衰老→病损→0死亡→暴毙→互斥迁移。 */
 import { healthRoll, healthRollRange, healthRollBasisPoints } from "../engine/characters/healthRoll";
 import { ageOver35 } from "../engine/characters/aging";
-import type { DeathCause, HealthStatus } from "../engine/state/types";
+import type { DeathCause, GameState, HealthStatus } from "../engine/state/types";
+import type { ContentDB } from "../engine/content/loader";
+import type { EventEffect } from "../engine/content/schemas";
+import type { GameTime } from "../engine/calendar/time";
+import { dayIndexOf } from "../engine/calendar/time";
+import { planHealthChange } from "./health";
+import { currentAgeOf, livingConsortIds } from "./healthRoster";
 
 export interface MonthlyHealthContext { health: number; status: HealthStatus; age: number; isYearStart: boolean; pregnancyMonthlyCost: boolean; seedKey: string; }
 export interface MonthlyHealthOutcome { previousHealth: number; nextHealth: number; previousStatus: HealthStatus; nextStatus: HealthStatus; died: boolean; deathCause?: DeathCause; }
@@ -34,4 +40,124 @@ export function projectMonthlyHealth(ctx: MonthlyHealthContext): MonthlyHealthOu
     else if (r < criticalRate + 50) nextStatus = "healthy";
   }
   return { previousHealth, nextHealth: h, previousStatus, nextStatus, died: false };
+}
+
+// ── 月度健康编排（§4 Phase 2）──────────────────────────────────────────────
+
+export interface MonthlyTickResult {
+  effects: EventEffect[];
+  sovereignDied: boolean;
+  aftermathDeaths: Array<{ kind: "taihou" | "consort" | "heir"; subjectId: string }>;
+}
+
+export interface MonthlyTickInput {
+  db: ContentDB;
+  state: GameState;
+  year: number;
+  month: number;
+  period: "early" | "mid" | "late";
+  rngSeed: number;
+}
+
+/**
+ * 按优先顺序执行一个月度健康 tick：
+ *   皇帝 → 太后（若已薨跳过）→ 在世侍君（字母序）→ 存活皇嗣（id 序）。
+ * 皇帝死亡时立即返回，不再处理后续角色。
+ */
+export function buildMonthlyHealthTick(input: MonthlyTickInput): MonthlyTickResult {
+  const { db, state, year, month, period, rngSeed } = input;
+  const at: GameTime = { year, month, period, dayIndex: dayIndexOf(year, month, period) };
+  const isYearStart = month === 1 && period === "early";
+  const effects: EventEffect[] = [];
+  const aftermathDeaths: Array<{ kind: "taihou" | "consort" | "heir"; subjectId: string }> = [];
+
+  // ── 皇帝 ──────────────────────────────────────────────────────────────
+  {
+    const seedKey = `tick:${rngSeed}:sovereign:${year}:${month}`;
+    const age = currentAgeOf(db, state, { kind: "sovereign" });
+    const health = state.resources.sovereign.health;
+    const status = state.resources.sovereign.healthStatus;
+    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
+    const { effects: fx } = planHealthChange(state, {
+      subject: { kind: "sovereign" },
+      healthDelta: out.nextHealth - health,
+      healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
+      forceDeath: out.died && out.nextHealth > 0,
+      cause: out.deathCause ?? "illness",
+      at,
+    });
+    effects.push(...fx);
+    if (out.died) {
+      return { effects, sovereignDied: true, aftermathDeaths: [] };
+    }
+  }
+
+  // ── 太后 ──────────────────────────────────────────────────────────────
+  if (state.taihou.deceased !== true) {
+    const seedKey = `tick:${rngSeed}:taihou:${year}:${month}`;
+    const age = currentAgeOf(db, state, { kind: "taihou" });
+    const health = state.taihou.health;
+    const status = state.taihou.healthStatus;
+    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
+    const { effects: fx } = planHealthChange(state, {
+      subject: { kind: "taihou" },
+      healthDelta: out.nextHealth - health,
+      healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
+      forceDeath: out.died && out.nextHealth > 0,
+      cause: out.deathCause ?? "illness",
+      at,
+    });
+    effects.push(...fx);
+    if (out.died) {
+      aftermathDeaths.push({ kind: "taihou", subjectId: "taihou" });
+    }
+  }
+
+  // ── 在世侍君（字母序）─────────────────────────────────────────────────
+  for (const consortId of livingConsortIds(db, state)) {
+    const seedKey = `tick:${rngSeed}:${consortId}:${year}:${month}`;
+    const age = currentAgeOf(db, state, { kind: "consort", id: consortId });
+    const st = state.standing[consortId];
+    const health = st?.health ?? 100;
+    const status = st?.healthStatus ?? "healthy";
+    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
+    const { effects: fx } = planHealthChange(state, {
+      subject: { kind: "consort", id: consortId },
+      healthDelta: out.nextHealth - health,
+      healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
+      forceDeath: out.died && out.nextHealth > 0,
+      cause: out.deathCause ?? "illness",
+      at,
+    });
+    effects.push(...fx);
+    if (out.died) {
+      aftermathDeaths.push({ kind: "consort", subjectId: consortId });
+    }
+  }
+
+  // ── 存活皇嗣（id 序）─────────────────────────────────────────────────
+  const aliveHeirs = [...state.resources.bloodline.heirs]
+    .filter((h) => h.lifecycle === "alive")
+    .sort((a, b) => a.id.localeCompare(b.id));
+  for (const heir of aliveHeirs) {
+    const seedKey = `tick:${rngSeed}:${heir.id}:${year}:${month}`;
+    const age = currentAgeOf(db, state, { kind: "heir", id: heir.id });
+    const health = heir.health;
+    const status = heir.healthStatus ?? "healthy";
+    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
+    const { effects: fx } = planHealthChange(state, {
+      subject: { kind: "heir", id: heir.id },
+      healthDelta: out.nextHealth - health,
+      healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
+      forceDeath: out.died && out.nextHealth > 0,
+      cause: out.deathCause ?? "illness",
+      at,
+    });
+    effects.push(...fx);
+    if (out.died) {
+      aftermathDeaths.push({ kind: "heir", subjectId: heir.id });
+    }
+  }
+
+  return { effects, sovereignDied: false, aftermathDeaths };
 }
