@@ -173,39 +173,36 @@ export async function produceDialogueLine(
 }
 
 /**
- * Build a DialoguePolicyContext for a speaker/target/location triple given current
- * game state. Returns Result because the speaker or state might be invalid.
+ * Build a DialoguePolicyContext from the ALREADY-ASSEMBLED DialogueRequest.
+ *
+ * Single-source invariant (plan §gate boundary): `offeredContextIds` is derived
+ * directly from `request.speakerContext.relevantMemories` — the exact memories
+ * handed to the provider — never from an independent buildMemoryContext call.
+ * Re-computing would let the gate's notion of "what was offered" drift from what
+ * the provider actually received (e.g. once targetId becomes dynamic), causing a
+ * legitimate source to be flagged unknown_source_context, or — worse — a source
+ * the provider never saw to be silently accepted. `now` likewise reuses
+ * `request.time` so time has one source too.
+ *
+ * The speaker was already validated when the request was assembled, so this
+ * cannot fail and returns the context directly (no Result wrapper).
  */
 export function buildDialoguePolicyContext(
   db: ContentDB,
   state: GameState,
-  speakerId: string,
-  targetId: string,
-  locationId: string,
-): Result<DialoguePolicyContext, GameError> {
-  const character = db.characters[speakerId];
-  if (!character) {
-    return err(aiError("BAD_SPEAKER", `unknown speaker "${speakerId}"`));
-  }
-  const standing = state.standing[speakerId] ?? character.initialStanding;
-  if (!standing) {
-    return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
-  }
-
-  const now = toGameTime(state.calendar);
-  const memCtx = buildMemoryContext(
-    state,
-    { speakerId },
-    { now, topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
+  request: DialogueRequest,
+): DialoguePolicyContext {
+  const { speakerId, targetId, time: now } = request;
+  // knownEvents are intentionally NOT part of offeredContextIds: they are built
+  // in memoryContext but never placed on DialogueRequest yet, so the provider
+  // never receives them — the gate must not bless a source it wasn't sent.
+  const offeredContextIds = new Set<string>(
+    request.speakerContext.relevantMemories.map((m) => m.id),
   );
-  // offeredContextIds = 仅 activatedMemories（= DialogueRequest.relevantMemories 实际下发给 provider 的内容）。
-  // knownEvents 尚未进 DialogueRequest（见 memoryContext.ts），待其有对应字段后再并入，
-  // 否则 gate 会放行 provider 从未拿到的来源。
-  const offeredContextIds = new Set<string>(memCtx.activatedMemories.map((m) => m.id));
   const audience = buildAudienceContext(state, db, { speakerId, targetId });
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
-  return ok({ audience, beliefProjection, offeredContextIds, now });
+  return { audience, beliefProjection, offeredContextIds, now };
 }
 
 /**

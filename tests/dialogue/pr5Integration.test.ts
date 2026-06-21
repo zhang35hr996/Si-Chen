@@ -30,9 +30,7 @@ function makeRequest() {
 }
 
 function makePolicy() {
-  const p = buildDialoguePolicyContext(db, state, SPEAKER, "player", "zichendian");
-  if (!p.ok) throw new Error(p.error.message);
-  return p.value;
+  return buildDialoguePolicyContext(db, state, makeRequest());
 }
 
 function makeProvider(proposedClaims: ProposedClaim[], text = VALID_TEXT): DialogueProvider {
@@ -53,11 +51,8 @@ function makeProvider(proposedClaims: ProposedClaim[], text = VALID_TEXT): Dialo
 }
 
 describe("buildDialoguePolicyContext", () => {
-  it("returns ok with audience, beliefProjection, offeredContextIds, now", () => {
-    const result = buildDialoguePolicyContext(db, state, SPEAKER, "player", "zichendian");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    const policy = result.value;
+  it("builds audience, beliefProjection, offeredContextIds, now from the request", () => {
+    const policy = buildDialoguePolicyContext(db, state, makeRequest());
     expect(policy.audience.targetId).toBe("player");
     expect(policy.audience.targetRole).toBe("sovereign");
     expect(policy.now).toMatchObject({ year: 1, month: 1, period: "early", dayIndex: 0 });
@@ -66,10 +61,32 @@ describe("buildDialoguePolicyContext", () => {
     expect(policy.offeredContextIds.size).toBeGreaterThan(0);
   });
 
-  it("returns err for unknown speaker", () => {
-    const result = buildDialoguePolicyContext(db, state, "char_ghost", "player", "zichendian");
+  it("rejects an unknown speaker at request assembly (validated once, upstream)", () => {
+    const result = assembleDialogueRequest(db, state, "char_ghost", "zichendian");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("BAD_SPEAKER");
+  });
+
+  it("offeredContextIds is derived from the request actually sent (single source, no re-compute)", () => {
+    // Single-source contract: offeredContextIds MUST be derived from the exact
+    // relevantMemories carried by the DialogueRequest handed to the provider,
+    // never from an independent buildMemoryContext call (which can drift once
+    // targetId becomes dynamic). Tampering the request's memories must show up
+    // verbatim in offeredContextIds.
+    const request = makeRequest();
+    const original = request.speakerContext.relevantMemories[0];
+    expect(original).toBeDefined();
+    const sentinelId = "sentinel_offered_id";
+    const tampered = {
+      ...request,
+      speakerContext: {
+        ...request.speakerContext,
+        relevantMemories: [{ ...original!, id: sentinelId }],
+      },
+    };
+    const policy = buildDialoguePolicyContext(db, state, tampered);
+    expect(policy.offeredContextIds).toBeInstanceOf(Set);
+    expect([...policy.offeredContextIds]).toEqual([sentinelId]);
   });
 });
 
