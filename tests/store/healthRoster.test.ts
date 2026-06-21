@@ -28,4 +28,36 @@ describe("livingConsortIds", () => {
     expect(ids.length).toBeGreaterThan(0);
     expect(ids).toEqual([...ids].sort());
   });
+
+  it("includes a generated (选秀) consort", () => {
+    const s = createNewGameState(db);
+    const base = Object.values(db.characters).find((c) => c.kind === "consort")!;
+    const id = "gen_test_1";
+    s.generatedConsorts[id] = { ...base, id } as any;
+    s.standing[id] = { rank: Object.keys(db.ranks)[0]!, favor: 0, health: 100, healthStatus: "healthy" } as any;
+    expect(livingConsortIds(db, s)).toContain(id);
+  });
+
+  it("excludes deceased and candidate consorts", () => {
+    const s = createNewGameState(db);
+    const base = Object.values(db.characters).find((c) => c.kind === "consort")!;
+    s.generatedConsorts["consort_dead"] = { ...base, id: "consort_dead" } as any;
+    s.standing["consort_dead"] = { rank: Object.keys(db.ranks)[0]!, favor: 0, lifecycle: "deceased" } as any;
+    s.generatedConsorts["consort_cand"] = { ...base, id: "consort_cand" } as any;
+    s.standing["consort_cand"] = { rank: Object.keys(db.ranks)[0]!, favor: 0, lifecycle: "candidate" } as any;
+    const ids = livingConsortIds(db, s);
+    expect(ids).not.toContain("consort_dead");
+    expect(ids).not.toContain("consort_cand");
+  });
+});
+
+describe("currentAgeOf — throw on missing subject", () => {
+  it("currentAgeOf throws on a missing consort (no silent fallback)", () => {
+    const s = createNewGameState(db);
+    expect(() => currentAgeOf(db, s, { kind: "consort", id: "does_not_exist" })).toThrow();
+  });
+  it("currentAgeOf throws on a missing heir", () => {
+    const s = createNewGameState(db);
+    expect(() => currentAgeOf(db, s, { kind: "heir", id: "no_such_heir" })).toThrow();
+  });
 });
