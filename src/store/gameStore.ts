@@ -15,6 +15,7 @@ import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState } from "../engine/state/types";
 import { changeOfficialGrade } from "../engine/officials/changeGrade";
+import { bestow, type RecipientKind, type BestowResult } from "./treasury";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -82,6 +83,13 @@ export class GameStore {
   changeOfficialGrade(officialId: string, newPostId: string): void {
     this.state = changeOfficialGrade(this.state, officialId, newPostId);
     this.emit();
+  }
+
+  /** 赏赐：扣库存并提升目标恩宠/好感（不耗行动点）。 */
+  applyBestow(db: ContentDB, itemId: string, recipient: { kind: RecipientKind; id: string }): BestowResult {
+    const result = bestow(this.state, db, itemId, recipient);
+    if (result.ok) { this.state = result.state; this.emit(); }
+    return result;
   }
 
   /**
