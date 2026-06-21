@@ -59,6 +59,19 @@ describe("validateDialogueClaims", () => {
     expect(r.ok).toBe(false);
     expect(r.findings.map((f) => f.code)).toContain("identity_mismatch");
   });
+  it("flags violates_etiquette when asserting a rank claim about a present consort before sovereign", () => {
+    const r = validateDialogueClaims(base({
+      audience: { targetId: "player", targetRole: "sovereign", presentCharacterIds: ["player", "lu_huaijin"], privacy: "semi_private" },
+      speakerId: "shen_zhibai",
+      beliefs: beliefsFrom({ "holds_rank:lu_huaijin": { value: "concubine", certainty: 100 } }),
+      proposedClaims: [pc({
+        claim: { id: "c1", predicate: "holds_rank", subjectId: "lu_huaijin", object: "concubine", modality: "assert" },
+        sourceContextIds: ["mem_1"],
+      })],
+    }));
+    expect(r.ok).toBe(false);
+    expect(r.findings.map((f) => f.code)).toEqual(["violates_etiquette"]);
+  });
   it("rejects the whole line (acceptedClaims empty) when any claim fails", () => {
     const r = validateDialogueClaims(base({
       beliefs: beliefsFrom({ "resides_at:shen_zhibai": { value: "xianfu_palace", certainty: 100 } }),
