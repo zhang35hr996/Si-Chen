@@ -29,7 +29,15 @@
 ## 2. 乘风报告类（概率触发，复用 gossip 机制）
 
 新增 `src/store/tribute.ts`：`buildTributeReport(db, state, seedKey): GossipPlan | null`，与
-`buildChengFengGossip` 并行，由同一 per-AP 钩子调用。到对应时机按概率（默认 20%）出一条报告。
+`buildChengFengGossip` 并行，由同一 per-AP 钩子调用。到对应时机按**动态概率**（随国情属性浮动，
+见下）出一条报告。
+
+**动态概率（纯函数，0–100 属性，每点偏离 50 计 ±0.1%，夹在 [3, 40]）：**
+- `tributeChance(state)` = clamp( **10** + 0.1·((productivity−50)+(publicSupport−50)+(prestige−50)), 3, 40)
+  —— 生产力(nation.productivity)、民心(nation.publicSupport)、威望(sovereign.prestige) 越高越易进贡，越低越少。
+- `ministerTributeChance(state)` = clamp( **10** + 0.1·((ministerLoyalty−50)+(corruption−50)+(prestige−50)), 3, 40)
+  —— 大臣忠心(nation.ministerLoyalty)、贪腐(nation.corruption)、威望(sovereign.prestige) 越高越易进献。
+- 命中判定：`gestationRoll(seedKey) % 100 < round(chance)`。
 
 报告经 `ReactionScreen` 给**两个选项**：
 - **①赏赐** → 打开赏赐选人弹窗（复用 Spec A 的 3-tab 选人）；确认后对该 tribute 物品执行
@@ -39,13 +47,13 @@
 两个来源共用上述机制，区别在**触发时机**与**物品池/文案**：
 
 ### 2a. 属地进贡（每日**上午**触发）
-- 触发：`isMorningSlot` 且概率命中；不耗 AP。
+- 触发：`isMorningSlot` 且 `tributeChance(state)` 命中；不耗 AP。
 - 物品池：非食物非珍宝的属地贡物 categories = 妆品/香/绸缎/皮毛/文房/乐器/玩器。
 - 文案模板：「陛下，{属地}进贡了{物品名}，是否收进私库？」`{属地}` 从一组地名（蜀地/江南/岭南/
   西域/闽地…）确定性取。
 
 ### 2b. 大臣进献（每**旬下午**触发，不耗 AP）
-- 触发：`isAfternoonSlot` 且当旬尚未出过此报告且概率命中。
+- 触发：`isAfternoonSlot` 且当旬尚未出过此报告且 `ministerTributeChance(state)` 命中。
 - **读取官员名册** `state.officials` 中**有名字**的官员，确定性取一名作进献者；名册空则不触发。
 - 物品池：珍宝 categories = 器玩/珍禽异兽。
 - 文案模板：「陛下，{官职}{姓名}进献了{物品名}，是否收进私库？」
@@ -105,6 +113,7 @@
 ## 7. 测试（先红后绿，≥80%）
 
 - 时间槽：`isMorningSlot`/`isAfternoonSlot` 对各 ap 值正确。
+- 动态概率：`tributeChance`/`ministerTributeChance` 在低/中(50)/高属性下的值与单调性正确、夹在 [3,40]；中性 50 → 10。
 - 进贡报告：上午触发、池筛选（非食物）、两选项 effects（赏赐=grantItem+bestow；收库=grantItem）。
 - 进献报告：下午触发、命中**具名**官员、名册空不触发、珍宝池。
 - 秋猎：武力三档掉落集合正确、2–3 件、高档 25% 额外掉落确定性、年度 flag 去重、参加扣 1AP、不参加不扣。
@@ -114,7 +123,7 @@
 ## 默认（已确认）
 
 1. 中午→下午(申/slot2)；属地进贡=上午(辰/slot1)。
-2. 报告类概率触发（默认 20%）。
+2. 报告类**动态概率**触发：属地进贡随 生产力/民心/威望 浮动；大臣进献随 大臣忠心/贪腐/威望 浮动；基准 10、每点 ±0.1%、夹 [3,40]。
 3. 进店扣 1AP，店内随便买。
 4. 价格按品阶派生（区间随机）。
 5. 货架每次随机一批（轮替）。
