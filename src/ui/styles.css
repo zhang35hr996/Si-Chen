@@ -3208,3 +3208,60 @@ button:active:enabled {
   cursor: pointer;
 }
 .bestow-modal__cancel:hover { color: var(--c-text); border-color: var(--c-line-gold); }
+
+/* ── 京城商铺 ─────────────────────────────────────────────────────── */
+.shop-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 2rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-body);
+  background-size: cover;
+  background-position: center;
+}
+.shop-screen__shelf {
+  list-style: none;
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shop-screen__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: var(--c-panel-1);
+  border: 1px solid var(--c-line);
+}
+.shop-screen__name {
+  flex: 1;
+  font-size: 0.97rem;
+}
+.shop-screen__price {
+  font-family: var(--font-title);
+  color: var(--c-gold-text);
+  font-size: 0.95rem;
+  min-width: 5em;
+  text-align: right;
+}
+.shop-screen__row button {
+  padding: 6px 16px;
+  font-size: 0.9rem;
+  border: 1px solid var(--c-gold);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-gold);
+  cursor: pointer;
+}
+.shop-screen__row button:hover:not(:disabled) {
+  background: rgba(200, 161, 90, 0.12);
+  color: var(--c-gold-text);
+}
+.shop-screen__row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

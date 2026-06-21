@@ -110,8 +110,10 @@ NPC 委托/自留路径直接按此表自动定位分，无玩家介入。
   `{ ...content.characters, ...state.generatedConsorts }`，使全部 ~70 处 `db.characters[id]`
   调用点自动可见生成侍君。引擎 reducer 仍以 `GameState`（standing/memories 按 id）运作。
 - 每位落库侍君同时写入：
-  - `standing[id]`：所选 `rank`、`favor`（默认值，如 30）、`residence: "chuxiu_gong"`、
-    `chamber: "main"`、`availableFromMonth: monthOrdinal(year, 5)`。
+  - `standing[id]`：所选 `rank`、初始 `favor`（随位分高低 10–20，见下）、
+    `residence: "chuxiu_gong"`、`chamber: "main"`、`availableFromMonth: monthOrdinal(year, 5)`。
+  - **初始恩宠按位分缩放**：`favor = clamp(10 + round(10 * (order - 50) / (180 - 50)), 10, 20)`，
+    即更衣（order 50）→ 10，皇贵君（order 180）→ 20，中间线性。位分越高初始恩宠相对越高。
   - `memories[id]`：空库 + 一条初始记忆（殿选承恩，入住储秀宫，salience 中等）。
   - `bedchamber[id]`：空记录（按需，与现有侍君一致）。
 - **侍寝门槛**：五月前不可。新增 `CharacterStanding.availableFromMonth?: number`
@@ -156,5 +158,5 @@ NPC 委托/自留路径直接按此表自动定位分，无玩家介入。
 
 - 秀男 age 14–22；平民宣读「良家子{姓名}，年{x}」。
 - 四五品统一推荐常在（不细分才人）。
-- 落库初始 favor 默认 30。
+- 落库初始 favor 随位分 10–20 缩放（更衣 10 → 皇贵君 20，线性）。
 - 太后/皇后留人为**随机**秀男（非固定家世）。
