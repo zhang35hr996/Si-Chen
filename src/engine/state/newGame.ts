@@ -78,6 +78,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     },
     flags: {},
     standing,
+    generatedConsorts: {},
     officials: generateOfficials(db, rngSeed),
     memories,
     bedchamber,

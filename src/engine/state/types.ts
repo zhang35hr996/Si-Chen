@@ -5,6 +5,7 @@
  * mutated by effects, shown in debug, persisted — never read by logic.
  */
 import type { CalendarState, GameTime } from "../calendar/time";
+import type { CharacterContent } from "../content/schemas";
 
 // ── Global resource pillars (scaffold values 0–100) ──────────────────
 // 皇帝(玩家本人)属性。明面: health/diligence/prestige/martial/statecraft；
@@ -213,6 +214,8 @@ export interface CharacterStanding {
   confined?: boolean;
   /** 好感/情意 0–100（仅侍君；缺省回退 authored hidden.affection）。 */
   affection?: number;
+  /** 殿选新晋侍君的侍寝解禁月序（monthOrdinal）；缺省即无门槛。 */
+  availableFromMonth?: number;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
@@ -277,6 +280,8 @@ export interface GameState {
   resources: Resources;
   flags: Record<string, FlagValue>;
   standing: Record<string, CharacterStanding>;
+  /** 殿选运行时生成并落库的侍君（content 之外）；App 合并进 db.characters。 */
+  generatedConsorts: Record<string, CharacterContent>;
   officials: Record<string, Official>;
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */

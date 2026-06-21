@@ -6,6 +6,7 @@ import { z } from "zod";
 import { calendarInvariantViolation, type CalendarState } from "../calendar/time";
 import {
   characterStandingSchema,
+  characterSchema,
   idSchema,
   memoryKindSchema,
 } from "../content/schemas";
@@ -139,6 +140,7 @@ export const gameStateSchema = z.strictObject({
   }),
   flags: z.record(z.string(), flagValueSchema),
   standing: z.record(idSchema, characterStandingSchema),
+  generatedConsorts: z.record(idSchema, characterSchema),
   officials: z.record(z.string(), officialSchema),
   memories: z.record(
     idSchema,
