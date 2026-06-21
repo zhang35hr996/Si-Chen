@@ -50,22 +50,14 @@ export interface MonthlyTickResult {
   aftermathDeaths: Array<{ kind: "taihou" | "consort" | "heir"; subjectId: string }>;
 }
 
-export interface MonthlyTickInput {
-  db: ContentDB;
-  state: GameState;
-  year: number;
-  month: number;
-  period: "early" | "mid" | "late";
-  rngSeed: number;
-}
-
 /**
  * 按优先顺序执行一个月度健康 tick：
  *   皇帝 → 太后（若已薨跳过）→ 在世侍君（字母序）→ 存活皇嗣（id 序）。
  * 皇帝死亡时立即返回，不再处理后续角色。
  */
-export function buildMonthlyHealthTick(input: MonthlyTickInput): MonthlyTickResult {
-  const { db, state, year, month, period, rngSeed } = input;
+export function buildMonthlyHealthTick(db: ContentDB, state: GameState): MonthlyTickResult {
+  const { year, month, period } = state.calendar;
+  const rngSeed = state.rngSeed;
   const at: GameTime = { year, month, period, dayIndex: dayIndexOf(year, month, period) };
   const isYearStart = month === 1 && period === "early";
   const effects: EventEffect[] = [];
@@ -80,7 +72,7 @@ export function buildMonthlyHealthTick(input: MonthlyTickInput): MonthlyTickResu
     const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
     const { effects: fx } = planHealthChange(state, {
       subject: { kind: "sovereign" },
-      healthDelta: out.nextHealth - health,
+      ...(out.nextHealth !== health ? { healthDelta: out.nextHealth - health } : {}),
       healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
       forceDeath: out.died && out.nextHealth > 0,
       cause: out.deathCause ?? "illness",
@@ -101,7 +93,7 @@ export function buildMonthlyHealthTick(input: MonthlyTickInput): MonthlyTickResu
     const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
     const { effects: fx } = planHealthChange(state, {
       subject: { kind: "taihou" },
-      healthDelta: out.nextHealth - health,
+      ...(out.nextHealth !== health ? { healthDelta: out.nextHealth - health } : {}),
       healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
       forceDeath: out.died && out.nextHealth > 0,
       cause: out.deathCause ?? "illness",
@@ -123,7 +115,7 @@ export function buildMonthlyHealthTick(input: MonthlyTickInput): MonthlyTickResu
     const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
     const { effects: fx } = planHealthChange(state, {
       subject: { kind: "consort", id: consortId },
-      healthDelta: out.nextHealth - health,
+      ...(out.nextHealth !== health ? { healthDelta: out.nextHealth - health } : {}),
       healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
       forceDeath: out.died && out.nextHealth > 0,
       cause: out.deathCause ?? "illness",
@@ -147,7 +139,7 @@ export function buildMonthlyHealthTick(input: MonthlyTickInput): MonthlyTickResu
     const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
     const { effects: fx } = planHealthChange(state, {
       subject: { kind: "heir", id: heir.id },
-      healthDelta: out.nextHealth - health,
+      ...(out.nextHealth !== health ? { healthDelta: out.nextHealth - health } : {}),
       healthStatus: out.nextStatus !== status ? out.nextStatus : undefined,
       forceDeath: out.died && out.nextHealth > 0,
       cause: out.deathCause ?? "illness",
