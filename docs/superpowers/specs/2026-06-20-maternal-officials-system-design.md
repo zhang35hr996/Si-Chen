@@ -12,7 +12,7 @@
 此前侍君的 `attributes.family`（0–100 数字）、`hidden.clanLoyalty` / `hidden.clanPower`（静态数字）是孤立的死值。本系统把它们换成由一个**朝臣名册**派生的活值：
 
 - 名册里每名朝臣有**官职 / 品级 / 姓名 / 忠心**，**权势**由品级派生，官职可升降。
-- 与侍君**同姓**的朝臣即其**母家主**。侍君的**家世** = 母家主官职 + 侍君嫡庶/排行（如「从一品兵部尚书嫡次子」）；**母家权势** = 母家主权势；**母家忠心** = 母家主忠心。
+- 与侍君**同姓**的朝臣即其**母家主**。侍君的**家世** = 母家主官职 + 侍君嫡庶/排行（如「从二品兵部尚书嫡次子」）；**母家权势** = 母家主权势；**母家忠心** = 母家主忠心。
 
 ---
 
@@ -125,7 +125,7 @@ power(post, id) = clamp( round(gradeOrder / 18 * 92) + 5 + jitter(id), 0, 100 )
 
 ```ts
 maternalClan?: {
-  postId: string;      // 母家主官职（决定家世前缀「从一品兵部尚书」）
+  postId: string;      // 母家主官职（决定家世前缀「从二品兵部尚书」）
   legitimate: boolean; // 嫡=true / 庶=false
   birthOrder: number;  // 1=长 2=次 3=三 …（≥1）
 }
@@ -155,7 +155,7 @@ maternalLoyalty(state, consort): number              // 母家忠心（无母家
 ```
 
 - **家世文本** = `{grade}{postName}{嫡|庶}{排行字}子`，排行字：1→长 2→次 3→三 4→四 …（数字→中文）。
-  例：post=兵部尚书(从一品) + maternalClan{嫡, 次} → 「从一品兵部尚书嫡次子」。
+  例：post=兵部尚书(从二品) + maternalClan{嫡, 次} → 「从二品兵部尚书嫡次子」。
   无 maternalClan 或母家主为平民 → 「平民之子」。
 - **母家权势** = `power(母家主.post, 母家主.id)`。
 - **母家忠心** = `母家主.loyalty`。
@@ -285,7 +285,7 @@ export const OFFICIAL_DOUBLE_GIVEN_NAME_POOL: readonly string[] = [
 - **官职表**：每条 gradeOrder 与 grade 自洽；id 唯一；平民 gradeOrder 0。
 - **power**：随 gradeOrder 单调；同 id 稳定；范围 0–100。
 - **generateOfficials**：同种子同结果（确定性）；每个"有 maternalClan 的姓"恰有一名母家主且 postId 与侍君一致；无关联官员数 = K。
-- **派生**：徐清欢（maternalClan{bingbu_shangshu, 嫡, 次}）→ 家世「从一品兵部尚书嫡次子」；母家权势 = 母家主 power；母家忠心 = 母家主 loyalty；无 maternalClan → 「平民之子」、母家权势/忠心 0。
+- **派生**：徐清欢（maternalClan{bingbu_shangshu, 嫡, 次}）→ 家世「从二品兵部尚书嫡次子」；母家权势 = 母家主 power；母家忠心 = 母家主 loyalty；无 maternalClan → 「平民之子」、母家权势/忠心 0。
 - **changeGrade**：改 postId 后 power 重算、loyalty 不变。
 - **loader**：posts.json 校验；同姓侍君 postId 冲突报错；maternalClan.postId 引用未知官职报错。
 - 其余 UI 手动验证。
