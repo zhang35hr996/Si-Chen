@@ -3,15 +3,17 @@
  * 纯逻辑集中于此；殿选界面与 App 接线只调用本模块。确定性随机走 gestationRoll。
  */
 import type { ContentDB } from "../engine/content/loader";
-import type { CharacterRank, CharacterContent } from "../engine/content/schemas";
+import type { CharacterRank, CharacterContent, EventEffect } from "../engine/content/schemas";
 import { characterSchema } from "../engine/content/schemas";
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
-import { chineseNumeral } from "../engine/calendar/time";
+import { chineseNumeral, MORNING_SLOT, shichenSlot } from "../engine/calendar/time";
 import {
   ARISTOCRATIC_SURNAME_POOL,
   ARISTOCRATIC_MALE_GIVEN_NAME_POOL,
 } from "../engine/characters/shijunNames";
 import type { GameState } from "../engine/state/types";
+import type { DecreeReaction } from "./empressDecree";
+import type { ChengFengPrompt } from "./prompt";
 
 /** 大选年：元年、四年、七年…（每三年）。 */
 export function isDaxuanYear(year: number): boolean {
@@ -165,4 +167,44 @@ export function describeRaiseHead(content: CharacterContent): string {
 export function describeTalent(content: CharacterContent): string {
   const specialty = content.attributes?.specialty ?? "女红";
   return `秀男恭敬回道：小男儿自幼习${specialty}，略通一二，让陛下见笑了。`;
+}
+
+/** 二月上旬辰时、大选年、未报过 → 凤后遣人禀告大选已备妥（设 flag + 节拍）。否则 null。 */
+export function buildDaxuanAnnounce(
+  _db: ContentDB,
+  state: GameState,
+): { effects: EventEffect[]; beats: DecreeReaction[] } | null {
+  const cal = state.calendar;
+  if (!isDaxuanYear(cal.year)) return null;
+  if (cal.month !== 2 || cal.period !== "early") return null;
+  if (shichenSlot(cal) !== MORNING_SLOT) return null;
+  if (state.flags[daxuanAnnounceFlagKey(cal.year)]) return null;
+  return {
+    effects: [{ type: "flag", key: daxuanAnnounceFlagKey(cal.year), value: true }],
+    beats: [
+      {
+        speakerId: "cheng_feng",
+        lines: [
+          "陛下，凤后娘娘遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
+        ],
+      },
+    ],
+  };
+}
+
+/** 四月下旬辰时、大选年、未决 → 殿选 prompt（前往 / 委托）。否则 null。 */
+export function buildDaxuanDianxuanPrompt(_db: ContentDB, state: GameState): ChengFengPrompt | null {
+  const cal = state.calendar;
+  if (!isDaxuanYear(cal.year)) return null;
+  if (cal.month !== 4 || cal.period !== "late") return null;
+  if (shichenSlot(cal) !== MORNING_SLOT) return null;
+  if (state.flags[daxuanDianxuanFlagKey(cal.year)]) return null;
+  return {
+    speakerId: "cheng_feng",
+    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
+    choices: [
+      { label: "前往体元殿", action: { type: "daxuanEnter", year: cal.year } },
+      { label: "让太后皇后决定", action: { type: "daxuanDelegate", year: cal.year } },
+    ],
+  };
 }
