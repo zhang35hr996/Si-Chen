@@ -28,7 +28,7 @@
 
 | 层 | 改动 |
 |---|---|
-| 引擎 `characters/presence.ts` | 新增时辰感知 `consortLocationAt`；`getCharacterLocation`/`getPresentAt` 接入当前 slot |
+| 引擎 `characters/presence.ts` | 新增 `consortLocationAt`（时辰感知所在）与 `presentAt`（按当前 slot 的实际在场者）；`getCharacterLocation`/`getPresentAt` **语义不变**（住处/花名册） |
 | 引擎 `characters/greeting.ts`（新） | 请安出席名单、免请安判定、游走掷骰（纯函数） |
 | 状态 `state/types.ts` | 新增两处瞬态字段（见 §8） |
 | store `greeting.ts`（新） | 装配「免请安」「请安进入」效果批 + 文案 |
@@ -57,7 +57,13 @@ consortLocationAt(db, state, charId, slot): string
 
 - 「住处」沿用现有 `standing[id].residence ?? defaultLocation`。
 - 皇后（凤后）不参与游走/请安，永远在坤宁宫。
-- `getCharacterLocation(db, state, charId)` 改为以 `shichenSlot(state.calendar)` 调 `consortLocationAt`；`getPresentAt` 随之按当前 slot 过滤。`inPalaceConsorts`（翻牌子/查看侍君用）维持「按住处」语义，不受时辰影响——它问的是「宫里有谁」，非「此刻在哪」。
+
+**关键：不改既有两函数的语义（避免破坏搬迁/地图）**
+
+- `getCharacterLocation(db, state, charId)` —— **保持住处/家语义不变**。它被 `relocate.ts`、`funnel.ts` 的 `relocate` 校验、人物详情「居所」依赖，这些都问「住在哪」，非「此刻在哪」。
+- `getPresentAt(db, state, locationId)` —— **保持住处花名册语义不变**。`HaremGrid`（地图总览住客）、`CourtyardScreen`（院子宫室住客）、`inPalaceConsorts`（翻牌子/查看侍君）依赖之；地图永远按住处显示住客，不随时辰闪变。既有 `tests/characters/presence.test.ts` 同此契约。
+- **新增** `consortLocationAt(db, state, charId, slot): string` —— 某 slot 的实际所在（住处 / 坤宁宫 / 御花园）。
+- **新增** `presentAt(db, state, locationId): CharacterContent[]` —— 以 `shichenSlot(state.calendar)` 调 `consortLocationAt`，返回此刻实际在场者（含皇后判定），按位分降序。**仅 `LocationScreen` 改用它**（替换其原 `getPresentAt` 调用），用于「此处此刻有谁」。
 
 ### 游走掷骰（确定性、性格加权）
 
@@ -77,7 +83,7 @@ wanders(rngSeed, dayIndex, slot, charId, chancePercent): boolean
 
 ## 5. 缺席禀报（layer 1 收尾）
 
-进侍君居所而本人此刻不在时，`CharacterScene` 对应空位显示宫人禀报，理由取该侍君 `consortLocationAt` 的当前所在：
+`LocationScreen` 同时取 **住处花名册**（`getPresentAt`，谁住这）与 **实际在场**（`presentAt`，谁在这）。缺席者 = 花名册 − 在场。进侍君居所而某住客此刻不在时，`CharacterScene` 对应宫室显示宫人禀报，理由取该侍君 `consortLocationAt` 的当前所在：
 
 - 在坤宁宫 → 「{称谓}往坤宁宫向皇后请安去了。」
 - 在御花园 → 「{称谓}往御花园散心去了。」
@@ -125,7 +131,8 @@ overnightWith?: { charId: string; morningDayIndex: number };
 
 引擎纯函数为主：
 
-- `consortLocationAt`：卯时→坤宁宫；被免→住处；白天游走命中/未命中；夜里在家；冷宫/已故/待选不动。
+- `consortLocationAt`：卯时→坤宁宫；被免→住处；留宿对象→住处；白天游走命中/未命中；夜里在家；冷宫/已故/待选不动。
+- `presentAt`：卯时坤宁宫＝皇后＋出席侍君；卯时某后宫居所空；白天游走者出现在御花园。既有 `getPresentAt`/`getCharacterLocation` 契约（`presence.test.ts`）保持不变。
 - `wanders`：同 (旬,slot,char) 稳定；性格关键词加权与 clamp 边界。
 - 请安出席名单：排除冷宫/已故/被免/待选；含皇后判定。
 - 免请安效果批：affection/favor 增量正确；写入 `excusedFromGreeting`。
