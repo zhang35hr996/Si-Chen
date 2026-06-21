@@ -1,24 +1,20 @@
-/**
- * createDialogueProvider (Task 3): the final-shape facade refuses every call
- * with config/not_configured until a real adapter is wired in a later task.
- */
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createDialogueProvider } from "../../src/engine/dialogue/providers/remoteProvider";
+import { okTransport, makeRequest } from "./fixtures/anthropic";
 
-describe("createDialogueProvider", () => {
-  it("satisfies the DialogueProvider contract and refuses with config/not_configured", async () => {
-    const provider = createDialogueProvider({ model: { provider: "anthropic", model: "x" } });
-    expect(provider.id).toBe("remote:anthropic:x");
-    expect(provider.kind).toBe("generative");
-    expect(provider.capabilities).toEqual({ strictTools: false, promptCaching: false, batch: false });
-
-    const result = await provider.generate({} as never);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      const e = result.error;
-      expect(e.kind).toBe("config");
-      expect(e.retryable).toBe(false);
-      if (e.kind === "config") expect(e.cause).toBe("not_configured");
-    }
+describe("createDialogueProvider routing", () => {
+  it("anthropic + injected transport → routed to the adapter", async () => {
+    const provider = createDialogueProvider({ model: { provider: "anthropic", model: "claude-sonnet-4-6" }, transport: okTransport({ text: "臣妾遵旨。", proposedClaims: [] }) });
+    expect(provider.capabilities.strictTools).toBe(true);
+    const r = await provider.generate(makeRequest("shen_zhibai"));
+    expect(r.ok).toBe(true); if (r.ok) expect(r.value.providerMeta?.provider).toBe("anthropic");
+  });
+  it("anthropic WITHOUT transport → config/not_configured (no SDK in engine)", async () => {
+    const r = await createDialogueProvider({ model: { provider: "anthropic", model: "x" } }).generate(makeRequest("shen_zhibai"));
+    expect(r.ok).toBe(false); if (!r.ok) expect(r.error).toMatchObject({ kind: "config", cause: "not_configured" });
+  });
+  it("unimplemented provider → config/not_configured", async () => {
+    const r = await createDialogueProvider({ model: { provider: "deepseek", model: "x" } }).generate(makeRequest("shen_zhibai"));
+    expect(r.ok).toBe(false); if (!r.ok) expect(r.error).toMatchObject({ kind: "config", cause: "not_configured" });
   });
 });
