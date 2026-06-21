@@ -16,10 +16,18 @@ describe("planReaction", () => {
     const p = planReaction({ relation: rel("交好"), disposition: DEFAULT_DISPOSITION, audience: sovereign, event: demote });
     expect(["petition", "defend"]).toContain(p.primary);
   });
+  it("降位+忠心盟友(devoted)+对陛下 → 辩护(defend)", () => {
+    const p = planReaction({ relation: rel("忠心"), disposition: DEFAULT_DISPOSITION, audience: sovereign, event: demote });
+    expect(p.primary).toBe("defend");
+  });
+  it("降位+友好盟友(friendly)+对陛下 → 求情(petition)", () => {
+    const p = planReaction({ relation: rel("交好"), disposition: DEFAULT_DISPOSITION, audience: sovereign, event: demote });
+    expect(p.primary).toBe("petition");
+  });
   it("降位+仇敌+对陛下 → 不当面幸灾乐祸（收敛），潜 contempt", () => {
     const p = planReaction({ relation: rel("交恶"), disposition: DEFAULT_DISPOSITION, audience: sovereign, event: demote });
     expect(p.primary).not.toBe("gloat");
-    expect(p.undertone?.type === "contempt" || p.undertone === undefined).toBe(true);
+    expect(p.undertone?.type).toBe("contempt");
   });
   it("降位+仇敌+私下对侍君 → 可幸灾乐祸", () => {
     const p = planReaction({ relation: rel("交恶"), disposition: DEFAULT_DISPOSITION, audience: consortPrivate, event: demote });
@@ -35,6 +43,11 @@ describe("planReaction", () => {
     expect(p.primary).toBe("congratulate");
     expect(p.undertone?.type).toBe("envy");
     expect(p.undertone!.concealment).toBeGreaterThan(60);
+  });
+  it("生育+仇敌+任意听众 → 表面恭贺、潜 resentment", () => {
+    const p = planReaction({ relation: rel("交恶"), disposition: DEFAULT_DISPOSITION, audience: consortPrivate, event: birth });
+    expect(p.primary).toBe("congratulate");
+    expect(p.undertone?.type).toBe("resentment");
   });
   it("夭折+挚友 → 安慰、潜 grief", () => {
     const p = planReaction({ relation: rel("敬爱"), disposition: DEFAULT_DISPOSITION, audience: consortPrivate, event: died });

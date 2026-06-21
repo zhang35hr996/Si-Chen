@@ -18,7 +18,12 @@ function baseInclination(event: EventReactionContext, r: SubjectRelation): Incli
   switch (event.eventType) {
     case "rank_changed":
       if (event.direction === "demote") {
-        if (ALLY(r)) return { primary: "petition", emotion: 60, negativeOutward: false };
+        if (ALLY(r)) {
+          const devoted = r.stance === "devoted" || r.respect >= 70;
+          return devoted
+            ? { primary: "defend", emotion: 70, negativeOutward: false }
+            : { primary: "petition", emotion: 60, negativeOutward: false };
+        }
         if (HOSTILE(r)) return { primary: "gloat", undertone: "contempt", emotion: r.hostility, negativeOutward: true };
         return { primary: "remain_reserved", emotion: 20, negativeOutward: false };
       }
@@ -38,6 +43,11 @@ function baseInclination(event: EventReactionContext, r: SubjectRelation): Incli
     case "residence_changed":
       if (ALLY(r)) return { primary: "agree", emotion: 25, negativeOutward: false };
       return { primary: "remain_reserved", emotion: 15, negativeOutward: false };
+    default: {
+      const _exhaustive: never = event.eventType;
+      void _exhaustive;
+      return { primary: "remain_reserved", emotion: 0, negativeOutward: false };
+    }
   }
 }
 
