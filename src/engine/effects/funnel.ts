@@ -220,6 +220,15 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_died": {
+        const heir = state.resources.bloodline.heirs.find((h) => h.id === e.heirId);
+        if (!heir) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        } else if (heir.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT", `heir "${e.heirId}" already deceased`, { heir: e.heirId });
+        }
+        break;
+      }
       case "relocate": {
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
@@ -490,6 +499,12 @@ export function applyEffects(
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         const applied = cappedDelta(`heir:${effect.heirId}`, effect.delta);
         heir.favor = clampPct(heir.favor + applied);
+        break;
+      }
+      case "heir_died": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        heir.lifecycle = "deceased";
+        heir.deceasedAt = now;
         break;
       }
       case "set_taihou_illness": {
