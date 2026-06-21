@@ -12,7 +12,8 @@ import {
   buildDialoguePolicyContext,
   produceDialogueLineWithPolicy,
 } from "../../src/engine/dialogue/orchestrator";
-import type { DialogueProvider, RawDialogueResponseInput } from "../../src/engine/dialogue/types";
+import type { DialogueProvider } from "../../src/engine/dialogue/types";
+import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
@@ -37,9 +38,10 @@ function makeProvider(proposedClaims: ProposedClaim[], text = VALID_TEXT): Dialo
   return {
     id: "synthetic",
     kind: "generative",
+    capabilities: { strictTools: true, promptCaching: false, batch: false },
     generate(req) {
       return Promise.resolve(
-        ok<RawDialogueResponseInput>({
+        ok<DialogueProviderResult>({
           speaker: req.speakerId,
           text,
           choices: [],
@@ -227,12 +229,14 @@ describe("produceDialogueLineWithPolicy — gate ordering", () => {
     const wrongSpeakerProvider: DialogueProvider = {
       id: "wrong",
       kind: "generative",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
       generate() {
         return Promise.resolve(
-          ok<RawDialogueResponseInput>({
+          ok<DialogueProviderResult>({
             speaker: "wei_sui", // not the requested speaker
             text: VALID_TEXT,
             choices: [],
+            proposedClaims: [],
           }),
         );
       },

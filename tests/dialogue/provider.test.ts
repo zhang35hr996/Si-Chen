@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { assembleDialogueRequest, produceDialogueLine } from "../../src/engine/dialogue/orchestrator";
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 import type { DialogueProvider, DialogueRequest } from "../../src/engine/dialogue/types";
+import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { RingBufferLogger } from "../../src/engine/infra/logger";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -44,19 +45,29 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
     expect(result.value.meta).toEqual({ generated: false, degraded: false });
   });
 
-  it("mock provider refuses non-scripted requests", async () => {
+  it("mock provider refuses non-scripted requests → ProviderError surfaces as mapped GameError", async () => {
     const request = { ...requestFor("shen_zhibai") };
     delete request.scripted;
-    const result = await mockProvider.generate(request);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("NO_SCRIPT");
+    // Direct generate call returns ProviderError
+    const providerResult = await mockProvider.generate(request);
+    expect(providerResult.ok).toBe(false);
+    if (!providerResult.ok) {
+      const e = providerResult.error;
+      expect(e.kind).toBe("config");
+      if (e.kind === "config") expect(e.cause).toBe("not_configured");
+    }
+    // Through orchestrator: ProviderError maps to GameError
+    const lineResult = await produceDialogueLine(db, mockProvider, request);
+    expect(lineResult.ok).toBe(false);
+    if (!lineResult.ok) expect(lineResult.error.code).toBe("PROVIDER_CONFIG");
   });
 
   it("wrong-speaker responses are rejected; unknown expressions normalize to neutral", async () => {
     const wrongSpeaker: DialogueProvider = {
       id: "fake",
       kind: "generative",
-      generate: () => Promise.resolve(ok({ speaker: "chu_he", text: "我是谁？", choices: [] })),
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: () => Promise.resolve(ok<DialogueProviderResult>({ speaker: "chu_he", text: "我是谁？", choices: [], proposedClaims: [] })),
     };
     const rejected = await produceDialogueLine(db, wrongSpeaker, requestFor("shen_zhibai"));
     expect(rejected.ok).toBe(false);
@@ -65,8 +76,9 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
     const weirdFace: DialogueProvider = {
       id: "fake",
       kind: "generative",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
       generate: (req) =>
-        Promise.resolve(ok({ speaker: req.speakerId, text: "……", expression: "ecstatic", choices: [] })),
+        Promise.resolve(ok<DialogueProviderResult>({ speaker: req.speakerId, text: "……", expression: "ecstatic", choices: [], proposedClaims: [] })),
     };
     const normalized = await produceDialogueLine(db, weirdFace, requestFor("shen_zhibai"));
     expect(normalized.ok).toBe(true);
@@ -76,16 +88,11 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
     }
   });
 
-  it("malformed responses fail the schema gate", async () => {
-    const garbage: DialogueProvider = {
-      id: "fake",
-      kind: "generative",
-      generate: () =>
-        Promise.resolve(ok({ speaker: "shen_zhibai", text: "", choices: [] } as never)),
-    };
-    const result = await produceDialogueLine(db, garbage, requestFor("shen_zhibai"));
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("MALFORMED");
+  // → anthropicProvider.test.ts (Task 5): malformed-response/schema parse is now adapter-side
+  it.skip("malformed responses fail the schema gate", async () => {
+    // This case moves to the Anthropic adapter test (Task 5), where the adapter
+    // is responsible for parsing the raw wire response. The orchestrator now
+    // receives an already-parsed DialogueProviderResult from the provider.
   });
 });
 
@@ -93,7 +100,8 @@ describe("produceDialogueLine text gates (PR 11)", () => {
   const speaking = (text: string, choices: { id: string; text: string }[] = []): DialogueProvider => ({
     id: "fake",
     kind: "generative",
-    generate: (req) => Promise.resolve(ok({ speaker: req.speakerId, text, choices })),
+    capabilities: { strictTools: false, promptCaching: false, batch: false },
+    generate: (req) => Promise.resolve(ok<DialogueProviderResult>({ speaker: req.speakerId, text, choices, proposedClaims: [] })),
   });
 
   it("rejects output containing a forbidden lexicon term", async () => {

@@ -17,13 +17,13 @@ import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
 import { buildMemoryContext } from "./memoryContext";
 import { recordMentionedContext } from "./mentionWriteback";
+import type { DialogueProviderResult } from "./providerContract";
+import { mapProviderErrorToGameError } from "./providerError";
 import {
-  rawDialogueResponseSchema,
   type DialogueLine,
   type DialogueProvider,
   type DialoguePolicyContext,
   type DialogueRequest,
-  type RawDialogueResponse,
 } from "./types";
 
 export function assembleDialogueRequest(
@@ -76,13 +76,13 @@ export function assembleDialogueRequest(
 /**
  * Internal helper: speaker check + text gates + expression normalize + line build.
  * Called by both produceDialogueLine and produceDialogueLineWithPolicy after the
- * schema parse (and, in the WithPolicy path, after the claim gate).
+ * provider call (and, in the WithPolicy path, after the claim gate).
  */
 function finalizeLine(
   db: ContentDB,
   provider: DialogueProvider,
   request: DialogueRequest,
-  response: RawDialogueResponse,
+  response: DialogueProviderResult,
   logger?: RingBufferLogger,
 ): Result<DialogueLine, GameError> {
   if (response.speaker !== request.speakerId) {
@@ -142,9 +142,10 @@ function finalizeLine(
 
 /**
  * Provider call + validation gates. The seam runs identically for mock and
- * future LLM output (PR 11): schema-valid → speaker identity matches → TEXT
- * gates (forbidden lexicon, self-ref correctness, rank/title terms, template
- * leaks — engine/dialogue/gates) → expression normalized to neutral fallback.
+ * future LLM output: provider returns an already-parsed DialogueProviderResult →
+ * speaker identity matches → TEXT gates (forbidden lexicon, self-ref correctness,
+ * rank/title terms, template leaks — engine/dialogue/gates) → expression
+ * normalized to neutral fallback.
  *
  * Gate boundary (plan §8): these are TEXT-only checks. Numeric/state validation
  * lives in engine/effects (PR 6). A "reject" gate finding fails the line; a
@@ -158,18 +159,9 @@ export async function produceDialogueLine(
   logger?: RingBufferLogger,
 ): Promise<Result<DialogueLine, GameError>> {
   const raw = await provider.generate(request);
-  if (!raw.ok) return raw;
+  if (!raw.ok) return err(mapProviderErrorToGameError(raw.error));
 
-  const parsed = rawDialogueResponseSchema.safeParse(raw.value);
-  if (!parsed.success) {
-    return err(
-      aiError("MALFORMED", `provider "${provider.id}" returned an invalid response`, {
-        context: { issues: parsed.error.issues.slice(0, 3).map((i) => i.message) },
-      }),
-    );
-  }
-
-  return finalizeLine(db, provider, request, parsed.data, logger);
+  return finalizeLine(db, provider, request, raw.value, logger);
 }
 
 /**
@@ -206,7 +198,7 @@ export function buildDialoguePolicyContext(
 }
 
 /**
- * Full policy-aware pipeline: schema parse → claim gate → finalizeLine → memory write-back.
+ * Full policy-aware pipeline: provider call → claim gate → finalizeLine → memory write-back.
  * Returns both the rendered line and the updated GameState (mentionLog updated).
  */
 export async function produceDialogueLineWithPolicy(
@@ -218,17 +210,9 @@ export async function produceDialogueLineWithPolicy(
   logger?: RingBufferLogger,
 ): Promise<Result<{ line: DialogueLine; nextState: GameState }, GameError>> {
   const raw = await provider.generate(request);
-  if (!raw.ok) return raw;
+  if (!raw.ok) return err(mapProviderErrorToGameError(raw.error));
 
-  const parsed = rawDialogueResponseSchema.safeParse(raw.value);
-  if (!parsed.success) {
-    return err(
-      aiError("MALFORMED", `provider "${provider.id}" returned an invalid response`, {
-        context: { issues: parsed.error.issues.slice(0, 3).map((i) => i.message) },
-      }),
-    );
-  }
-  const response = parsed.data;
+  const response: DialogueProviderResult = raw.value;
 
   // ── claim gate ────────────────────────────────────────────────────
   const claimResult = validateDialogueClaims({
