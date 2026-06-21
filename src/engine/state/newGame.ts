@@ -4,6 +4,7 @@
  * so this is a pure, deterministic mapping.
  */
 import { createCalendar, toGameTime } from "../calendar/time";
+import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import { generateOfficials } from "../officials/generate";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
@@ -21,6 +22,22 @@ export function memoryEntryId(charId: string, seq: number): string {
   return `mem_${charId}_${String(seq).padStart(6, "0")}`;
 }
 
+/**
+ * 侍君 standing 的运行时补充：affection 初值 + 入宫时刻（不覆盖 authored）。
+ * initialStanding 复用真实 `CharacterStanding`（Partial），避免手写缩窄形状导致
+ * 测试对象字面量触发 excess-property error / 平行类型漂移。
+ */
+export function consortStandingExtras(
+  character: { kind: string; hidden?: { affection: number }; initialStanding?: Partial<CharacterStanding> },
+  startTime: GameTime,
+): Partial<CharacterStanding> {
+  if (character.kind !== "consort") return {};
+  return {
+    ...(character.hidden ? { affection: character.hidden.affection } : {}),
+    palaceEnteredAt: character.initialStanding?.palaceEnteredAt ?? startTime,
+  };
+}
+
 export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   const calendar = createCalendar({
     ...db.world.calendar.start,
@@ -36,9 +53,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     if (character.initialStanding) {
       standing[character.id] = {
         ...character.initialStanding,
-        ...(character.kind === "consort" && character.hidden
-          ? { affection: character.hidden.affection }
-          : {}),
+        ...consortStandingExtras(character, startTime),
       };
     }
     memories[character.id] = {

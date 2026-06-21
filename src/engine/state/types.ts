@@ -213,6 +213,8 @@ export interface CharacterStanding {
   confined?: boolean;
   /** 好感/情意 0–100（仅侍君；缺省回退 authored hidden.affection）。 */
   affection?: number;
+  /** 入宫时刻（知情资格用）；非常住者 undefined。所有入宫流程必须写此字段。 */
+  palaceEnteredAt?: GameTime;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
