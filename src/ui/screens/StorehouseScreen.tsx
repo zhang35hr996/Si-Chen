@@ -83,7 +83,8 @@ export function StorehouseScreen({
           store={store}
           itemId={rewardItem}
           onClose={() => setRewardItem(null)}
-          onConfirmed={() => setFeedback("已赏赐")}
+          onConfirmed={(name) => setFeedback(`已将此物赏赐给 ${name}`)}
+          onFailed={(reason) => setFeedback(`赏赐失败：${reason}`)}
         />
       )}
     </div>

@@ -2,7 +2,8 @@
  * BestowModal 赏赐弹窗（库房与进贡共用）。
  *
  * 3-tab 选人（侍君/皇嗣/宗亲），宗亲 tab 暂无数据（占位）。
- * 确认赏赐 → store.applyBestow(db, itemId, recipient)，成功后调用 onConfirmed?.() 再 onClose()。
+ * 确认赏赐 → store.applyBestow(db, itemId, recipient)；成功调用 onConfirmed?.(targetName)、
+ * 失败调用 onFailed?.(reason)，随后 onClose()。
  */
 import { useState } from "react";
 import type { ContentDB } from "../../engine/content/loader";
@@ -61,12 +62,14 @@ export function BestowModal({
   itemId,
   onClose,
   onConfirmed,
+  onFailed,
 }: {
   db: ContentDB;
   store: GameStore;
   itemId: string;
   onClose: () => void;
-  onConfirmed?: () => void;
+  onConfirmed?: (targetName: string) => void;
+  onFailed?: (reason: string) => void;
 }) {
   const state = useGameState(store);
   const [activeTab, setActiveTab] = useState<TabId>("consorts");
@@ -84,9 +87,12 @@ export function BestowModal({
 
   function handleConfirm() {
     if (!selected) return;
-    const result = store.applyBestow(db, itemId, { kind: selected.kind, id: selected.id });
+    const selectedTarget = selected;
+    const result = store.applyBestow(db, itemId, { kind: selectedTarget.kind, id: selectedTarget.id });
     if (result.ok) {
-      onConfirmed?.();
+      onConfirmed?.(selectedTarget.name);
+    } else {
+      onFailed?.("reason" in result ? result.reason : "未知错误");
     }
     onClose();
   }
