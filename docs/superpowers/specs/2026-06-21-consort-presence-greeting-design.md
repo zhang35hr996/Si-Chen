@@ -33,7 +33,9 @@
 | 状态 `state/types.ts` | 新增两处瞬态字段（见 §8） |
 | store `greeting.ts`（新） | 装配「免请安」「请安进入」效果批 + 文案 |
 | store `bedchamber.ts` / `conversation.ts` | 子时滚旬时记 `overnightWith` |
-| UI | 乘风请安遮罩、请安场景、离宫二选一、缺席禀报 |
+| 引擎 `characters/gongli.ts`（新） | 侍君贴身宫隶的确定性派生（名字/立绘/禀告者，见 §5.1） |
+| 资产 `assets/manifest.json` | 加 6 条 `portrait.gongliN.neutral` |
+| UI | 乘风请安遮罩、请安场景、离宫二选一、缺席禀报（宫隶口吻） |
 
 ## 4. 时辰感知临场引擎
 
@@ -85,8 +87,27 @@ wanders(rngSeed, dayIndex, slot, charId, chancePercent): boolean
 
 `LocationScreen` 同时取 **住处花名册**（`getPresentAt`，谁住这）与 **实际在场**（`presentAt`，谁在这）。缺席者 = 花名册 − 在场。进侍君居所而某住客此刻不在时，`CharacterScene` 对应宫室显示宫人禀报，理由取该侍君 `consortLocationAt` 的当前所在：
 
-- 在坤宁宫 → 「{称谓}往坤宁宫向皇后请安去了。」
-- 在御花园 → 「{称谓}往御花园散心去了。」
+禀报由该侍君的**贴身宫隶**口吻发出（见 §5.1），非通用「宫人」：
+
+- 在坤宁宫 → 「{宫隶名}垂手禀道：『{称谓}往坤宁宫向皇后请安去了。』」
+- 在御花园 → 「{宫隶名}垂手禀道：『{称谓}往御花园散心去了。』」
+
+`CharacterScene` 缺席时改用**禀告宫隶的立绘 + 名牌**取代侍君空位。
+
+## 5.1 宫隶（侍君贴身宫人）
+
+每名侍君固定 2 名贴身宫隶，**确定性派生、不落存档**（与 `randomPetName`/`pickGivenName` 同范式）：
+
+```ts
+interface GongliAttendant { name: string; portraitSet: string } // portraitSet 如 "gongli3"
+attendantsOf(rngSeed, consortId): [GongliAttendant, GongliAttendant]
+reportingAttendant(rngSeed, consortId, dayIndex): GongliAttendant
+```
+
+- **名字**：从 `MALE_ATTENDANT_RESERVED_CHARS`（`characters/lilangNames.ts`，96 个无姓二字名，含听雪/听竹）按 `fnv1a64Hex(\`${rngSeed}:${consortId}:gongli:${i}\`)` 取（`i=0,1`）；两名相同则 `(idx+1)%N` 错开 —— 保证同侍君 2 名互不相同。
+- **立绘**：`gongli${1 + hash%6}`，对应 `assets/manifest.json` 新增的 `portrait.gongli1.neutral … gongli6.neutral` → `portraits/gongli/gongliN.png`（gongli 文件夹现有 6 张）。
+- **禀告者**：`reportingAttendant` 按 `dayIndex` 在 2 名间择一（当日稳定、跨日可换人）。
+- **范围**：仅缺席禀告时浮现。跨侍君偶发同名容忍（YAGNI）。冷宫/待选/凤后几乎不缺席，其宫隶自然不出现。
 
 文案模板集中于 store/format 层，引擎只回位置。
 
@@ -133,6 +154,7 @@ overnightWith?: { charId: string; morningDayIndex: number };
 
 - `consortLocationAt`：卯时→坤宁宫；被免→住处；留宿对象→住处；白天游走命中/未命中；夜里在家；冷宫/已故/待选不动。
 - `presentAt`：卯时坤宁宫＝皇后＋出席侍君；卯时某后宫居所空；白天游走者出现在御花园。既有 `getPresentAt`/`getCharacterLocation` 契约（`presence.test.ts`）保持不变。
+- `gongli`：同 `(rngSeed,consortId)` 稳定；2 名互不相同；名字落在 `MALE_ATTENDANT_RESERVED_CHARS`；`portraitSet` ∈ gongli1–6；`reportingAttendant` 随 dayIndex 在 2 名间切换。manifest 含 6 条 gongli 条目（`validate-manifest` 通过）。
 - `wanders`：同 (旬,slot,char) 稳定；性格关键词加权与 clamp 边界。
 - 请安出席名单：排除冷宫/已故/被免/待选；含皇后判定。
 - 免请安效果批：affection/favor 增量正确；写入 `excusedFromGreeting`。
