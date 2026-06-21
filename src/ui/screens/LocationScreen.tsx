@@ -39,6 +39,7 @@ export function LocationScreen({
   greetingAttendeeCount,
   onEnterGreeting,
   onExitGreeting,
+  onLeavePalace,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -65,6 +66,7 @@ export function LocationScreen({
   greetingAttendeeCount?: number;
   onEnterGreeting?: () => void;
   onExitGreeting?: () => void;
+  onLeavePalace?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -105,7 +107,7 @@ export function LocationScreen({
       calendar={state.calendar}
       crumbs={crumbs}
       pregnant={pregnant}
-      onBack={onOpenMap}
+      onBack={onLeavePalace ?? onOpenMap}
       onOpenResources={onOpenResources}
       onOpenSettings={onOpenSettings}
       className="location-shell"

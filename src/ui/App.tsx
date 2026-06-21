@@ -11,7 +11,8 @@ import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees } from "../engine/characters/greeting";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
-import { monthOrdinal } from "../engine/calendar/time";
+import { monthOrdinal, isGreetingSlot } from "../engine/calendar/time";
+import { getCharacterLocation } from "../engine/characters/presence";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
@@ -59,6 +60,7 @@ import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
+import { MorningAfterOverlay } from "./components/MorningAfterOverlay";
 import { buildRelocate } from "../store/relocate";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
@@ -498,6 +500,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   const liveState = store.getState();
+
+  const ov = liveState.overnightWith;
+  const morningAfterCharId =
+    ov &&
+    ov.morningDayIndex === liveState.calendar.dayIndex &&
+    isGreetingSlot(liveState.calendar) &&
+    getCharacterLocation(db, liveState, ov.charId) === liveState.playerLocation
+      ? ov.charId
+      : null;
+
   const preg = liveState.resources.bloodline.pregnancy;
   // 孕二月敬事房上书：pending 且已过受孕月。
   const jingshifangDue =
@@ -719,6 +731,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   const [ceremonyOpen, setCeremonyOpen] = useState(false);
+  const [morningAfterOpen, setMorningAfterOpen] = useState(false);
 
   const enterGreeting = () => {
     const { spend, decreeBeats } = spendAp(1);
@@ -731,6 +744,24 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   const exitGreeting = () => {
     goHome(); // 退出坤宁宫，回地图；不耗行动点
+  };
+
+  // 离开后宫居所：若是留宿宫且卯时，先弹二选一；否则正常回地图。
+  const leavePalace = () => {
+    if (morningAfterCharId) setMorningAfterOpen(true);
+    else goHome();
+  };
+
+  const restExcuse = () => {
+    if (morningAfterCharId) store.applyExcuseGreeting(db, morningAfterCharId);
+    setMorningAfterOpen(false);
+    goHome();
+  };
+
+  const silentLeave = () => {
+    store.dismissOvernight();
+    setMorningAfterOpen(false);
+    goHome();
   };
 
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
@@ -909,6 +940,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           greetingAttendeeCount={greetingAttendees(db, store.getState()).length}
           onEnterGreeting={enterGreeting}
           onExitGreeting={exitGreeting}
+          onLeavePalace={leavePalace}
         />
       )}
       {view === "wenzhaodian" && (
@@ -1367,6 +1399,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <GreetingCeremonyOverlay
           empressName={db.characters.shen_zhibai?.profile.name ?? "皇后"}
           onDone={() => setCeremonyOpen(false)}
+        />
+      )}
+      {morningAfterOpen && morningAfterCharId && (
+        <MorningAfterOverlay
+          consortName={db.characters[morningAfterCharId]?.profile.name ?? "爱卿"}
+          onRest={restExcuse}
+          onSilent={silentLeave}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
