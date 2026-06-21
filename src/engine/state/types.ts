@@ -59,6 +59,17 @@ export type MenstrualStatus = "normal" | "irregular" | "absent";
 
 export type PregnancyStatus = "none" | "pending" | "carrying";
 
+/** 病情状态（与数值 health 独立存储）。 */
+export type HealthStatus = "healthy" | "sick" | "critical";
+
+/** 死因（写入 deathRecord / decease 效果）。 */
+export type DeathCause =
+  | "illness"
+  | "critical_sudden"
+  | "pregnancy"
+  | "childbirth"
+  | "scripted";
+
 export interface PregnancyState {
   /** none=未孕/已传嗣后(健康); pending=已受孕未告知; carrying=帝王自孕中 */
   status: PregnancyStatus;
