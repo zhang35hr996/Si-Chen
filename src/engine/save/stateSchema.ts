@@ -33,6 +33,18 @@ const calendarStateSchema = gameTimeSchema
     message: "impossible calendar state",
   });
 
+/** 情绪键枚举（与 content/schemas 的 memoryEmotionSchema 对齐；跨层不共享 import，靠 parity 测试防漂移）。 */
+const memoryEmotionSchema = z.enum(["joy","grief","fear","anger","envy","shame","guilt","relief"]);
+/** 单个情绪强度 0–100。 */
+const emotionValueSchema = z.number().min(0).max(100);
+/**
+ * Partial record of emotion intensities — keys derived from the enum (no
+ * hand-listing), values bounded 0–100, unknown keys rejected. Mirror of
+ * content/schemas memoryEmotionsSchema; kept equivalent by
+ * tests/state/memoryEmotionsParity.test.ts.
+ */
+export const memoryEmotionsSchema = z.partialRecord(memoryEmotionSchema, emotionValueSchema);
+
 const memoryEntrySchema = z.strictObject({
   id: z.string().min(1),
   ownerId: idSchema,
@@ -44,16 +56,7 @@ const memoryEntrySchema = z.strictObject({
   summary: z.string().min(1).max(240),
   strength: percent,
   retention: z.enum(["fast", "slow", "permanent"]),
-  emotions: z.object({
-    joy: z.number().optional(),
-    grief: z.number().optional(),
-    fear: z.number().optional(),
-    anger: z.number().optional(),
-    envy: z.number().optional(),
-    shame: z.number().optional(),
-    guilt: z.number().optional(),
-    relief: z.number().optional(),
-  }),
+  emotions: memoryEmotionsSchema,
   triggerTags: z.array(z.string()).max(5),
   unresolved: z.boolean(),
   createdAt: gameTimeSchema,

@@ -58,17 +58,15 @@ export const memoryKindSchema = z.enum([
 export const memoryEmotionSchema = z.enum(["joy","grief","fear","anger","envy","shame","guilt","relief"]);
 const memoryPerspectiveSchema = z.enum(["actor","target","witness","parent","ally","enemy","relative"]);
 
-/** Partial record of emotion intensities — only present emotions need to be listed. */
-const emotionsSchema = z.object({
-  joy: z.number().optional(),
-  grief: z.number().optional(),
-  fear: z.number().optional(),
-  anger: z.number().optional(),
-  envy: z.number().optional(),
-  shame: z.number().optional(),
-  guilt: z.number().optional(),
-  relief: z.number().optional(),
-}).default({});
+/** 单个情绪强度 0–100。 */
+const emotionValueSchema = z.number().min(0).max(100);
+/**
+ * Partial record of emotion intensities — keys derived from memoryEmotionSchema
+ * (no hand-listing → cannot drift from the enum), values bounded to 0–100, and
+ * unknown emotion keys rejected. Mirrored in save/stateSchema; kept equivalent
+ * by tests/state/memoryEmotionsParity.test.ts.
+ */
+export const memoryEmotionsSchema = z.partialRecord(memoryEmotionSchema, emotionValueSchema);
 
 const memoryDraftBase = z.strictObject({
   kind: memoryKindSchema,
@@ -78,7 +76,7 @@ const memoryDraftBase = z.strictObject({
   strength: percent,
   triggerTags: z.array(tagSchema).max(5),
   unresolved: z.boolean().default(false),
-  emotions: emotionsSchema,
+  emotions: memoryEmotionsSchema.default({}),
   sourceEventId: z.string().regex(/^evt_\d{6}$/).optional(), // 格式 evt_NNNNNN（content 层不能 import 上层 courtEventIdSchema，内联同正则）
 });
 
