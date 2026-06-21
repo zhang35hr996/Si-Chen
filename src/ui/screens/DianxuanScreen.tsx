@@ -25,19 +25,26 @@ export function DianxuanScreen({ registry, db, candidates, onDone }: {
   const bg = registry.resolveVariant("bg.tiyuandian", "day", "background");
   const cur = candidates[idx];
 
-  if (!cur) { onDone(kept, false, idx); return null; }
+  if (!cur) return null;
 
   const portrait = registry.portrait(cur.content.portraitSet, "neutral");
   const ranks = pickableRanks(db);
   const recommended = recommendRank(cur.grade);
   const recommendedName = db.ranks[recommended]?.name ?? "更衣";
 
-  const advance = () => { setReveal(null); setPickingRank(false); setIdx((i) => i + 1); };
+  const isLast = idx >= candidates.length - 1;
 
-  const keep = (rank: string) => {
-    setKept((k) => [...k, { candidate: cur, rank }]);
-    advance();
+  /** 进入下一位；若已是最后一位则结束殿选（leftEarly=false，已全部审阅）。 */
+  const goNext = (nextKept: KeptPick[]) => {
+    if (isLast) { onDone(nextKept, false, idx + 1); return; }
+    setKept(nextKept);
+    setReveal(null);
+    setPickingRank(false);
+    setIdx((i) => i + 1);
   };
+
+  const pass = () => goNext(kept);                                   // 撂牌子
+  const keep = (rank: string) => goNext([...kept, { candidate: cur, rank }]); // 留牌子定位分
 
   return (
     <main className="dialogue-screen" style={bg ? { backgroundImage: `url("${bg.url}")` } : undefined}>
@@ -54,7 +61,7 @@ export function DianxuanScreen({ registry, db, candidates, onDone }: {
             <button type="button" onClick={() => setReveal(describeRaiseHead(cur.content))}>抬起头来</button>
             <button type="button" onClick={() => setReveal(describeTalent(cur.content))}>问才艺</button>
             <button type="button" onClick={() => setPickingRank(true)}>留牌子</button>
-            <button type="button" onClick={advance}>撂牌子</button>
+            <button type="button" onClick={pass}>撂牌子</button>
             <button type="button" onClick={() => onDone(kept, true, idx)}>离开体元殿</button>
           </div>
         ) : (
