@@ -36,6 +36,7 @@ export function MapScreen({
   onOpenResources,
   onOpenStorehouse,
   onOpenCourtyard,
+  onEnterShop,
   onBoardChange,
 }: {
   db: ContentDB;
@@ -53,6 +54,7 @@ export function MapScreen({
   onOpenResources?: () => void;
   onOpenStorehouse?: () => void;
   onOpenCourtyard: (loc: LocationContent) => void;
+  onEnterShop: (id: "wanbaolou" | "zuixianlou") => void;
   onBoardChange?: (boardId: string) => void;
 }) {
   const state = useGameState(store);
@@ -130,6 +132,7 @@ export function MapScreen({
   // 点击节点直接执行动作（无信息栏中转）。
   const onNodeActivate = (loc: LocationContent) => {
     if (loc.id === state.playerLocation) { onEnterCurrent(); return; }
+    if (loc.id === "wanbaolou" || loc.id === "zuixianlou") { onEnterShop(loc.id); return; }
     if (loc.entry === "free") { onOpenView(loc.id); return; }
     if (!checkTravel(db, state, loc.id).ok) return; // 不可达：点击无效
     travel(loc.id);

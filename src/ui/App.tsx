@@ -16,6 +16,12 @@ import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
+import { buildProvinceTribute, buildMinisterTribute } from "../store/tribute";
+import { buildAutumnHuntPrompt } from "../store/autumnHunt";
+import { ChengFengPromptScreen } from "./screens/ChengFengPromptScreen";
+import { BestowModal } from "./components/BestowModal";
+import { MORNING_SLOT, AFTERNOON_SLOT } from "../engine/calendar/time";
+import type { ChengFengPrompt, PromptAction } from "../store/prompt";
 import { buildIncense, buildFortune } from "../store/temple";
 import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { audioController } from "./audio/AudioController";
@@ -59,11 +65,12 @@ import { SettingsMenu } from "./components/SettingsMenu";
 import { TitleScreen } from "./screens/TitleScreen";
 import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
+import { ShopScreen } from "./screens/ShopScreen";
 
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse" | "shop";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -115,11 +122,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [courtyardLocId, setCourtyardLocId] = useState<string | null>(null);
   const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shopId, setShopId] = useState<"wanbaolou" | "zuixianlou" | null>(null);
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
+  const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
+  const [giftItemId, setGiftItemId] = useState<string | null>(null);
   const lastBoardRef = useRef<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const tickedPeriods = useRef<Set<string>>(new Set());
+  const shopRollover = useRef(false);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   // BGM effect: compute zone defensively (content may not be ok)
@@ -177,6 +188,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const goHome = () => {
     setMapAtRoot(true);
     setView("map");
+    maybeAutumnHunt();
   };
 
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
@@ -184,6 +196,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const loc = store.getState().playerLocation;
     if (loc === "cining_gong") { setView("cining_gong"); maybeShizhi(); return; }
     setView(loc === "wenzhaodian" ? "wenzhaodian" : loc === "yuqing_gong" ? "yuqing_gong" : loc === "fengxiandian" ? "fengxiandian" : "location");
+    if (loc === "wenzhaodian") maybeAutumnHunt();
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -299,6 +312,58 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return [];
   };
 
+  /** action 解释器：玩家在进贡/秋猎 prompt 中的选择。 */
+  const resolvePromptAction = (action: PromptAction) => {
+    switch (action.type) {
+      case "stash":
+        store.applyGrantItem(action.itemId);
+        setPrompt(null);
+        break;
+      case "gift":
+        // 先将贡品入库，再开赏赐弹窗（BestowModal 调 applyBestow 时扣库存净效果：+1 -1 = 0）。
+        store.applyGrantItem(action.itemId);
+        setGiftItemId(action.itemId);
+        setPrompt(null);
+        break;
+      case "huntJoin":
+        store.dispatch({ type: "SPEND_AP", amount: 1 });
+        store.applyAutumnHunt(`hunt:${store.getState().rngSeed}:${store.getState().calendar.year}`);
+        setPrompt(null);
+        break;
+      case "huntDecline":
+        store.declineAutumnHunt();
+        setPrompt(null);
+        break;
+    }
+  };
+
+  /** 每行动点掷进贡 prompt（属地早上/大臣下午；每旬大臣至多一次）。命中则设 prompt 并返回 true。 */
+  const rollTribute = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): boolean => {
+    for (let i = 0; i < amount; i++) {
+      const slot = before.apMax - before.ap + i;
+      const key = `tribute:${store.getState().rngSeed}:${before.dayIndex}:${slot}`;
+      if (rolledSlots.current.has(key)) continue;
+      let p: ChengFengPrompt | null = null;
+      if (slot === MORNING_SLOT) p = buildProvinceTribute(db, store.getState(), key);
+      else if (slot === AFTERNOON_SLOT) {
+        const dedupe = `tributeMinister:${before.dayIndex}`;
+        if (!store.getState().flags[dedupe]) {
+          p = buildMinisterTribute(db, store.getState(), key);
+          if (p) store.dispatch({ type: "SET_FLAG", key: dedupe, value: true });
+        }
+      }
+      if (p) { rolledSlots.current.add(key); setPrompt(p); return true; }
+    }
+    return false;
+  };
+
+  /** 秋猎询问：9月中旬下午进入主地图/御书房时检查一次。命中则设 prompt 并返回 true。 */
+  const maybeAutumnHunt = (): boolean => {
+    const p = buildAutumnHuntPrompt(store.getState(), `hunt:${store.getState().rngSeed}`);
+    if (p) { setPrompt(p); return true; }
+    return false;
+  };
+
   /** 旬翻转：掷太后生病/自愈，应用效果并返回提示节拍（每旬至多一次）。 */
   const rollTaihouIllness = (): DecreeReaction[] => {
     const cal = store.getState().calendar;
@@ -327,13 +392,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return true;
   };
 
-  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰 + 乘风汇报。返回扣点结果与台词。 */
+  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果与台词。 */
   const spendAp = (amount: number) => {
     const before = store.getState().calendar;
     const spend = store.dispatch({ type: "SPEND_AP", amount });
     let decreeBeats = spend.ok ? rollDecree(before, amount) : [];
     if (spend.ok) decreeBeats = [...decreeBeats, ...rollRebuke(before, amount)];
-    if (spend.ok) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
+    if (spend.ok) {
+      const tributeShown = rollTribute(before, amount);
+      if (!tributeShown) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
+    }
     if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };
@@ -600,6 +668,21 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     playReactions([{ speakerId: "wei_sui", lines: plan.lines }, ...decreeBeats], spend.value.rolledOver);
   };
 
+  // 进店（耗 1 行动点）：先切换到 shop 视图，再串播懿旨/乘风节拍（若有）。
+  // 转旬 rollover 不触发 runCheckpoints，避免 checkpoint 视图抢占商铺界面。
+  const enterShop = (id: "wanbaolou" | "zuixianlou") => {
+    if (store.getState().calendar.ap < 1) return;
+    const { spend, decreeBeats } = spendAp(1);
+    if (!spend.ok) return;
+    setShopId(id);
+    setView("shop");
+    doAutosave();
+    shopRollover.current = spend.value.rolledOver;
+    // 节拍串播以 rolledOver=false 调用，确保播完后不切走商铺视图。
+    // 转旬 checkpoint 延迟到关店时执行（见 ShopScreen onClose）。
+    playReactions(decreeBeats, false);
+  };
+
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
@@ -780,6 +863,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setView("storehouse")}
           onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
+          onEnterShop={enterShop}
           onBoardChange={(boardId) => {
             setCurrentBoard(boardId);
             if (boardId === "hougong" && lastBoardRef.current !== "hougong" && db.characters["cheng_feng"]) {
@@ -801,6 +885,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {view === "storehouse" && (
         <StorehouseScreen db={db} store={store} onClose={() => setView("map")} />
+      )}
+      {view === "shop" && shopId && (
+        <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
+          onClose={() => {
+            setShopId(null);
+            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true); }
+            else { setView("map"); }
+          }} />
       )}
       {view === "freeview" && freeViewId && (
         <FreeViewScreen
@@ -933,6 +1025,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             }
           }}
         />
+      )}
+      {prompt && !reaction && (
+        <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={prompt} onChoose={resolvePromptAction} />
+      )}
+      {giftItemId && (
+        <BestowModal db={db} store={store} itemId={giftItemId}
+          onClose={() => setGiftItemId(null)} onConfirmed={() => setGiftItemId(null)} />
       )}
       {flipOpen && (
         <BedchamberPicker

@@ -188,3 +188,17 @@ export function formatGameTime(time: GameTime & { eraName?: string }): string {
 export function formatAp(calendar: CalendarState): string {
   return `行动点：${calendar.ap}/${calendar.apMax}`;
 }
+
+/** 触发用时辰槽常量：辰时(上午)=1，申时(下午)=2。 */
+export const MORNING_SLOT = 1;
+export const AFTERNOON_SLOT = 2;
+
+/** 当前待用行动点是否落在上午(辰时)。 */
+export function isMorningSlot(calendar: CalendarState): boolean {
+  return shichenSlot(calendar) === MORNING_SLOT;
+}
+
+/** 当前待用行动点是否落在下午(申时)。 */
+export function isAfternoonSlot(calendar: CalendarState): boolean {
+  return shichenSlot(calendar) === AFTERNOON_SLOT;
+}

@@ -48,6 +48,7 @@ export const characterStandingSchema = z.strictObject({
   confined: z.boolean().optional(),
   affection: percent.optional(),
   palaceEnteredAt: gameTimeShape.optional(),
+  availableFromMonth: z.number().int().min(1).optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────

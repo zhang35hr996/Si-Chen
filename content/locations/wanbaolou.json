@@ -1,0 +1,10 @@
+{
+  "id": "wanbaolou",
+  "name": "万宝楼",
+  "description": "京城东市最负盛名的珍宝阁，珠翠绫罗、文玩奇珍琳琅满目，掌柜见来客气度不凡，含笑相迎。",
+  "backgroundKey": "bg.wanbaolou",
+  "ambience": ["市声", "算盘", "茶香"],
+  "position": { "x": 0.35, "y": 0.55 },
+  "zone": "jingcheng",
+  "entry": "free"
+}

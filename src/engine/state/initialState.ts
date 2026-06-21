@@ -50,6 +50,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     taihou: { ill: false },
     flags: {},
     standing: {},
+    generatedConsorts: {},
     officials: {},
     memories: {},
     bedchamber: {},

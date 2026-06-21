@@ -1,0 +1,10 @@
+{
+  "id": "zuixianlou",
+  "name": "醉仙楼",
+  "description": "京城最热闹的酒楼，楼上雅座临街，糕点茶饮、南北珍味样样齐全，小二吆喝声不绝于耳。",
+  "backgroundKey": "bg.zuixianlou",
+  "ambience": ["喧笑", "酒令", "饭菜香"],
+  "position": { "x": 0.62, "y": 0.55 },
+  "zone": "jingcheng",
+  "entry": "free"
+}
