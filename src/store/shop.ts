@@ -1,5 +1,5 @@
 /** 京城商铺：按品阶定价 + 货架确定性轮替。 */
-import { gestationRoll } from "../engine/characters/gestation";
+import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
 import type { ContentDB } from "../engine/content/loader";
 import type { ItemDef } from "../engine/content/schemas";
 
@@ -13,7 +13,7 @@ const FOOD = ["点心", "茶饮", "珍味"];
 /** 区间内确定性随机定价。 */
 export function priceOf(item: ItemDef, seedKey: string): number {
   const [lo, hi] = TIER_RANGE[item.tier];
-  return lo + (gestationRoll(`price:${item.id}:${seedKey}`) % (hi - lo + 1));
+  return lo + (gestationRollRaw(`price:${item.id}:${seedKey}`) % (hi - lo + 1));
 }
 
 function shopPool(db: ContentDB, shopId: ShopId): string[] {

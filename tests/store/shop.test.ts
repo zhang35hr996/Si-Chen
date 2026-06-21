@@ -22,6 +22,13 @@ describe("商铺定价", () => {
     const item = Object.values(db.items)[0]!;
     expect(priceOf(item, "k")).toBe(priceOf(item, "k"));
   });
+  it("marvel 价格可达区间上部（>449）", () => {
+    const db = loadRealContent();
+    const marvel = Object.values(db.items).find((i) => i.tier === "marvel")!;
+    let max = 0;
+    for (let i = 0; i < 200; i++) max = Math.max(max, priceOf(marvel, `seed${i}`));
+    expect(max).toBeGreaterThanOrEqual(450);
+  });
 });
 
 describe("货架轮替", () => {
