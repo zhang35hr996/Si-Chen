@@ -8,6 +8,15 @@ import type { ContentDB } from "../content/loader";
 import { generateOfficials } from "../officials/generate";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
 
+/** 新游戏私库种子（id 须存在于 content/items.json）。 */
+const STOREHOUSE_SEED: Record<string, number> = {
+  luozidai: 2,
+  yunjin: 1,
+  diaopi: 1,
+  mingqian_longjing: 2,
+  meihua_gao: 3,
+};
+
 export function memoryEntryId(charId: string, seq: number): string {
   return `mem_${charId}_${String(seq).padStart(6, "0")}`;
 }
@@ -25,7 +34,12 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
 
   for (const character of Object.values(db.characters)) {
     if (character.initialStanding) {
-      standing[character.id] = { ...character.initialStanding };
+      standing[character.id] = {
+        ...character.initialStanding,
+        ...(character.kind === "consort" && character.hidden
+          ? { affection: character.hidden.affection }
+          : {}),
+      };
     }
     memories[character.id] = {
       entries: character.initialMemories.map((draft, index) => ({
@@ -60,7 +74,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
         gestations: [],
         heirs: [],
       },
-      storehouse: { items: {} },
+      storehouse: { items: { ...STOREHOUSE_SEED } },
     },
     flags: {},
     standing,

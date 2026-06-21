@@ -98,6 +98,9 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       }
       delete resources.court;
     }
+    if (resources.storehouse === undefined) {
+      resources.storehouse = { items: {} };
+    }
     const bloodline = ((resources.bloodline ?? {}) as Record<string, unknown>);
     const heirs = (bloodline.heirs as Record<string, unknown>[] | undefined) ?? [];
     for (const h of heirs) {

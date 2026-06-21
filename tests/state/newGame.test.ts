@@ -26,7 +26,7 @@ describe("createNewGameState", () => {
   });
 
   it("seeds standing for characters with an initial standing", () => {
-    expect(state.standing["shen_zhibai"]).toEqual({ rank: "fenghou", favor: 25 });
+    expect(state.standing["shen_zhibai"]).toEqual({ rank: "fenghou", favor: 25, affection: 50 });
     expect(state.standing["wei_sui"]).toEqual({ rank: "sili_zhang", favor: 40 });
     expect(state.standing["taihou"]).toBeUndefined();
   });
