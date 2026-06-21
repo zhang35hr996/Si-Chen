@@ -14,6 +14,8 @@ import type { CharacterContent } from "../content/schemas";
 export interface SovereignState {
   /** 健康 */
   health: number;
+  /** 病情状态（与 health 数值独立）。 */
+  healthStatus: HealthStatus;
   /** 勤政 */
   diligence: number;
   /** 威望（原 court.authority 圣威） */
@@ -58,6 +60,17 @@ export interface NationState {
 export type MenstrualStatus = "normal" | "irregular" | "absent";
 
 export type PregnancyStatus = "none" | "pending" | "carrying";
+
+/** 病情状态（与数值 health 独立存储）。 */
+export type HealthStatus = "healthy" | "sick" | "critical";
+
+/** 死因（写入 deathRecord / decease 效果）。 */
+export type DeathCause =
+  | "illness"
+  | "critical_sudden"
+  | "pregnancy"
+  | "childbirth"
+  | "scripted";
 
 export interface PregnancyState {
   /** none=未孕/已传嗣后(健康); pending=已受孕未告知; carrying=帝王自孕中 */
@@ -151,6 +164,8 @@ export interface Heir {
   lifecycle: HeirLifecycle;
   /** 夭折时刻；存活时 undefined。 */
   deceasedAt?: GameTime;
+  /** 病情状态（出生置 healthy；旧存档可能无此字段）。 */
+  healthStatus?: HealthStatus;
 }
 
 export interface BloodlineState {
@@ -214,8 +229,6 @@ export interface CharacterStanding {
   residence?: string;
   /** 所居宫室（缺省 "main" 主殿）。 */
   chamber?: ChamberId;
-  /** 凤体违和（病）。 */
-  ill?: boolean;
   /** 禁足。 */
   confined?: boolean;
   /** 好感/情意 0–100（仅侍君；缺省回退 authored hidden.affection）。 */
@@ -224,6 +237,16 @@ export interface CharacterStanding {
   palaceEnteredAt?: GameTime;
   /** 殿选新晋侍君的侍寝解禁月序（monthOrdinal）；缺省即无门槛。 */
   availableFromMonth?: number;
+  /** 运行时数值健康 0–100（侍君；初始取 attributes.health；官员无此字段）。 */
+  health?: number;
+  /** 病情状态（健康/生病/重病；官员无此字段）。 */
+  healthStatus?: HealthStatus;
+  /** 动态入宫侍君的入宫年龄（选秀用）；预置侍君用 profile.age。 */
+  ageAtEntry?: number;
+  /** 动态入宫侍君的入宫年份。 */
+  enteredAtYear?: number;
+  /** 身后事记录（死后写入，绝不覆盖生前 rank/title）。 */
+  deathRecord?: DeathRecord;
 }
 
 // ── Memory (PR2: 活人感形状) ──────────────────────────────────────────
@@ -295,10 +318,40 @@ export interface BedchamberRecord {
   encounters: BedchamberEncounter[];
 }
 
+export interface DeathRecord {
+  diedAt: GameTime;
+  cause: DeathCause;
+  /** 生前位分/封号快照。 */
+  originalRankId: string;
+  originalTitle?: string;
+  /** 追封位分/谥号（生前数据不动）。 */
+  posthumousRankId?: string;
+  posthumousEpithet?: string;
+}
+
+export interface PendingAftermath {
+  /** 稳定 id：death:{kind}:{subjectId}:{deathDayIndex}（幂等去重）。 */
+  id: string;
+  kind: "taihou" | "consort" | "heir";
+  subjectId: string;
+  at: GameTime;
+  resolved: boolean;
+}
+
 // ── 太后（尊长）状态 ──────────────────────────────────────────────────
 export interface TaihouState {
-  /** 太后是否卧病。 */
-  ill: boolean;
+  /** 运行时数值健康 0–100（初始 70）。 */
+  health: number;
+  /** 病情状态。 */
+  healthStatus: HealthStatus;
+  /** 是否已薨。 */
+  deceased?: boolean;
+  /** 薨逝时刻。 */
+  diedAt?: GameTime;
+  /** 谥号（1–2 字）。 */
+  posthumousName?: string;
+  /** 服丧截止 dayIndex（独占上界 = deathDayIndex + 3，含死亡当日）。 */
+  mourningUntilDayExclusive?: number;
 }
 
 // ── The single authoritative state ────────────────────────────────────
@@ -384,5 +437,7 @@ export interface GameState {
   excusedFromGreeting?: { dayIndex: number; charIds: string[] };
   /** 子时留宿记录，供次晨离宫二选一。 */
   overnightWith?: { charId: string; morningDayIndex: number };
+  /** 持久化身后事队列（皇帝不入队）。 */
+  pendingAftermath: PendingAftermath[];
   rngSeed: number;
 }

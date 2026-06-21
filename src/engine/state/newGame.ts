@@ -28,13 +28,15 @@ export function memoryEntryId(charId: string, seq: number): string {
  * 测试对象字面量触发 excess-property error / 平行类型漂移。
  */
 export function consortStandingExtras(
-  character: { kind: string; hidden?: { affection: number }; initialStanding?: Partial<CharacterStanding> },
+  character: { kind: string; hidden?: { affection: number }; initialStanding?: Partial<CharacterStanding>; attributes?: { health: number } },
   startTime: GameTime,
 ): Partial<CharacterStanding> {
   if (character.kind !== "consort") return {};
   return {
     ...(character.hidden ? { affection: character.hidden.affection } : {}),
     palaceEnteredAt: character.initialStanding?.palaceEnteredAt ?? startTime,
+    health: (character as { attributes?: { health: number } }).attributes?.health ?? 100,
+    healthStatus: "healthy",
   };
 }
 
@@ -82,9 +84,9 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   return {
     calendar,
     playerLocation: db.world.startingLocation,
-    taihou: { ill: false },
+    taihou: { health: 70, healthStatus: "healthy" },
     resources: {
-      sovereign: { ...db.world.startingResources.sovereign },
+      sovereign: { ...db.world.startingResources.sovereign, healthStatus: "healthy" as const },
       nation: { ...db.world.startingResources.nation },
       bloodline: {
         ...db.world.startingResources.bloodline,
@@ -105,6 +107,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     emotionalConditions: [],
     mentionLog: [],
     sceneHistory: [],
+    pendingAftermath: [],
     rngSeed,
   };
 }

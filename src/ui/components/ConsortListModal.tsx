@@ -12,6 +12,7 @@ import { bedchamberConfig, canSummon } from "../../store/bedchamber";
 import { ATTRIBUTE_LABELS } from "./CharacterCard";
 import { describe } from "../format/descriptors";
 import type { ScaleId } from "../format/descriptors";
+import { HealthStatusChip } from "./HealthStatusChip";
 
 export function ConsortListModal({
   db,
@@ -96,6 +97,12 @@ export function ConsortListModal({
           <p className="consort-detail__field">
             位分：{db.ranks[st.rank]?.name}
             {st.title ? `　封号：${st.title}` : ""}
+          </p>
+          <p className="consort-detail__field">
+            <HealthStatusChip
+              status={st.healthStatus ?? "healthy"}
+              health={st.health ?? 100}
+            />
           </p>
           <p className="consort-detail__field">{c.profile.role}</p>
           {c.attributes && (

@@ -12,6 +12,7 @@ import { bedchamberConfig } from "../../store/bedchamber";
 import { toGameTime } from "../../engine/calendar/time";
 import { describe } from "../format/descriptors";
 import type { ScaleId } from "../format/descriptors";
+import { HealthStatusChip } from "./HealthStatusChip";
 
 /** 侍君明面数值属性 — 特长/喜好是标签，单独渲染。 */
 export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes & ("appearance" | "health"), string]> = [
@@ -77,6 +78,14 @@ export function CharacterCard({
             侍寝　月{favor.lastMonth}·季{favor.lastThreeMonths}·年{favor.lastYear}
           </span>
         </div>
+      )}
+      {isConsort && standing && (
+        <p className="char-card__health">
+          <HealthStatusChip
+            status={standing.healthStatus ?? "healthy"}
+            health={standing.health ?? 100}
+          />
+        </p>
       )}
       {isConsort && standing?.lifecycle && standing.lifecycle !== "normal" && (
         <p className="char-card__lifecycle" data-lifecycle={standing.lifecycle}>

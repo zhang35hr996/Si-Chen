@@ -1,4 +1,4 @@
-/** 皇嗣台词子屏：与 ReactionScreen 同布局，但立绘由 portraitSet 显式给出（皇嗣非 db.characters）。 */
+/** 通用立绘+台词页：立绘由 portraitSet 显式给出，可复用于任意非 db.characters 角色（皇嗣、官员等）。 */
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
@@ -6,7 +6,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 
-export function ChildReactionScreen({
+export function CharacterReactionScreen({
   db,
   store,
   registry,

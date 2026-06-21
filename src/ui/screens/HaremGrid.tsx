@@ -28,7 +28,7 @@ interface Status {
 function statusesOf(standing: CharacterStanding | undefined): Status[] {
   const out: Status[] = [];
   if (standing?.lifecycle === "carrying") out.push({ icon: "孕", label: "怀胎", tone: "warn" });
-  if (standing?.ill) out.push({ icon: "病", label: "凤体违和", tone: "warn" });
+  if (standing?.healthStatus && standing.healthStatus !== "healthy") out.push({ icon: "病", label: "凤体违和", tone: "warn" });
   if (standing?.confined) out.push({ icon: "禁", label: "禁足", tone: "dim" });
   return out;
 }

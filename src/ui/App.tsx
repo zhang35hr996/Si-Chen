@@ -32,7 +32,7 @@ import { BestowModal } from "./components/BestowModal";
 import { MORNING_SLOT, AFTERNOON_SLOT } from "../engine/calendar/time";
 import type { ChengFengPrompt, PromptAction } from "../store/prompt";
 import { buildIncense, buildFortune } from "../store/temple";
-import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
+import { buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { audioController } from "./audio/AudioController";
 import { trackFor } from "./audio/trackFor";
 import { CourtyardScreen } from "./screens/CourtyardScreen";
@@ -42,7 +42,7 @@ import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
 import { buildAdoptionReaction } from "../store/adoption";
-import { ChildReactionScreen } from "./screens/ChildReactionScreen";
+import { CharacterReactionScreen } from "./screens/CharacterReactionScreen";
 import { buildBirth, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
@@ -145,7 +145,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const lastBoardRef = useRef<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
-  const tickedPeriods = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
@@ -269,10 +268,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const canContinue =
     storage !== null && listSaves(storage).some((s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok");
 
-  /** 重置每旬/每行动点的去重 ref：新游戏或读档后必须清空，否则旧局的 key（rngSeed 固定为 1）会压制本局掷骰。 */
+  /** 重置每行动点的去重 ref：新游戏或读档后必须清空，否则旧局的 key（rngSeed 固定为 1）会压制本局掷骰。 */
   const resetRollGuards = () => {
     rolledSlots.current.clear();
-    tickedPeriods.current.clear();
   };
 
   const continueGame = () => {
@@ -426,18 +424,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return false;
   };
 
-  /** 旬翻转：掷太后生病/自愈，应用效果并返回提示节拍（每旬至多一次）。 */
-  const rollTaihouIllness = (): DecreeReaction[] => {
-    const cal = store.getState().calendar;
-    const key = `${store.getState().rngSeed}:${cal.year}:${cal.month}:${cal.period}`;
-    if (tickedPeriods.current.has(key)) return [];
-    tickedPeriods.current.add(key);
-    const tick = buildTaihouIllnessTick(store.getState(), key);
-    if (!tick) return [];
-    const applied = store.applyEffects(db, tick.effects);
-    if (!applied.ok) return [];
-    return tick.beats;
-  };
 
   /** 进慈宁宫且太后病中：掷侍疾遭遇，命中即应用并串播。返回是否已起反应。 */
   const maybeShizhi = (): boolean => {
@@ -465,7 +451,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       if (!tributeShown) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
     }
     if (spend.ok) decreeBeats = [...decreeBeats, ...rollDaxuanAnnounce()];
-    if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };
 
@@ -668,9 +653,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const spend = store.dispatch({ type: "SKIP_REMAINDER" });
     if (!spend.ok) return;
     doAutosave();
-    const beats = rollTaihouIllness();
-    if (beats.length) playReactions(beats, true);
-    else runCheckpoints(true);
+    runCheckpoints(true);
   };
 
   // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。
@@ -828,7 +811,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         if (applied.ok) beats = plan.reactions;
       }
     }
-    if (rolledOver) beats = [...beats, ...rollTaihouIllness()];
     if (beats.length) playReactions(beats, rolledOver);
     else runCheckpoints(rolledOver);
   };
@@ -1118,13 +1100,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               // 若本场景消耗行动点导致转旬/转月，立刻触发 time_advance 事件，
               // 不必等玩家转换地图再 trigger。
               if (rolledOver) {
-                // 场景提交导致转旬：补掷太后生病（其余转旬路径走 spendAp/travel/restAlone）。
-                const illnessBeats = rollTaihouIllness();
-                if (illnessBeats.length) {
-                  const [first, ...rest] = illnessBeats;
-                  setReactionQueue((q) => [...q, ...rest]);
-                  setReaction(first!);
-                }
                 const t = pickNextEvent(db, store.getState(), "time_advance");
                 if (t && chainDepth.current < MAX_EVENT_CHAIN) {
                   chainDepth.current += 1;
@@ -1402,7 +1377,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         />
       )}
       {childReaction && (
-        <ChildReactionScreen
+        <CharacterReactionScreen
           db={db}
           store={store}
           registry={registry}

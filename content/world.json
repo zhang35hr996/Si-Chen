@@ -2,6 +2,7 @@
   "contentVersion": "0.1.0",
   "calendar": { "apMax": 6, "start": { "year": 1, "month": 1, "period": "early" } },
   "startingLocation": "zichendian",
+  "sovereign": { "startingAge": 18 },
   "startingResources": {
     "sovereign": { "health": 70, "diligence": 50, "prestige": 50, "martial": 50, "statecraft": 50, "cruelty": 20, "fatigue": 20, "regimeSecurity": 60 },
     "nation": { "military": 50, "treasury": 10000, "publicSupport": 50, "productivity": 50, "governance": 50, "consortClanPower": 30, "ministerLoyalty": 50, "corruption": 20, "clanDiscontent": 20, "rumor": 10 },

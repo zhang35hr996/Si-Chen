@@ -11,7 +11,7 @@ describe("createInitialState", () => {
 
   it("initializes the resource pillars with placeholder values", () => {
     const { resources } = createInitialState();
-    expect(resources.sovereign).toEqual({ health: 70, diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 });
+    expect(resources.sovereign).toEqual({ health: 70, healthStatus: "healthy", diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 });
     expect(resources.nation).toEqual({ military: 50, treasury: 10000, publicSupport: 50, productivity: 50, governance: 50, consortClanPower: 30, ministerLoyalty: 50, corruption: 20, clanDiscontent: 20, rumor: 10 });
     expect(resources.bloodline).toEqual({
       menstrualStatus: "normal",

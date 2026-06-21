@@ -3265,3 +3265,15 @@ button:active:enabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── 健康状态 chip ─────────────────────────────── */
+.health-chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 0.6rem;
+  font-size: 0.85em;
+  border: 1px solid #5c4d3a;
+}
+.health-chip[data-status="healthy"] { color: #8fd18f; }
+.health-chip[data-status="sick"] { color: #d6c07a; }
+.health-chip[data-status="critical"] { color: #d98a8a; }

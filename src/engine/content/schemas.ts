@@ -36,6 +36,15 @@ export const gameTimeShape = z.strictObject({
   dayIndex: z.number().int().min(0),
 });
 
+export const deathRecordSchema = z.strictObject({
+  diedAt: gameTimeShape,
+  cause: z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted"]),
+  originalRankId: idSchema,
+  originalTitle: nonEmpty.optional(),
+  posthumousRankId: idSchema.optional(),
+  posthumousEpithet: z.string().min(1).max(2).optional(),
+});
+
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
@@ -44,11 +53,15 @@ export const characterStandingSchema = z.strictObject({
   recoverUntilMonth: z.number().int().min(1).optional(),
   residence: idSchema.optional(),
   chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
-  ill: z.boolean().optional(),
   confined: z.boolean().optional(),
   affection: percent.optional(),
   palaceEnteredAt: gameTimeShape.optional(),
   availableFromMonth: z.number().int().min(1).optional(),
+  health: percent.optional(),
+  healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
+  ageAtEntry: z.number().int().min(0).optional(),
+  enteredAtYear: z.number().int().min(1).optional(),
+  deathRecord: deathRecordSchema.optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
@@ -121,6 +134,9 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
 );
 
 // ── effects (the single funnel — plan §6, fully discriminated) ────────
+
+const deathCauseSchema = z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted"]);
+
 export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("favor"), char: idSchema, delta }),
   z.strictObject({
@@ -212,12 +228,44 @@ export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("heir_adopt"), heirId: nonEmpty, fatherId: idSchema }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
   z.strictObject({ type: z.literal("heir_died"), heirId: nonEmpty }),
-  z.strictObject({ type: z.literal("set_taihou_illness"), ill: z.boolean() }),
   z.strictObject({
     type: z.literal("relocate"),
     char: idSchema,
     location: idSchema,
     chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]),
+  }),
+  z.strictObject({
+    type: z.literal("set_consort_health"),
+    char: idSchema,
+    healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
+    healthDelta: z.number().int().optional(),
+  }),
+  z.strictObject({
+    type: z.literal("set_taihou_health"),
+    healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
+    healthDelta: z.number().int().optional(),
+  }),
+  z.strictObject({
+    type: z.literal("set_heir_health"),
+    heirId: nonEmpty,
+    healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
+    healthDelta: z.number().int().optional(),
+  }),
+  z.strictObject({
+    type: z.literal("set_consort_posthumous"),
+    char: idSchema,
+    posthumousRankId: idSchema.optional(),
+    posthumousEpithet: z.string().min(1).max(2).optional(),
+  }),
+  z.strictObject({ type: z.literal("consort_decease"), char: idSchema, at: gameTimeShape, cause: deathCauseSchema }),
+  z.strictObject({ type: z.literal("heir_decease"), heirId: nonEmpty, at: gameTimeShape, cause: deathCauseSchema }),
+  z.strictObject({ type: z.literal("taihou_decease"), at: gameTimeShape, cause: deathCauseSchema }),
+  z.strictObject({
+    type: z.literal("enqueue_aftermath"),
+    id: nonEmpty,
+    kind: z.enum(["taihou", "consort", "heir"]),
+    subjectId: idSchema,
+    at: gameTimeShape,
   }),
 ]);
 
@@ -524,6 +572,9 @@ export const worldSchema = z.strictObject({
     }),
   }),
   startingLocation: idSchema,
+  sovereign: z.strictObject({
+    startingAge: z.number().int().min(0),
+  }),
   startingResources: z.strictObject({
     sovereign: z.strictObject({
       health: percent,

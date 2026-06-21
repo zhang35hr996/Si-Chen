@@ -10,7 +10,10 @@ import {
   idSchema,
   memoryKindSchema,
 } from "../content/schemas";
+
 import type { GameState } from "../state/types";
+
+const nonEmpty = z.string().min(1);
 
 const percent = z.number().int().min(0).max(100);
 
@@ -78,6 +81,7 @@ export const gameStateSchema = z.strictObject({
   resources: z.strictObject({
     sovereign: z.strictObject({
       health: percent,
+      healthStatus: z.enum(["healthy", "sick", "critical"]),
       diligence: percent,
       prestige: percent,
       martial: percent,
@@ -150,6 +154,7 @@ export const gameStateSchema = z.strictObject({
           ]),
           lifecycle: z.enum(["alive", "deceased"]),
           deceasedAt: gameTimeSchema.optional(),
+          healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
         }).superRefine((h, ctx) => {
           if (h.lifecycle === "alive" && h.deceasedAt !== undefined) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "alive heir must not have deceasedAt", path: ["deceasedAt"] });
@@ -180,7 +185,14 @@ export const gameStateSchema = z.strictObject({
       ),
     }),
   ),
-  taihou: z.strictObject({ ill: z.boolean() }),
+  taihou: z.strictObject({
+    health: percent,
+    healthStatus: z.enum(["healthy", "sick", "critical"]),
+    deceased: z.boolean().optional(),
+    diedAt: gameTimeSchema.optional(),
+    posthumousName: z.string().min(1).max(2).optional(),
+    mourningUntilDayExclusive: z.number().int().min(0).optional(),
+  }),
   eventLog: z.array(z.strictObject({ eventId: idSchema, firedAt: gameTimeSchema })),
   chronicle: z.array(
     z.strictObject({
@@ -218,6 +230,15 @@ export const gameStateSchema = z.strictObject({
     speakerId: idSchema, audienceId: idSchema, memoryId: z.string().min(1), mentionedAt: gameTimeSchema,
   })),
   sceneHistory: z.array(idSchema),
+  pendingAftermath: z.array(
+    z.strictObject({
+      id: nonEmpty,
+      kind: z.enum(["taihou", "consort", "heir"]),
+      subjectId: idSchema,
+      at: gameTimeSchema,
+      resolved: z.boolean(),
+    }),
+  ),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;
 
