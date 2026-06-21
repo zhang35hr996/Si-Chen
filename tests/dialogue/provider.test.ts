@@ -22,7 +22,9 @@ describe("assembleDialogueRequest carries the full future-AI context", () => {
     expect(request.speakerContext.profile.name).toBe("沈知白");
     expect(request.speakerContext.standing).toMatchObject({ rank: "fenghou", favor: 25 });
     expect(request.speakerContext.standing.selfRefs.toPlayer).toEqual(["臣后"]);
-    expect(request.speakerContext.relevantMemories).toEqual([]); // field rides along, v0 empty
+    // shen_zhibai has a permanent-retention authored memory that survives the retrieval threshold
+    expect(request.speakerContext.relevantMemories.length).toBeGreaterThan(0);
+    expect(request.speakerContext.relevantMemories[0]!.ownerId).toBe("shen_zhibai");
     expect(request.speakerContext.stances?.[0]?.charId).toBe("lu_huaijin");
     expect(request.etiquette.forbiddenTerms).toContain("父皇");
     expect(request.etiquette.addressRules).toHaveLength(22);

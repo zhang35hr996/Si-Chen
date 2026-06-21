@@ -12,6 +12,7 @@ import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState } from "../state/types";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
+import { buildMemoryContext } from "./memoryContext";
 import {
   rawDialogueResponseSchema,
   type DialogueLine,
@@ -47,7 +48,11 @@ export function assembleDialogueRequest(
       profile: character.profile,
       voice: character.voice,
       standing: { ...standing, selfRefs: rank.selfRefs },
-      relevantMemories: [], // retrieval is post-skeleton; the field rides along
+      relevantMemories: buildMemoryContext(
+        state,
+        { speakerId },
+        { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId },
+      ).activatedMemories,
       stances: character.stances ?? [],
     },
     etiquette: {
