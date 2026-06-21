@@ -17,9 +17,12 @@ interface Inclination {
 function baseInclination(event: EventReactionContext, r: SubjectRelation): Inclination {
   switch (event.eventType) {
     case "rank_changed":
+      if (event.direction !== "demote" && event.direction !== "promote") {
+        return { primary: "remain_reserved", emotion: 0, negativeOutward: false };
+      }
       if (event.direction === "demote") {
         if (ALLY(r)) {
-          const devoted = r.stance === "devoted" || r.respect >= 70;
+          const devoted = r.stance === "devoted";
           return devoted
             ? { primary: "defend", emotion: 70, negativeOutward: false }
             : { primary: "petition", emotion: 60, negativeOutward: false };

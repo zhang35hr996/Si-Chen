@@ -38,7 +38,7 @@ export interface RelationDiagnostic { code: "unknown_authored_attitude"; value: 
 export function deriveSubjectRelation(input: {
   charId: string;
   authoredAttitude?: string;
-  standingAffection?: number;  // 0–100 运行时 affection（侍君）
+  standingAffection?: number;  // −100..100 运行时 affection
   favorThreat?: number;        // 0–100 对方恩宠上升威胁度
 }): { relation: SubjectRelation; diagnostics: RelationDiagnostic[] } {
   const diagnostics: RelationDiagnostic[] = [];

@@ -53,6 +53,11 @@ describe("planReaction", () => {
     const p = planReaction({ relation: rel("敬爱"), disposition: DEFAULT_DISPOSITION, audience: consortPrivate, event: died });
     expect(p.primary).toBe("comfort");
   });
+  it("rank_changed 缺 direction → remain_reserved（不当 promote 处理）", () => {
+    const noDir = { eventType: "rank_changed", subjectId: "gu" } as EventReactionContext;
+    const p = planReaction({ relation: rel("交好"), disposition: DEFAULT_DISPOSITION, audience: consortPrivate, event: noDir });
+    expect(p.primary).toBe("remain_reserved");
+  });
   it("确定性 + 兜底（中性+搬迁 → remain_reserved/agree）", () => {
     const res: EventReactionContext = { eventType: "residence_changed", subjectId: "gu" };
     const p = planReaction({ relation: rel(""), disposition: DEFAULT_DISPOSITION, audience: consortPrivate, event: res });
