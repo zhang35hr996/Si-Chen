@@ -15,7 +15,7 @@ describe("createNewGameState", () => {
   });
 
   it("copies starting resources from world.json (bloodline gains empty heirs)", () => {
-    expect(state.resources.sovereign).toEqual({ health: 70, diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 });
+    expect(state.resources.sovereign).toEqual({ health: 70, healthStatus: "healthy", diligence: 50, prestige: 50, martial: 50, statecraft: 50, cruelty: 20, fatigue: 20, regimeSecurity: 60 });
     expect(state.resources.nation).toEqual({ military: 50, treasury: 10000, publicSupport: 50, productivity: 50, governance: 50, consortClanPower: 30, ministerLoyalty: 50, corruption: 20, clanDiscontent: 20, rumor: 10 });
     expect(state.resources.bloodline).toEqual({
       menstrualStatus: "normal",
@@ -26,7 +26,7 @@ describe("createNewGameState", () => {
   });
 
   it("seeds standing for characters with an initial standing", () => {
-    expect(state.standing["shen_zhibai"]).toEqual({ rank: "fenghou", favor: 25, affection: 50, palaceEnteredAt: { year: 1, month: 1, period: "early", dayIndex: 0 } });
+    expect(state.standing["shen_zhibai"]).toEqual({ rank: "fenghou", favor: 25, affection: 50, palaceEnteredAt: { year: 1, month: 1, period: "early", dayIndex: 0 }, health: 78, healthStatus: "healthy" });
     expect(state.standing["wei_sui"]).toEqual({ rank: "sili_zhang", favor: 40 });
     expect(state.standing["taihou"]).toBeUndefined();
   });

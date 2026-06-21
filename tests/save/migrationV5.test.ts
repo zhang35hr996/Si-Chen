@@ -17,10 +17,10 @@ describe("save migration v4 → v5 (属性系统重构)", () => {
       petName: "", education: { scholarship: 5, martial: 5, virtue: 5 },
       lifecycle: "alive",
     });
-    const v5 = createSaveData(db, state, "slot1");
+    const v6 = createSaveData(db, state, "slot1");
 
     // Simulate a v4 save: old court pillar + heirs lacking the new attribute fields.
-    const v4State = structuredClone(v5.state) as unknown as Record<string, unknown>;
+    const v4State = structuredClone(v6.state) as unknown as Record<string, unknown>;
     const resources = v4State.resources as Record<string, unknown>;
     delete resources.sovereign;
     delete resources.nation;
@@ -30,7 +30,13 @@ describe("save migration v4 → v5 (属性系统重构)", () => {
       delete h.health; delete h.talent; delete h.diligence;
       delete h.ambition; delete h.closeness; delete h.support; delete h.faction;
     }
-    const envelope = { ...v5, formatVersion: 4, state: v4State, checksum: checksumOf(v4State) };
+    // also strip out v5→v6 fields to simulate a true v4 save
+    delete v4State.pendingAftermath;
+    const taihou = v4State.taihou as Record<string, unknown>;
+    delete taihou.health;
+    delete taihou.healthStatus;
+    taihou.ill = false;
+    const envelope = { ...v6, formatVersion: 4, state: v4State, checksum: checksumOf(v4State) };
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(envelope));
 
     const loaded = readSlot(storage, db, "slot1");
@@ -44,5 +50,8 @@ describe("save migration v4 → v5 (属性系统重构)", () => {
     const heir = loaded.value.state.resources.bloodline.heirs[0]!;
     expect(heir.health).toBe(60);
     expect(heir.faction).toBe("none");
+    // v5→v6 fields
+    expect(loaded.value.state.taihou.health).toBe(70);
+    expect(loaded.value.state.taihou.healthStatus).toBe("healthy");
   });
 });

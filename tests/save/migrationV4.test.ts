@@ -8,24 +8,26 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 
 describe("save format v4", () => {
-  it("version is at least 5", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(5);
+  it("version is at least 6", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(6);
   });
 
-  it("migration v3 → v4: backfills taihou:{ill:false} when absent", () => {
+  it("migration v3 → v6: backfills taihou with health/healthStatus when absent", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
-    const v4 = createSaveData(db, state, "slot1");
+    const v6 = createSaveData(db, state, "slot1");
 
     // Simulate a v3 save that lacks the taihou key
-    const v3State = structuredClone(v4.state) as unknown as Record<string, unknown>;
+    const v3State = structuredClone(v6.state) as unknown as Record<string, unknown>;
     delete v3State.taihou;
-    const envelope = { ...v4, formatVersion: 3, state: v3State, checksum: checksumOf(v3State) };
+    delete v3State.pendingAftermath;
+    const envelope = { ...v6, formatVersion: 3, state: v3State, checksum: checksumOf(v3State) };
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(envelope));
 
     const loaded = readSlot(storage, db, "slot1");
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    expect(loaded.value.state.taihou).toEqual({ ill: false });
+    expect(loaded.value.state.taihou.health).toBe(70);
+    expect(loaded.value.state.taihou.healthStatus).toBe("healthy");
   });
 });
