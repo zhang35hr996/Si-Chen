@@ -130,6 +130,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const tickedPeriods = useRef<Set<string>>(new Set());
+  const shopRollover = useRef(false);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   // BGM effect: compute zone defensively (content may not be ok)
@@ -675,7 +676,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!spend.ok) return;
     setShopId(id);
     setView("shop");
+    doAutosave();
+    shopRollover.current = spend.value.rolledOver;
     // 节拍串播以 rolledOver=false 调用，确保播完后不切走商铺视图。
+    // 转旬 checkpoint 延迟到关店时执行（见 ShopScreen onClose）。
     playReactions(decreeBeats, false);
   };
 
@@ -884,7 +888,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {view === "shop" && shopId && (
         <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
-          onClose={() => { setShopId(null); setView("map"); }} />
+          onClose={() => {
+            setShopId(null);
+            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true); }
+            else { setView("map"); }
+          }} />
       )}
       {view === "freeview" && freeViewId && (
         <FreeViewScreen
