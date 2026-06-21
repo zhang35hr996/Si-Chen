@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
-import { getPresentAt } from "../../engine/characters/presence";
+import { getPresentAt, presentAt, absentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
@@ -73,7 +73,9 @@ export function LocationScreen({
     // Loader guarantees startingLocation exists; this is the render-side backstop.
     return <p className="screen-error">未知地点：{state.playerLocation}</p>;
   }
-  const present = getPresentAt(db, state, location.id);
+  const present = presentAt(db, state, location.id); // 此刻实际在场
+  const roster = getPresentAt(db, state, location.id); // 住处花名册（谁住这）
+  const absence = absentAt(db, state, location.id); // charId → 去向 locationId
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const eligible = getEligibleEvents(db, state, "location_enter");
   const canBedchamber = state.calendar.ap >= 1;
@@ -82,7 +84,7 @@ export function LocationScreen({
     location.id === "zichendian" && summonedConsortId ? db.characters[summonedConsortId] : undefined;
 
   // 居所宫殿（后宫）有住客侍君 → 视觉小说场景；设宫室的居所即便空置也进场景（显示 5 宫室槽）。
-  const sceneConsorts = location.zone === "hougong" ? present.filter((c) => c.kind === "consort") : [];
+  const sceneConsorts = location.zone === "hougong" ? roster.filter((c) => c.kind === "consort") : [];
   const showScene = sceneConsorts.length > 0 || hasChambers(location.id);
 
   const crumbs = breadcrumbFor(db, location.id);
@@ -106,6 +108,7 @@ export function LocationScreen({
           registry={registry}
           location={location}
           consorts={sceneConsorts}
+          absence={absence}
           focusConsortId={focusConsortId}
           onConverse={onConverse}
           onBedchamber={onBedchamber}

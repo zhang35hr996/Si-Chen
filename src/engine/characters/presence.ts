@@ -94,3 +94,14 @@ export function presentAt(db: ContentDB, state: GameState, locationId: string): 
         (db.ranks[a.initialStanding?.rank ?? ""]?.order ?? 0),
     );
 }
+
+/** 住客（住处花名册）中此刻不在 locationId 者 → 其当前所在。供缺席禀报用。 */
+export function absentAt(db: ContentDB, state: GameState, locationId: string): Record<string, string> {
+  const slot = shichenSlot(state.calendar);
+  const here = new Set(presentAt(db, state, locationId).map((c) => c.id));
+  const out: Record<string, string> = {};
+  for (const c of getPresentAt(db, state, locationId)) {
+    if (!here.has(c.id)) out[c.id] = consortLocationAt(db, state, c.id, slot);
+  }
+  return out;
+}

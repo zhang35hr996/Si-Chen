@@ -11,6 +11,8 @@ import type { CharacterContent, LocationContent } from "../../engine/content/sch
 import type { ChamberId, GameState } from "../../engine/state/types";
 import { CHAMBERS, chamberOf, hasChambers } from "../../engine/characters/chambers";
 import { canSummon } from "../../store/bedchamber";
+import { resolveDisplayName } from "../../engine/characters/standing";
+import { reportingAttendant } from "../../engine/characters/gongli";
 
 /** 恪守礼数的问候集；按 charId 确定性选取，避免僭越或失礼。 */
 const GREETINGS = ["恭迎陛下圣驾。", "陛下万福金安。", "臣侍恭候陛下多时了。", "见过陛下，陛下圣安。"];
@@ -26,6 +28,7 @@ export function CharacterScene({
   registry,
   location,
   consorts,
+  absence,
   focusConsortId,
   onConverse,
   onBedchamber,
@@ -39,6 +42,7 @@ export function CharacterScene({
   location: LocationContent;
   /** 该宫住客侍君（按位分降序）；首位为默认主角，>1 时提供切换。 */
   consorts: CharacterContent[];
+  absence?: Record<string, string | undefined>;
   focusConsortId?: string | null;
   onConverse?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
@@ -67,6 +71,20 @@ export function CharacterScene({
   const background = registry.resolveVariant(location.backgroundKey, "day", "background").url;
   // 对话/侍寝 与卡片同一门槛：有行动点且本旬可侍寝。
   const actionable = !!character && state.calendar.ap >= 1 && canSummon(state, character.id);
+
+  const awayTo = character ? absence?.[character.id] : undefined;
+  const awayName = character && standing ? resolveDisplayName(character, standing, rank) : "";
+  // 缺席时由该侍君贴身宫隶（当日确定）口吻禀告。
+  const servant = awayTo && character ? reportingAttendant(state.rngSeed, character.id, state.calendar.dayIndex) : null;
+  const whereLine =
+    awayTo === "kunninggong"
+      ? `${awayName}往坤宁宫向皇后请安去了。`
+      : awayTo === "yuhuayuan"
+        ? `${awayName}往御花园散心去了。`
+        : awayTo
+          ? `${awayName}此刻不在宫中。`
+          : null;
+  const awayLine = servant && whereLine ? `${servant.name}垂手禀道：「${whereLine}」` : whereLine;
 
   return (
     <section className="char-scene" aria-label={`${location.name} · ${character?.profile.name ?? "空置"}`}>
@@ -114,9 +132,9 @@ export function CharacterScene({
         {character ? (
           <img
             className="char-scene__sprite"
-            src={registry.portrait(character.portraitSet, "neutral").url}
-            alt={character.profile.name}
-            data-fallback={registry.portrait(character.portraitSet, "neutral").isFallback || undefined}
+            src={registry.portrait(servant ? servant.portraitSet : character.portraitSet, "neutral").url}
+            alt={servant ? servant.name : character.profile.name}
+            data-fallback={registry.portrait(servant ? servant.portraitSet : character.portraitSet, "neutral").isFallback || undefined}
           />
         ) : (
           <div className="char-scene__empty" aria-hidden="true">
@@ -129,71 +147,77 @@ export function CharacterScene({
         {character ? (
           <>
             <div className="char-scene__nameplate">
-              <span className="char-scene__name">{character.profile.name}</span>
+              <span className="char-scene__name">{servant ? servant.name : character.profile.name}</span>
               <span className="char-scene__sub">
-                {rank ? `${rank.name} · ` : ""}
+                {servant ? `${character.profile.name}的宫人 · ` : rank ? `${rank.name} · ` : ""}
                 {location.name}
               </span>
             </div>
-            <p className="char-scene__line">{greetingFor(character.id)}</p>
+            {awayLine ? (
+              <p className="char-scene__line char-scene__line--absent">{awayLine}</p>
+            ) : (
+              <>
+                <p className="char-scene__line">{greetingFor(character.id)}</p>
 
-            <div className="action-dock">
-              <div className="action-dock__primary">
-                {onConverse && actionable && (
-                  <button type="button" className="action-btn" onClick={() => onConverse(character.id)}>
-                    对话
-                  </button>
-                )}
-                <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
-                  查看详情
-                </button>
-                {(onManage || onRelocate) && character.id !== "shen_zhibai" && (
-                  <div className="action-more">
-                    <button
-                      type="button"
-                      className="action-btn"
-                      aria-expanded={moreOpen}
-                      onClick={() => setMoreOpen((v) => !v)}
-                    >
-                      更多 ▾
+                <div className="action-dock">
+                  <div className="action-dock__primary">
+                    {onConverse && actionable && (
+                      <button type="button" className="action-btn" onClick={() => onConverse(character.id)}>
+                        对话
+                      </button>
+                    )}
+                    <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
+                      查看详情
                     </button>
-                    {moreOpen && (
-                      <div className="action-more__menu">
-                        {onManage && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMoreOpen(false);
-                              onManage(character.id);
-                            }}
-                          >
-                            管理位分 / 封号
-                          </button>
-                        )}
-                        {onRelocate && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMoreOpen(false);
-                              onRelocate(character.id);
-                            }}
-                          >
-                            搬迁
-                          </button>
+                    {(onManage || onRelocate) && character.id !== "shen_zhibai" && (
+                      <div className="action-more">
+                        <button
+                          type="button"
+                          className="action-btn"
+                          aria-expanded={moreOpen}
+                          onClick={() => setMoreOpen((v) => !v)}
+                        >
+                          更多 ▾
+                        </button>
+                        {moreOpen && (
+                          <div className="action-more__menu">
+                            {onManage && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreOpen(false);
+                                  onManage(character.id);
+                                }}
+                              >
+                                管理位分 / 封号
+                              </button>
+                            )}
+                            {onRelocate && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreOpen(false);
+                                  onRelocate(character.id);
+                                }}
+                              >
+                                搬迁
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-              <div className="action-dock__highlight">
-                {onBedchamber && actionable && (
-                  <button type="button" className="action-btn action-btn--key" onClick={() => onBedchamber(character.id)}>
-                    侍寝
-                  </button>
-                )}
-              </div>
-            </div>
+                  <div className="action-dock__highlight">
+                    {onBedchamber && actionable && (
+                      <button type="button" className="action-btn action-btn--key" onClick={() => onBedchamber(character.id)}>
+                        侍寝
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div className="char-scene__nameplate">
