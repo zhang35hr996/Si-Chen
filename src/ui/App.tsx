@@ -211,6 +211,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     // 进殿即扣 apCost；满点扣点不会转旬/跨月，故 healthOutcome 必为 null（统一入口仍走一遍）。
     const spend = store.advanceTime(db, { type: "SPEND_AP", amount: ev.apCost });
     if (!spend.ok) return;
+    if (spend.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     const cal = store.getState().calendar;
     const queue = pickCourtAffairs(db, `court:${store.getState().rngSeed}:${cal.dayIndex}`);
     doAutosave(); // 行动点已扣，先落盘，再进事务

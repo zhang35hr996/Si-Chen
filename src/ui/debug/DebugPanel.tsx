@@ -154,8 +154,16 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
   const [, bumpReport] = useState(0);
 
   const spendAp = (amount: number) => {
-    const result = store.dispatch({ type: "SPEND_AP", amount });
-    setLastRejection(result.ok ? null : `${formatErrorTag(result.error)} — ${result.error.message}`);
+    if (db) {
+      // Route through the unified time entry so the monthly health tick / gameOver run.
+      const result = store.advanceTime(db, { type: "SPEND_AP", amount });
+      setLastRejection(result.ok ? null : result.error.map((e) => `${formatErrorTag(e)} — ${e.message}`).join("; "));
+    } else {
+      // NOTE: intentional raw dispatch — debug AP does NOT run the monthly health tick
+      // (db not yet loaded; advanceTime requires a ContentDB).
+      const result = store.dispatch({ type: "SPEND_AP", amount });
+      setLastRejection(result.ok ? null : `${formatErrorTag(result.error)} — ${result.error.message}`);
+    }
   };
 
   const gameStarted = Object.keys(state.standing).length > 0;
