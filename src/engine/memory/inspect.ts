@@ -16,11 +16,11 @@ export function listMemories(state: GameState, charId: string): readonly MemoryE
 /** Whole-store overview for the debug panel header. */
 export function memoryOverview(
   state: GameState,
-): { charId: string; count: number; protectedCount: number }[] {
+): { charId: string; count: number; permanentCount: number }[] {
   return Object.entries(state.memories).map(([charId, store]) => ({
     charId,
     count: store.entries.length,
-    protectedCount: store.entries.filter((e) => e.protected).length,
+    permanentCount: store.entries.filter((e) => e.retention === "permanent").length,
   }));
 }
 
@@ -31,6 +31,5 @@ export function memoryAgeDays(entry: MemoryEntry, now: GameTime): number {
 
 /** Human label for the debug panel's origin column. */
 export function memoryOriginLabel(entry: MemoryEntry): string {
-  if (entry.source === "authored") return "授定背景";
-  return entry.originSceneId ? `场景 ${entry.originSceneId}` : "效果批";
+  return entry.sourceEventId ? `事件 ${entry.sourceEventId}` : "授定/直写";
 }

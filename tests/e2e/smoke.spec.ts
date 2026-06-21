@@ -48,7 +48,7 @@ test("vertical slice: new game → 登基 → event → choose → save → relo
   expect(afterCommit.flags.rite_scheduled).toBe(true);
   expect(afterCommit.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
   const siliMemories = afterCommit.memories.wei_sui?.entries ?? [];
-  expect(siliMemories.some((m) => m.tags.includes("rite"))).toBe(true);
+  expect(siliMemories.some((m) => m.triggerTags.includes("rite"))).toBe(true);
 
   // ── manual save to a slot ───────────────────────────────────────────
   await page.getByRole("button", { name: "设置" }).click();

@@ -15,7 +15,7 @@ function stateAt(year: number): { state: GameState; heir: Heir } {
   const heir: Heir = {
     id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
     birthAt: makeGameTime(1, 1, "early"), favor: 50, legitimate: true,
-    petName: "团团", education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none",
+    petName: "团团", education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
   };
   s.resources.bloodline.heirs.push(heir);
   return { state: s, heir };

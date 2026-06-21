@@ -44,12 +44,15 @@
           "type": "memory",
           "char": "taihou",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "皇帝来慈宁宫问安叙话，哀家心里宽慰。",
-            "salience": 45,
-            "tags": ["player", "taihou"],
-            "participants": ["player", "taihou"],
-            "locationId": "cining_gong"
+            "strength": 45,
+            "retention": "fast",
+            "subjectIds": ["player", "taihou"],
+            "perspective": "witness",
+            "triggerTags": ["taihou"],
+            "unresolved": false,
+            "emotions": { "relief": 30 }
           }
         }
       ]

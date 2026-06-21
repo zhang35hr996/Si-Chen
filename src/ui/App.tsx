@@ -377,11 +377,21 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         setGiftItemId(action.itemId);
         setPrompt(null);
         break;
-      case "huntJoin":
+      case "huntJoin": {
         store.dispatch({ type: "SPEND_AP", amount: 1 });
-        store.applyAutumnHunt(`hunt:${store.getState().rngSeed}:${store.getState().calendar.year}`);
+        const furs = store.applyAutumnHunt(`hunt:${store.getState().rngSeed}:${store.getState().calendar.year}`);
+        const counts = new Map<string, number>();
+        for (const id of furs) counts.set(id, (counts.get(id) ?? 0) + 1);
+        const summary = [...counts].map(([id, n]) => `${db.items[id]?.name ?? id}×${n}`).join("、");
         setPrompt(null);
+        // 秋猎归来：乘风在围场（qiulie 背景）汇报所获皮毛。
+        setReaction({
+          speakerId: "cheng_feng",
+          lines: [`陛下今秋围猎尽兴，猎得${summary}，已尽数收入库房。`],
+          backgroundKey: "bg.qiulie",
+        });
         break;
+      }
       case "huntDecline":
         store.declineAutumnHunt();
         setPrompt(null);

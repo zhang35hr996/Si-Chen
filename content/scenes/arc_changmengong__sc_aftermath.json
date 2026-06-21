@@ -19,12 +19,15 @@
           "type": "memory",
           "char": "wenya",
           "entry": {
-            "kind": "opinion",
+            "kind": "impression",
             "summary": "陛下一念之恩，温雅暗自生出复见之望。",
-            "salience": 50,
-            "tags": ["player", "hopeful"],
-            "participants": ["player", "wenya"],
-            "locationId": "changmengong"
+            "strength": 50,
+            "retention": "slow",
+            "subjectIds": ["player", "wenya"],
+            "perspective": "witness",
+            "triggerTags": ["hopeful"],
+            "unresolved": true,
+            "emotions": { "joy": 25 }
           }
         }
       ],

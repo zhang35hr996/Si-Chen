@@ -7,9 +7,13 @@
 import { z } from "zod";
 import type { GameTime } from "../calendar/time";
 import type { CharacterContent, CharacterRank } from "../content/schemas";
+import type { BeliefProjection } from "../chronicle/belief";
 import type { GameError } from "../infra/errors";
 import type { Result } from "../infra/result";
 import type { CharacterStanding, MemoryEntry } from "../state/types";
+import { proposedClaimSchema, type ProposedClaim } from "./claims";
+import type { DialogueAudienceContext } from "./audience";
+import type { ReactionPlan } from "./reactionTypes";
 
 export interface DialogueRequest {
   speakerId: string;
@@ -20,7 +24,7 @@ export interface DialogueRequest {
     profile: CharacterContent["profile"];
     voice: CharacterContent["voice"];
     standing: CharacterStanding & { selfRefs: CharacterRank["selfRefs"] };
-    /** v0: always [] — retrieval lands with the real provider (plan §7). */
+    /** 由激活管线填充（decay → retrievalScore → rankCandidates，默认 topN 5）。 */
     relevantMemories: MemoryEntry[];
     stances: { charId: string; attitude: string }[];
   };
@@ -49,14 +53,17 @@ export const rawDialogueResponseSchema = z.strictObject({
       }),
     )
     .max(4),
+  proposedClaims: z.array(proposedClaimSchema).default([]),
 });
 export type RawDialogueResponse = z.infer<typeof rawDialogueResponseSchema>;
+/** Input type for provider.generate — proposedClaims is optional (defaulted by parser). */
+export type RawDialogueResponseInput = z.input<typeof rawDialogueResponseSchema>;
 
 export interface DialogueProvider {
   readonly id: string;
   /** scripted providers echo authored content; generative ones invent it. */
   readonly kind: "scripted" | "generative";
-  generate(request: DialogueRequest): Promise<Result<RawDialogueResponse, GameError>>;
+  generate(request: DialogueRequest): Promise<Result<RawDialogueResponseInput, GameError>>;
 }
 
 /** What the UI renders — it never sees scene nodes. */
@@ -69,3 +76,14 @@ export interface DialogueLine {
   choices: { id: string; text: string; tone?: string }[];
   meta: { generated: boolean; degraded: boolean };
 }
+
+export interface DialoguePolicyContext {
+  audience: DialogueAudienceContext;
+  reactionPlan?: ReactionPlan;
+  beliefProjection: BeliefProjection;
+  offeredContextIds: ReadonlySet<string>;
+  now: GameTime;
+}
+
+// Re-export ProposedClaim so callers can import from types without reaching into claims
+export type { ProposedClaim };

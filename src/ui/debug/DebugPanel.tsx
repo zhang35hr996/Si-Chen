@@ -74,10 +74,10 @@ function MemoryBrowser({ db, state }: { db?: ContentDB; state: GameState }) {
         {entries.map((entry) => (
           <li key={entry.id}>
             <span className="memory-browser__meta">
-              {entry.id} · {entry.kind} · 显著 {entry.salience} · {memoryAgeDays(entry, now)} 行动日前 ·{" "}
+              {entry.id} · {entry.kind} · 强度 {entry.strength} · {memoryAgeDays(entry, now)} 行动日前 ·{" "}
               {memoryOriginLabel(entry)}
-              {entry.protected ? " · 🔒" : ""}
-              {entry.tags.length > 0 ? ` · #${entry.tags.join(" #")}` : ""}
+              {entry.retention === "permanent" ? " · 🔒" : ""}
+              {entry.triggerTags.length > 0 ? ` · #${entry.triggerTags.join(" #")}` : ""}
             </span>
             <span className="memory-browser__summary">{entry.summary}</span>
           </li>
@@ -172,11 +172,15 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
               type: "memory",
               char: firstCharId,
               entry: {
-                kind: "opinion",
+                kind: "impression",
                 summary: "（调试）陛下方才在调试面板里拨弄了一下人心。",
-                salience: 10,
-                tags: ["debug"],
-                participants: ["player", firstCharId],
+                strength: 10,
+                retention: "fast",
+                subjectIds: ["player", firstCharId],
+                perspective: "witness",
+                triggerTags: ["debug"],
+                unresolved: false,
+                emotions: {},
               },
             },
           ]

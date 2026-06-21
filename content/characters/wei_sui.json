@@ -22,12 +22,15 @@
   "initialStanding": { "rank": "sili_zhang", "favor": 40 },
   "initialMemories": [
     {
-      "kind": "fact_learned",
+      "kind": "episodic",
       "summary": "本月下旬传月祭仪的仪程尚未得陛下御批，礼不可误期。",
-      "salience": 60,
-      "tags": ["rite", "duty"],
-      "participants": ["wei_sui"],
-      "protected": true
+      "strength": 60,
+      "retention": "permanent",
+      "subjectIds": ["wei_sui"],
+      "perspective": "actor",
+      "triggerTags": ["rite", "duty"],
+      "unresolved": true,
+      "emotions": {}
     }
   ],
   "secrets": []

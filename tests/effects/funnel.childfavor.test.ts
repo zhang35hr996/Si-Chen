@@ -19,7 +19,7 @@ function withHeir(favor = 50): GameState {
     favor,
     legitimate: true,
     petName: "",
-    education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none",
+    education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
   });
   return s;
 }

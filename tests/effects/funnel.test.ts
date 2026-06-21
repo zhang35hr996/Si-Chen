@@ -64,18 +64,22 @@ describe("valid effects apply", () => {
     expect(next.resources.bloodline.menstrualStatus).toBe("irregular");
   });
 
-  it("memory appends: monotonic id, GameTime stamp, scene_outcome source, never protected", () => {
+  it("memory appends: monotonic id, ownerId, GameTime stamp, new fields", () => {
     const state = fresh(); // lu_huaijin already has mem_..._000001 authored
     const next = expectApplied(state, [
       {
         type: "memory",
         char: "lu_huaijin",
         entry: {
-          kind: "event",
+          kind: "episodic",
           summary: "测试记忆。",
-          salience: 40,
-          tags: ["test"],
-          participants: ["player", "lu_huaijin"],
+          strength: 40,
+          retention: "fast",
+          subjectIds: ["player", "lu_huaijin"],
+          perspective: "witness",
+          triggerTags: ["test"],
+          unresolved: false,
+          emotions: {},
         },
       },
     ]);
@@ -83,8 +87,9 @@ describe("valid effects apply", () => {
     expect(store.entries).toHaveLength(2);
     const entry = store.entries[1]!;
     expect(entry.id).toBe("mem_lu_huaijin_000002");
-    expect(entry.source).toBe("scene_outcome");
-    expect(entry.protected).toBe(false);
+    expect(entry.ownerId).toBe("lu_huaijin");
+    expect(entry.strength).toBe(40);
+    expect(entry.retention).toBe("fast");
     expect(entry.createdAt).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
     expect("ap" in entry.createdAt).toBe(false);
     expect(store.nextSeq).toBe(3);
@@ -101,10 +106,10 @@ describe("valid effects apply", () => {
 describe("invalid effects reject", () => {
   const cases: [string, unknown][] = [
     ["unknown favor target", { type: "favor", char: "char_ghost", delta: 2 }],
-    ["unknown memory target", { type: "memory", char: "char_ghost", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"] } }],
+    ["unknown memory target", { type: "memory", char: "char_ghost", entry: { kind: "episodic", summary: "x", strength: 1, retention: "fast", subjectIds: ["player"], perspective: "witness", triggerTags: [], unresolved: false, emotions: {} } }],
     ["illegal pillar/field pair", { type: "resource", pillar: "sovereign", field: "harmony", delta: 1 }],
     ["oversized single delta", { type: "favor", char: "shen_zhibai", delta: 40 }],
-    ["protected runtime memory", { type: "memory", char: "shen_zhibai", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"], protected: true } }],
+    ["old v0 salience field rejected by schema", { type: "memory", char: "shen_zhibai", entry: { kind: "event", summary: "x", salience: 1, tags: [], participants: ["player"] } }],
     ["empty flag key", { type: "flag", key: "", value: 1 }],
     ["set_rank to 凤后 cap (fenghou) is rejected", { type: "set_rank", char: "shen_zhibai", rank: "fenghou" }],
     ["garbage", { hello: "world" }],

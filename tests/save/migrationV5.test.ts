@@ -15,6 +15,7 @@ describe("save migration v4 → v5 (属性系统重构)", () => {
       id: "heir_000001", sex: "daughter", fatherId: null, bearer: "sovereign",
       birthAt: { year: 1, month: 1, period: "early", dayIndex: 0 }, favor: 50, legitimate: true,
       petName: "", education: { scholarship: 5, martial: 5, virtue: 5 },
+      lifecycle: "alive",
     });
     const v5 = createSaveData(db, state, "slot1");
 
