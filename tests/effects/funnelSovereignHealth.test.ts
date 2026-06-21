@@ -14,6 +14,8 @@ describe("set_sovereign_health", () => {
     const db = loadTestContent(); const s = createNewGameState(db);
     const r = applyEffects(db, s, [{ type: "set_sovereign_health", healthDelta: -100, healthStatus: "critical" }]);
     expect(r.ok).toBe(true);
-    if (r.ok) { expect(r.value.resources.sovereign.health).toBe(0); expect(r.value.resources.sovereign.healthStatus).toBe("critical"); }
+    if (!r.ok) return;
+    expect(r.value.resources.sovereign.health).toBe(0);
+    expect(r.value.resources.sovereign.healthStatus).toBe("critical");
   });
 });

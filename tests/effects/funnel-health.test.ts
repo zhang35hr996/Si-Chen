@@ -24,7 +24,9 @@ describe("health funnel effects", () => {
     // re-death is a no-op (already deceased; deathRecord preserved)
     const before = JSON.stringify(r1.value.standing[id]!.deathRecord);
     const r2 = applyEffects(db, r1.value, [{ type: "consort_decease", char: id, at, cause: "scripted" }]);
-    if (r2.ok) expect(JSON.stringify(r2.value.standing[id]!.deathRecord)).toBe(before);
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+    expect(JSON.stringify(r2.value.standing[id]!.deathRecord)).toBe(before);
   });
 
   it("set_taihou_health clamps and sets status", () => {

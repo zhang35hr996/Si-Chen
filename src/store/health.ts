@@ -61,8 +61,8 @@ function currentOf(
 
 /**
  * Build the health-mutation effect for a given subject.
- * For sovereign the `resource` effect delta is capped to ±10 (schema limit);
- * the outcome's nextHealth is still computed from the raw delta.
+ * Sovereign emits `set_sovereign_health` (uncapped); clamping to 0–100 happens
+ * in the apply handler. No ±10 cap remains.
  */
 function setHealthEffect(
   s: HealthSubject,
