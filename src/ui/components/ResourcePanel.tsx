@@ -4,7 +4,7 @@
 import type { GameState } from "../../engine/state/types";
 import { Drawer } from "./Drawer";
 import { DescriptorStat } from "./DescriptorStat";
-import { formatCoins } from "../screens/StorehouseScreen";
+import { formatCoins } from "../format";
 
 function NumberLine({ label, value }: { label: string; value: number }) {
   return (

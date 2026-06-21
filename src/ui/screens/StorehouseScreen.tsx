@@ -12,12 +12,9 @@ import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import type { RecipientKind } from "../../store/treasury";
 import { resolveDisplayName } from "../../engine/characters/standing";
+import { formatCoins } from "../format";
 
 // ── Pure helpers ─────────────────────────────────────────────────────────
-
-export function formatCoins(n: number): string {
-  return n.toLocaleString("en-US");
-}
 
 export interface BestowTarget {
   id: string;

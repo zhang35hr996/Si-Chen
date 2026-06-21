@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatCoins, bestowTargets } from "../../src/ui/screens/StorehouseScreen";
+import { bestowTargets } from "../../src/ui/screens/StorehouseScreen";
+import { formatCoins } from "../../src/ui/format";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 
