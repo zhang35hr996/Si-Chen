@@ -114,41 +114,8 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     }
     return { ...env, formatVersion: 5, state, checksum: checksumOf(state) };
   },
-  // v5 → v6: 健康/病情/身后事系统。taihou {ill} → {health, healthStatus}；
-  // sovereign 补 healthStatus；侍君 standing 补 health/healthStatus；新增 pendingAftermath。
-  5: (old) => {
-    const env = old as SaveEnvelope;
-    const state = structuredClone(env.state) as Record<string, unknown>;
-    // 太后
-    const taihou = (state.taihou ?? {}) as Record<string, unknown>;
-    if ("ill" in taihou) {
-      delete taihou.ill;
-    }
-    if (taihou.health === undefined) taihou.health = 70;
-    if (taihou.healthStatus === undefined) taihou.healthStatus = "healthy";
-    state.taihou = taihou;
-    // 皇帝
-    const resources = (state.resources ?? {}) as Record<string, unknown>;
-    const sovereign = (resources.sovereign ?? {}) as Record<string, unknown>;
-    if (sovereign.healthStatus === undefined) sovereign.healthStatus = "healthy";
-    resources.sovereign = sovereign;
-    state.resources = resources;
-    // pendingAftermath
-    if (state.pendingAftermath === undefined) state.pendingAftermath = [];
-    // standing: add health/healthStatus for consort entries that lack them
-    const standing = (state.standing ?? {}) as Record<string, Record<string, unknown>>;
-    for (const st of Object.values(standing)) {
-      if (st.health === undefined && st.favor !== undefined) {
-        // only consort standings have favor; skip officials (no health system)
-        // can't tell consort from official here, so only add if standing has palaceEnteredAt or affection
-        if (st.palaceEnteredAt !== undefined || st.affection !== undefined) {
-          st.health = 100;
-          st.healthStatus = "healthy";
-        }
-      }
-    }
-    return { ...env, formatVersion: 6, state, checksum: checksumOf(state) };
-  },
+  // v5 → v6 migration deliberately omitted (no-save-backcompat policy).
+  // A v5 save hits the missing MIGRATIONS[5] check and quarantines.
 };
 
 export interface SaveSystemOptions {
