@@ -14,6 +14,13 @@ import { DescriptorStat } from "./DescriptorStat";
 
 type Tab = "overview" | "attrs" | "history" | "children" | "relations";
 
+export function effectiveAffection(
+  hidden: { affection: number },
+  standing?: { affection?: number },
+): number {
+  return standing?.affection ?? hidden.affection;
+}
+
 const TABS: Array<[Tab, string]> = [
   ["overview", "总览"],
   ["attrs", "属性"],
@@ -115,7 +122,7 @@ export function CharacterProfileDrawer({
           {character.hidden && (
             <>
               <h3 className="profile-h">暗属性（开发期可见）</h3>
-              <DescriptorStat label="情意" scale="affection" value={character.hidden.affection} />
+              <DescriptorStat label="情意" scale="affection" value={effectiveAffection(character.hidden, standing)} />
               <DescriptorStat label="恐惧" scale="fear" value={character.hidden.fear} />
               <DescriptorStat label="野心" scale="ambition" value={character.hidden.ambition} kind="consort" />
               <DescriptorStat label="母家忠心" scale="loyalty" value={maternalLoyalty(state, character)} />
