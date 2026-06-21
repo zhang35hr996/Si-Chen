@@ -10,6 +10,7 @@ import type { GameState } from "../../engine/state/types";
 import { getCharacterLocation } from "../../engine/characters/presence";
 import { familyText, maternalLoyalty, maternalPower } from "../../engine/officials/derive";
 import { Drawer } from "./Drawer";
+import { DescriptorStat } from "./DescriptorStat";
 
 type Tab = "overview" | "attrs" | "history" | "children" | "relations";
 
@@ -20,18 +21,6 @@ const TABS: Array<[Tab, string]> = [
   ["children", "子嗣"],
   ["relations", "关系"],
 ];
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="profile-stat">
-      <span className="profile-stat__label">{label}</span>
-      <span className="profile-stat__bar">
-        <span className="profile-stat__fill" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </span>
-      <span className="profile-stat__val">{value}</span>
-    </div>
-  );
-}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -111,14 +100,14 @@ export function CharacterProfileDrawer({
           {attrs ? (
             <>
               <h3 className="profile-h">才貌</h3>
-              <Stat label="容貌" value={attrs.appearance} />
+              <DescriptorStat label="容貌" scale="appearance" value={attrs.appearance} />
               <Field label="家世" value={familyText(db, state, character)} />
               <dl className="profile-fields">
                 <Field label="特长" value={attrs.specialty} />
                 <Field label="喜好" value={attrs.likes.join("、")} />
               </dl>
               <h3 className="profile-h">身体</h3>
-              <Stat label="健康" value={attrs.health} />
+              <DescriptorStat label="健康" scale="health" value={attrs.health} />
             </>
           ) : (
             <p className="profile-empty">此人无养成属性。</p>
@@ -126,15 +115,15 @@ export function CharacterProfileDrawer({
           {character.hidden && (
             <>
               <h3 className="profile-h">暗属性（开发期可见）</h3>
-              <Stat label="情意" value={character.hidden.affection} />
-              <Stat label="恐惧" value={character.hidden.fear} />
-              <Stat label="野心" value={character.hidden.ambition} />
-              <Stat label="母家忠心" value={maternalLoyalty(state, character)} />
-              <Stat label="母家权势" value={maternalPower(db, state, character)} />
+              <DescriptorStat label="情意" scale="affection" value={character.hidden.affection} />
+              <DescriptorStat label="恐惧" scale="fear" value={character.hidden.fear} />
+              <DescriptorStat label="野心" scale="ambition" value={character.hidden.ambition} kind="consort" />
+              <DescriptorStat label="母家忠心" scale="loyalty" value={maternalLoyalty(state, character)} />
+              <DescriptorStat label="母家权势" scale="power" value={maternalPower(db, state, character)} />
             </>
           )}
           <h3 className="profile-h">与皇帝</h3>
-          {standing ? <Stat label="恩宠" value={standing.favor} /> : <p className="profile-empty">尚未查明。</p>}
+          {standing ? <DescriptorStat label="恩宠" scale="favor" value={standing.favor} kind="consort" /> : <p className="profile-empty">尚未查明。</p>}
         </div>
       )}
 
