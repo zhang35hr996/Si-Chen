@@ -16,6 +16,7 @@ export interface HealthChangeInput {
   subject: HealthSubject;
   healthDelta?: number;
   healthStatus?: HealthStatus;
+  forceDeath?: boolean;
   cause: DeathCause;
   at: GameTime;
 }
@@ -32,9 +33,6 @@ export interface HealthChangeOutcome {
 }
 
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
-
-/** Clamp delta to the schema-allowed range for content effects (±10). */
-const clampDelta = (n: number) => Math.min(10, Math.max(-10, n));
 
 function currentOf(
   state: GameState,
@@ -74,10 +72,9 @@ function setHealthEffect(
   switch (s.kind) {
     case "sovereign":
       return {
-        type: "resource",
-        pillar: "sovereign",
-        field: "health",
-        delta: clampDelta(rawDelta),
+        type: "set_sovereign_health",
+        ...(rawDelta !== 0 ? { healthDelta: rawDelta } : {}),
+        ...(status ? { healthStatus: status } : {}),
       };
     case "taihou":
       return {
@@ -124,19 +121,26 @@ function deceaseEffects(
   };
 }
 
+function isDeceased(state: GameState, s: HealthSubject): boolean {
+  if (s.kind === "taihou") return state.taihou.deceased === true;
+  if (s.kind === "consort") return state.standing[s.id]?.lifecycle === "deceased";
+  if (s.kind === "heir") return state.resources.bloodline.heirs.find((h) => h.id === s.id)?.lifecycle === "deceased";
+  return false; // sovereign death ends the game; never re-planned
+}
+
 export function planHealthChange(
   state: GameState,
   input: HealthChangeInput,
 ): { effects: EventEffect[]; outcome: HealthChangeOutcome } {
   const cur = currentOf(state, input.subject);
-  if (!cur) {
+  if (!cur || isDeceased(state, input.subject)) {
     return {
       effects: [],
       outcome: {
-        previousHealth: 0,
-        nextHealth: 0,
-        previousStatus: "healthy",
-        nextStatus: "healthy",
+        previousHealth: cur?.health ?? 0,
+        nextHealth: cur?.health ?? 0,
+        previousStatus: cur?.status ?? "healthy",
+        nextStatus: cur?.status ?? "healthy",
         died: false,
       },
     };
@@ -145,9 +149,10 @@ export function planHealthChange(
   const delta = input.healthDelta ?? 0;
   const nextHealth = clamp(cur.health + delta);
   const nextStatus = input.healthStatus ?? cur.status;
-  const died = nextHealth <= 0;
+  const died = input.forceDeath === true || nextHealth <= 0;
 
-  const effects: EventEffect[] = [setHealthEffect(input.subject, delta, input.healthStatus)];
+  const effects: EventEffect[] = [];
+  if (delta !== 0 || input.healthStatus !== undefined) effects.push(setHealthEffect(input.subject, delta, input.healthStatus));
 
   const outcome: HealthChangeOutcome = {
     previousHealth: cur.health,

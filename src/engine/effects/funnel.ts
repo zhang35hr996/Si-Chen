@@ -62,15 +62,38 @@ export function validateEffects(
       case "resource":
       case "set_bloodline_status":
       case "flag":
+      case "set_sovereign_health":
       case "set_taihou_health":
-      case "set_consort_health":
-      case "set_heir_health":
-      case "set_consort_posthumous":
-      case "consort_decease":
-      case "heir_decease":
       case "taihou_decease":
       case "enqueue_aftermath":
         break; // fully constrained by the schema
+      case "set_consort_health":
+      case "consort_decease": {
+        const ch = (effect as { char: string }).char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        if (!c || c.kind !== "consort" || !state.standing[ch]) bad(index, "BAD_EFFECT_TARGET", `effect needs a consort with standing: "${ch}"`, { char: ch });
+        else if (state.standing[ch]!.lifecycle === "deceased" && effect.type === "set_consort_health") bad(index, "BAD_EFFECT_TARGET", `set_consort_health on deceased consort: "${ch}"`, { char: ch });
+        break;
+      }
+      case "set_consort_posthumous": {
+        const ch = (effect as { char: string }).char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        const st = state.standing[ch];
+        if (!c || c.kind !== "consort" || !st || st.lifecycle !== "deceased" || !st.deathRecord)
+          bad(index, "BAD_EFFECT_TARGET", `set_consort_posthumous needs a deceased consort with deathRecord: "${ch}"`, { char: ch });
+        break;
+      }
+      case "set_heir_health": {
+        const h = state.resources.bloodline.heirs.find((x) => x.id === (effect as { heirId: string }).heirId);
+        if (!h) bad(index, "BAD_EFFECT_TARGET", `set_heir_health: no such heir "${(effect as { heirId: string }).heirId}"`, { heirId: (effect as { heirId: string }).heirId });
+        else if (h.lifecycle === "deceased") bad(index, "BAD_EFFECT_TARGET", `set_heir_health on deceased heir "${h.id}"`, { heirId: h.id });
+        break;
+      }
+      case "heir_decease": {
+        const h = state.resources.bloodline.heirs.find((x) => x.id === (effect as { heirId: string }).heirId);
+        if (!h) bad(index, "BAD_EFFECT_TARGET", `heir_decease: no such heir "${(effect as { heirId: string }).heirId}"`, { heirId: (effect as { heirId: string }).heirId });
+        break; // already-deceased heir is allowed (apply case is idempotent)
+      }
       case "set_rank": {
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
@@ -515,6 +538,11 @@ export function applyEffects(
         heir.deceasedAt = now;
         break;
       }
+      case "set_sovereign_health": {
+        if (effect.healthDelta !== undefined) next.resources.sovereign.health = clampPct(next.resources.sovereign.health + effect.healthDelta);
+        if (effect.healthStatus !== undefined) next.resources.sovereign.healthStatus = effect.healthStatus;
+        break;
+      }
       case "set_consort_health": {
         const st = next.standing[effect.char]!;
         if (effect.healthDelta !== undefined) st.health = clampPct((st.health ?? 100) + effect.healthDelta);
@@ -543,20 +571,22 @@ export function applyEffects(
         break;
       }
       case "consort_decease": {
-        const st = next.standing[effect.char]!;
-        const rank = st.rank;
-        st.lifecycle = "deceased";
-        st.deathRecord = {
-          diedAt: effect.at,
-          cause: effect.cause,
-          originalRankId: rank,
-          ...(st.title !== undefined ? { originalTitle: st.title } : {}),
-        };
+        const st = next.standing[effect.char];
+        if (st && st.lifecycle !== "deceased") {       // idempotent: skip if already dead
+          st.lifecycle = "deceased";
+          st.deathRecord = {
+            diedAt: effect.at,
+            cause: effect.cause,
+            originalRankId: st.rank,
+            ...(st.title !== undefined ? { originalTitle: st.title } : {}),
+          };
+        }
+        next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter((g) => g.carrier !== effect.char); // 断胎
         break;
       }
       case "heir_decease": {
         const h = next.resources.bloodline.heirs.find((x) => x.id === effect.heirId);
-        if (h) { h.lifecycle = "deceased"; h.deceasedAt = effect.at; }
+        if (h && h.lifecycle !== "deceased") { h.lifecycle = "deceased"; h.deceasedAt = effect.at; }
         break;
       }
       case "taihou_decease": {
