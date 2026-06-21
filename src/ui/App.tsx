@@ -480,6 +480,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!applied.ok) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
+    store.recordOvernight(db, plan.charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
     const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
@@ -721,6 +722,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!lines) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return;
+    store.recordOvernight(db, charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
     playReactions([{ speakerId: charId, lines }, ...decreeBeats], spend.value.rolledOver);
