@@ -65,11 +65,12 @@ import { SettingsMenu } from "./components/SettingsMenu";
 import { TitleScreen } from "./screens/TitleScreen";
 import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
+import { ShopScreen } from "./screens/ShopScreen";
 
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse" | "shop";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -121,6 +122,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [courtyardLocId, setCourtyardLocId] = useState<string | null>(null);
   const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shopId, setShopId] = useState<"wanbaolou" | "zuixianlou" | null>(null);
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
   const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
   const [giftItemId, setGiftItemId] = useState<string | null>(null);
@@ -665,6 +667,18 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     playReactions([{ speakerId: "wei_sui", lines: plan.lines }, ...decreeBeats], spend.value.rolledOver);
   };
 
+  // 进店（耗 1 行动点）：先切换到 shop 视图，再串播懿旨/乘风节拍（若有）。
+  // 转旬 rollover 不触发 runCheckpoints，避免 checkpoint 视图抢占商铺界面。
+  const enterShop = (id: "wanbaolou" | "zuixianlou") => {
+    if (store.getState().calendar.ap < 1) return;
+    const { spend, decreeBeats } = spendAp(1);
+    if (!spend.ok) return;
+    setShopId(id);
+    setView("shop");
+    // 节拍串播以 rolledOver=false 调用，确保播完后不切走商铺视图。
+    playReactions(decreeBeats, false);
+  };
+
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
@@ -845,6 +859,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setView("storehouse")}
           onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
+          onEnterShop={enterShop}
           onBoardChange={(boardId) => {
             setCurrentBoard(boardId);
             if (boardId === "hougong" && lastBoardRef.current !== "hougong" && db.characters["cheng_feng"]) {
@@ -866,6 +881,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {view === "storehouse" && (
         <StorehouseScreen db={db} store={store} onClose={() => setView("map")} />
+      )}
+      {view === "shop" && shopId && (
+        <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
+          onClose={() => { setShopId(null); setView("map"); }} />
       )}
       {view === "freeview" && freeViewId && (
         <FreeViewScreen
