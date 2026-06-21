@@ -18,15 +18,15 @@ export function isExcused(state: GameState, charId: string): boolean {
 const OUTGOING_TRAITS = ["活泼", "开朗", "好动", "爱热闹", "天真", "烂漫", "率真", "跳脱", "好奇"];
 const RESERVED_TRAITS = ["端肃", "克制", "沉静", "守礼", "重礼", "清冷", "淡泊", "孤僻", "内敛", "寡言", "持重"];
 
-/** 基础游走概率 25，按性格关键词每命中 ±15，clamp [5,60]。 */
+/** 基础游走概率 12，按性格关键词每命中 ±12，clamp [3,40]。 */
 export function wanderChance(character: CharacterContent): number {
   const traits = character.profile.personalityTraits ?? [];
-  let p = 25;
+  let p = 12;
   for (const t of traits) {
-    if (OUTGOING_TRAITS.some((k) => t.includes(k))) p += 15;
-    if (RESERVED_TRAITS.some((k) => t.includes(k))) p -= 15;
+    if (OUTGOING_TRAITS.some((k) => t.includes(k))) p += 12;
+    if (RESERVED_TRAITS.some((k) => t.includes(k))) p -= 12;
   }
-  return Math.min(60, Math.max(5, p));
+  return Math.min(40, Math.max(3, p));
 }
 
 /** 确定性游走判定：命中即此 slot 去御花园。 */

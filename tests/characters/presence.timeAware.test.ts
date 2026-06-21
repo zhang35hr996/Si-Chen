@@ -38,6 +38,13 @@ describe("consortLocationAt", () => {
     expect(consortLocationAt(db, base, "lu_huaijin", 5)).toBe(home);
   });
 
+  it("皇帝在其宫中（临幸/对话留驻）则白天不游走", () => {
+    const s = { ...base, playerLocation: home };
+    expect(consortLocationAt(db, s, "lu_huaijin", 1)).toBe(home);
+    expect(consortLocationAt(db, s, "lu_huaijin", 2)).toBe(home);
+    expect(consortLocationAt(db, s, "lu_huaijin", 3)).toBe(home);
+  });
+
   it("白天高概率必去御花园、零概率必在家", () => {
     const out = { ...base, standing: { ...base.standing, lu_huaijin: { ...base.standing.lu_huaijin!, } } };
     // 用一个能让概率拉满/归零的探针：直接断言两极由 wanders 决定——此处校验函数会路由到御花园分支

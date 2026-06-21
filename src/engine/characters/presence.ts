@@ -77,6 +77,8 @@ export function consortLocationAt(
     if (isExcused(state, charId)) return home;
     return "kunninggong";
   }
+  // 皇帝此刻就在其宫中（临幸/对话留驻），侍君留在宫中陪驾，不外出游走。
+  if (state.playerLocation === home) return home;
   if (slot >= 1 && slot <= 3 && wanders(state.rngSeed, state.calendar.dayIndex, slot, charId, wanderChance(char))) {
     return "yuhuayuan";
   }

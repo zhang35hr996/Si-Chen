@@ -5,20 +5,20 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 
 describe("wanderChance (性格加权)", () => {
-  it("端肃/克制/重礼法 的沈知白低于基础 25", () => {
+  it("端肃/克制/重礼法 的沈知白低于基础 12", () => {
     // personalityTraits: ["端肃","克制","重礼法","外冷内热"] → 命中 3 个内敛关键词
-    expect(wanderChance(db.characters.shen_zhibai!)).toBeLessThan(25);
+    expect(wanderChance(db.characters.shen_zhibai!)).toBeLessThan(12);
   });
 
-  it("clamp 不低于 5、不高于 60", () => {
+  it("clamp 不低于 3、不高于 40", () => {
     const reserved = { profile: { personalityTraits: ["端肃", "克制", "守礼", "清冷", "淡泊"] } } as never;
     const outgoing = { profile: { personalityTraits: ["活泼", "开朗", "好动", "爱热闹", "天真"] } } as never;
-    expect(wanderChance(reserved)).toBe(5);
-    expect(wanderChance(outgoing)).toBe(60);
+    expect(wanderChance(reserved)).toBe(3);
+    expect(wanderChance(outgoing)).toBe(40);
   });
 
-  it("无 traits 用基础 25", () => {
-    expect(wanderChance({ profile: {} } as never)).toBe(25);
+  it("无 traits 用基础 12", () => {
+    expect(wanderChance({ profile: {} } as never)).toBe(12);
   });
 });
 
