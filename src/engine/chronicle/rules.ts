@@ -35,6 +35,16 @@ export function participantId(event: CourtEvent, role: string): string | undefin
   return roleId(event.participants, role);
 }
 
+/** 取事件中给定 roles 的不重复父母 charId（保持首次出现顺序）。 */
+export function uniqueParentIds(event: CourtEvent, roles: string[]): string[] {
+  const seen = new Set<string>();
+  for (const role of roles) {
+    const id = participantId(event, role);
+    if (id) seen.add(id);
+  }
+  return [...seen];
+}
+
 const rankChanged: RecordAfterEventRule = {
   mode: "record_after",
   // 证明降/晋位真的发生：before.rank===from ∧ after.rank===to ∧ from!==to。
@@ -103,7 +113,38 @@ const residenceChanged: RecordAfterEventRule = {
   applyRelationshipEffects: () => [],
 };
 
+const heirBorn: RecordAfterEventRule = {
+  mode: "record_after",
+  validateTransition(before, after, draft) {
+    const errs: GameError[] = [];
+    const heirId = draft.payload.heirId;
+    if (typeof heirId !== "string") errs.push(stateError("RULE_BAD", "heir_born payload.heirId missing"));
+    else {
+      if (before.resources.bloodline.heirs.some((h) => h.id === heirId)) errs.push(stateError("RULE_BAD", "heir_born: heir already existed before"));
+      if (!after.resources.bloodline.heirs.some((h) => h.id === heirId)) errs.push(stateError("RULE_BAD", "heir_born: heir not present after"));
+    }
+    const newborn = roleId(draft.participants, "newborn");
+    if (newborn && typeof heirId === "string" && newborn !== heirId) errs.push(stateError("RULE_BAD", "heir_born newborn participant must match payload.heirId"));
+    return errs;
+  },
+  createPersonalMemories(state, event) {
+    const heirId = typeof event.payload.heirId === "string" ? event.payload.heirId : "";
+    return uniqueParentIds(event, ["birth_father", "adoptive_father"])
+      .filter((id) => state.memories[id])
+      .map((id) => ({
+        type: "memory", char: id,
+        entry: {
+          kind: "episodic", summary: `诞下皇嗣，喜不自胜。`, strength: 85, retention: "permanent",
+          subjectIds: [heirId], perspective: "parent", triggerTags: ["heir", "birth", "anniversary"],
+          unresolved: false, emotions: { joy: 80 }, sourceEventId: event.id,
+        },
+      }));
+  },
+  applyRelationshipEffects: () => [],
+};
+
 export const eventMemoryRules: Partial<Record<CourtEventType, EventMemoryRule>> = {
   rank_changed: rankChanged,
   residence_changed: residenceChanged,
+  heir_born: heirBorn,
 };
