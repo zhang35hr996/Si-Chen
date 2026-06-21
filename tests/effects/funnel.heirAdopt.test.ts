@@ -14,7 +14,7 @@ function heirState(): GameState {
   s.resources.bloodline.heirs.push({
     id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
     birthAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
-    favor: 40, legitimate: true, petName: "团团", education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none",
+    favor: 40, legitimate: true, petName: "团团", education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
   });
   return s;
 }
@@ -47,7 +47,7 @@ describe("funnel: heir_adopt", () => {
     s.resources.bloodline.heirs.push({
       id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
       birthAt: makeGameTime(1, 1, "early"), favor: 50, legitimate: false, petName: "",
-      education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none",
+      education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
     });
     const okR = applyEffects(db, s, [{ type: "heir_adopt", heirId: "heir_000001", fatherId: "taihou" }]);
     expect(okR.ok).toBe(true);

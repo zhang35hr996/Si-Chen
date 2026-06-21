@@ -62,7 +62,7 @@ describe("bestow 赏赐", () => {
     state.resources.bloodline.heirs.push({
       id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
       birthAt: state.calendar, favor: 50, legitimate: true, petName: "", education: { scholarship: 0, martial: 0, virtue: 0 },
-      health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 40, support: 20, faction: "none",
+      health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 40, support: 20, faction: "none", lifecycle: "alive",
     });
     const r = bestow(state, db, fine.id, { kind: "heir", id: "heir_000001" });
     expect(r.ok).toBe(true);
