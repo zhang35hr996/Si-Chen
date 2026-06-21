@@ -10,12 +10,13 @@ import type { GameState } from "../../engine/state/types";
 import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/favorTier";
 import { bedchamberConfig } from "../../store/bedchamber";
 import { toGameTime } from "../../engine/calendar/time";
+import { describe } from "../format/descriptors";
+import type { ScaleId } from "../format/descriptors";
 
 /** 侍君明面数值属性 — 特长/喜好是标签，单独渲染。 */
-export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes & ("appearance" | "health" | "nurture"), string]> = [
+export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes & ("appearance" | "health"), string]> = [
   ["appearance", "容貌"],
   ["health", "健康"],
-  ["nurture", "承养"],
 ];
 
 export function CharacterCard({
@@ -113,7 +114,7 @@ export function CharacterCard({
           {ATTRIBUTE_LABELS.map(([key, label]) => (
             <div key={key}>
               <dt>{label}</dt>
-              <dd>{character.attributes![key]}</dd>
+              <dd>{describe(key as ScaleId, character.attributes![key]!)}</dd>
             </div>
           ))}
           <div>

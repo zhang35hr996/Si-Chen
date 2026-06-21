@@ -10,6 +10,8 @@ import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import { bedchamberConfig } from "../../store/bedchamber";
 import { ATTRIBUTE_LABELS } from "./CharacterCard";
+import { describe } from "../format/descriptors";
+import type { ScaleId } from "../format/descriptors";
 
 export function ConsortListModal({
   db,
@@ -96,7 +98,7 @@ export function ConsortListModal({
               {ATTRIBUTE_LABELS.map(([key, label]) => (
                 <div key={key}>
                   <dt>{label}</dt>
-                  <dd>{c.attributes![key]}</dd>
+                  <dd>{describe(key as ScaleId, c.attributes![key]!)}</dd>
                 </div>
               ))}
               <div>
