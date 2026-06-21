@@ -18,7 +18,7 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 7 characters, 18 locations, 17 events, 17 scenes, 22 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 7 characters, 23 locations, 17 events, 17 scenes, 22 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
@@ -30,7 +30,7 @@ describe("real content/ boots", () => {
         "wenzhaodian", "xianfugong", "zichendian", "yuhuayuan", "yuqing_gong",
         "zhaoning_gong", "chenghui_gong", "jingren_gong", "zhongcui_gong",
         "yanhe_gong", "jiyue_gong", "chengqian_gong", "yongshou_gong", "yikun_gong",
-        "chuxiu_gong", "simiao",
+        "chuxiu_gong", "simiao", "wanbaolou", "zuixianlou",
       ].sort(),
     );
     expect(Object.keys(db.events).sort()).toEqual(
