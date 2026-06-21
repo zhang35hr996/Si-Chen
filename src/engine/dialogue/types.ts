@@ -10,6 +10,7 @@ import type { CharacterContent, CharacterRank } from "../content/schemas";
 import type { GameError } from "../infra/errors";
 import type { Result } from "../infra/result";
 import type { CharacterStanding, MemoryEntry } from "../state/types";
+import { proposedClaimSchema, type ProposedClaim } from "./claims";
 
 export interface DialogueRequest {
   speakerId: string;
@@ -49,14 +50,17 @@ export const rawDialogueResponseSchema = z.strictObject({
       }),
     )
     .max(4),
+  proposedClaims: z.array(proposedClaimSchema).default([]),
 });
 export type RawDialogueResponse = z.infer<typeof rawDialogueResponseSchema>;
+/** Input type for provider.generate — proposedClaims is optional (defaulted by parser). */
+export type RawDialogueResponseInput = z.input<typeof rawDialogueResponseSchema>;
 
 export interface DialogueProvider {
   readonly id: string;
   /** scripted providers echo authored content; generative ones invent it. */
   readonly kind: "scripted" | "generative";
-  generate(request: DialogueRequest): Promise<Result<RawDialogueResponse, GameError>>;
+  generate(request: DialogueRequest): Promise<Result<RawDialogueResponseInput, GameError>>;
 }
 
 /** What the UI renders — it never sees scene nodes. */
@@ -69,3 +73,18 @@ export interface DialogueLine {
   choices: { id: string; text: string; tone?: string }[];
   meta: { generated: boolean; degraded: boolean };
 }
+
+import type { BeliefProjection } from "../chronicle/belief";
+import type { DialogueAudienceContext } from "./audience";
+import type { ReactionPlan } from "./reactionTypes";
+
+export interface DialoguePolicyContext {
+  audience: DialogueAudienceContext;
+  reactionPlan?: ReactionPlan;
+  beliefProjection: BeliefProjection;
+  offeredContextIds: ReadonlySet<string>;
+  now: GameTime;
+}
+
+// Re-export ProposedClaim so callers can import from types without reaching into claims
+export type { ProposedClaim };
