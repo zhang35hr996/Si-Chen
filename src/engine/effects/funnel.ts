@@ -10,7 +10,7 @@
  *   - targets must exist in BOTH content and current state
  *   - numeric clamping lives here only: per-axis cumulative delta is capped
  *     to ±AXIS_CAP per batch, resulting values clamped 0–100
- *   - runtime memory is append-only, source "scene_outcome", never protected
+ *   - runtime memory is append-only; retention is author/effect-supplied (permanent allowed)
  *   - reject-one-reject-all: any invalid effect rejects the whole batch and
  *     the caller keeps the original state reference
  */
