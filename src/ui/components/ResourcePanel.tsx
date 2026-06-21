@@ -1,18 +1,15 @@
 /**
- * 国情（§七）：只读宽抽屉，皇帝/朝局分组，标签 + 数字 + 进度条。
- * 仅展示当前 state 模型既有字段；属性体系 realignment 属独立数据任务，本次不引入新数值。
+ * 国情（§七）：只读宽抽屉，皇帝/朝局分组，明面/暗属性分组，使用形容词标签。
  */
 import type { GameState } from "../../engine/state/types";
 import { Drawer } from "./Drawer";
+import { DescriptorStat } from "./DescriptorStat";
 
-function Bar({ label, value }: { label: string; value: number }) {
+function NumberLine({ label, value }: { label: string; value: number }) {
   return (
-    <div className="profile-stat">
-      <span className="profile-stat__label">{label}</span>
-      <span className="profile-stat__bar">
-        <span className="profile-stat__fill" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </span>
-      <span className="profile-stat__val">{value}</span>
+    <div className="attr-line">
+      <span className="attr-line__label">{label}</span>
+      <span className="attr-line__value">{value}</span>
     </div>
   );
 }
@@ -22,28 +19,34 @@ export function ResourcePanel({ state, onClose }: { state: GameState; onClose: (
   return (
     <Drawer title="国情" subtitle="朝野上下，尽在圣览" onClose={onClose}>
       <div className="profile-section">
-        <h3 className="profile-h">皇帝</h3>
-        <Bar label="健康" value={sovereign.health} />
-        <Bar label="勤政" value={sovereign.diligence} />
-        <Bar label="威望" value={sovereign.prestige} />
-        <Bar label="武力" value={sovereign.martial} />
-        <Bar label="政略" value={sovereign.statecraft} />
-        <Bar label="暴戾" value={sovereign.cruelty} />
-        <Bar label="疲劳" value={sovereign.fatigue} />
-        <Bar label="皇权安全" value={sovereign.regimeSecurity} />
+        <h3 className="profile-h">皇帝 · 明面</h3>
+        <DescriptorStat label="健康" scale="health" value={sovereign.health} />
+        <DescriptorStat label="勤政" scale="diligence" value={sovereign.diligence} />
+        <DescriptorStat label="威望" scale="prestige" value={sovereign.prestige} />
+        <DescriptorStat label="武力" scale="martial" value={sovereign.martial} />
+        <DescriptorStat label="政略" scale="statecraft" value={sovereign.statecraft} />
       </div>
       <div className="profile-section">
-        <h3 className="profile-h">国家</h3>
-        <Bar label="军力" value={nation.military} />
-        <Bar label="国库" value={nation.treasury} />
-        <Bar label="民心" value={nation.publicSupport} />
-        <Bar label="生产力" value={nation.productivity} />
-        <Bar label="朝政" value={nation.governance} />
-        <Bar label="外戚权势" value={nation.consortClanPower} />
-        <Bar label="大臣忠心" value={nation.ministerLoyalty} />
-        <Bar label="贪腐" value={nation.corruption} />
-        <Bar label="宗室不满" value={nation.clanDiscontent} />
-        <Bar label="谣言热度" value={nation.rumor} />
+        <h3 className="profile-h">皇帝 · 暗属性</h3>
+        <DescriptorStat label="暴戾" scale="cruelty" value={sovereign.cruelty} />
+        <DescriptorStat label="皇权安全" scale="regimeSecurity" value={sovereign.regimeSecurity} />
+        <NumberLine label="疲劳" value={sovereign.fatigue} />
+      </div>
+      <div className="profile-section">
+        <h3 className="profile-h">国家 · 明面</h3>
+        <DescriptorStat label="军力" scale="military" value={nation.military} />
+        <NumberLine label="国库" value={nation.treasury} />
+        <DescriptorStat label="民心" scale="publicSupport" value={nation.publicSupport} />
+        <DescriptorStat label="生产力" scale="productivity" value={nation.productivity} />
+        <DescriptorStat label="朝政" scale="governance" value={nation.governance} />
+      </div>
+      <div className="profile-section">
+        <h3 className="profile-h">国家 · 暗属性</h3>
+        <DescriptorStat label="外戚权势" scale="clanPowerNation" value={nation.consortClanPower} />
+        <DescriptorStat label="大臣忠心" scale="loyalty" value={nation.ministerLoyalty} />
+        <DescriptorStat label="贪腐" scale="corruption" value={nation.corruption} />
+        <DescriptorStat label="宗室不满" scale="clanDiscontent" value={nation.clanDiscontent} />
+        <DescriptorStat label="谣言热度" scale="rumor" value={nation.rumor} />
       </div>
     </Drawer>
   );

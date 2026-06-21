@@ -2882,3 +2882,11 @@ button:active:enabled {
 /* ── 寺庙菜单 ── */
 .temple-menu { display: flex; gap: 12px; justify-content: center; padding: 12px; }
 .temple-menu button { padding: 10px 22px; font-size: 1rem; }
+
+/* ── DescriptorStat (.attr-line) ── */
+.attr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.attr-line__label { color: var(--c-text-dim); font-size: 0.9rem; }
+.attr-line__value { font-family: var(--font-title); letter-spacing: 0.05em; }
+.attr-line__value[data-tone="good"] { color: var(--c-gold-text, #d9b87c); }
+.attr-line__value[data-tone="bad"] { color: #c8625a; }
+.attr-line__value[data-tone="neutral"] { color: var(--c-text); }
