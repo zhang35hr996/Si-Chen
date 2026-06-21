@@ -14,6 +14,7 @@ describe("save migration v2 → v3", () => {
     (state.resources.bloodline.heirs as unknown as Record<string, unknown>[]).push({
       id: "heir_000001", sex: "daughter", fatherId: null, bearer: "sovereign",
       birthAt: { year: 1, month: 1, period: "early", dayIndex: 0 }, favor: 50, legitimate: true,
+      lifecycle: "alive",
     });
     const v3 = createSaveData(db, state, "slot1");
     const v2State = structuredClone(v3.state) as unknown as Record<string, unknown>;

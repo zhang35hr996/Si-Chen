@@ -440,6 +440,7 @@ export function applyEffects(
             closeness: 50,
             support: 20,
             faction: "none",
+            lifecycle: "alive",
           });
         }
         if (effect.bearer !== "sovereign") {

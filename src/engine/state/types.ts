@@ -79,6 +79,8 @@ export interface GestationState {
 
 export type HeirSex = "daughter" | "son";
 
+export type HeirLifecycle = "alive" | "deceased";
+
 /**
  * 皇嗣党羽倾向（暗属性，文本枚举而非数值）。见 21-attribute-catalog.md。
  * none=无明显党羽 / empress=亲近皇后 / adoptive=依附承养人 / maternal=受母家扶持 /
@@ -144,6 +146,10 @@ export interface Heir {
   support: number;
   /** 党羽倾向（文本枚举）。 */
   faction: HeirFaction;
+  /** 生死状态（出生置 alive；heir_died 转 deceased）。 */
+  lifecycle: HeirLifecycle;
+  /** 夭折时刻；存活时 undefined。 */
+  deceasedAt?: GameTime;
 }
 
 export interface BloodlineState {

@@ -132,6 +132,15 @@ export const gameStateSchema = z.strictObject({
             "wavering",
             "foreign",
           ]),
+          lifecycle: z.enum(["alive", "deceased"]),
+          deceasedAt: gameTimeSchema.optional(),
+        }).superRefine((h, ctx) => {
+          if (h.lifecycle === "alive" && h.deceasedAt !== undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "alive heir must not have deceasedAt", path: ["deceasedAt"] });
+          }
+          if (h.lifecycle === "deceased" && h.deceasedAt === undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "deceased heir must have deceasedAt", path: ["deceasedAt"] });
+          }
         }),
       ),
     }),
