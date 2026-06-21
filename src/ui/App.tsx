@@ -58,6 +58,7 @@ import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
 import { RelocateModal } from "./components/RelocateModal";
+import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
 import { buildRelocate } from "../store/relocate";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
@@ -718,7 +719,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   const [ceremonyOpen, setCeremonyOpen] = useState(false);
-  void ceremonyOpen; // Task 9 will render this; declared here for state ownership
 
   const enterGreeting = () => {
     const { spend, decreeBeats } = spendAp(1);
@@ -1361,6 +1361,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onLoaded={() => { resetRollGuards(); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {ceremonyOpen && (
+        <GreetingCeremonyOverlay
+          empressName={db.characters.shen_zhibai?.profile.name ?? "皇后"}
+          onDone={() => setCeremonyOpen(false)}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
