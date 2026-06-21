@@ -34,16 +34,28 @@ const calendarStateSchema = gameTimeSchema
 
 const memoryEntrySchema = z.strictObject({
   id: z.string().min(1),
+  ownerId: idSchema,
   kind: memoryKindSchema,
+  sourceEventId: courtEventIdSchema.optional(), // PR1 已在本文件定义并导出
+
+  subjectIds: z.array(z.string()).min(1),
+  perspective: z.enum(["actor","target","witness","parent","ally","enemy","relative"]),
   summary: z.string().min(1).max(240),
-  salience: percent,
+  strength: percent,
+  retention: z.enum(["fast", "slow", "permanent"]),
+  emotions: z.object({
+    joy: z.number().optional(),
+    grief: z.number().optional(),
+    fear: z.number().optional(),
+    anger: z.number().optional(),
+    envy: z.number().optional(),
+    shame: z.number().optional(),
+    guilt: z.number().optional(),
+    relief: z.number().optional(),
+  }),
+  triggerTags: z.array(z.string()).max(5),
+  unresolved: z.boolean(),
   createdAt: gameTimeSchema,
-  tags: z.array(z.string()).max(5),
-  participants: z.array(z.string()).min(1),
-  locationId: idSchema.optional(),
-  source: z.enum(["authored", "scene_outcome"]),
-  originSceneId: idSchema.optional(),
-  protected: z.boolean(),
 });
 
 const officialSchema = z.strictObject({

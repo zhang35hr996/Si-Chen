@@ -275,7 +275,7 @@ export function applyEffects(
   db: ContentDB,
   state: GameState,
   effects: readonly EventEffect[],
-  context: EffectContext = {},
+  _context: EffectContext = {},
 ): Result<GameState, GameError[]> {
   const errors = validateEffects(db, state, effects);
   if (errors.length > 0) return err(errors);
@@ -513,18 +513,21 @@ export function applyEffects(
       }
       case "memory": {
         const store = next.memories[effect.char]!;
+        const d = effect.entry;
         store.entries.push({
           id: memoryEntryId(effect.char, store.nextSeq),
-          kind: effect.entry.kind,
-          summary: effect.entry.summary,
-          salience: effect.entry.salience,
-          createdAt: now, // GameTime — never carries AP
-          tags: [...effect.entry.tags],
-          participants: [...effect.entry.participants],
-          ...(effect.entry.locationId !== undefined ? { locationId: effect.entry.locationId } : {}),
-          source: "scene_outcome", // runtime memory is never "authored"
-          ...(context.sceneId !== undefined ? { originSceneId: context.sceneId } : {}),
-          protected: false, // and never protected (schema already forbids true)
+          ownerId: effect.char,
+          kind: d.kind,
+          ...(d.sourceEventId !== undefined ? { sourceEventId: d.sourceEventId } : {}),
+          subjectIds: [...d.subjectIds],
+          perspective: d.perspective,
+          summary: d.summary,
+          strength: d.strength,
+          retention: d.retention,
+          emotions: { ...d.emotions },
+          triggerTags: [...d.triggerTags],
+          unresolved: d.unresolved,
+          createdAt: now,
         });
         store.nextSeq += 1;
         break;

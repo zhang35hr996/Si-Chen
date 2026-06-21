@@ -62,11 +62,15 @@ export function buildRankOp(
     type: "memory",
     char: charId,
     entry: {
-      kind: "event",
+      kind: "episodic",
       summary: reaction.memory,
-      salience: kind === "strip_title" || kind === "demote" ? 70 : 55,
-      tags: ["player", kind],
-      participants: ["player", charId],
+      strength: kind === "strip_title" || kind === "demote" ? 70 : 55,
+      retention: kind === "strip_title" || kind === "demote" ? "permanent" : "slow",
+      subjectIds: ["player", charId],
+      perspective: "target",
+      triggerTags: ["player", kind],
+      unresolved: kind === "strip_title" || kind === "demote",
+      emotions: kind === "strip_title" || kind === "demote" ? { shame: 30 } : { joy: 30 },
     },
   });
   return { kind, effects, lines: reaction.lines, charId };

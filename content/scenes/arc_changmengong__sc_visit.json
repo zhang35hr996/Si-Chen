@@ -36,12 +36,15 @@
           "type": "memory",
           "char": "wenya",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "陛下亲临冷宫，扶起温雅，言『朕记得你』。",
-            "salience": 70,
-            "tags": ["player", "rescued"],
-            "participants": ["player", "wenya"],
-            "locationId": "changmengong"
+            "strength": 70,
+            "retention": "permanent",
+            "subjectIds": ["player", "wenya"],
+            "perspective": "witness",
+            "triggerTags": ["rescued"],
+            "unresolved": false,
+            "emotions": { "relief": 60, "joy": 50 }
           }
         }
       ],

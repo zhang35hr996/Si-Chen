@@ -300,9 +300,9 @@ function checkCharacterRefs(
       }
     }
     for (const memory of character.initialMemories) {
-      for (const participant of memory.participants) {
-        if (participant !== "player" && !characters.byId[participant]) {
-          errors.push(missingRef(source, "character", participant));
+      for (const subjectId of memory.subjectIds) {
+        if (subjectId !== "player" && !characters.byId[subjectId]) {
+          errors.push(missingRef(source, "character", subjectId));
         }
       }
     }

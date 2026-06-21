@@ -29,12 +29,15 @@
           "type": "memory",
           "char": "shen_zhibai",
           "entry": {
-            "kind": "event",
+            "kind": "episodic",
             "summary": "陛下当面准我重申宫规。凤印的分量，还在。",
-            "salience": 60,
-            "tags": ["player", "rules", "authority"],
-            "participants": ["player", "shen_zhibai"],
-            "locationId": "kunninggong"
+            "strength": 60,
+            "retention": "slow",
+            "subjectIds": ["player", "shen_zhibai"],
+            "perspective": "witness",
+            "triggerTags": ["rules", "authority"],
+            "unresolved": false,
+            "emotions": { "relief": 30 }
           }
         }
       ],
@@ -55,12 +58,15 @@
           "type": "memory",
           "char": "shen_zhibai",
           "entry": {
-            "kind": "opinion",
+            "kind": "impression",
             "summary": "陛下对宫规之事含糊其辞。是不愿管，还是不愿我管？",
-            "salience": 55,
-            "tags": ["player", "rules", "doubt"],
-            "participants": ["player", "shen_zhibai"],
-            "locationId": "kunninggong"
+            "strength": 55,
+            "retention": "slow",
+            "subjectIds": ["player", "shen_zhibai"],
+            "perspective": "witness",
+            "triggerTags": ["rules", "doubt"],
+            "unresolved": true,
+            "emotions": {}
           }
         }
       ],
@@ -81,12 +87,15 @@
           "type": "memory",
           "char": "shen_zhibai",
           "entry": {
-            "kind": "event",
+            "kind": "grievance",
             "summary": "陛下当面驳了我整肃宫规之奏，说是小题大做。殿上宫人都听见了。",
-            "salience": 70,
-            "tags": ["player", "rules", "humiliation"],
-            "participants": ["player", "shen_zhibai"],
-            "locationId": "kunninggong"
+            "strength": 70,
+            "retention": "permanent",
+            "subjectIds": ["player", "shen_zhibai"],
+            "perspective": "witness",
+            "triggerTags": ["rules", "humiliation"],
+            "unresolved": true,
+            "emotions": { "shame": 50, "anger": 20 }
           }
         }
       ],

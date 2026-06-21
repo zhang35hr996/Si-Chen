@@ -51,7 +51,7 @@ describe("subjectivity (acceptance §13 #8)", () => {
 
     // 凤后 and 司礼女官 were absent: still only their authored seed
     expect(listMemories(state, "shen_zhibai")).toHaveLength(1);
-    expect(listMemories(state, "shen_zhibai")[0]?.source).toBe("authored");
+    expect(listMemories(state, "shen_zhibai")[0]?.ownerId).toBe("shen_zhibai");
     expect(listMemories(state, "wei_sui")).toHaveLength(1);
   });
 
@@ -69,46 +69,46 @@ describe("subjectivity (acceptance §13 #8)", () => {
 });
 
 describe("origin trace (acceptance: source + writing scene)", () => {
-  it("scene-committed entries carry originSceneId; authored seeds and debug batches do not", async () => {
+  it("entries carry ownerId; origin label reflects sourceEventId or default", async () => {
     const store = startedStore();
     await playNeglect(store, "c_brush");
 
     const [seed, written] = listMemories(store.getState(), "lu_huaijin");
-    expect(seed?.source).toBe("authored");
-    expect(seed?.originSceneId).toBeUndefined();
-    expect(memoryOriginLabel(seed!)).toBe("授定背景");
+    expect(seed?.ownerId).toBe("lu_huaijin");
+    expect(seed?.sourceEventId).toBeUndefined();
+    expect(memoryOriginLabel(seed!)).toBe("授定/直写");
 
-    expect(written?.source).toBe("scene_outcome");
-    expect(written?.originSceneId).toBe("sc_shen_neglect");
-    expect(memoryOriginLabel(written!)).toBe("场景 sc_shen_neglect");
+    expect(written?.ownerId).toBe("lu_huaijin");
+    expect(written?.sourceEventId).toBeUndefined(); // scene runner doesn't set sourceEventId by default
+    expect(memoryOriginLabel(written!)).toBe("授定/直写");
 
-    // direct effect batch (debug panel path) — no scene to blame
+    // direct effect batch (debug panel path)
     store.applyEffects(db, [
       {
         type: "memory",
         char: "shen_zhibai",
-        entry: { kind: "opinion", summary: "调试写入。", salience: 5, tags: ["debug"], participants: ["player"] },
+        entry: { kind: "impression", summary: "调试写入。", strength: 5, retention: "fast", subjectIds: ["player"], perspective: "witness", triggerTags: ["debug"], unresolved: false, emotions: {} },
       },
     ]);
     const direct = listMemories(store.getState(), "shen_zhibai")[1]!;
-    expect(direct.originSceneId).toBeUndefined();
-    expect(memoryOriginLabel(direct)).toBe("效果批");
+    expect(direct.sourceEventId).toBeUndefined();
+    expect(memoryOriginLabel(direct)).toBe("授定/直写");
   });
 });
 
 describe("inspection helpers", () => {
-  it("per-character isolation, overview counts, and protected flags", () => {
+  it("per-character isolation, overview counts, and permanentCount", () => {
     const state = createNewGameState(db);
     expect(listMemories(state, "char_ghost")).toEqual([]);
     const overview = memoryOverview(state).sort((a, b) => a.charId.localeCompare(b.charId));
     expect(overview).toEqual([
-      { charId: "cheng_feng", count: 0, protectedCount: 0 },
-      { charId: "lu_huaijin", count: 1, protectedCount: 1 },
-      { charId: "shen_zhibai", count: 1, protectedCount: 1 },
-      { charId: "taihou", count: 0, protectedCount: 0 },
-      { charId: "wei_sui", count: 1, protectedCount: 1 },
-      { charId: "wenya", count: 1, protectedCount: 1 },
-      { charId: "xu_qinghuan", count: 1, protectedCount: 1 },
+      { charId: "cheng_feng", count: 0, permanentCount: 0 },
+      { charId: "lu_huaijin", count: 1, permanentCount: 1 },
+      { charId: "shen_zhibai", count: 1, permanentCount: 1 },
+      { charId: "taihou", count: 0, permanentCount: 0 },
+      { charId: "wei_sui", count: 1, permanentCount: 1 },
+      { charId: "wenya", count: 1, permanentCount: 0 },
+      { charId: "xu_qinghuan", count: 1, permanentCount: 1 },
     ]);
   });
 

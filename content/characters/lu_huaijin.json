@@ -25,12 +25,15 @@
   "initialStanding": { "rank": "chenghui", "favor": 30 },
   "initialMemories": [
     {
-      "kind": "event",
+      "kind": "episodic",
       "summary": "陛下已有三旬不曾召我，连御花园偶遇也只是颔首而过。",
-      "salience": 70,
-      "tags": ["player", "neglect"],
-      "participants": ["player", "lu_huaijin"],
-      "protected": true
+      "strength": 70,
+      "retention": "permanent",
+      "subjectIds": ["player", "lu_huaijin"],
+      "perspective": "witness",
+      "triggerTags": ["neglect"],
+      "unresolved": true,
+      "emotions": { "grief": 40 }
     }
   ],
   "secrets": [],

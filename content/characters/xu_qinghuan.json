@@ -25,12 +25,15 @@
   "initialStanding": { "rank": "jun", "favor": 45 },
   "initialMemories": [
     {
-      "kind": "event",
+      "kind": "episodic",
       "summary": "陛下近来常召臣侍侍奉，新宠正浓。只是旧人那边的目光，越来越冷了。",
-      "salience": 60,
-      "tags": ["player", "favor", "rivalry"],
-      "participants": ["player", "xu_qinghuan"],
-      "protected": true
+      "strength": 60,
+      "retention": "permanent",
+      "subjectIds": ["player", "xu_qinghuan"],
+      "perspective": "witness",
+      "triggerTags": ["favor", "rivalry"],
+      "unresolved": false,
+      "emotions": { "joy": 30 }
     }
   ],
   "secrets": [],

@@ -25,12 +25,15 @@
   "initialStanding": { "rank": "fenghou", "favor": 25 },
   "initialMemories": [
     {
-      "kind": "event",
+      "kind": "episodic",
       "summary": "陛下已有两月未入后宫，各宫期盼雨露，还望陛下早日垂顾，开枝散叶，方才后继有人。",
-      "salience": 65,
-      "tags": ["player", "favor", "rules"],
-      "participants": ["player", "shen_zhibai"],
-      "protected": true
+      "strength": 65,
+      "retention": "permanent",
+      "subjectIds": ["player", "shen_zhibai"],
+      "perspective": "witness",
+      "triggerTags": ["favor", "rules"],
+      "unresolved": true,
+      "emotions": {}
     }
   ],
   "secrets": [],
