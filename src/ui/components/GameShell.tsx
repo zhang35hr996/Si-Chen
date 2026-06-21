@@ -17,6 +17,7 @@ export function GameShell({
   onCrumb,
   onOpenResources,
   onOpenSettings,
+  onOpenStorehouse,
   className,
   children,
 }: {
@@ -31,6 +32,7 @@ export function GameShell({
   onCrumb?: (index: number) => void;
   onOpenResources?: () => void;
   onOpenSettings?: () => void;
+  onOpenStorehouse?: () => void;
   className?: string;
   children: ReactNode;
 }) {
@@ -43,6 +45,7 @@ export function GameShell({
         pregnant={pregnant}
         onOpenResources={onOpenResources}
         onOpenSettings={onOpenSettings}
+        onOpenStorehouse={onOpenStorehouse}
       />
       <BreadcrumbBar crumbs={crumbs} onBack={onBack} onCrumb={onCrumb} />
       <div className="shell__body">{children}</div>

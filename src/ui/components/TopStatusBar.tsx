@@ -11,12 +11,14 @@ export function TopStatusBar({
   pregnant,
   onOpenResources,
   onOpenSettings,
+  onOpenStorehouse,
 }: {
   calendar: CalendarState;
   locationName?: string;
   pregnant?: boolean;
   onOpenResources?: () => void;
   onOpenSettings?: () => void;
+  onOpenStorehouse?: () => void;
 }) {
   return (
     <header className="topbar">
@@ -41,6 +43,11 @@ export function TopStatusBar({
         {onOpenResources && (
           <button type="button" className="topbar__btn" onClick={onOpenResources}>
             国情
+          </button>
+        )}
+        {onOpenStorehouse && (
+          <button type="button" className="topbar__btn" onClick={onOpenStorehouse}>
+            国库
           </button>
         )}
         {onOpenSettings && (

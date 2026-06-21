@@ -34,6 +34,7 @@ export function MapScreen({
   onOpenSettings,
   onClose,
   onOpenResources,
+  onOpenStorehouse,
   onOpenCourtyard,
   onBoardChange,
 }: {
@@ -50,6 +51,7 @@ export function MapScreen({
   onOpenSettings: () => void;
   onClose: () => void;
   onOpenResources?: () => void;
+  onOpenStorehouse?: () => void;
   onOpenCourtyard: (loc: LocationContent) => void;
   onBoardChange?: (boardId: string) => void;
 }) {
@@ -187,6 +189,7 @@ export function MapScreen({
       onCrumb={jumpToCrumb}
       onOpenResources={onOpenResources}
       onOpenSettings={onOpenSettings}
+      onOpenStorehouse={onOpenStorehouse}
       className="map-shell"
     >
       <div className="map-layout">

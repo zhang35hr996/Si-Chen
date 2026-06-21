@@ -58,11 +58,12 @@ import { ReactionScreen } from "./screens/ReactionScreen";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { TitleScreen } from "./screens/TitleScreen";
 import { CoronationScreen } from "./screens/CoronationScreen";
+import { StorehouseScreen } from "./screens/StorehouseScreen";
 
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -777,6 +778,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenSettings={() => setSettingsOpen(true)}
           onClose={() => { setFocusConsortId(null); setView("location"); }}
           onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setView("storehouse")}
           onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
           onBoardChange={(boardId) => {
             setCurrentBoard(boardId);
@@ -796,6 +798,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onPickHall={(consortId) => enterConsortQuarters(courtyardLocId!, consortId)}
           onBack={() => { setCourtyardLocId(null); setMapAtRoot(false); setView("map"); }}
         />
+      )}
+      {view === "storehouse" && (
+        <StorehouseScreen db={db} store={store} onClose={() => setView("map")} />
       )}
       {view === "freeview" && freeViewId && (
         <FreeViewScreen
