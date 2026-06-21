@@ -450,6 +450,7 @@ export function applyEffects(
             support: 20,
             faction: "none",
             lifecycle: "alive",
+            healthStatus: "healthy",
           });
         }
         if (effect.bearer !== "sovereign") {

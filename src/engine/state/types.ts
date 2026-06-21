@@ -164,8 +164,8 @@ export interface Heir {
   lifecycle: HeirLifecycle;
   /** 夭折时刻；存活时 undefined。 */
   deceasedAt?: GameTime;
-  /** 病情状态。 */
-  healthStatus: HealthStatus;
+  /** 病情状态（出生置 healthy；旧存档可能无此字段）。 */
+  healthStatus?: HealthStatus;
   /** 是否夭折（新身后事系统；与 lifecycle="deceased" 并行）。 */
   deceased?: boolean;
   /** 夭折时刻（新身后事系统；与 deceasedAt 并行）。 */
@@ -241,10 +241,10 @@ export interface CharacterStanding {
   palaceEnteredAt?: GameTime;
   /** 殿选新晋侍君的侍寝解禁月序（monthOrdinal）；缺省即无门槛。 */
   availableFromMonth?: number;
-  /** 运行时数值健康 0–100（侍君；初始取 attributes.health）。 */
-  health: number;
-  /** 病情状态（健康/生病/重病）。 */
-  healthStatus: HealthStatus;
+  /** 运行时数值健康 0–100（侍君；初始取 attributes.health；官员无此字段）。 */
+  health?: number;
+  /** 病情状态（健康/生病/重病；官员无此字段）。 */
+  healthStatus?: HealthStatus;
   /** 动态入宫侍君的入宫年龄（选秀用）；预置侍君用 profile.age。 */
   ageAtEntry?: number;
   /** 动态入宫侍君的入宫年份。 */

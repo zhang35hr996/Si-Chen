@@ -19,6 +19,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     resources: {
       sovereign: {
         health: 70,
+        healthStatus: "healthy",
         diligence: 50,
         prestige: 50,
         martial: 50,
@@ -47,7 +48,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
       },
       storehouse: { items: {} },
     },
-    taihou: { ill: false },
+    taihou: { health: 70, healthStatus: "healthy" },
     flags: {},
     standing: {},
     generatedConsorts: {},
@@ -59,6 +60,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     emotionalConditions: [],
     mentionLog: [],
     sceneHistory: [],
+    pendingAftermath: [],
     rngSeed: overrides.rngSeed ?? 1,
   };
 }

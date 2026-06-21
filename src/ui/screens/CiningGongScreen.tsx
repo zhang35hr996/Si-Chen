@@ -19,7 +19,7 @@ export function CiningGongScreen({
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const portrait = registry.portrait(taihou.portraitSet, "neutral");
   const canAct = state.calendar.ap >= 1;
-  const ill = state.taihou.ill;
+  const ill = state.taihou.healthStatus !== "healthy";
 
   return (
     <GameShell

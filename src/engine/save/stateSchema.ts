@@ -150,7 +150,7 @@ export const gameStateSchema = z.strictObject({
           ]),
           lifecycle: z.enum(["alive", "deceased"]),
           deceasedAt: gameTimeSchema.optional(),
-          healthStatus: z.enum(["healthy", "sick", "critical"]),
+          healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
           deceased: z.boolean().optional(),
           diedAt: gameTimeSchema.optional(),
         }).superRefine((h, ctx) => {
