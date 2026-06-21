@@ -3,7 +3,15 @@
  * 纯逻辑集中于此；殿选界面与 App 接线只调用本模块。确定性随机走 gestationRoll。
  */
 import type { ContentDB } from "../engine/content/loader";
-import type { CharacterRank } from "../engine/content/schemas";
+import type { CharacterRank, CharacterContent } from "../engine/content/schemas";
+import { characterSchema } from "../engine/content/schemas";
+import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
+import { chineseNumeral } from "../engine/calendar/time";
+import {
+  ARISTOCRATIC_SURNAME_POOL,
+  ARISTOCRATIC_MALE_GIVEN_NAME_POOL,
+} from "../engine/characters/shijunNames";
+import type { GameState } from "../engine/state/types";
 
 /** 大选年：元年、四年、七年…（每三年）。 */
 export function isDaxuanYear(year: number): boolean {
@@ -39,4 +47,120 @@ export function pickableRanks(db: ContentDB): CharacterRank[] {
   return Object.values(db.ranks)
     .filter((r) => r.domain === "harem" && r.id !== "fenghou" && r.order >= 50 && r.order <= 180)
     .sort((a, b) => b.order - a.order);
+}
+
+// ── 生成池（确定性取样） ──────────────────────────────────────────────
+const SPECIALTY_POOL = ["古筝", "琵琶", "书法", "丹青", "刺绣", "烹茶", "棋艺", "舞乐", "诗赋", "骑射"];
+const TRAIT_POOL = ["温婉", "活泼", "沉静", "孤傲", "机敏", "腼腆", "爽利", "细腻", "执拗", "娴雅"];
+const LIKES_POOL = ["玉器", "香料", "古籍", "骏马", "茶饮", "花木", "字画", "珠玉", "琴谱", "棋具"];
+const PORTRAIT_SETS = ["consort1", "consort2", "consort3", "consort4", "consort5", "consort6"];
+
+function pick<T>(pool: readonly T[], seed: string): T {
+  return pool[gestationRollRaw(seed) % pool.length]!;
+}
+
+/** 候选秀男（生成态，未落库）。 */
+export interface Candidate {
+  content: CharacterContent;
+  fatherOfficialId?: string;
+  /** 父官品 gradeOrder，或平民。驱动皇后推荐位分。 */
+  grade: number | "commoner";
+  /** 礼官宣读词。 */
+  announce: string;
+}
+
+/** 用 gestationRoll 确定性生成 8–12 位候选秀男。 */
+export function generateCandidates(db: ContentDB, state: GameState, year: number): Candidate[] {
+  const base = `daxuan:gen:${year}`;
+  const count = 8 + (gestationRollRaw(`${base}:n`) % 5); // 8–12
+  const officialIds = Object.keys(state.officials);
+  const out: Candidate[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const seed = `${base}:${i}`;
+    const isShijia = officialIds.length > 0 && gestationRollRaw(`${seed}:shijia`) % 100 < 60;
+
+    let surname: string;
+    let fatherOfficialId: string | undefined;
+    let grade: number | "commoner";
+    let announce: string;
+
+    const givenName = pick(ARISTOCRATIC_MALE_GIVEN_NAME_POOL, `${seed}:given`);
+    const age = 14 + (gestationRollRaw(`${seed}:age`) % 9); // 14–22
+
+    if (isShijia) {
+      fatherOfficialId = officialIds[gestationRollRaw(`${seed}:father`) % officialIds.length]!;
+      const father = state.officials[fatherOfficialId]!;
+      surname = father.surname;
+      grade = db.officialPosts[father.postId]?.gradeOrder ?? "commoner";
+      const postName = db.officialPosts[father.postId]?.name ?? "官员";
+      announce = `${postName}之男 ${surname}${givenName}，年${chineseNumeral(age)}。`;
+    } else {
+      surname = pick(ARISTOCRATIC_SURNAME_POOL, `${seed}:surname`);
+      grade = "commoner";
+      announce = `良家子 ${surname}${givenName}，年${chineseNumeral(age)}。`;
+    }
+
+    const traitCount = 2 + (gestationRollRaw(`${seed}:tc`) % 2); // 2–3
+    const traits: string[] = [];
+    for (let t = 0; t < traitCount; t++) {
+      const tr = pick(TRAIT_POOL, `${seed}:trait:${t}`);
+      if (!traits.includes(tr)) traits.push(tr);
+    }
+    const specialty = pick(SPECIALTY_POOL, `${seed}:spec`);
+    const likes = [pick(LIKES_POOL, `${seed}:like0`), pick(LIKES_POOL, `${seed}:like1`)]
+      .filter((v, idx, arr) => arr.indexOf(v) === idx);
+
+    const content: CharacterContent = {
+      id: `xiunan_${year}_${i}`,
+      kind: "consort",
+      attributes: {
+        appearance: 40 + (gestationRoll(`${seed}:app`) % 56), // 40–95
+        health: 50 + (gestationRoll(`${seed}:hp`) % 46),       // 50–95
+        nurture: 40 + (gestationRoll(`${seed}:nur`) % 56),     // 40–95
+        specialty,
+        likes,
+      },
+      hidden: {
+        affection: 30 + (gestationRoll(`${seed}:aff`) % 31),   // 30–60
+        fear: 20 + (gestationRoll(`${seed}:fear`) % 41),       // 20–60
+        ambition: 20 + (gestationRoll(`${seed}:amb`) % 61),    // 20–80
+      },
+      profile: {
+        name: `${surname}${givenName}`,
+        surname,
+        age,
+        role: isShijia ? "殿选新晋，世家出身" : "殿选新晋，良家子",
+        appearance: "眉目清秀，举止拘谨，初入宫闱，难掩怯意。",
+        personalityTraits: traits,
+        coreFacts: [isShijia ? "经三年大选入宫，初居储秀宫" : "良家子，经大选入宫，初居储秀宫"],
+        goals: ["在宫中站稳脚跟", "得陛下垂顾"],
+        speechStyle: "语气谨慎，言辞守礼。",
+      },
+      defaultLocation: "chuxiu_gong",
+      portraitSet: pick(PORTRAIT_SETS, `${seed}:portrait`),
+      expressions: ["neutral"],
+      voice: { register: "formal", quirks: [], tabooTopics: [] },
+      initialMemories: [],
+      secrets: [],
+    };
+
+    const parsed = characterSchema.safeParse(content);
+    if (!parsed.success) continue; // 极端取样下不合法则跳过该位
+    out.push({ content: parsed.data, fatherOfficialId, grade, announce });
+  }
+  return out;
+}
+
+// ── 抬头/才艺 模板化描述（确定性） ───────────────────────────────────
+export function describeRaiseHead(content: CharacterContent): string {
+  const app = content.attributes?.appearance ?? 50;
+  const trait = content.profile.personalityTraits[0] ?? "腼腆";
+  const looks = app >= 75 ? "眉目如画、容色出众" : app >= 50 ? "面目清秀" : "样貌寻常却也周正";
+  return `秀男${trait}地微微抬头，是个${looks}的小男儿。`;
+}
+
+export function describeTalent(content: CharacterContent): string {
+  const specialty = content.attributes?.specialty ?? "女红";
+  return `秀男恭敬回道：小男儿自幼习${specialty}，略通一二，让陛下见笑了。`;
 }
