@@ -452,9 +452,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const rollActionBeats = (
     before: { apMax: number; ap: number; dayIndex: number },
     amount: number,
-    _rolledOver: boolean,
   ): DecreeReaction[] => {
-    void _rolledOver;
     let beats = rollDecree(before, amount);
     beats = [...beats, ...rollRebuke(before, amount)];
     const tributeShown = rollTribute(before, amount);
@@ -468,7 +466,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const spend = store.advanceTime(db, { type: "SPEND_AP", amount });
     const sovereignDied = spend.ok && spend.value.healthOutcome?.sovereignDied === true;
     const decreeBeats: DecreeReaction[] =
-      spend.ok && !sovereignDied ? rollActionBeats(before, amount, spend.value.rolledOver) : [];
+      spend.ok && !sovereignDied ? rollActionBeats(before, amount) : [];
     return { spend, decreeBeats, sovereignDied };
   };
 
@@ -693,7 +691,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
-    const decreeBeats = rollActionBeats(before, 1, settled.value.rolledOver);
+    const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     setHeirListOpen(false);
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
@@ -709,7 +707,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
-    const decreeBeats = rollActionBeats(before, 1, settled.value.rolledOver);
+    const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     if (settled.value.rolledOver) setReactionRollover(true);
@@ -757,7 +755,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
-    const decreeBeats = rollActionBeats(before.calendar, 1, settled.value.rolledOver);
+    const decreeBeats = rollActionBeats(before.calendar, 1);
     doAutosave();
     playReactions([{ speakerId: "wei_sui", lines: plan.lines }, ...decreeBeats], settled.value.rolledOver);
   };

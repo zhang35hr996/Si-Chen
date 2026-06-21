@@ -236,6 +236,7 @@ export const gameStateSchema = z.strictObject({
       resolved: z.boolean(),
     }),
   ),
+  gameOver: z.strictObject({ cause: z.literal("sovereign_death"), at: gameTimeSchema }).optional(),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;
 
