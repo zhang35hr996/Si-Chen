@@ -20,15 +20,16 @@
 | `content/world.json` | `nation.treasury` 50 → **10000** |
 | `src/engine/state/initialState.ts` | `treasury: 50` → `10000` |
 | `src/engine/save/saveSystem.ts` | 旧档回填默认 `treasury: 50` → `10000` |
-| `src/engine/content/schemas.ts` | `startingResources.nation.treasury` 由 `percent` → 非负整数 schema（`z.number().int().min(0)`） |
-| `src/engine/save/stateSchema.ts` | 同上，`treasury: percent` → 非负整数 |
+| `src/engine/content/schemas.ts` | ① `startingResources.nation.treasury` 由 `percent` → 非负整数（`z.number().int().min(0)`）；② **从 `resource/nation` 效果枚举中删除 `"treasury"`**（见下） |
+| `src/engine/save/stateSchema.ts` | `nation.treasury` `percent` → 非负整数 |
 | `src/engine/state/types.ts` | 注释「国库（0–100 充盈度抽象）」→「国库（铜钱，单位：两）」 |
-| `src/engine/effects/funnel.ts` | **关键**：当前 L282 对所有 nation 字段 `clampPct`(0–100)。treasury 改为只 `Math.max(0, …)`（无上限、不破百），其余 nation 字段维持 `clampPct` |
-| `src/store/temple.ts` | 上香「大吉」的 `nat("treasury", 4..6)` 在百分制下是「+4~6 充盈度」，纯数字下意为「+4~6 两」（过小）。改为 coin 量级 `mag(key,"ex",200,400)`（+200~400 两） |
+| `src/engine/effects/funnel.ts` | **无需特例**：treasury 既已移出效果枚举，`resource` 分支的 `effect.field` 类型不再含 treasury，clamp 自然不作用于它。funnel 代码本体不改（仅随枚举类型收窄） |
+| `src/store/temple.ts` | 上香「大吉」原 `roll%2===0 ? sov("prestige",4..6) : nat("treasury",4..6)`。删 treasury 支，改为恒 `sov("prestige", mag(key,"ex",4,6))` |
 | `src/ui/components/ResourcePanel.tsx` | 「国库」行已是 `NumberLine`（非形容词）。改为显示「{千分位} 两」 |
 
-> `treasury` 保留在 `resource/nation` 效果枚举中（authored 效果仍可加减国库），只是其钳制改为「下限 0、无上限」。
-> 采买/赏赐走专用 helper（见 §3），不依赖该通用效果路径。
+> **设计要点**：`AXIS_CAP=10`（resource 效果每批至多 ±10）且全库无 authored 内容把 treasury 当效果字段，
+> 故铜钱不适合走通用 resource 效果路径。treasury 移出效果枚举后，铜钱**只**经 `grantCoins`/`spendCoins`（§3）
+> 直接增减，无 0–100 钳制、无 ±10 批次帽。
 
 ## 2. 物品目录（content/items.json + db.items）
 
