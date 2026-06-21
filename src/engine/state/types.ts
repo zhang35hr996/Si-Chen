@@ -342,5 +342,9 @@ export interface GameState {
   /** 客观事件编年史（append-only，剧情事实；与 eventLog 的触发记账分离）。 */
   chronicle: CourtEvent[];
   sceneHistory: string[];
+  /** 本晨被免请安的侍君（按 dayIndex 自然失效）。 */
+  excusedFromGreeting?: { dayIndex: number; charIds: string[] };
+  /** 子时留宿记录，供次晨离宫二选一。 */
+  overnightWith?: { charId: string; morningDayIndex: number };
   rngSeed: number;
 }

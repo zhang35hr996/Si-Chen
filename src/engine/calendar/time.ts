@@ -202,3 +202,11 @@ export function isMorningSlot(calendar: CalendarState): boolean {
 export function isAfternoonSlot(calendar: CalendarState): boolean {
   return shichenSlot(calendar) === AFTERNOON_SLOT;
 }
+
+/** 卯时槽位常量：一日首槽（早上请安）。 */
+export const MAO_SLOT = 0;
+
+/** 当前待用行动点是否落在卯时（请安时辰）。 */
+export function isGreetingSlot(calendar: CalendarState): boolean {
+  return shichenSlot(calendar) === MAO_SLOT;
+}
