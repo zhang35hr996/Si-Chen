@@ -265,6 +265,43 @@ export class GameStore {
       if (!a.ok) return err(a.error);
       candidate = a.value;
     }
+    return this.advanceCandidate(db, candidate, command);
+  }
+
+  /**
+   * Travel through the SAME atomic time-advancing core as resolveTimedAction.
+   * Applies the MOVE command(s) to a local candidate (instant, no time cost),
+   * then advances time via `advanceCommand` (the SPEND_AP), running the
+   * cross-month health tick + gameOver write in ONE commit. If any step rejects,
+   * `this.state` is untouched. Routes travel's time-spend through the unified
+   * entry so cross-month travel runs the monthly tick (and can end the game).
+   */
+  travelAndAdvance(
+    db: ContentDB,
+    moveCommands: readonly GameCommand[],
+    advanceCommand: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+  ): Result<TimedOutcome, GameError[]> {
+    // 1) MOVE on a local candidate (no time advances yet — subject still where they were)
+    let candidate = this.state;
+    if (moveCommands.length > 0) {
+      const m = applyBatch(candidate, moveCommands);
+      if (!m.ok) return err([m.error]);
+      candidate = m.value.state;
+    }
+    return this.advanceCandidate(db, candidate, advanceCommand);
+  }
+
+  /**
+   * Shared core: advance the calendar on `candidate`, run the cross-month health
+   * tick, write gameOver on sovereign death, then commit ONCE. Atomic: any
+   * failure returns err and leaves `this.state` untouched.
+   */
+  private advanceCandidate(
+    db: ContentDB,
+    candidateIn: GameState,
+    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+  ): Result<TimedOutcome, GameError[]> {
+    let candidate = candidateIn;
     // 2) advance the calendar (pure reducer) on the candidate
     const before = monthOrdinal(candidate.calendar);
     const cmd = applyCommand(candidate, command);

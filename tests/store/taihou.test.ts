@@ -12,7 +12,7 @@ describe("buildShizhiEncounter", () => {
     expect(buildShizhiEncounter(db, s, "1:1:early")).toBeNull();
   });
 
-  it("when ill + hitting gate: picks an attendant, cures 太后, +5 favor", () => {
+  it("when ill + hitting gate: picks an attendant, +5 favor, but does NOT cure 太后", () => {
     const s = createNewGameState(db);
     s.taihou.healthStatus = "sick";
     let seed = "";
@@ -23,7 +23,8 @@ describe("buildShizhiEncounter", () => {
     expect(seed).not.toBe("");
     const plan = buildShizhiEncounter(db, s, seed)!;
     expect(db.characters[plan.attendantId]).toBeDefined();
-    expect(plan.effects.some((e) => e.type === "set_taihou_health" && e.healthStatus === "healthy")).toBe(true);
+    // 侍疾不再免费治愈太后。
+    expect(plan.effects.some((e) => e.type === "set_taihou_health")).toBe(false);
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.attendantId && e.delta === 5)).toBe(true);
     expect(plan.beats.length).toBe(3);
   });

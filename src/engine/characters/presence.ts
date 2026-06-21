@@ -28,7 +28,11 @@ export function getPresentAt(
   locationId: string,
 ): CharacterContent[] {
   return Object.values(db.characters)
-    .filter((character) => getCharacterLocation(db, state, character.id) === locationId)
+    .filter(
+      (character) =>
+        state.standing[character.id]?.lifecycle !== "deceased" &&
+        getCharacterLocation(db, state, character.id) === locationId,
+    )
     .sort(
       (a, b) =>
         (db.ranks[b.initialStanding?.rank ?? ""]?.order ?? 0) -
@@ -89,7 +93,11 @@ export function consortLocationAt(
 export function presentAt(db: ContentDB, state: GameState, locationId: string): CharacterContent[] {
   const slot = shichenSlot(state.calendar);
   return Object.values(db.characters)
-    .filter((character) => consortLocationAt(db, state, character.id, slot) === locationId)
+    .filter(
+      (character) =>
+        state.standing[character.id]?.lifecycle !== "deceased" &&
+        consortLocationAt(db, state, character.id, slot) === locationId,
+    )
     .sort(
       (a, b) =>
         (db.ranks[b.initialStanding?.rank ?? ""]?.order ?? 0) -

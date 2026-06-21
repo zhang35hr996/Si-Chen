@@ -45,8 +45,9 @@ export function MapScreen({
   /** Open on the 皇城主地图 (root board) — true after 新游戏 / 事件结束 (hub return);
    *  false when opened from a location's 宫城图 button (start on that board). */
   atRoot: boolean;
-  /** spentAp=false 表示宫内免行动点移动（不掷懿旨/敲打、不跑转旬）。 */
-  onTravelled: (rolledOver: boolean, spentAp: boolean) => void;
+  /** spentAp=false 表示宫内免行动点移动（不掷懿旨/敲打、不跑转旬）。
+   *  sovereignDied=true 表示本次跨月 tick 皇帝崩逝，调用方须 short-circuit 回 title。 */
+  onTravelled: (rolledOver: boolean, spentAp: boolean, sovereignDied?: boolean) => void;
   onEnterCurrent: () => void;
   onOpenView: (locationId: string) => void;
   onOpenSettings: () => void;
@@ -114,19 +115,29 @@ export function MapScreen({
   const travel = (to: string) => {
     const batch = buildTravelBatch(db, state, to);
     if (!batch.ok) return; // button is disabled; backstop only
-    const spentAp = batch.value.some((c) => c.type === "SPEND_AP");
-    const result = store.dispatchBatch(batch.value);
-    if (result.ok) onTravelled(result.value.rolledOver, spentAp);
+    const moveCommands = batch.value.filter((c) => c.type !== "SPEND_AP");
+    const spend = batch.value.find(
+      (c): c is { type: "SPEND_AP"; amount: number } => c.type === "SPEND_AP",
+    );
+    if (spend) {
+      // 耗行动点旅行：经统一时间入口（移动 + 扣点 + 跨月健康 tick + gameOver）。
+      const result = store.travelAndAdvance(db, moveCommands, spend);
+      if (result.ok) onTravelled(result.value.rolledOver, true, result.value.healthOutcome?.sovereignDied === true);
+    } else {
+      const result = store.dispatchBatch(moveCommands);
+      if (result.ok) onTravelled(result.value.rolledOver, false, false);
+    }
   };
 
   // 出宫（前往京城）扣 1 行动力，并复用 travel 的转旬/懿旨/敲打结算；
   // 回宫与城内（进后宫等）导航免费，仅切换视图。
   const exitPalace = (to: string) => {
     if (state.calendar.ap < 1) return; // button is disabled; backstop only
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
-    if (!spend.ok) return;
+    // 出宫扣点经统一时间入口（无 MOVE 命令，仅推进时间 + 跨月健康 tick + gameOver）。
+    const result = store.travelAndAdvance(db, [], { type: "SPEND_AP", amount: 1 });
+    if (!result.ok) return;
     enterBoard(to);
-    onTravelled(spend.value.rolledOver, true);
+    onTravelled(result.value.rolledOver, true, result.value.healthOutcome?.sovereignDied === true);
   };
 
   // 点击节点直接执行动作（无信息栏中转）。

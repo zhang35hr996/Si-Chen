@@ -118,6 +118,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   // 宫城图 button opens the map on the current board instead (atRoot=false).
   const [mapAtRoot, setMapAtRoot] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
+  // 轻量系统提示横幅（如太后已薨时进慈宁宫）。非角色台词，独立于视图渲染。
+  const [notice, setNotice] = useState<string | null>(null);
   const [successorOpen, setSuccessorOpen] = useState(false);
   const [successorDismissedMonth, setSuccessorDismissedMonth] = useState<number | null>(null);
   const [centennialDismissedMonth, setCentennialDismissedMonth] = useState<number | null>(null);
@@ -156,6 +158,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   // 大选·四月 prompt：进入房间且到节点时声明式弹出（reactiveState 订阅日历驱动重算）。
   const reactiveState = useGameState(store);
+
+  // 死者视图清理：被召见的侍君若在跨月健康 tick 中身故，清除召见态（不在死者宫中停留）。
+  useEffect(() => {
+    if (!summonedConsortId) return;
+    if (reactiveState.standing[summonedConsortId]?.lifecycle === "deceased") {
+      setSummonedConsortId(null);
+    }
+  }, [reactiveState.standing, summonedConsortId]);
   useEffect(() => {
     if (!content.ok) return;
     if (view !== "location" || daxuanPrompt || dianxuan) return;
@@ -223,7 +233,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
-    if (loc === "cining_gong") { setView("cining_gong"); maybeShizhi(); return; }
+    if (loc === "cining_gong") {
+      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
+      setView("cining_gong"); maybeShizhi(); return;
+    }
     setView(loc === "wenzhaodian" ? "wenzhaodian" : loc === "yuqing_gong" ? "yuqing_gong" : loc === "fengxiandian" ? "fengxiandian" : "location");
     if (loc === "wenzhaodian") maybeAutumnHunt();
   };
@@ -267,7 +280,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   const canContinue =
-    storage !== null && listSaves(storage).some((s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok");
+    storage !== null &&
+    listSaves(storage).some(
+      (s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok" && !s.gameOver,
+    );
 
   /** 重置每行动点的去重 ref：新游戏或读档后必须清空，否则旧局的 key（rngSeed 固定为 1）会压制本局掷骰。 */
   const resetRollGuards = () => {
@@ -280,6 +296,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (result.ok) {
       store.loadState(result.value.state);
       resetRollGuards();
+      // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
+      if (store.getState().gameOver) {
+        setContinueError("先帝已崩，请开新局。");
+        setView("title");
+        return;
+      }
       setContinueError(result.value.warnings.map((w) => w.message).join("；") || null);
       goHome();
     } else {
@@ -297,7 +319,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     else if (store.getState().playerLocation === "wenzhaodian") setView("wenzhaodian");
     else if (store.getState().playerLocation === "yuqing_gong") setView("yuqing_gong");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
-    else if (store.getState().playerLocation === "cining_gong") { setView("cining_gong"); maybeShizhi(); }
+    else if (store.getState().playerLocation === "cining_gong") {
+      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); }
+      else { setView("cining_gong"); maybeShizhi(); }
+    }
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
@@ -430,6 +455,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   /** 进慈宁宫且太后病中：掷侍疾遭遇，命中即应用并串播。返回是否已起反应。 */
   const maybeShizhi = (): boolean => {
+    if (store.getState().taihou.deceased) return false; // 太后已薨：不再侍疾。
     const cal = store.getState().calendar;
     const key = `${cal.year}:${cal.month}:${cal.period}`;
     const plan = buildShizhiEncounter(db, store.getState(), key);
@@ -834,7 +860,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   /** 旅行结算（MapScreen.onTravelled 与院子 enterConsortQuarters 共用）。 */
-  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean) => {
+  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false) => {
+    if (sovereignDied) { onSovereignDeath(); return; } // 跨月旅行皇帝崩逝：清场回 title。
     doAutosave();
     // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
     if (!spentAp) return;
@@ -860,13 +887,19 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (here) { enterCurrentLocation(); return; }
     const batch = buildTravelBatch(db, store.getState(), palaceId);
     if (!batch.ok) { setView("map"); return; }
-    const spentAp = batch.value.some((c) => c.type === "SPEND_AP");
-    const result = store.dispatchBatch(batch.value);
-    if (!result.ok) { setView("map"); return; } // 兜底：勿滞留在已置空的院子视图（黑屏）
-    if (spentAp) {
-      // 出宫等耗行动点的移动：复用 MapScreen.onTravelled 的结算（懿旨/敲打/转旬 + 进房）。
-      onTravelledSettle(result.value.rolledOver, spentAp);
+    const moveCommands = batch.value.filter((c) => c.type !== "SPEND_AP");
+    const spend = batch.value.find(
+      (c): c is { type: "SPEND_AP"; amount: number } => c.type === "SPEND_AP",
+    );
+    if (spend) {
+      // 出宫等耗行动点的移动：经统一时间入口（移动 + 扣点 + 跨月健康 tick + gameOver）。
+      const result = store.travelAndAdvance(db, moveCommands, spend);
+      if (!result.ok) { setView("map"); return; } // 兜底：勿滞留在已置空的院子视图（黑屏）
+      if (result.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+      onTravelledSettle(result.value.rolledOver, true);
     } else {
+      const result = store.dispatchBatch(moveCommands);
+      if (!result.ok) { setView("map"); return; } // 兜底：勿滞留在已置空的院子视图（黑屏）
       // 宫内免行动点移动：onTravelledSettle 对 !spentAp 仅落盘即返回，不设视图，
       // 故此处显式进入该宫房间（否则 view 滞留 courtyard 而 courtyardLocId 已空 → 黑屏）。
       doAutosave();
@@ -935,6 +968,27 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   return (
     <>
+      {notice && (
+        <div
+          role="status"
+          onClick={() => setNotice(null)}
+          style={{
+            position: "fixed",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            padding: "10px 20px",
+            background: "rgba(20,16,12,0.92)",
+            color: "#f4e8d0",
+            borderRadius: 6,
+            cursor: "pointer",
+            fontSize: 14,
+          }}
+        >
+          {notice}
+        </div>
+      )}
       {view === "title" && (
         <TitleScreen
           registry={registry}

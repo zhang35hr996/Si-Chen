@@ -395,6 +395,8 @@ export interface SlotInfo {
   slot: SaveSlot;
   status: "empty" | "ok" | "corrupt";
   createdAt?: string;
+  /** 终局存档（先帝已崩）：菜单据此禁用「继续」。浅读，不做 schema 校验。 */
+  gameOver?: boolean;
 }
 
 /** Shallow listing for the save menu — never quarantines, never throws. */
@@ -403,11 +405,12 @@ export function listSaves(storage: KVStorage): SlotInfo[] {
     const raw = storage.get(keyOf(slot));
     if (raw === null) return { slot, status: "empty" as const };
     try {
-      const data = JSON.parse(raw) as { createdAt?: unknown };
+      const data = JSON.parse(raw) as { createdAt?: unknown; state?: { gameOver?: unknown } };
       return {
         slot,
         status: "ok" as const,
         ...(typeof data.createdAt === "string" ? { createdAt: data.createdAt } : {}),
+        ...(data.state?.gameOver != null ? { gameOver: true } : {}),
       };
     } catch {
       return { slot, status: "corrupt" as const };
