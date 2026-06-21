@@ -266,6 +266,22 @@ export const characterSchema = z
 
 export type CharacterContent = z.infer<typeof characterSchema>;
 
+// ── items (content/items.json — 库房物品目录) ─────────────────────────
+export const itemTierSchema = z.enum(["common", "fine", "treasure", "marvel"]);
+export const itemCategorySchema = z.enum([
+  "妆品", "香", "绸缎", "皮毛", "文房", "乐器",
+  "玩器", "点心", "茶饮", "珍味", "器玩", "珍禽异兽",
+]);
+export const itemDefSchema = z.strictObject({
+  id: idSchema,
+  name: z.string().min(1),
+  category: itemCategorySchema,
+  tier: itemTierSchema,
+  tags: z.array(z.string()).max(8),
+});
+export type ItemDef = z.infer<typeof itemDefSchema>;
+export const itemsFileSchema = z.strictObject({ items: z.array(itemDefSchema) });
+
 // ── official posts (官职表 — world.json) ─────────────────────────────
 export const officialPostSchema = z.strictObject({
   id: idSchema,

@@ -9,6 +9,7 @@ import { err, ok, type Result } from "../infra/result";
 import {
   characterSchema,
   gameEventSchema,
+  itemsFileSchema,
   locationSchema,
   sceneSchema,
   worldLexiconSchema,
@@ -17,6 +18,7 @@ import {
   type CharacterRank,
   type EventEffect,
   type GameEventContent,
+  type ItemDef,
   type LocationContent,
   type OfficialPost,
   type SceneContent,
@@ -39,6 +41,7 @@ export interface RawContent {
   locations: RawFile[];
   events: RawFile[];
   scenes: RawFile[];
+  items?: RawFile;
 }
 
 export interface ContentDB {
@@ -51,6 +54,7 @@ export interface ContentDB {
   locations: Record<string, LocationContent>;
   events: Record<string, GameEventContent>;
   scenes: Record<string, SceneContent>;
+  items: Record<string, ItemDef>;
 }
 
 /** Runtime guard for scene execution (plan §10 #7) — exported for PR 8. */
@@ -65,6 +69,19 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
   const locations = parseCollection(locationSchema, raw.locations, errors);
   const events = parseCollection(gameEventSchema, raw.events, errors);
   const scenes = parseCollection(sceneSchema, raw.scenes, errors);
+
+  const items: Record<string, ItemDef> = {};
+  if (raw.items) {
+    const parsed = parseFile(itemsFileSchema, raw.items, errors);
+    if (parsed) {
+      for (const def of parsed.items) {
+        if (items[def.id]) {
+          errors.push(contentError("DUPLICATE_ID", `items.json: duplicate item id "${def.id}"`));
+        }
+        items[def.id] = def;
+      }
+    }
+  }
 
   const ranks: Record<string, CharacterRank> = {};
   if (world) {
@@ -121,6 +138,7 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
       locations: locations.byId,
       events: events.byId,
       scenes: scenes.byId,
+      items,
     }),
   );
 }

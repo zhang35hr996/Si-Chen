@@ -51,6 +51,7 @@ export function readContentDir(rootDir: string): DiskContent {
       locations: readDir("locations"),
       events: readDir("events"),
       scenes: readDir("scenes"),
+      items: readJson(join(rootDir, "items.json")),
     },
     parseErrors,
   };

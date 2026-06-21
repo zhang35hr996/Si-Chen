@@ -24,11 +24,13 @@ export function loadGameContent(): Result<ContentDB, GameError[]> {
   const scenes: RawFile[] = [];
   let world: RawFile = { source: "content/world.json", data: null };
   let lexicon: RawFile = { source: "content/lexicon.json", data: null };
+  let items: RawFile | undefined;
 
   for (const [path, data] of Object.entries(modules)) {
     const file = toRawFile(path, data);
     if (path.endsWith("/world.json")) world = file;
     else if (path.endsWith("/lexicon.json")) lexicon = file;
+    else if (path.endsWith("/items.json")) items = file;
     else if (path.includes("/characters/")) characters.push(file);
     else if (path.includes("/locations/")) locations.push(file);
     else if (path.includes("/events/")) events.push(file);
@@ -41,7 +43,7 @@ export function loadGameContent(): Result<ContentDB, GameError[]> {
   events.sort(bySource);
   scenes.sort(bySource);
 
-  return loadContent({ world, lexicon, characters, locations, events, scenes });
+  return loadContent({ world, lexicon, characters, locations, events, scenes, items });
 }
 
 const bySource = (a: RawFile, b: RawFile): number => a.source.localeCompare(b.source);
