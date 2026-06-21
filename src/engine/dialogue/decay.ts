@@ -4,6 +4,7 @@ import type { GameTime } from "../calendar/time";
 import type { MemoryEntry } from "../state/types";
 
 export const MEMORY_CONFIG = {
+  // 单位：dayIndex 行动日周期（每月 3）— 非日历天；数值校准实现期可调
   halfLifeDays: { fast: 75, slow: 720 },
   minimumRetrievalSalience: 25,
 } as const;

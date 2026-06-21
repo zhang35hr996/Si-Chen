@@ -20,7 +20,7 @@ export interface DialogueRequest {
     profile: CharacterContent["profile"];
     voice: CharacterContent["voice"];
     standing: CharacterStanding & { selfRefs: CharacterRank["selfRefs"] };
-    /** v0: always [] — retrieval lands with the real provider (plan §7). */
+    /** 由激活管线填充（decay → retrievalScore → rankCandidates，默认 topN 5）。 */
     relevantMemories: MemoryEntry[];
     stances: { charId: string; attitude: string }[];
   };

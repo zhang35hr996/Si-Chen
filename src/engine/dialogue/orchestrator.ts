@@ -51,7 +51,7 @@ export function assembleDialogueRequest(
       relevantMemories: buildMemoryContext(
         state,
         { speakerId },
-        { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId },
+        { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId, locationId },
       ).activatedMemories,
       stances: character.stances ?? [],
     },

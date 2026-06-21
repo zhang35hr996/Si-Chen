@@ -15,6 +15,7 @@ export function buildMemoryContext(
   const ranked = rankCandidates(state, ctx, recalled, topN);
   return {
     activatedMemories: ranked.flatMap((c) => (c.kind === "memory" ? [c.memory] : [])),
+    // knownEvents 已生成，但 DialogueRequest 尚无对应字段（PR5 接入）
     knownEvents: ranked.flatMap((c) => (c.kind === "event" ? [c.event] : [])),
   };
 }

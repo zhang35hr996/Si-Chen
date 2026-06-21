@@ -17,7 +17,7 @@ const requestFor = (speakerId: string, text = "台词。"): DialogueRequest => {
 };
 
 describe("assembleDialogueRequest carries the full future-AI context", () => {
-  it("profile, voice, standing+selfRefs, empty memories, stances, etiquette, GameTime", () => {
+  it("profile, voice, standing+selfRefs, memories(激活), stances, etiquette, GameTime", () => {
     const request = requestFor("shen_zhibai");
     expect(request.speakerContext.profile.name).toBe("沈知白");
     expect(request.speakerContext.standing).toMatchObject({ rank: "fenghou", favor: 25 });
