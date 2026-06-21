@@ -208,3 +208,36 @@ export function buildDaxuanDianxuanPrompt(_db: ContentDB, state: GameState): Che
     ],
   };
 }
+
+// ── NPC 自留（委托 + 早退场） ──────────────────────────────────────
+
+/** NPC（太后/皇后）留下的秀男及自动定的位分。 */
+export interface KeptConsort {
+  candidate: Candidate;
+  rank: string;
+}
+
+/** 委托路径：20% 几率留 1–2 位随机秀男，按家世推荐位分；否则空。 */
+export function npcKeepOnDelegate(db: ContentDB, _state: GameState, year: number): KeptConsort[] {
+  const cands = generateCandidates(db, _state, year);
+  if (cands.length === 0) return [];
+  if (gestationRoll(`daxuan:npc:delegate:${year}`) >= 20) return [];
+  const n = 1 + (gestationRollRaw(`daxuan:npc:delegate:n:${year}`) % 2); // 1–2
+  const picked: KeptConsort[] = [];
+  for (let i = 0; i < n && i < cands.length; i++) {
+    const idx = gestationRollRaw(`daxuan:npc:delegate:pick:${year}:${i}`) % cands.length;
+    const cand = cands[idx]!;
+    if (picked.some((k) => k.candidate.content.id === cand.content.id)) continue;
+    picked.push({ candidate: cand, rank: recommendRank(cand.grade) });
+  }
+  return picked;
+}
+
+/** 早退场：20% 几率从剩余未审阅者中留 1 位随机，按家世推荐位分；否则 null。 */
+export function npcKeepOnLeave(remaining: Candidate[], _state: GameState, year: number): KeptConsort | null {
+  if (remaining.length === 0) return null;
+  if (gestationRoll(`daxuan:npc:leave:${year}`) >= 20) return null;
+  const idx = gestationRollRaw(`daxuan:npc:leave:pick:${year}`) % remaining.length;
+  const cand = remaining[idx]!;
+  return { candidate: cand, rank: recommendRank(cand.grade) };
+}
