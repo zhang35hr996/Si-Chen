@@ -62,7 +62,14 @@ export function validateEffects(
       case "resource":
       case "set_bloodline_status":
       case "flag":
-      case "set_taihou_illness":
+      case "set_taihou_health":
+      case "set_consort_health":
+      case "set_heir_health":
+      case "set_consort_posthumous":
+      case "consort_decease":
+      case "heir_decease":
+      case "taihou_decease":
+      case "enqueue_aftermath":
         break; // fully constrained by the schema
       case "set_rank": {
         const ch = db.characters[e.char];
@@ -508,8 +515,65 @@ export function applyEffects(
         heir.deceasedAt = now;
         break;
       }
-      case "set_taihou_illness": {
-        next.taihou.ill = effect.ill;
+      case "set_consort_health": {
+        const st = next.standing[effect.char]!;
+        if (effect.healthDelta !== undefined) st.health = clampPct((st.health ?? 100) + effect.healthDelta);
+        if (effect.healthStatus !== undefined) st.healthStatus = effect.healthStatus;
+        break;
+      }
+      case "set_taihou_health": {
+        if (effect.healthDelta !== undefined) next.taihou.health = clampPct(next.taihou.health + effect.healthDelta);
+        if (effect.healthStatus !== undefined) next.taihou.healthStatus = effect.healthStatus;
+        break;
+      }
+      case "set_heir_health": {
+        const h = next.resources.bloodline.heirs.find((x) => x.id === effect.heirId);
+        if (h) {
+          if (effect.healthDelta !== undefined) h.health = clampPct(h.health + effect.healthDelta);
+          if (effect.healthStatus !== undefined) h.healthStatus = effect.healthStatus;
+        }
+        break;
+      }
+      case "set_consort_posthumous": {
+        const st = next.standing[effect.char]!;
+        if (st.deathRecord) {
+          if (effect.posthumousRankId !== undefined) st.deathRecord.posthumousRankId = effect.posthumousRankId;
+          if (effect.posthumousEpithet !== undefined) st.deathRecord.posthumousEpithet = effect.posthumousEpithet;
+        }
+        break;
+      }
+      case "consort_decease": {
+        const st = next.standing[effect.char]!;
+        const rank = st.rank;
+        st.lifecycle = "deceased";
+        st.deathRecord = {
+          diedAt: effect.at,
+          cause: effect.cause,
+          originalRankId: rank,
+          ...(st.title !== undefined ? { originalTitle: st.title } : {}),
+        };
+        break;
+      }
+      case "heir_decease": {
+        const h = next.resources.bloodline.heirs.find((x) => x.id === effect.heirId);
+        if (h) { h.deceased = true; h.diedAt = effect.at; }
+        break;
+      }
+      case "taihou_decease": {
+        next.taihou.deceased = true;
+        next.taihou.diedAt = effect.at;
+        break;
+      }
+      case "enqueue_aftermath": {
+        if (!next.pendingAftermath.some((a) => a.id === effect.id)) {
+          next.pendingAftermath.push({
+            id: effect.id,
+            kind: effect.kind,
+            subjectId: effect.subjectId,
+            at: effect.at,
+            resolved: false,
+          });
+        }
         break;
       }
       case "memory": {
