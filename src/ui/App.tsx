@@ -8,9 +8,11 @@ import { assetError, stateError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
+import { greetingAttendees } from "../engine/characters/greeting";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
-import { monthOrdinal } from "../engine/calendar/time";
+import { monthOrdinal, isGreetingSlot } from "../engine/calendar/time";
+import { getCharacterLocation } from "../engine/characters/presence";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
@@ -19,6 +21,13 @@ import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng
 import { buildProvinceTribute, buildMinisterTribute } from "../store/tribute";
 import { buildAutumnHuntPrompt } from "../store/autumnHunt";
 import { ChengFengPromptScreen } from "./screens/ChengFengPromptScreen";
+import { DianxuanScreen } from "./screens/DianxuanScreen";
+import {
+  buildDaxuanAnnounce, buildDaxuanDianxuanPrompt, generateCandidates,
+  npcKeepOnDelegate, npcKeepOnLeave, daxuanDianxuanFlagKey,
+  type Candidate,
+} from "../store/grandSelection";
+import { useGameState } from "../store/useGameState";
 import { BestowModal } from "./components/BestowModal";
 import { MORNING_SLOT, AFTERNOON_SLOT } from "../engine/calendar/time";
 import type { ChengFengPrompt, PromptAction } from "../store/prompt";
@@ -50,6 +59,8 @@ import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
 import { RelocateModal } from "./components/RelocateModal";
+import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
+import { MorningAfterOverlay } from "./components/MorningAfterOverlay";
 import { buildRelocate } from "../store/relocate";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
@@ -70,7 +81,7 @@ import { ShopScreen } from "./screens/ShopScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse" | "shop";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse" | "shop" | "dianxuan";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -113,6 +124,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
   const [consortListOpen, setConsortListOpen] = useState(false);
+  // 从「查看侍君」列表进入封号管理/搬迁时记录该侍君：先关列表（两个弹窗叠层会互相遮挡点击），
+  // 操作（或取消）结束后据此重开列表并定位回同一位侍君。非列表入口（紫宸殿卡片/召见）保持 null。
+  const [consortListReturnId, setConsortListReturnId] = useState<string | null>(null);
   const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
@@ -126,6 +140,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
   const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
   const [giftItemId, setGiftItemId] = useState<string | null>(null);
+  const [daxuanPrompt, setDaxuanPrompt] = useState<ChengFengPrompt | null>(null);
+  const [dianxuan, setDianxuan] = useState<{ candidates: Candidate[]; year: number } | null>(null);
   const lastBoardRef = useRef<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
@@ -139,6 +155,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     audioController.play(trackFor({ view, board: currentBoard, zone: bgmZone }));
   }, [view, currentBoard, bgmZone]);
 
+  // 大选·四月 prompt：进入房间且到节点时声明式弹出（reactiveState 订阅日历驱动重算）。
+  const reactiveState = useGameState(store);
+  useEffect(() => {
+    if (!content.ok) return;
+    if (view !== "location" || daxuanPrompt || dianxuan) return;
+    const p = buildDaxuanDianxuanPrompt(content.value, store.getState());
+    if (p) setDaxuanPrompt(p);
+  }, [reactiveState.calendar.dayIndex, reactiveState.calendar.ap, view, daxuanPrompt, dianxuan]);
+
   if (!content.ok || !manifest.success) {
     const errors = [
       ...(content.ok ? [] : content.error),
@@ -148,7 +173,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     ];
     return <BootErrorScreen errors={errors} />;
   }
-  const db = content.value;
+  // 合并殿选落库的生成侍君，使其在房间/院子等界面可见（每渲染重算，开销低）。
+  const db = {
+    ...content.value,
+    characters: { ...content.value.characters, ...store.getState().generatedConsorts },
+  };
 
   const startEvent = (eventId: string) => {
     // 上朝是一场会话而非单个事件：进殿即扣 1 行动点，随机抽 2–3 件事务逐件处理。
@@ -204,23 +233,37 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (storage) autosave(storage, db, store.getState(), { logger });
   };
 
+  /** 若管理/搬迁是从「查看侍君」列表进入的，操作结束后重开列表（定位到该侍君）。 */
+  const reopenConsortListIfReturning = () => {
+    if (consortListReturnId) setConsortListOpen(true);
+  };
+
   const applyRankOp = (charId: string, req: RankOpRequest) => {
     const op = buildRankOp(db, store.getState(), charId, req);
     setManageCharId(null);
-    if (!op) return; // no change
+    if (!op) {
+      reopenConsortListIfReturning(); // 无变化：直接回到列表
+      return;
+    }
     const result = store.applyEffects(db, op.effects);
     if (result.ok) {
       doAutosave();
-      setReaction({ speakerId: charId, lines: op.lines });
+      setReaction({ speakerId: charId, lines: op.lines }); // 列表在反应播完后（onDone）重开
+    } else {
+      reopenConsortListIfReturning();
     }
   };
 
   const applyRelocate = (charId: string, location: string, chamber: ChamberId) => {
     const effects = buildRelocate(db, store.getState(), charId, location, chamber);
     setRelocateCharId(null);
-    if (!effects) return; // 无变化 / 非法目标
+    if (!effects) {
+      reopenConsortListIfReturning(); // 无变化 / 非法目标
+      return;
+    }
     const result = store.applyEffects(db, effects);
     if (result.ok) doAutosave();
+    reopenConsortListIfReturning(); // 搬迁无反应，立即回到列表
   };
 
   const canContinue =
@@ -310,6 +353,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       }
     }
     return [];
+  };
+
+  /** 二月大选报告（节拍，设 flag）；每大选年一次。返回节拍。 */
+  const rollDaxuanAnnounce = (): DecreeReaction[] => {
+    const r = buildDaxuanAnnounce(db, store.getState());
+    if (!r) return [];
+    const applied = store.applyEffects(db, r.effects);
+    if (!applied.ok) return [];
+    return r.beats;
   };
 
   /** action 解释器：玩家在进贡/秋猎 prompt 中的选择。 */
@@ -412,6 +464,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       const tributeShown = rollTribute(before, amount);
       if (!tributeShown) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
     }
+    if (spend.ok) decreeBeats = [...decreeBeats, ...rollDaxuanAnnounce()];
     if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };
@@ -458,6 +511,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (!applied.ok) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
+    store.recordOvernight(db, plan.charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
     const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
@@ -473,6 +527,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   const liveState = store.getState();
+
+  const ov = liveState.overnightWith;
+  const morningAfterCharId =
+    ov &&
+    ov.morningDayIndex === liveState.calendar.dayIndex &&
+    isGreetingSlot(liveState.calendar) &&
+    getCharacterLocation(db, liveState, ov.charId) === liveState.playerLocation
+      ? ov.charId
+      : null;
+
   const preg = liveState.resources.bloodline.pregnancy;
   // 孕二月敬事房上书：pending 且已过受孕月。
   const jingshifangDue =
@@ -693,12 +757,47 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     playReactions(decreeBeats, false);
   };
 
+  const [ceremonyOpen, setCeremonyOpen] = useState(false);
+  const [morningAfterOpen, setMorningAfterOpen] = useState(false);
+
+  const enterGreeting = () => {
+    const { spend, decreeBeats } = spendAp(1);
+    if (!spend.ok) return;
+    doAutosave();
+    setCeremonyOpen(true);
+    // 懿旨等转旬反应入队，待 ceremony 关闭后随正常流程消化（此处仅记一旬动作）。
+    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
+  };
+
+  const exitGreeting = () => {
+    goHome(); // 退出坤宁宫，回地图；不耗行动点
+  };
+
+  // 离开后宫居所：若是留宿宫且卯时，先弹二选一；否则正常回地图。
+  const leavePalace = () => {
+    if (morningAfterCharId) setMorningAfterOpen(true);
+    else goHome();
+  };
+
+  const restExcuse = () => {
+    if (morningAfterCharId) store.applyExcuseGreeting(db, morningAfterCharId);
+    setMorningAfterOpen(false);
+    goHome();
+  };
+
+  const silentLeave = () => {
+    store.dismissOvernight();
+    setMorningAfterOpen(false);
+    goHome();
+  };
+
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
     if (!lines) return;
     const { spend, decreeBeats } = spendAp(1);
     if (!spend.ok) return;
+    store.recordOvernight(db, charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
     playReactions([{ speakerId: charId, lines }, ...decreeBeats], spend.value.rolledOver);
@@ -755,6 +854,64 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     }
   };
 
+  /** 大选·四月 prompt 选择：进殿选（扣 1AP）或委托太后皇后（不扣 AP）。 */
+  const onDaxuanChoose = (action: PromptAction) => {
+    setDaxuanPrompt(null);
+    if (action.type === "daxuanEnter") {
+      // 设决定 flag + 扣 1AP，打开殿选。
+      store.setFlag(daxuanDianxuanFlagKey(action.year), true);
+      const { spend, decreeBeats } = spendAp(1);
+      if (!spend.ok) return;
+      const cands = generateCandidates(db, store.getState(), action.year);
+      setDianxuan({ candidates: cands, year: action.year });
+      setView("dianxuan");
+      // 殿选为原子流程：扣点产生的节拍此处先忽略串播。
+      void decreeBeats;
+    } else if (action.type === "daxuanDelegate") {
+      store.setFlag(daxuanDianxuanFlagKey(action.year), true);
+      const kept = npcKeepOnDelegate(db, store.getState(), action.year);
+      if (kept.length > 0) store.commitDaxuanKept(db, kept);
+      const beats: DecreeReaction[] = kept.length > 0
+        ? kept.map((k) => ({
+            speakerId: "cheng_feng",
+            lines: [`陛下，太后与皇后做主，留了${k.candidate.content.profile.name}的牌子，封为${db.ranks[k.rank]?.name ?? ""}，已迁入储秀宫。`],
+          }))
+        : [{ speakerId: "cheng_feng", lines: ["陛下，此次大选，太后与皇后看过，未有特别中意的，便都撂了牌子。"] }];
+      doAutosave();
+      const [first, ...rest] = beats;
+      if (first) { setReaction(first); setReactionQueue(rest); }
+    }
+  };
+
+  /** 殿选结束：落库选中侍君；早退场则从未审阅池随机留 1 位 NPC（约 20%）。 */
+  const onDianxuanDone = (
+    kept: { candidate: Candidate; rank: string }[],
+    leftEarly: boolean,
+    reviewedCount: number,
+  ) => {
+    const year = dianxuan?.year ?? store.getState().calendar.year;
+    for (const k of kept) store.commitDaxuanConsort(db, k.candidate, k.rank);
+    const beats: DecreeReaction[] = [];
+    if (leftEarly && dianxuan) {
+      const reviewedIds = new Set(kept.map((k) => k.candidate.content.id));
+      const remaining = dianxuan.candidates
+        .slice(reviewedCount)
+        .filter((c) => !reviewedIds.has(c.content.id));
+      const npc = npcKeepOnLeave(remaining, store.getState(), year);
+      if (npc) {
+        store.commitDaxuanKept(db, [npc]);
+        beats.push({
+          speakerId: "cheng_feng",
+          lines: [`陛下留步——有一位${npc.candidate.announce.replace(/，年.*$/, "")}颇得太后青眼，太后留了他的牌子，封为${db.ranks[npc.rank]?.name ?? ""}。`],
+        });
+      }
+    }
+    setDianxuan(null);
+    doAutosave();
+    goHome();
+    if (beats.length > 0) { const [f, ...rest] = beats; setReaction(f!); setReactionQueue(rest); }
+  };
+
   return (
     <>
       {view === "title" && (
@@ -798,7 +955,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
           onSummonPhysician={() => setPhysicianOpen(true)}
           onOpenHeirs={() => setHeirListOpen(true)}
-          onOpenConsorts={() => setConsortListOpen(true)}
+          onOpenConsorts={() => {
+            setConsortListReturnId(null); // 新开列表：从列表根开始（非管理返回）
+            setConsortListOpen(true);
+          }}
           onReviewMemorials={reviewMemorials}
           onRestAlone={restAlone}
           onConverse={converse}
@@ -807,6 +967,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           summonedConsortId={summonedConsortId}
           onDismissSummon={() => setSummonedConsortId(null)}
           focusConsortId={focusConsortId}
+          greetingAttendeeCount={greetingAttendees(db, store.getState()).length}
+          onEnterGreeting={enterGreeting}
+          onExitGreeting={exitGreeting}
+          onLeavePalace={leavePalace}
         />
       )}
       {view === "wenzhaodian" && (
@@ -895,6 +1059,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {view === "storehouse" && (
         <StorehouseScreen db={db} store={store} onClose={() => setView("map")} />
+      )}
+      {view === "dianxuan" && dianxuan && (
+        <DianxuanScreen
+          registry={registry}
+          db={db}
+          store={store}
+          candidates={dianxuan.candidates}
+          year={dianxuan.year}
+          onDone={onDianxuanDone}
+        />
       )}
       {view === "shop" && shopId && (
         <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
@@ -997,7 +1171,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           character={db.characters[manageCharId]!}
           standing={store.getState().standing[manageCharId]!}
           onApply={(req) => applyRankOp(manageCharId, req)}
-          onClose={() => setManageCharId(null)}
+          onClose={() => {
+            setManageCharId(null);
+            reopenConsortListIfReturning(); // 取消也回到列表
+          }}
         />
       )}
       {relocateCharId && db.characters[relocateCharId] && store.getState().standing[relocateCharId] && (
@@ -1006,7 +1183,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           state={liveState}
           character={db.characters[relocateCharId]!}
           onRelocate={(location, chamber) => applyRelocate(relocateCharId, location, chamber)}
-          onClose={() => setRelocateCharId(null)}
+          onClose={() => {
+            setRelocateCharId(null);
+            reopenConsortListIfReturning(); // 取消也回到列表
+          }}
         />
       )}
       {reaction && (
@@ -1025,6 +1205,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               setReaction(nextLine!);
               return;
             }
+            // 封号管理（自列表进入）的反应播完 → 回到列表并定位回该侍君。
+            // 仅列表入口会置 consortListReturnId，故不影响其它反应来源。
+            reopenConsortListIfReturning();
             if (postBirthPromoteId) {
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
@@ -1038,6 +1221,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {prompt && !reaction && (
         <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={prompt} onChoose={resolvePromptAction} />
+      )}
+      {daxuanPrompt && !reaction && (
+        <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={daxuanPrompt} onChoose={onDaxuanChoose} />
       )}
       {giftItemId && (
         <BestowModal db={db} store={store} itemId={giftItemId}
@@ -1061,15 +1247,28 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           state={liveState}
           registry={registry}
           sovereignPregnant={preg.status !== "none"}
-          onManage={(id) => setManageCharId(id)}
-          onRelocate={(id) => setRelocateCharId(id)}
+          initialSelectedId={consortListReturnId}
+          onManage={(id) => {
+            setConsortListReturnId(id); // 操作后回到列表并定位回此侍君
+            setConsortListOpen(false); // 先关列表，避免与封号管理弹窗叠层互相遮挡
+            setManageCharId(id);
+          }}
+          onRelocate={(id) => {
+            setConsortListReturnId(id);
+            setConsortListOpen(false);
+            setRelocateCharId(id);
+          }}
           onSummon={(id) => {
+            setConsortListReturnId(null);
             setConsortListOpen(false);
             setSummonedConsortId(id);
           }}
           onAddCandidate={addCandidate}
           onRemoveCandidate={removeCandidate}
-          onClose={() => setConsortListOpen(false)}
+          onClose={() => {
+            setConsortListReturnId(null);
+            setConsortListOpen(false);
+          }}
         />
       )}
       {bedchamberPickId && db.characters[bedchamberPickId] && (
@@ -1246,6 +1445,26 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onLoaded={() => { resetRollGuards(); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {ceremonyOpen && (
+        <GreetingCeremonyOverlay
+          empressName={db.characters.shen_zhibai?.profile.name ?? "皇后"}
+          onDone={() => {
+            setCeremonyOpen(false);
+            if (reactionQueue.length > 0) {
+              const [first, ...rest] = reactionQueue;
+              setReaction(first!);
+              setReactionQueue(rest);
+            }
+          }}
+        />
+      )}
+      {morningAfterOpen && morningAfterCharId && (
+        <MorningAfterOverlay
+          consortName={db.characters[morningAfterCharId]?.profile.name ?? "爱卿"}
+          onRest={restExcuse}
+          onSilent={silentLeave}
         />
       )}
       <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />

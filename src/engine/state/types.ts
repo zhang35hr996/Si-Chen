@@ -380,5 +380,9 @@ export interface GameState {
   /** 记忆提及日志（PR4：冷却惩罚）。 */
   mentionLog: MemoryMentionRecord[];
   sceneHistory: string[];
+  /** 本晨被免请安的侍君（按 dayIndex 自然失效）。 */
+  excusedFromGreeting?: { dayIndex: number; charIds: string[] };
+  /** 子时留宿记录，供次晨离宫二选一。 */
+  overnightWith?: { charId: string; morningDayIndex: number };
   rngSeed: number;
 }

@@ -1,8 +1,8 @@
 /**
  * Vertical-slice smoke (skeleton-plan §11/§13). One end-to-end journey:
- *   new game → trigger the starting-location event → advance dialogue →
- *   choose an outcome → verify AP/effects/memory/eventLog via the debug dump →
- *   manual save → reload page → continue → verify the state persisted.
+ *   new game → 登基改元 → enter 紫宸殿 → trigger its location_enter event →
+ *   advance dialogue → choose an outcome → verify AP/effects/memory/eventLog
+ *   via the debug dump → manual save → reload page → continue → verify persist.
  *
  * State is read straight from the debug panel's JSON dump (toggle: backtick),
  * the same surface a developer inspects by hand.
@@ -19,16 +19,21 @@ async function readState(page: Page): Promise<GameState> {
   return JSON.parse(text ?? "{}") as GameState;
 }
 
-test("vertical slice: new game → event → choose → save → reload → persist", async ({ page }) => {
+test("vertical slice: new game → 登基 → event → choose → save → reload → persist", async ({ page }) => {
   await page.goto("/");
 
-  // ── title → new game (lands on the 皇城主地图 hub) ─────────────────────
+  // ── title → new game → 登基改元（输入年号 → 开始）─────────────────────
   await page.getByRole("button", { name: "新游戏" }).click();
-  await expect(page.getByText("卯时（早上）")).toBeVisible(); // 第一个行动点 = 卯时
+  await page.getByPlaceholder("请输入年号（两字）").fill("永熙");
+  await page.getByRole("button", { name: "确认年号" }).click();
+  await page.getByRole("button", { name: "开始" }).click();
 
-  // ── enter the starting room (御书房) from the map, then its event ──────
-  await page.getByRole("button", { name: /御书房/ }).click();
-  await page.getByRole("button", { name: /司礼请示经血祭仪/ }).click();
+  // lands on the 皇城主地图 hub; first 行动点 = 卯时
+  await expect(page.getByText("卯时（早上）")).toBeVisible();
+
+  // ── enter the starting room (紫宸殿) from the map, then its event ──────
+  await page.getByRole("button", { name: "紫宸殿" }).click();
+  await page.getByRole("button", { name: "司礼请示传月祭仪" }).click();
 
   // ── dialogue: pick 准奏, then advance the closing line to commit ──────
   await page.getByRole("button", { name: /准奏/ }).click();

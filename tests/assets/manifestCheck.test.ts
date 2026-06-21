@@ -38,7 +38,7 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(51);
+    expect(result.entryCount).toBe(57); // origin/main 51 + 6 宫隶 portraits (portrait.gongli1–6.neutral)
     expect(result.placeholderCount).toBe(0); // all consort portraits now have real art
   });
 

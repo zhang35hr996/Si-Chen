@@ -17,6 +17,8 @@ import type { GameState } from "../engine/state/types";
 import { changeOfficialGrade } from "../engine/officials/changeGrade";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
+import { addGeneratedConsort, initialFavorForRank, type Candidate, type KeptConsort } from "./grandSelection";
+import { excuseFromGreeting, dismissOvernight, recordOvernight } from "./greeting";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -123,6 +125,51 @@ export class GameStore {
   declineAutumnHunt(): void {
     const year = this.state.calendar.year;
     this.state = { ...this.state, flags: { ...this.state.flags, [autumnHuntFlagKey(year)]: true } };
+    this.emit();
+  }
+
+  /** 设/清一个布尔 flag（大选一次性标记）。 */
+  setFlag(key: string, value: boolean): void {
+    this.state = { ...this.state, flags: { ...this.state.flags, [key]: value } };
+    this.emit();
+  }
+
+  /** 施恩免请安（不耗行动点）。 */
+  applyExcuseGreeting(db: ContentDB, charId: string): void {
+    this.state = excuseFromGreeting(this.state, db, charId);
+    this.emit();
+  }
+
+  /** 「不说」：清留宿，侍君照常请安。 */
+  dismissOvernight(): void {
+    this.state = dismissOvernight(this.state);
+    this.emit();
+  }
+
+  /** 子时侍寝/对话滚旬后记留宿（条件不满足则无副作用）。 */
+  recordOvernight(db: ContentDB, charId: string, rolledOver: boolean): void {
+    const next = recordOvernight(this.state, db, charId, rolledOver);
+    if (next !== this.state) {
+      this.state = next;
+      this.emit();
+    }
+  }
+
+  /** 殿选留牌子：按所选位分落库一位秀男（恩宠随位分缩放）。 */
+  commitDaxuanConsort(db: ContentDB, candidate: Candidate, rank: string): void {
+    const favor = initialFavorForRank(db.ranks[rank]?.order ?? 50);
+    this.state = addGeneratedConsort(this.state, candidate.content, rank, favor);
+    this.emit();
+  }
+
+  /** 批量落库 NPC 留下的秀男（按各自推荐位分）。 */
+  commitDaxuanKept(db: ContentDB, kept: KeptConsort[]): void {
+    let next = this.state;
+    for (const k of kept) {
+      const favor = initialFavorForRank(db.ranks[k.rank]?.order ?? 50);
+      next = addGeneratedConsort(next, k.candidate.content, k.rank, favor);
+    }
+    this.state = next;
     this.emit();
   }
 

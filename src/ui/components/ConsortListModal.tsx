@@ -8,7 +8,7 @@ import { inPalaceConsorts } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
-import { bedchamberConfig } from "../../store/bedchamber";
+import { bedchamberConfig, canSummon } from "../../store/bedchamber";
 import { ATTRIBUTE_LABELS } from "./CharacterCard";
 import { describe } from "../format/descriptors";
 import type { ScaleId } from "../format/descriptors";
@@ -18,6 +18,7 @@ export function ConsortListModal({
   state,
   registry,
   sovereignPregnant,
+  initialSelectedId,
   onManage,
   onRelocate,
   onSummon,
@@ -29,6 +30,8 @@ export function ConsortListModal({
   state: GameState;
   registry: AssetRegistry;
   sovereignPregnant: boolean;
+  /** 重开列表时直接展开该侍君的详情（封号管理/搬迁返回后定位回原处）；null=从列表根开始。 */
+  initialSelectedId?: string | null;
   onManage: (charId: string) => void;
   onRelocate: (charId: string) => void;
   onSummon: (charId: string) => void;
@@ -37,7 +40,7 @@ export function ConsortListModal({
   onClose: () => void;
 }) {
   const consorts = inPalaceConsorts(db, state);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const selected = consorts.find((c) => c.id === selectedId) ?? null;
 
   // 抚养皇嗣名号查表（按性别出生序编号）。
@@ -124,7 +127,7 @@ export function ConsortListModal({
               : raised.map((h) => heirNameById.get(h.id) ?? h.id).join("、")}
           </p>
           <div className="consort-detail__actions">
-            <button type="button" onClick={() => onSummon(c.id)}>
+            <button type="button" disabled={!canSummon(state, c.id)} onClick={() => onSummon(c.id)}>
               召见
             </button>
             {!isEmpress && (
