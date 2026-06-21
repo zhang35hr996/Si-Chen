@@ -14,6 +14,7 @@ import {
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState, Heir } from "../../engine/state/types";
+import { describe } from "../format/descriptors";
 
 export function HeirListModal({
   db,
@@ -113,12 +114,18 @@ export function HeirListModal({
           {h.adoptiveFatherId && (
             <p className="heir-detail__field">养父：{nameOf(h.adoptiveFatherId)}</p>
           )}
-          <p className="heir-detail__field">宠爱：{h.favor}</p>
+          <p className="heir-detail__field">健康：{describe("health", h.health)}</p>
+          <p className="heir-detail__field">宠爱：{describe("favor", h.favor, "heir")}</p>
+          <p className="heir-detail__field">天赋：{describe("talent", h.talent)}</p>
+          <p className="heir-detail__field">努力：{describe("effort", h.diligence)}</p>
           {isEnrolled(h, state.calendar) && (
-            <p className="heir-detail__field heir-list__edu">
-              学问{h.education.scholarship}·骑射{h.education.martial}·品行{h.education.virtue}
+            <p className="heir-detail__field">
+              政治：{describe("statecraft", h.education.scholarship)}・武力：{describe("martial", h.education.martial)}・道德：{describe("virtue", h.education.virtue)}
             </p>
           )}
+          <p className="heir-detail__field">野心：{describe("ambition", h.ambition, "heir")}</p>
+          <p className="heir-detail__field">亲近：{describe("closeness", h.closeness)}</p>
+          <p className="heir-detail__field">继位支持：{describe("support", h.support)}</p>
           <div className="heir-detail__actions">
             {onSummon && (
               <button type="button" disabled={!canSummon} onClick={() => onSummon(h.id)}>
