@@ -1,36 +1,14 @@
-/** 太后系统纯逻辑（生病/侍疾/敲打），种子化确定性。 */
+/** 太后系统纯逻辑（侍疾/敲打），种子化确定性。*/
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
+import { isIll } from "../engine/characters/health";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { GameState } from "../engine/state/types";
 
-export const TAIHOU_BASE_ILL_CHANCE = 5;
-export const TAIHOU_ILL_CHANCE_CAP = 25;
-export const TAIHOU_RECOVER_CHANCE = 50;
-
 export interface TaihouBeats {
   effects: EventEffect[];
   beats: { speakerId: string; lines: string[] }[];
-}
-
-/** 元年=5%，逐年+1%，封顶 25%。 */
-export function taihouIllnessChance(year: number): number {
-  return Math.min(TAIHOU_BASE_ILL_CHANCE + Math.max(0, year - 1), TAIHOU_ILL_CHANCE_CAP);
-}
-
-/** 旬翻转掷骰：未病→可能生病（含提示）；已病→可能自愈（无提示）。无变化返回 null。 */
-export function buildTaihouIllnessTick(state: GameState, seedKey: string): TaihouBeats | null {
-  if (!state.taihou.ill) {
-    const chance = taihouIllnessChance(state.calendar.year);
-    if (gestationRoll(`taihou:ill:${seedKey}`) % 100 >= chance) return null;
-    return {
-      effects: [{ type: "set_taihou_illness", ill: true }],
-      beats: [{ speakerId: "wei_sui", lines: ["司礼官急奏：太后凤体违和，太医已往慈宁宫诊视。"] }],
-    };
-  }
-  if (gestationRoll(`taihou:recover:${seedKey}`) % 100 >= TAIHOU_RECOVER_CHANCE) return null;
-  return { effects: [{ type: "set_taihou_illness", ill: false }], beats: [] };
 }
 
 export const TAIHOU_SHIZHI_CHANCE = 50;
@@ -54,7 +32,7 @@ function attendantPool(db: ContentDB, state: GameState): string[] {
 
 /** 病中进慈宁宫遇侍君/凤后侍疾。seedKey 按旬钉死。无遭遇/无候选→null。 */
 export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: string): ShizhiPlan | null {
-  if (!state.taihou.ill) return null;
+  if (!isIll(state.taihou.healthStatus)) return null;
   if (gestationRoll(`taihou:shizhi:gate:${seedKey}`) % 100 >= TAIHOU_SHIZHI_CHANCE) return null;
   const pool = attendantPool(db, state);
   if (pool.length === 0) return null;
@@ -65,7 +43,7 @@ export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: s
   return {
     attendantId,
     effects: [
-      { type: "set_taihou_illness", ill: false },
+      { type: "set_taihou_health", healthStatus: "healthy" },
       { type: "favor", char: attendantId, delta: 5 },
       {
         type: "memory",
@@ -112,7 +90,7 @@ function rebukePool(db: ContentDB, state: GameState): { id: string; favor: numbe
 
 /** 每行动点 5% 敲打；病中不掷。按 favor 加权选人（宠高更易中）。无候选→null。 */
 export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: string): RebukePlan | null {
-  if (state.taihou.ill) return null;
+  if (isIll(state.taihou.healthStatus)) return null;
   if (gestationRoll(`taihou:rebuke:gate:${seedKey}`) % 100 >= TAIHOU_REBUKE_CHANCE) return null;
   const pool = rebukePool(db, state);
   if (pool.length === 0) return null;

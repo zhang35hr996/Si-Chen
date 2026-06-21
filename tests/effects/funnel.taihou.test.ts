@@ -7,12 +7,12 @@ const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
-describe("set_taihou_illness", () => {
-  it("flips taihou.ill through the funnel", () => {
+describe("set_taihou_health", () => {
+  it("sets taihou healthStatus through the funnel", () => {
     const s0 = createNewGameState(db);
-    expect(s0.taihou.ill).toBe(false);
-    const r = applyEffects(db, s0, [{ type: "set_taihou_illness", ill: true }]);
+    expect(s0.taihou.healthStatus).toBe("healthy");
+    const r = applyEffects(db, s0, [{ type: "set_taihou_health", healthStatus: "sick" }]);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.taihou.ill).toBe(true);
+    if (r.ok) expect(r.value.taihou.healthStatus).toBe("sick");
   });
 });
