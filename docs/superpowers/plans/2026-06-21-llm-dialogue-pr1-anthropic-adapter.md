@@ -496,8 +496,11 @@ export function createAnthropicProvider(opts: { model: string; transport: Anthro
       const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let resolveCancel!: (v: typeof CANCEL) => void;
       const deadline = new Promise<typeof TIMEOUT>((res) => { timer = setTimeout(() => res(TIMEOUT), timeoutMs); });
-      const cancel = new Promise<typeof CANCEL>((res) => { options?.signal?.addEventListener("abort", () => res(CANCEL), { once: true }); });
+      const cancel = new Promise<typeof CANCEL>((res) => { resolveCancel = res; });
+      const onCallerAbort = () => resolveCancel(CANCEL);
+      options?.signal?.addEventListener("abort", onCallerAbort, { once: true });
       try {
         // Promise.race guarantees the deadline/cancel even if the transport ignores the signal.
         const winner = await Promise.race([opts.transport.send(payload, { signal: controller.signal }), deadline, cancel]);
@@ -506,6 +509,7 @@ export function createAnthropicProvider(opts: { model: string; transport: Anthro
         if (!winner.ok) return err(classifyTransportFailure(winner.error));
         return parseToolUse(winner.value, request, opts.model);
       } finally {
+        options?.signal?.removeEventListener("abort", onCallerAbort); // remove even when transport returns first
         if (timer) clearTimeout(timer);
       }
     },
@@ -783,11 +787,17 @@ function ctx(text: string, claims: ProposedClaim[]) {
 }
 const rankClaim = (id: string, object: string, sourceIds: string[]): ProposedClaim =>
   ({ claim: { id, predicate: "holds_rank", subjectId: SPEAKER, object, modality: "assert" }, sourceContextIds: sourceIds, modality: "assert", certainty: 90 });
+function firstOffered(ids: ReadonlySet<string>): string {
+  const offered = [...ids][0];
+  expect(offered).toBeDefined();
+  if (!offered) throw new Error("fixture must offer memory context (speaker initial memories changed?)");
+  return offered;
+}
 
 describe("anthropic provider — full PR5 pipeline acceptance", () => {
   it("(a) valid claim with a real offered source → passes, mentionLog grows", async () => {
     const { req, policy, provider } = ctx("本宫累了，陛下早些歇息。", []);
-    const offered = [...policy.offeredContextIds][0]!;
+    const offered = firstOffered(policy.offeredContextIds);
     const { req: r2, policy: p2, provider: pr2 } = ctx("本宫累了。", [rankClaim("c1", correctRank, [offered])]);
     void req; void policy; void provider;
     const r = await produceDialogueLineWithPolicy(db, pr2, r2, p2, state);
@@ -797,7 +807,7 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
 
   it("(b) claim contradicts belief → CLAIM_REJECTED, state.mentionLog unchanged", async () => {
     const before = structuredClone(state.mentionLog);
-    const offered = [...ctx("本宫累了。", []).policy.offeredContextIds][0]!;
+    const offered = firstOffered(ctx("本宫累了。", []).policy.offeredContextIds);
     const { req, policy, provider } = ctx("本宫累了。", [rankClaim("c2", wrongRank, [offered])]);
     const r = await produceDialogueLineWithPolicy(db, provider, req, policy, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("CLAIM_REJECTED");
@@ -815,7 +825,7 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
   it("(d) claim valid but text has a forbidden term → text reject, state.mentionLog unchanged", async () => {
     const before = structuredClone(state.mentionLog);
     const probe = ctx("本宫累了。", []);
-    const offered = [...probe.policy.offeredContextIds][0]!;
+    const offered = firstOffered(probe.policy.offeredContextIds);
     const { req, policy, provider } = ctx("皇上圣明。", [rankClaim("c4", correctRank, [offered])]);
     const r = await produceDialogueLineWithPolicy(db, provider, req, policy, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("GATE_REJECTED");
