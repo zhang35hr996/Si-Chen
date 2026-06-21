@@ -15,6 +15,7 @@ import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState, Heir } from "../../engine/state/types";
 import { describe } from "../format/descriptors";
+import { HealthStatusChip } from "./HealthStatusChip";
 
 export function HeirListModal({
   db,
@@ -114,7 +115,7 @@ export function HeirListModal({
           {h.adoptiveFatherId && (
             <p className="heir-detail__field">养父：{nameOf(h.adoptiveFatherId)}</p>
           )}
-          <p className="heir-detail__field">健康：{describe("health", h.health)}</p>
+          <p className="heir-detail__field">健康：{describe("health", h.health)}　<HealthStatusChip status={h.healthStatus ?? "healthy"} health={h.health} /></p>
           <p className="heir-detail__field">宠爱：{describe("favor", h.favor, "heir")}</p>
           <p className="heir-detail__field">天赋：{describe("talent", h.talent)}</p>
           <p className="heir-detail__field">努力：{describe("effort", h.diligence)}</p>

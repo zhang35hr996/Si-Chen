@@ -4,6 +4,7 @@
 import type { GameState } from "../../engine/state/types";
 import { Drawer } from "./Drawer";
 import { DescriptorStat } from "./DescriptorStat";
+import { HealthStatusChip } from "./HealthStatusChip";
 import { formatCoins } from "../format";
 
 function NumberLine({ label, value }: { label: string; value: number }) {
@@ -22,6 +23,9 @@ export function ResourcePanel({ state, onClose }: { state: GameState; onClose: (
       <div className="profile-section">
         <h3 className="profile-h">皇帝 · 明面</h3>
         <DescriptorStat label="健康" scale="health" value={sovereign.health} />
+        <div className="attr-line">
+          <HealthStatusChip status={sovereign.healthStatus} health={sovereign.health} />
+        </div>
         <DescriptorStat label="勤政" scale="diligence" value={sovereign.diligence} />
         <DescriptorStat label="威望" scale="prestige" value={sovereign.prestige} />
         <DescriptorStat label="武力" scale="martial" value={sovereign.martial} />
