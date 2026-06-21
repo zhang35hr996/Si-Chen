@@ -55,6 +55,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     bedchamber: {},
     eventLog: [],
     chronicle: [],
+    emotionalConditions: [],
     sceneHistory: [],
     rngSeed: overrides.rngSeed ?? 1,
   };

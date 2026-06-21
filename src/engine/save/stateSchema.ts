@@ -198,6 +198,17 @@ export const gameStateSchema = z.strictObject({
       tags: z.array(z.string()),
     }),
   ),
+  emotionalConditions: z.array(
+    z.strictObject({
+      id: z.string().min(1),
+      ownerId: idSchema,
+      type: z.enum(["acute_grief","prolonged_grief","resentment","anxiety","infatuation","humiliation"]),
+      sourceEventId: z.string().min(1),
+      severity: percent,
+      startedAt: gameTimeSchema,
+      recoveryProfile: z.enum(["fast","normal","slow","stuck"]),
+    }),
+  ),
   sceneHistory: z.array(idSchema),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;

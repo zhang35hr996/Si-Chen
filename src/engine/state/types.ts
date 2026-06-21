@@ -258,6 +258,19 @@ export interface CharacterMemoryStore {
   nextSeq: number;
 }
 
+export type EmotionalConditionType =
+  | "acute_grief" | "prolonged_grief" | "resentment" | "anxiety" | "infatuation" | "humiliation";
+
+export interface EmotionalCondition {
+  id: string;                 // "cond_<ownerId>_000001"
+  ownerId: string;
+  type: EmotionalConditionType;
+  sourceEventId: string;
+  severity: number;           // 0–100
+  startedAt: GameTime;
+  recoveryProfile: "fast" | "normal" | "slow" | "stuck";
+}
+
 export type BedchamberMode = "passion" | "pleasure" | "companionship";
 
 export interface BedchamberEncounter {
@@ -349,6 +362,8 @@ export interface GameState {
   eventLog: EventLogEntry[];
   /** 客观事件编年史（append-only，剧情事实；与 eventLog 的触发记账分离）。 */
   chronicle: CourtEvent[];
+  /** 角色情绪状态（与永久创伤记忆分离；PR2c 只存储，自动恢复留待后续）。 */
+  emotionalConditions: EmotionalCondition[];
   sceneHistory: string[];
   rngSeed: number;
 }
