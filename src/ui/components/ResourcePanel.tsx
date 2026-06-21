@@ -4,6 +4,7 @@
 import type { GameState } from "../../engine/state/types";
 import { Drawer } from "./Drawer";
 import { DescriptorStat } from "./DescriptorStat";
+import { formatCoins } from "../screens/StorehouseScreen";
 
 function NumberLine({ label, value }: { label: string; value: number }) {
   return (
@@ -35,7 +36,10 @@ export function ResourcePanel({ state, onClose }: { state: GameState; onClose: (
       <div className="profile-section">
         <h3 className="profile-h">国家 · 明面</h3>
         <DescriptorStat label="军力" scale="military" value={nation.military} />
-        <NumberLine label="国库" value={nation.treasury} />
+        <div className="attr-line">
+          <span className="attr-line__label">国库</span>
+          <span className="attr-line__value">{formatCoins(nation.treasury)} 两</span>
+        </div>
         <DescriptorStat label="民心" scale="publicSupport" value={nation.publicSupport} />
         <DescriptorStat label="生产力" scale="productivity" value={nation.productivity} />
         <DescriptorStat label="朝政" scale="governance" value={nation.governance} />
