@@ -46,16 +46,16 @@ const run = (t: ReturnType<typeof msgTransport>) => createAnthropicProvider({ mo
 const expectErr = async (p: Promise<{ ok: boolean }>, m: object) => { const x = await p as { ok: boolean; error?: object }; expect(x.ok).toBe(false); if (!x.ok) expect(x.error).toMatchObject(m); };
 
 describe("anthropicProvider — protocol classification", () => {
-  it("wrong tool", () => expectErr(run(msgTransport(msg({ content: [{ type: "tool_use", name: "other", input: {} }] }))), { kind: "protocol", cause: "wrong_tool" }));
+  it("wrong tool", () => expectErr(run(msgTransport(msg({ content: [{ type: "tool_use", name: "other", input: {} }] }))), { kind: "protocol", cause: "wrong_tool", retryable: true }));
   it("multiple tool calls", () => expectErr(run(msgTransport(msg({ content: [
     { type: "tool_use", name: "emit_dialogue_line", input: { text: "a", proposedClaims: [] } },
-    { type: "tool_use", name: "emit_dialogue_line", input: { text: "b", proposedClaims: [] } }] }))), { kind: "protocol", cause: "multiple_tool_calls" }));
-  it("max_tokens → truncated", () => expectErr(run(msgTransport(msg({ stop_reason: "max_tokens", content: [{ type: "tool_use", name: "emit_dialogue_line", input: { text: "半", proposedClaims: [] } }] }))), { kind: "protocol", cause: "truncated" }));
+    { type: "tool_use", name: "emit_dialogue_line", input: { text: "b", proposedClaims: [] } }] }))), { kind: "protocol", cause: "multiple_tool_calls", retryable: true }));
+  it("max_tokens → truncated", () => expectErr(run(msgTransport(msg({ stop_reason: "max_tokens", content: [{ type: "tool_use", name: "emit_dialogue_line", input: { text: "半", proposedClaims: [] } }] }))), { kind: "protocol", cause: "truncated", retryable: true }));
   it("refusal → refused", () => expectErr(run(msgTransport(msg({ stop_reason: "refusal" }))), { kind: "refused" }));
   it("pause_turn → protocol NOT retryable", () => expectErr(run(msgTransport(msg({ stop_reason: "pause_turn" }))), { kind: "protocol", cause: "pause_turn", retryable: false }));
   it("context exceeded → config/request_too_large", () => expectErr(run(msgTransport(msg({ stop_reason: "model_context_window_exceeded" }))), { kind: "config", cause: "request_too_large" }));
-  it("end_turn no tool → no_tool_call", () => expectErr(run(msgTransport(msg({ stop_reason: "end_turn", content: [{ type: "text" }] }))), { kind: "protocol", cause: "no_tool_call" }));
-  it("invalid tool input → schema_invalid", () => expectErr(run(msgTransport(msg({ content: [{ type: "tool_use", name: "emit_dialogue_line", input: { text: "", proposedClaims: [] } }] }))), { kind: "protocol", cause: "schema_invalid" }));
+  it("end_turn no tool → no_tool_call", () => expectErr(run(msgTransport(msg({ stop_reason: "end_turn", content: [{ type: "text" }] }))), { kind: "protocol", cause: "no_tool_call", retryable: true }));
+  it("invalid tool input → schema_invalid", () => expectErr(run(msgTransport(msg({ content: [{ type: "tool_use", name: "emit_dialogue_line", input: { text: "", proposedClaims: [] } }] }))), { kind: "protocol", cause: "schema_invalid", retryable: true }));
 });
 
 describe("anthropicProvider — transport-failure classification", () => {
