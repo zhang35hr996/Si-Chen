@@ -72,6 +72,38 @@ const rankChanged: RecordAfterEventRule = {
   applyRelationshipEffects: () => [],
 };
 
+const residenceChanged: RecordAfterEventRule = {
+  mode: "record_after",
+  // 证明迁居真的发生：before.residence===from ∧ after.residence===to。
+  validateTransition(before, after, draft) {
+    const errs: GameError[] = [];
+    const mover = roleId(draft.participants, "mover");
+    const { from, to } = draft.payload;
+    if (!mover || !before.standing[mover] || !after.standing[mover]) errs.push(stateError("RULE_BAD", "residence_changed needs 'mover' with standing in both states"));
+    if (typeof to !== "string") errs.push(stateError("RULE_BAD", "residence_changed payload.to missing"));
+    else if (mover && before.standing[mover] && after.standing[mover]) {
+      if (before.standing[mover]!.residence !== from) errs.push(stateError("RULE_BAD", "before.residence !== payload.from"));
+      if (after.standing[mover]!.residence !== to) errs.push(stateError("RULE_BAD", "after.residence !== payload.to"));
+    }
+    return errs;
+  },
+  createPersonalMemories(state, event) {
+    const mover = participantId(event, "mover");
+    if (!mover || !state.memories[mover]) return [];
+    const to = typeof event.payload.to === "string" ? event.payload.to : (event.locationId ?? "");
+    return [{
+      type: "memory", char: mover,
+      entry: {
+        kind: "impression", summary: `迁居${to}。`, strength: 35, retention: "fast",
+        subjectIds: [mover], perspective: "actor", triggerTags: ["residence"],
+        unresolved: false, emotions: {}, sourceEventId: event.id,
+      },
+    }];
+  },
+  applyRelationshipEffects: () => [],
+};
+
 export const eventMemoryRules: Partial<Record<CourtEventType, EventMemoryRule>> = {
   rank_changed: rankChanged,
+  residence_changed: residenceChanged,
 };
