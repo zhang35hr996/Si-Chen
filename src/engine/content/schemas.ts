@@ -27,6 +27,15 @@ const participantSchema = z.union([z.literal("player"), idSchema]);
 export const monthPeriodSchema = z.enum(["early", "mid", "late"]);
 
 // ── per-character runtime fragments (bound to engine/state/types) ─────
+
+/** GameTime 形状（与 save/stateSchema 的 gameTimeSchema 对齐；本地定义避免跨模块循环依赖）。 */
+export const gameTimeShape = z.strictObject({
+  year: z.number().int().min(1),
+  month: z.number().int().min(1).max(12),
+  period: z.enum(["early", "mid", "late"]),
+  dayIndex: z.number().int().min(0),
+});
+
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
@@ -39,6 +48,7 @@ export const characterStandingSchema = z.strictObject({
   confined: z.boolean().optional(),
   affection: percent.optional(),
   availableFromMonth: z.number().int().min(1).optional(),
+  palaceEnteredAt: gameTimeShape.optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────

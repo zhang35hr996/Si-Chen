@@ -264,6 +264,7 @@ export function addGeneratedConsort(
         residence: "chuxiu_gong",
         chamber: "main",
         availableFromMonth: monthOrdinal({ year: state.calendar.year, month: 5 }),
+        palaceEnteredAt: now, // 入宫时刻（知情资格用）：殿选承恩即此刻入宫
       },
     },
     memories: {

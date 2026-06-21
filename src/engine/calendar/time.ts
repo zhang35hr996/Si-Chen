@@ -81,6 +81,14 @@ export function dayIndexOf(year: number, month: number, period: MonthPeriod): nu
   return ((year - 1) * 12 + (month - 1)) * 3 + PERIOD_ORDINAL[period];
 }
 
+/** Chronological order by action-day index. <0 if a<b, 0 if equal, >0 if a>b. */
+export function compareGameTime(
+  a: Pick<GameTime, "dayIndex">,
+  b: Pick<GameTime, "dayIndex">,
+): number {
+  return a.dayIndex - b.dayIndex;
+}
+
 /** Month index from 元年一月 = 1 (period-agnostic) — drives 受宠 windows. */
 export function monthOrdinal(time: Pick<GameTime, "year" | "month">): number {
   return (time.year - 1) * 12 + time.month;

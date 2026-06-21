@@ -216,6 +216,8 @@ export interface CharacterStanding {
   affection?: number;
   /** 殿选新晋侍君的侍寝解禁月序（monthOrdinal）；缺省即无门槛。 */
   availableFromMonth?: number;
+  /** 入宫时刻（知情资格用）；非常住者 undefined。所有入宫流程必须写此字段。 */
+  palaceEnteredAt?: GameTime;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
@@ -273,6 +275,56 @@ export interface EventLogEntry {
   firedAt: GameTime;
 }
 
+// ── 客观事件编年史（严格 append-only；独立于 eventLog 的事件触发记账）─────
+export type CourtEventType =
+  | "residence_changed"
+  | "heir_born"
+  | "heir_died"
+  | "rank_changed"
+  | "punished"
+  | "rewarded"
+  | "conflict"
+  | "promise"
+  | "secret_discovered";
+// claim_corrected 延后到【首个有错误信念/可证伪 claim 的 PR】，而非承诺 PR5——它需生产者+消费者；
+// 加入即死类型。
+
+/** 公共/私人记忆共用的衰减档位。 */
+export type MemoryRetention = "fast" | "slow" | "permanent";
+
+/** contemporaneous=仅事发时在范围内者默认知道；institutional=后来进入者也默认知道。 */
+export type KnowledgePersistence = "contemporaneous" | "institutional";
+
+/** 判别联合：无效组合在数据入口即失败。v1 不允许 realm+contemporaneous。 */
+export type CourtEventPublicity =
+  | { scope: "circle"; circleIds: string[] }
+  | { scope: "palace"; persistence: KnowledgePersistence }
+  | { scope: "realm"; persistence: "institutional" };
+
+export interface CourtEventParticipant {
+  charId: string;
+  /** 显式角色，不靠数组位置：birth_father / adoptive_father / sovereign_parent / newborn / demoted / … */
+  role: string;
+}
+
+/** 一条不可变的「曾经发生过什么」。append-only，永不回写；更正用 claim_corrected 新事件。 */
+export interface CourtEvent {
+  /** "evt_000001"，由现有最大序号 +1 派生。 */
+  id: string;
+  type: CourtEventType;
+  occurredAt: GameTime;
+  participants: CourtEventParticipant[];
+  locationId?: string;
+  /** 仅非角色标量（birthOrder/sex/from-to rank …）。 */
+  payload: Record<string, unknown>;
+  publicity: CourtEventPublicity;
+  /** 0–100 公共显著度。 */
+  publicSalience: number;
+  /** 公共事件也参与有效强度衰减（与私人记忆同一检索公式）。 */
+  retention: MemoryRetention;
+  tags: string[];
+}
+
 export interface GameState {
   calendar: CalendarState;
   playerLocation: string;
@@ -287,6 +339,8 @@ export interface GameState {
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;
   eventLog: EventLogEntry[];
+  /** 客观事件编年史（append-only，剧情事实；与 eventLog 的触发记账分离）。 */
+  chronicle: CourtEvent[];
   sceneHistory: string[];
   rngSeed: number;
 }

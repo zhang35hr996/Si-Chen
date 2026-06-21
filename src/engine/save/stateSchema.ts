@@ -14,6 +14,8 @@ import type { GameState } from "../state/types";
 
 const percent = z.number().int().min(0).max(100);
 
+export const courtEventIdSchema = z.string().regex(/^evt_\d{6}$/);
+
 export const gameTimeSchema = z.strictObject({
   year: z.number().int().min(1),
   month: z.number().int().min(1).max(12),
@@ -156,6 +158,27 @@ export const gameStateSchema = z.strictObject({
   ),
   taihou: z.strictObject({ ill: z.boolean() }),
   eventLog: z.array(z.strictObject({ eventId: idSchema, firedAt: gameTimeSchema })),
+  chronicle: z.array(
+    z.strictObject({
+      id: courtEventIdSchema,
+      type: z.enum([
+        "residence_changed", "heir_born", "heir_died", "rank_changed",
+        "punished", "rewarded", "conflict", "promise", "secret_discovered",
+      ]),
+      occurredAt: gameTimeSchema,
+      participants: z.array(z.strictObject({ charId: idSchema, role: z.string().min(1) })),
+      locationId: idSchema.optional(),
+      payload: z.record(z.string(), z.unknown()),
+      publicity: z.discriminatedUnion("scope", [
+        z.strictObject({ scope: z.literal("circle"), circleIds: z.array(idSchema) }),
+        z.strictObject({ scope: z.literal("palace"), persistence: z.enum(["contemporaneous", "institutional"]) }),
+        z.strictObject({ scope: z.literal("realm"), persistence: z.literal("institutional") }),
+      ]),
+      publicSalience: percent,
+      retention: z.enum(["fast", "slow", "permanent"]),
+      tags: z.array(z.string()),
+    }),
+  ),
   sceneHistory: z.array(idSchema),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;
