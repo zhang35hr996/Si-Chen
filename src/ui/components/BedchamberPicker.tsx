@@ -3,6 +3,7 @@ import type { AssetRegistry } from "../../engine/assets/registry";
 import { inPalaceConsorts } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
+import { canSummon } from "../../store/bedchamber";
 
 export function BedchamberPicker({
   db,
@@ -17,7 +18,7 @@ export function BedchamberPicker({
   onPick: (charId: string) => void;
   onClose: () => void;
 }) {
-  const consorts = inPalaceConsorts(db, state);
+  const consorts = inPalaceConsorts(db, state).filter((c) => canSummon(state, c.id));
   const bg = registry.background("bg.fanpaizi");
 
   return (

@@ -8,7 +8,7 @@ import { inPalaceConsorts } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
-import { bedchamberConfig } from "../../store/bedchamber";
+import { bedchamberConfig, canSummon } from "../../store/bedchamber";
 import { ATTRIBUTE_LABELS } from "./CharacterCard";
 import { describe } from "../format/descriptors";
 import type { ScaleId } from "../format/descriptors";
@@ -124,7 +124,7 @@ export function ConsortListModal({
               : raised.map((h) => heirNameById.get(h.id) ?? h.id).join("、")}
           </p>
           <div className="consort-detail__actions">
-            <button type="button" onClick={() => onSummon(c.id)}>
+            <button type="button" disabled={!canSummon(state, c.id)} onClick={() => onSummon(c.id)}>
               召见
             </button>
             {!isEmpress && (
