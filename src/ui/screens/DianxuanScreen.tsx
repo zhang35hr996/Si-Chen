@@ -15,6 +15,11 @@ export function DianxuanScreen({ registry, db, candidates, onDone }: {
   store: GameStore;
   candidates: Candidate[];
   year: number;
+  /**
+   * 殿选结束回调。reviewedCount = 玩家已「决定」（留/撂）的秀男数：
+   * 全部看完=candidates.length；中途离场=idx（当前这位未决，留在未审阅池）。
+   * 调用方据此取未审阅者：candidates.slice(reviewedCount)。
+   */
   onDone: (kept: KeptPick[], leftEarly: boolean, reviewedCount: number) => void;
 }) {
   const [idx, setIdx] = useState(0);
