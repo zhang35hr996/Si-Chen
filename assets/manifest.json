@@ -48,6 +48,7 @@
     "bg.dengji": { "path": "cg/dengji.png", "kind": "background", "placeholder": false },
     "bg.wanbaolou": { "path": "backgrounds/wanbaolou.png", "kind": "background", "placeholder": false },
     "bg.zuixianlou": { "path": "backgrounds/zuixianlou.png", "kind": "background", "placeholder": false },
+    "bg.qiulie": { "path": "backgrounds/qiulie.png", "kind": "background", "placeholder": false },
     "map.palace": { "path": "map/palace_morning.png", "kind": "map", "placeholder": false },
     "map.palace.twilight": { "path": "map/palace_twilight.png", "kind": "map", "placeholder": false },
     "map.palace.night": { "path": "map/palace_evening.png", "kind": "map", "placeholder": false }
