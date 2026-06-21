@@ -274,6 +274,14 @@ export interface EmotionalCondition {
   recoveryProfile: "fast" | "normal" | "slow" | "stuck";
 }
 
+// ── 记忆提及日志（PR4：冷却惩罚） ────────────────────────────────────────
+export interface MemoryMentionRecord {
+  speakerId: string;
+  audienceId: string;
+  memoryId: string;
+  mentionedAt: GameTime;
+}
+
 export type BedchamberMode = "passion" | "pleasure" | "companionship";
 
 export interface BedchamberEncounter {
@@ -369,6 +377,8 @@ export interface GameState {
   chronicle: CourtEvent[];
   /** 角色情绪状态（与永久创伤记忆分离；PR2c 只存储，自动恢复留待后续）。 */
   emotionalConditions: EmotionalCondition[];
+  /** 记忆提及日志（PR4：冷却惩罚）。 */
+  mentionLog: MemoryMentionRecord[];
   sceneHistory: string[];
   rngSeed: number;
 }

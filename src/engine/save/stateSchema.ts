@@ -211,6 +211,9 @@ export const gameStateSchema = z.strictObject({
       recoveryProfile: z.enum(["fast","normal","slow","stuck"]),
     }),
   ),
+  mentionLog: z.array(z.strictObject({
+    speakerId: idSchema, audienceId: idSchema, memoryId: z.string().min(1), mentionedAt: gameTimeSchema,
+  })),
   sceneHistory: z.array(idSchema),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;
