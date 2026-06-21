@@ -45,6 +45,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
         gestations: [],
         heirs: [],
       },
+      storehouse: { items: {} },
     },
     taihou: { ill: false },
     flags: {},

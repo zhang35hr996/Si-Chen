@@ -60,6 +60,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
         gestations: [],
         heirs: [],
       },
+      storehouse: { items: {} },
     },
     flags: {},
     standing,

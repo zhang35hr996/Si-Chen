@@ -133,6 +133,9 @@ export const gameStateSchema = z.strictObject({
         }),
       ),
     }),
+    storehouse: z.strictObject({
+      items: z.record(idSchema, z.number().int().min(0)),
+    }),
   }),
   flags: z.record(z.string(), flagValueSchema),
   standing: z.record(idSchema, characterStandingSchema),

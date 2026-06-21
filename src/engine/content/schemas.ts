@@ -36,6 +36,7 @@ export const characterStandingSchema = z.strictObject({
   chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
   ill: z.boolean().optional(),
   confined: z.boolean().optional(),
+  affection: percent.optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────

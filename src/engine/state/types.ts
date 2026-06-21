@@ -163,10 +163,17 @@ export interface BloodlineState {
   heirs: Heir[];
 }
 
+/** 库房（私库）：铜钱在 nation.treasury，本处只存物品库存。 */
+export interface StorehouseState {
+  /** itemId → 数量；为 0 即删除该 key。 */
+  items: Record<string, number>;
+}
+
 export interface Resources {
   sovereign: SovereignState;
   nation: NationState;
   bloodline: BloodlineState;
+  storehouse: StorehouseState;
 }
 
 // ── Per-character runtime state ───────────────────────────────────────
@@ -202,6 +209,8 @@ export interface CharacterStanding {
   ill?: boolean;
   /** 禁足。 */
   confined?: boolean;
+  /** 好感/情意 0–100（仅侍君；缺省回退 authored hidden.affection）。 */
+  affection?: number;
 }
 
 // ── Memory v0 (writes land in PR 9; the shape is part of GameState now) ─
