@@ -18,6 +18,7 @@ import { changeOfficialGrade } from "../engine/officials/changeGrade";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import { addGeneratedConsort, initialFavorForRank, type Candidate, type KeptConsort } from "./grandSelection";
+import { excuseFromGreeting, dismissOvernight, recordOvernight } from "./greeting";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -131,6 +132,27 @@ export class GameStore {
   setFlag(key: string, value: boolean): void {
     this.state = { ...this.state, flags: { ...this.state.flags, [key]: value } };
     this.emit();
+  }
+
+  /** 施恩免请安（不耗行动点）。 */
+  applyExcuseGreeting(db: ContentDB, charId: string): void {
+    this.state = excuseFromGreeting(this.state, db, charId);
+    this.emit();
+  }
+
+  /** 「不说」：清留宿，侍君照常请安。 */
+  dismissOvernight(): void {
+    this.state = dismissOvernight(this.state);
+    this.emit();
+  }
+
+  /** 子时侍寝/对话滚旬后记留宿（条件不满足则无副作用）。 */
+  recordOvernight(db: ContentDB, charId: string, rolledOver: boolean): void {
+    const next = recordOvernight(this.state, db, charId, rolledOver);
+    if (next !== this.state) {
+      this.state = next;
+      this.emit();
+    }
   }
 
   /** 殿选留牌子：按所选位分落库一位秀男（恩宠随位分缩放）。 */

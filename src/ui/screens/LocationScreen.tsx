@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
-import { timeOfDay } from "../../engine/calendar/time";
-import { getPresentAt } from "../../engine/characters/presence";
+import { timeOfDay, isGreetingSlot } from "../../engine/calendar/time";
+import { getPresentAt, presentAt, absentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
@@ -36,6 +36,10 @@ export function LocationScreen({
   summonedConsortId,
   onDismissSummon,
   focusConsortId,
+  greetingAttendeeCount,
+  onEnterGreeting,
+  onExitGreeting,
+  onLeavePalace,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -59,6 +63,10 @@ export function LocationScreen({
   summonedConsortId?: string | null;
   onDismissSummon?: () => void;
   focusConsortId?: string | null;
+  greetingAttendeeCount?: number;
+  onEnterGreeting?: () => void;
+  onExitGreeting?: () => void;
+  onLeavePalace?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
@@ -73,16 +81,22 @@ export function LocationScreen({
     // Loader guarantees startingLocation exists; this is the render-side backstop.
     return <p className="screen-error">未知地点：{state.playerLocation}</p>;
   }
-  const present = getPresentAt(db, state, location.id);
+  const present = presentAt(db, state, location.id); // 此刻实际在场
+  const roster = getPresentAt(db, state, location.id); // 住处花名册（谁住这）
+  const absence = absentAt(db, state, location.id); // charId → 去向 locationId
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const eligible = getEligibleEvents(db, state, "location_enter");
   const canBedchamber = state.calendar.ap >= 1;
+  const greetingHere =
+    location.id === "kunninggong" &&
+    isGreetingSlot(state.calendar) &&
+    (greetingAttendeeCount ?? 0) > 0;
   // 召见到御书房：把被召见的侍君并入在场（仅御书房）。
   const summoned =
     location.id === "zichendian" && summonedConsortId ? db.characters[summonedConsortId] : undefined;
 
   // 居所宫殿（后宫）有住客侍君 → 视觉小说场景；设宫室的居所即便空置也进场景（显示 5 宫室槽）。
-  const sceneConsorts = location.zone === "hougong" ? present.filter((c) => c.kind === "consort") : [];
+  const sceneConsorts = location.zone === "hougong" ? roster.filter((c) => c.kind === "consort") : [];
   const showScene = sceneConsorts.length > 0 || hasChambers(location.id);
 
   const crumbs = breadcrumbFor(db, location.id);
@@ -93,7 +107,7 @@ export function LocationScreen({
       calendar={state.calendar}
       crumbs={crumbs}
       pregnant={pregnant}
-      onBack={onOpenMap}
+      onBack={onLeavePalace ?? onOpenMap}
       onOpenResources={onOpenResources}
       onOpenSettings={onOpenSettings}
       className="location-shell"
@@ -106,6 +120,7 @@ export function LocationScreen({
           registry={registry}
           location={location}
           consorts={sceneConsorts}
+          absence={absence}
           focusConsortId={focusConsortId}
           onConverse={onConverse}
           onBedchamber={onBedchamber}
@@ -230,6 +245,22 @@ export function LocationScreen({
         </main>
       )}
 
+      {greetingHere && onEnterGreeting && onExitGreeting && (
+        <div className="modal-backdrop">
+          <div className="event-overlay" onClick={(e) => e.stopPropagation()}>
+            <h2 className="event-overlay__title">坤宁宫　晨省</h2>
+            <p className="event-overlay__hint">乘风躬身：「众侍君正给皇后请安，陛下是否去看看？」</p>
+            <div className="event-overlay__choices">
+              <button type="button" onClick={onEnterGreeting}>
+                进入主殿（耗一个行动点）
+              </button>
+            </div>
+            <button type="button" className="event-overlay__later" onClick={onExitGreeting}>
+              退出坤宁宫
+            </button>
+          </div>
+        </div>
+      )}
       {eligible.length > 0 && !eventsDismissed && (
         <div className="modal-backdrop">
           <div className="event-overlay" onClick={(e) => e.stopPropagation()}>
