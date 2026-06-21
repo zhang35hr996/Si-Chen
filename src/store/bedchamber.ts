@@ -58,18 +58,22 @@ export function hasActiveGestation(state: GameState): boolean {
   return state.resources.bloodline.pregnancy.status !== "none";
 }
 
-/** 激情可选：非承嗣君怀胎中、且不在产后休养中。 */
+/** 激情可选：非承嗣君怀胎中、且不在产后休养中、且已过侍寝解禁月。 */
 export function passionAllowed(state: GameState, charId: string): boolean {
   const st = state.standing[charId];
   if (!st) return false;
   if (st.lifecycle === "carrying") return false;
   if (st.recoverUntilMonth !== undefined && monthOrdinal(state.calendar) < st.recoverUntilMonth) return false;
+  if (st.availableFromMonth !== undefined && monthOrdinal(state.calendar) < st.availableFromMonth) return false;
   return true;
 }
 
-/** 可召侍寝：非已故。 */
+/** 可召侍寝：非已故、且已过侍寝解禁月。 */
 export function canSummon(state: GameState, charId: string): boolean {
-  return state.standing[charId]?.lifecycle !== "deceased";
+  const st = state.standing[charId];
+  if (!st || st.lifecycle === "deceased") return false;
+  if (st.availableFromMonth !== undefined && monthOrdinal(state.calendar) < st.availableFromMonth) return false;
+  return true;
 }
 
 export interface BedchamberPlan {
