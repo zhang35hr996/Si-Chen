@@ -36,6 +36,15 @@ export const gameTimeShape = z.strictObject({
   dayIndex: z.number().int().min(0),
 });
 
+export const deathRecordSchema = z.strictObject({
+  diedAt: gameTimeShape,
+  cause: z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted"]),
+  originalRankId: idSchema,
+  originalTitle: nonEmpty.optional(),
+  posthumousRankId: idSchema.optional(),
+  posthumousEpithet: z.string().min(1).max(2).optional(),
+});
+
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
@@ -44,11 +53,15 @@ export const characterStandingSchema = z.strictObject({
   recoverUntilMonth: z.number().int().min(1).optional(),
   residence: idSchema.optional(),
   chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
-  ill: z.boolean().optional(),
   confined: z.boolean().optional(),
   affection: percent.optional(),
   palaceEnteredAt: gameTimeShape.optional(),
   availableFromMonth: z.number().int().min(1).optional(),
+  health: percent,
+  healthStatus: z.enum(["healthy", "sick", "critical"]),
+  ageAtEntry: z.number().int().min(0).optional(),
+  enteredAtYear: z.number().int().min(1).optional(),
+  deathRecord: deathRecordSchema.optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
