@@ -1,7 +1,10 @@
-# 健康 / 病情 / 生死 系统设计
+# 健康 / 病情 / 生死 系统设计（活文档）
 
-> 状态：已通过 brainstorming，待实现计划（writing-plans）。
-> 分支：`feat/health-illness-mortality`（新建，基于当前 `feat/consort-presence-greeting`）。
+> **状态：与实际代码对账中。** Phase 1 已实现并入 PR #8（`feat/health-illness-mortality` → `main`）。
+> Phase 2 的实施依据是 **`docs/superpowers/plans/2026-06-21-health-system-phase2.md`（v2）**，其中已确定若干本设计稿早期版本之外的规则；本文档随之对账更新（见各节）。
+> **实施以 v2 plan 与实际代码为准；本文档为总设计/对账参考，勿据早期快照生成任务。**
+>
+> 与早期快照相比，已对账修正的要点：①分类型年龄 `currentAgeOf`（§1.1）②`deathRecord` 而非 `posthumousRank/Title`（§1.3）③`planHealthChange` 加 `forceDeath` + `set_sovereign_health` 解封顶（§1.4）④`healthRollBasisPoints` 亚百分比精度（§2）⑤跨月日历触发取代 ref 去重、统一 `GameStore.advanceTime` 入口（§3.1）⑥`livingConsortIds`/`generatedConsorts` 动态侍君（§3）⑦持久化 `gameOver` 终局（§6.1）⑧`CharacterReactionScreen`、女官姓名池（§4.3）⑨非皇帝身后事 `FEATURE_AFTERMATH_UI` 关闭、无假占位 resolve（§7）。
 
 ## 0. 目标
 
@@ -48,8 +51,11 @@
 - 侍君旧 `standing.ill?: boolean` **删除**，由 `healthStatus` 取代。
   辅助函数 `isIll(status) = status !== "healthy"` 供需要布尔的旧调用方（如太后侍疾/敲打）使用。
 - 太后旧 `taihou.ill: boolean` **删除**；`taihou.ts` 的 `buildTaihouIllnessTick`（每旬 5–25%
-  生病掷骰）**移除**，太后生病改由 §3 统一月度 tick 驱动。`buildShizhiEncounter` /
-  `buildTaihouRebuke` 改读 `isIll(taihou.healthStatus)`，逻辑不变。
+  生病掷骰）**移除**，太后生病改由 §3 统一月度 tick 驱动。`buildTaihouRebuke` 改读
+  `isIll(taihou.healthStatus)`，逻辑不变。
+- **`buildShizhiEncounter`（侍疾）必须移除其治愈效果** `{ type: "set_taihou_health", healthStatus: "healthy" }`：
+  否则太后重病时进慈宁宫即免费痊愈，绕过太医 30% 治愈率。侍疾仍可加恩宠 / 写记忆 / 播台词，
+  但**不得改变太后病情**（病情只由 §3 tick 或 §4 太医改变）。
 - `set_taihou_illness` 效果**退役**，由 §1.4 的 `set_taihou_health`（可设状态/加减健康）取代；
   所有旧调用点改用新效果。
 
@@ -88,35 +94,38 @@
 为此，**所有**健康变更（月度 tick、转胎 −10、生产 −5/−10、剧情 `set_*_health`、未来的惩罚/受伤
 事件）**统一经由**一个结算函数，禁止调用方自行拼装「扣血 + 置死 + 入队」三步：
 
+实际落地名 `planHealthChange`（即设计中的 `resolveHealthChange`，纯函数：state + 入参 → 一组原子效果 + outcome），位于 `src/store/health.ts`：
+
 ```ts
-resolveHealthChange(state, {
+planHealthChange(state, {
   subject,        // { kind: "sovereign" | "taihou" | "consort" | "heir", id? }
   healthDelta?,   // 加减（clamp 0–100）
   healthStatus?,  // 可选直接置状态（看诊治愈、tick 迁移结果）
+  forceDeath?,    // 强制死亡（重病暴毙：health 仍 > 0 也必须死，见 §3.3/§6）
   cause,          // DeathCause
   at,             // GameTime
-}): HealthChangeOutcome
+}): { effects: EventEffect[]; outcome: HealthChangeOutcome }
 ```
 
 `HealthChangeOutcome = { previousHealth, nextHealth, previousStatus, nextStatus, died, deathCause?,
-sovereignDied?, aftermathId? }`。该函数**原子**完成：
+sovereignDied?, aftermathId? }`。**死亡判定：`died = forceDeath === true || nextHealth ≤ 0`**（仅靠死因字符串不足以致死）。逻辑：
 
-1. clamp 健康值；2. 更新状态；3. 检查死亡（`nextHealth ≤ 0` 或调用方传入的暴毙判定）；
-4. 处理孕期死亡（§6.5：未产断胎 / 已产存嗣）；5. 标记生命周期；
-6. **幂等**地加入身后事队列（皇帝除外，见 §7；同人同月只入一条）。
+1. clamp 健康值；2. 计算 nextStatus；3. `died` 判定（含 `forceDeath`）；
+4. 皇帝死 → `sovereignDied`（**不入队**）；非皇帝死 → 追加 `*_decease` + `enqueue_aftermath`；
+5. delta=0 且无 status 且无 forceDeath → **不发空效果**。
 
-调用方只调用 `resolveHealthChange`，由它内部使用下列**底层 funnel 效果**（不被调用方直接组合）：
+调用方只调用 `planHealthChange`，由它产出下列**底层 funnel 效果**（不被调用方直接拼装）：
 
+- `set_sovereign_health { healthStatus?, healthDelta? }`（**uncapped**，皇帝健康专用——区别于上限 ±10 的 `resource` 效果，使致死 delta 可实现）。
 - `set_consort_health { char, healthStatus?, healthDelta? }` / `set_taihou_health { healthStatus?, healthDelta? }`
-  / `set_heir_health { heirId, healthStatus?, healthDelta? }`：clamp 0–100。`set_taihou_illness` 退役迁移至此。
-- `set_consort_posthumous { char, posthumousRankId?, posthumousEpithet? }`：写 `deathRecord`，不动生前数据。
-- `consort_decease { char, at, cause }` / `heir_decease { heirId, at, cause }` / `taihou_decease { at, cause }`：
-  置死亡标记 + 时间 + 死因，**不触发 UI**（UI 由身后事事件驱动，见 §7）。
-- `enqueue_aftermath { id, kind, subjectId, at }`：幂等入队（按稳定 `id` 去重）。
+  / `set_heir_health { heirId, healthStatus?, healthDelta? }`：clamp 0–100。`set_taihou_illness` 已退役迁移至此。
+- `set_consort_posthumous { char, posthumousRankId?, posthumousEpithet? }`：写 `deathRecord`，不动生前数据；要求目标已故且有 `deathRecord`。
+- `consort_decease { char, at, cause }`：置 deathRecord/lifecycle，**重复死亡幂等（no-op）**，并**自动清该侍君活动 gestation（断胎，§6.5）**；`heir_decease { heirId, at, cause }`（置 `lifecycle="deceased"`/`deceasedAt`）/ `taihou_decease { at, cause }`。**不触发 UI**（UI 由身后事事件驱动，见 §7）。
+- `enqueue_aftermath { id, kind, subjectId, at }`：幂等入队（稳定 id `death:{kind}:{subjectId}:{dayIndex}`）。
+- `consort_decease` / `set_consort_health` / `set_consort_posthumous` 在 `validateEffects` 有强 target 守卫：目标须由 `db.characters[char] ?? state.generatedConsorts[char]` 解析为 `kind==="consort"` 且有 standing，按效果区分存活/已故/有 deathRecord。
 - 葬仪扣银沿用现有 `resource`/`treasury` funnel（带下限 clamp 至 0），见 §6.2。
 
-所有新效果在 `schemas.ts` 的 `eventEffectSchema` 增分支，在 `funnel.ts` 增 case，各配单测；
-`resolveHealthChange` 本身为纯函数（输入 state + 参数 → 一组原子效果 + outcome），配独立单测。
+> 孕期断胎不在 `planHealthChange` 内，而由 `consort_decease` 效果自动完成——任何死亡路径（病亡 / 转胎 / 生产）一致；已产侍君无活动 gestation，故「已产→皇嗣存活」天然成立。所有新效果在 `eventEffectSchema` 增分支、`funnel.ts` 增 case，各配单测。
 
 ### 1.5 存档迁移
 
@@ -128,25 +137,34 @@ sovereignDied?, aftermathId? }`。该函数**原子**完成：
 **不复用 `gestationRoll`**。新增 `src/engine/characters/healthRoll.ts`：
 
 ```ts
-export function healthRoll(seedKey: string): number   // 0–99，fnv1a64Hex 取模
-export function healthRollRange(seedKey: string, lo: number, hi: number): number // [lo,hi]
+export function healthRoll(seedKey: string): number               // 0–99（整数百分比：暴毙 5%、迁移 50%/criticalRate）
+export function healthRollRange(seedKey: string, lo: number, hi: number): number // [lo,hi]（病损/孕期成本）
+export function healthRollBasisPoints(seedKey: string): number     // 0–9999（亚百分比精度：onset）
 ```
 
 - 实现同 `gestationRoll`（`fnv1a64Hex` 哈希取模），但独立命名空间，互不串扰。
-- 所有病情/看诊/死亡掷骰都用稳定 seedKey（含 `rngSeed` + `year:month` + 角色 id +
-  用途），保证**读档重算结果不变**、tick 幂等。
-- 月度判定 seedKey 形如 `health:onset:{rngSeed}:{charId}:{year}:{month}`，**不含 period/ap**，
-  确保一个月内只产生一个稳定结果。
+- **onset 命中必须用 `healthRollBasisPoints`**，按万分比判定 `bp < monthlyRate × 10000`。
+  最低年化 5% 换算月度仅 ≈0.426%，用 0–99 整数比较会被放大成 1%/月（约两倍），故须万分比精度。
+  整数 `healthRoll` 仅用于 5%/30%/50% 这类整数概率。
+- 所有掷骰用稳定 seedKey（含 `rngSeed` + `year:month` + 角色 id + 用途），保证**读档重算结果不变**。
+- 月度 seedKey 形如 `tick:{rngSeed}:{charId}:{year}:{month}:{用途}`，**不含 period/ap**，一月内稳定。
 
 ## 3. 月度健康 tick
 
-### 3.1 触发点与幂等
+### 3.1 触发点与幂等（对账：跨月日历，非 ref）
 
-- 在每月**上旬**（`period === "early"`）首次结算时运行一次，覆盖全体角色。
-- 复用现有「转旬应用」时机：在 `App.tsx` 的 rollover 路径增设 `rollHealthTick()`，
-  以 `health:tick:{rngSeed}:{year}:{month}` 写入 `tickedPeriods` 风格的去重集，
-  **每月至多执行一次**（多次 rollover、读档后重入都不重复）。
-- 实际状态变更通过 §1.4 的 funnel 效果落地（确定性，可单测）。
+- **幂等靠日历跨月，不用 React ref / 不加存档字段。** 仅当一次时间推进事务令
+  `monthOrdinal(after) !== monthOrdinal(before)`（即「下旬 → 次月上旬」）才运行月度 tick，覆盖全体角色。
+  日历本身按「上旬→中旬→下旬→次月上旬」推进：早→中、中→晚不跑；晚→次月早跑一次；
+  读档后日历已在新月，**自然不重跑**（ref 方案在读档清空后会重复扣血，已废弃）。
+- **统一时间入口 `GameStore.advanceTime(db, command)`**（`command ∈ {SPEND_AP, SKIP_REMAINDER}`）：
+  原子完成「推进日历 → 检测跨月 → 构建并应用月度 tick effects → 返回 rolledOver/monthChanged/healthOutcome」。
+  **所有** UI 时间推进（含 `restAlone` 的 `SKIP_REMAINDER`、`adoptHeir` 的直接 `SPEND_AP`）都改走此入口，
+  杜绝「只接 `spendAp` 导致部分跨月路径不结算健康」「日历已前进但健康未结算」。
+- 角色集合：皇帝、太后（未薨）、`livingConsortIds(db, state)`（静态 standing ∪ `generatedConsorts`，
+  排除 candidate/deceased，**含冷宫**）、在世皇嗣；年龄统一经 `currentAgeOf`（§1.1）。
+- 实际状态变更通过 §1.4 的 funnel 效果落地（确定性，可单测）。orchestrator `buildMonthlyHealthTick`
+  按「皇帝→太后→侍君(id 序)→皇嗣(id 序)」遍历；**皇帝死亡即返回**（同月不再生成其他死亡）。
 
 ### 3.2 年化→月度生病概率（关键修正）
 
@@ -181,6 +199,7 @@ projectMonthlyHealth(subject, context): {
    *（本月刚转生病者本月不扣病损、不恶化，见步骤 6。）*
 4. **0 血死亡**：若 `h ≤ 0` → `died = true, deathCause = "illness"`，**到此为止**（不再迁移）。
 5. **重病暴毙**：若 `previousStatus === "critical"`，5% → `died = true, deathCause = "critical_sudden"`，到此为止。
+   *（此时 `nextHealth` 可能仍 > 0；orchestrator 落地时对 `died && nextHealth > 0` 向 `planHealthChange` 传 `forceDeath: true`，否则 `nextHealth ≤ 0` 判定会漏死，见 §1.4。）*
 6. **互斥状态迁移**（单次，不叠加；仅未死亡时）：
    - `healthy`：按 §3.2 `monthlyRate` 掷 onset，命中 → `sick`（**本月到此为止，不扣病损**）。
    - `sick`：单次取 `r ∈ [0,100)`：`criticalRate = clamp(1 + ageOver35, 1, 30)`；
@@ -248,11 +267,13 @@ projectMonthlyHealth(subject, context): {
 
 死亡分两段：**tick 内只标记**（§7 队列），**身后事由持久化事件驱动**逐个处理。
 
-### 6.1 皇帝死亡
+### 6.1 皇帝死亡（持久化终局，不可继续）
 
-- health ≤ 0 或重病暴毙 → `resolveHealthChange` 返回 `sovereignDied = true`（**不入身后事队列**）。
-- settle 完成后**最高优先**进入 **game over → 回主界面**；即使同月其他角色也死亡，游戏已结束，
-  不再展示任何身后事（§7 优先级）。
+- health ≤ 0 或重病暴毙（`forceDeath`）→ `planHealthChange` 返回 `sovereignDied = true`（**不入身后事队列**）。
+- orchestrator 在处理皇帝后**立即返回**（同月不再生成太后/侍君/皇嗣死亡）——「皇帝最高优先」是状态层语义，非仅 UI 顺序。
+- **仅 `setView("title")` 不足以终局。** 持久化 `state.gameOver = { cause: "sovereign_death", at }`：
+  主界面「继续游戏」检测到 `gameOver` 即**禁用**（不可重新加载死亡自动档），只允许新游戏 / 读更早手动档。
+  （或备选：皇帝死亡时不写死亡后自动档、保留 `auto.prev`；本设计采前者，状态语义更完整。）
 
 ### 6.2 太后死亡
 
