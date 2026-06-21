@@ -16,6 +16,12 @@ import { buildConversation } from "../store/conversation";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
+import { buildProvinceTribute, buildMinisterTribute } from "../store/tribute";
+import { buildAutumnHuntPrompt } from "../store/autumnHunt";
+import { ChengFengPromptScreen } from "./screens/ChengFengPromptScreen";
+import { BestowModal } from "./components/BestowModal";
+import { MORNING_SLOT, AFTERNOON_SLOT } from "../engine/calendar/time";
+import type { ChengFengPrompt, PromptAction } from "../store/prompt";
 import { buildIncense, buildFortune } from "../store/temple";
 import { buildTaihouIllnessTick, buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
 import { audioController } from "./audio/AudioController";
@@ -116,6 +122,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
+  const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
+  const [giftItemId, setGiftItemId] = useState<string | null>(null);
   const lastBoardRef = useRef<string>("palace");
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
@@ -177,6 +185,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const goHome = () => {
     setMapAtRoot(true);
     setView("map");
+    maybeAutumnHunt();
   };
 
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
@@ -184,6 +193,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const loc = store.getState().playerLocation;
     if (loc === "cining_gong") { setView("cining_gong"); maybeShizhi(); return; }
     setView(loc === "wenzhaodian" ? "wenzhaodian" : loc === "yuqing_gong" ? "yuqing_gong" : loc === "fengxiandian" ? "fengxiandian" : "location");
+    if (loc === "wenzhaodian") maybeAutumnHunt();
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -299,6 +309,57 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return [];
   };
 
+  /** action 解释器：玩家在进贡/秋猎 prompt 中的选择。 */
+  const resolvePromptAction = (action: PromptAction) => {
+    switch (action.type) {
+      case "stash":
+        store.applyGrantItem(action.itemId);
+        setPrompt(null);
+        break;
+      case "gift":
+        // 先将贡品入库，再开赏赐弹窗（BestowModal 调 applyBestow 时扣库存净效果：+1 -1 = 0）。
+        store.applyGrantItem(action.itemId);
+        setGiftItemId(action.itemId);
+        setPrompt(null);
+        break;
+      case "huntJoin":
+        store.applyAutumnHunt(`hunt:${store.getState().rngSeed}:${store.getState().calendar.year}`);
+        setPrompt(null);
+        break;
+      case "huntDecline":
+        store.declineAutumnHunt();
+        setPrompt(null);
+        break;
+    }
+  };
+
+  /** 每行动点掷进贡 prompt（属地早上/大臣下午；每旬大臣至多一次）。命中则设 prompt 并返回 true。 */
+  const rollTribute = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): boolean => {
+    for (let i = 0; i < amount; i++) {
+      const slot = before.apMax - before.ap + i;
+      const key = `tribute:${store.getState().rngSeed}:${before.dayIndex}:${slot}`;
+      if (rolledSlots.current.has(key)) continue;
+      let p: ChengFengPrompt | null = null;
+      if (slot === MORNING_SLOT) p = buildProvinceTribute(db, store.getState(), key);
+      else if (slot === AFTERNOON_SLOT) {
+        const dedupe = `tributeMinister:${before.dayIndex}`;
+        if (!store.getState().flags[dedupe]) {
+          p = buildMinisterTribute(db, store.getState(), key);
+          if (p) store.dispatch({ type: "SET_FLAG", key: dedupe, value: true });
+        }
+      }
+      if (p) { rolledSlots.current.add(key); setPrompt(p); return true; }
+    }
+    return false;
+  };
+
+  /** 秋猎询问：9月中旬下午进入主地图/御书房时检查一次。命中则设 prompt 并返回 true。 */
+  const maybeAutumnHunt = (): boolean => {
+    const p = buildAutumnHuntPrompt(store.getState(), `hunt:${store.getState().rngSeed}`);
+    if (p) { setPrompt(p); return true; }
+    return false;
+  };
+
   /** 旬翻转：掷太后生病/自愈，应用效果并返回提示节拍（每旬至多一次）。 */
   const rollTaihouIllness = (): DecreeReaction[] => {
     const cal = store.getState().calendar;
@@ -327,13 +388,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return true;
   };
 
-  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰 + 乘风汇报。返回扣点结果与台词。 */
+  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果与台词。 */
   const spendAp = (amount: number) => {
     const before = store.getState().calendar;
     const spend = store.dispatch({ type: "SPEND_AP", amount });
     let decreeBeats = spend.ok ? rollDecree(before, amount) : [];
     if (spend.ok) decreeBeats = [...decreeBeats, ...rollRebuke(before, amount)];
-    if (spend.ok) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
+    if (spend.ok) {
+      const tributeShown = rollTribute(before, amount);
+      if (!tributeShown) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
+    }
     if (spend.ok && spend.value.rolledOver) decreeBeats = [...decreeBeats, ...rollTaihouIllness()];
     return { spend, decreeBeats };
   };
@@ -933,6 +997,13 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             }
           }}
         />
+      )}
+      {prompt && !reaction && (
+        <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={prompt} onChoose={resolvePromptAction} />
+      )}
+      {giftItemId && (
+        <BestowModal db={db} store={store} itemId={giftItemId}
+          onClose={() => setGiftItemId(null)} onConfirmed={() => setGiftItemId(null)} />
       )}
       {flipOpen && (
         <BedchamberPicker
