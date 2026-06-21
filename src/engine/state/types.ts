@@ -439,5 +439,7 @@ export interface GameState {
   overnightWith?: { charId: string; morningDayIndex: number };
   /** 持久化身后事队列（皇帝不入队）。 */
   pendingAftermath: PendingAftermath[];
+  /** 终局：皇帝崩逝由时间事务在同批写入；置位后 title「继续」禁用（Task 5/8）。 */
+  gameOver?: { cause: "sovereign_death"; at: GameTime };
   rngSeed: number;
 }
