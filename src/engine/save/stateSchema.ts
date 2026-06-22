@@ -232,6 +232,9 @@ export const gameStateSchema = z.strictObject({
   mentionLog: z.array(z.strictObject({
     speakerId: idSchema, audienceId: idSchema, memoryId: z.string().min(1), mentionedAt: gameTimeSchema,
   })),
+  eventReactionLog: z.array(z.strictObject({
+    speakerId: idSchema, audienceId: idSchema, eventId: z.string().min(1), reactedAt: gameTimeSchema,
+  })),
   sceneHistory: z.array(idSchema),
   pendingAftermath: z.array(
     z.strictObject({
