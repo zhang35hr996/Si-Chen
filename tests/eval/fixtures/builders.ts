@@ -420,32 +420,27 @@ const latest_mutation_test: EvalFixtureDefinition = {
 // ── 9. forbidden_claim_test ───────────────────────────────────────────────────
 
 /**
- * Fixture where the speaker is forbidden from claiming about the player's rank.
- * Since forbiddenClaims are source-independent (no source check),
- * the claim is blocked regardless of what sourceRef is cited.
- * Exercises: claim_explicitly_forbidden (source-independent, fact+polarity only).
+ * Fixture where wenya is forbidden from asserting a higher rank (zhaoyi).
+ * wenya.dialoguePolicy.forbiddenClaims includes holds_rank(wenya, zhaoyi, assert).
+ * The gate fires claim_explicitly_forbidden regardless of the proposed sourceRef —
+ * source-independence: the forbidden check is fact+polarity only, no source check.
  *
- * Note: T11 wires forbiddenClaims from policy → gate (when non-empty).
- * In the current base state (no events, no memories with sourceEventId),
- * forbiddenClaims = [] so this needs the assembly pipeline to produce a forbidden claim.
- * Since assembleClaims.forbidden = [] until T7+ actually fills it, we use a
- * providerFactory that injects forbiddenClaims directly via claimGate.
+ * Exercises: claim_explicitly_forbidden (source-independent).
  */
 const forbidden_claim_test: EvalFixtureDefinition = {
   buildState() {
     return loadBase();
   },
   responseFor() {
-    // Propose a claim that would be forbidden
     return {
-      text: "陛下想必仍为天子，但侍身以为……",
+      text: "侍身以为，侍身曾为昭仪……",
       proposedClaims: [
         {
           claim: {
-            id: "c_eval_forbidden",
+            id: "c_eval_forbidden_wenya_rank",
             predicate: "holds_rank",
-            subjectId: "shen_zhibai",
-            object: "fenghou",
+            subjectId: "wenya",
+            object: "zhaoyi",
             modality: "assert",
           },
           sourceRefs: [{ kind: "fact" as const, id: "identity" }],

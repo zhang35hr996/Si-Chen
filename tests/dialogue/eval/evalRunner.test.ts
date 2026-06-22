@@ -26,6 +26,7 @@ import { createNewGameState } from "../../../src/engine/state/newGame";
 import {
   assembleDialogueRequest,
 } from "../../../src/engine/dialogue/orchestrator";
+import { evalFixtures } from "../../eval/fixtures/builders";
 
 // ── Shared test infrastructure ────────────────────────────────────────────────
 
@@ -525,5 +526,25 @@ describe("evaluateExpectations", () => {
     expect(codes).toContain("unexpected_gate_result");
     expect(codes).toContain("forbidden_text_present");
     expect(codes).toContain("required_source_not_cited");
+  });
+});
+
+// ── describe: sc040 — claim_explicitly_forbidden golden scenario ──────────────
+
+describe("sc040 — claim_explicitly_forbidden for wenya rank claim", () => {
+  it("gateStatus=fail and claimFindings contains claim_explicitly_forbidden", async () => {
+    const scenario: EvalScenario = {
+      id: "sc040",
+      fixtureId: "forbidden_claim_test",
+      speakerId: "wenya",
+      locationId: "changmengong",
+      expectations: { gatePass: false },
+    };
+    const fixture = evalFixtures["forbidden_claim_test"]!;
+    const result = await runEvalScenario(scenario, fixture, "sc040-run", 0);
+
+    expect(result.gateStatus).toBe("fail");
+    expect(result.expectationStatus).toBe("pass");
+    expect(result.claimFindings.some((f) => f.code === "claim_explicitly_forbidden")).toBe(true);
   });
 });
