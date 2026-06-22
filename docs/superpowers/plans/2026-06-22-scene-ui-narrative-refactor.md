@@ -68,13 +68,15 @@ test("location_enter @ hougong palace → auto_on_enter", () => expect(resolveEn
 
 ```ts
 presentation: z.discriminatedUnion("mode", [
-  z.strictObject({ mode: z.literal("request_audience"), audienceCharacterId: idSchema, audiencePrompt: nonEmpty }),
-  z.strictObject({ mode: z.literal("exploration"), subLocationId: idSchema, eventHint: nonEmpty.optional() }),
+  z.strictObject({ mode: z.literal("request_audience"), hostLocationId: idSchema, audienceCharacterId: idSchema, audiencePrompt: nonEmpty }),
+  z.strictObject({ mode: z.literal("exploration"), hostLocationId: idSchema, subLocationId: idSchema, eventHint: nonEmpty.optional() }),
   z.strictObject({ mode: z.literal("auto_on_enter") }),
   z.strictObject({ mode: z.literal("manual") }),
   z.strictObject({ mode: z.literal("scheduled") }),
 ]).optional(),
 ```
+
+> **规则（评审 r2 #2）**：`auto_on_enter` 可由旧 content 推导；`request_audience`/`exploration`/`manual` **必须显式声明 `presentation`**。由 Task 1.1b 的 `validate-content` 跨引用校验强制，不靠运行时兜底。
 
 - [ ] **Step 4: 实现 entryMode.ts**
 
@@ -97,32 +99,53 @@ export function resolveEntryMode(event: GameEventContent, location: LocationCont
 
 - [ ] **Step 6: 提交** — `feat(events): 事件 presentation 契约 + resolveEntryMode`
 
-### Task 1.2: 中央 router — `pickAutoStartEvent`（P0-1 核心）
+### Task 1.1b: validate-content 跨引用校验（评审 r2 #2）
 
-**Files:** Create `src/engine/events/router.ts`；Test `tests/events/router.test.ts`
+**Files:** Modify `tools/validate-content.ts`；Test `tests/tools/validateContent.test.ts`（若无则新建）
+
+**Interfaces:** 构建期校验，违例使 `npm run validate-content` 退出非零。
+
+- [ ] **Step 1: 写失败测试** — 构造违例 content 各一例，断言校验报错：
+  - `request_audience`/`exploration`/`manual` 事件缺 `presentation`；
+  - `presentation.audienceCharacterId` 不在 `db.characters`；
+  - `presentation.hostLocationId` 不在 `db.locations`；
+  - `exploration` 的 `hostLocationId` location 无 `subLocations`，或 `subLocationId` 不在其 `subLocations[].id`。
+- [ ] **Step 2: 运行确认失败。**
+- [ ] **Step 3: 实现校验**（在现有 content 加载后追加跨引用遍历，聚合错误信息）。
+- [ ] **Step 4: 运行通过 + `npm run validate-content`（现有 content 全过）。**
+- [ ] **Step 5: 提交** — `feat(tools): validate-content 强制非自动事件声明 presentation 并校验引用`
+
+### Task 1.2: 中央 router — `pickAutoStartEvent` + 全部自动 checkpoint 改走 router（P0-1 / 评审 r2 #4）
+
+**Files:** Create `src/engine/events/router.ts`；Modify `src/ui/App.tsx`（4 处自动 `pickNextEvent` → `pickAutoStartEvent`）；Test `tests/events/router.test.ts`、`tests/ui/autoRouting.test.tsx`
 
 **Interfaces:**
 - Consumes: `getEligibleEvents`（`engine.ts`，不变）、`resolveEntryMode`。
 - Produces: `export function pickAutoStartEvent(db: ContentDB, state: GameState, checkpoint: Checkpoint, location: LocationContent | undefined): GameEventContent | null;`
+- **App 改造点（审计实测 4 处）**：`runCheckpoints`（`App.tsx:322-323` time_advance/location_enter）、`proceedAfterNewGame`（`:528` game_start）、`onDone` 链（`:1191` scene_end）、`onDone` 转旬（`:1208` time_advance）——全部传 `db.locations[store.getState().playerLocation]`。
 
 - [ ] **Step 1: 写失败测试（关键回归）**
 
 ```ts
 // tests/events/router.test.ts
 import { pickAutoStartEvent } from "../../src/engine/events/router";
-// 构造 db：同一 location_enter checkpoint 下，一个 auto_on_enter（priority 1）+ 一个 request_audience（priority 9）
 test("auto checkpoint only starts auto_on_enter, never higher-priority request_audience", () => {
-  const picked = pickAutoStartEvent(db, state, "location_enter", zichendianLoc);
-  expect(picked?.presentation?.mode ?? "auto_on_enter").toBe("auto_on_enter");
+  expect(pickAutoStartEvent(db, state, "location_enter", zichendianLoc)?.presentation?.mode ?? "auto_on_enter").toBe("auto_on_enter");
 });
 test("returns null when only request_audience/exploration/manual eligible", () => {
   expect(pickAutoStartEvent(db, state, "location_enter", yuhuayuanLoc)).toBeNull();
+});
+test("scene_end does not auto-start a manual event", () => {
+  expect(pickAutoStartEvent(db, stateWithManualOnSceneEnd, "scene_end", curLoc)).toBeNull();
+});
+test("time_advance does not auto-start a request_audience event", () => {
+  expect(pickAutoStartEvent(db, stateWithAudienceOnTimeAdvance, "time_advance", curLoc)).toBeNull();
 });
 ```
 
 - [ ] **Step 2: 运行确认失败。**
 
-- [ ] **Step 3: 实现**
+- [ ] **Step 3: 实现 router**
 
 ```ts
 import { getEligibleEvents, type Checkpoint } from "./engine";
@@ -137,9 +160,13 @@ export function pickAutoStartEvent(db: ContentDB, state: GameState, checkpoint: 
 }
 ```
 
-- [ ] **Step 4: 运行通过。**
+- [ ] **Step 4: 改 App 4 处调用点** — 全部 `pickNextEvent(db, S, ckpt)` → `pickAutoStartEvent(db, S, ckpt, db.locations[S.playerLocation])`；`App.tsx:6` 改 import。`pickNextEvent` 不再在 App 直接使用。
 
-- [ ] **Step 5: 提交** — `feat(events): pickAutoStartEvent 中央呈现路由（仅 auto_on_enter 自动启动）`
+- [ ] **Step 5: 写 App 路由回归测试**（`tests/ui/autoRouting.test.tsx`）：scene_end 上的 manual 事件不被自动启动；time_advance 上的 request_audience 不被自动启动；auto 链保留 return target（与 Task 1.4 联测）。
+
+- [ ] **Step 6: 运行通过 + `npm run typecheck`。**
+
+- [ ] **Step 7: 提交** — `feat(events): pickAutoStartEvent + 全部自动 checkpoint 改走 router`
 
 ### Task 1.3: audience 生命周期（P0-3）
 
@@ -148,27 +175,31 @@ export function pickAutoStartEvent(db: ContentDB, state: GameState, checkpoint: 
 **Interfaces:**
 - Produces:
   - `export type AudienceStatus = "available"|"pending"|"suppressed";`
-  - `export interface AudienceItem { event: GameEventContent; status: AudienceStatus; }`
+  - `export interface AudienceItem { event; presentation: { mode:"request_audience"; hostLocationId:string; audienceCharacterId:string; audiencePrompt:string }; status: AudienceStatus; affordable: boolean; deferredAtDayIndex?: number; remindAtDayIndex?: number; }`
   - `export function defer(eventId: string, dayIndex: number): EventEffect[];`
   - `export function clearAudience(eventId: string): EventEffect[];`
-  - `export function shouldRemind(state: GameState, eventId: string): boolean;`
-  - `export function audienceStatus(state: GameState, eventId: string): AudienceStatus;`
-  - `export function getAudienceQueue(db: ContentDB, state: GameState, locationId: string): AudienceItem[];`
-  - `export function pendingAudienceCount(db: ContentDB, state: GameState, locationId: string): number;`
-  - const `AUDIENCE_REMIND_AFTER_DAYS = 3;`
+  - `export function shouldRemind(state, eventId): boolean;`
+  - `export function audienceStatus(state, eventId): AudienceStatus;`
+  - `export function getAudienceQueue(db, state, locationId): AudienceItem[];`
+  - `export function pendingAudienceCount(db, state, locationId): number;`
+  - `export function audienceReconciliationEffects(db, state, locationId): EventEffect[];`
+  - const `AUDIENCE_REMIND_AFTER_PERIODS = 1;`（1 dayIndex = 1 旬；评审 r2 #6，**非 3**）
 - flag 键：`audience:pending:<id>` / `audience:promptShownAt:<id>` / `audience:remindAt:<id>`。
 
 - [ ] **Step 1: 写失败测试**
 
 ```ts
 // tests/events/audience.test.ts
-import { defer, clearAudience, shouldRemind, audienceStatus, getAudienceQueue, pendingAudienceCount, AUDIENCE_REMIND_AFTER_DAYS } from "../../src/engine/events/audience";
+import { defer, clearAudience, shouldRemind, audienceStatus, getAudienceQueue, pendingAudienceCount, audienceReconciliationEffects, AUDIENCE_REMIND_AFTER_PERIODS } from "../../src/engine/events/audience";
 
-test("defer sets pending + promptShownAt + remindAt", () => {
+test("AUDIENCE_REMIND_AFTER_PERIODS is 1 (next 旬, not next month)", () => {
+  expect(AUDIENCE_REMIND_AFTER_PERIODS).toBe(1);
+});
+test("defer sets pending + promptShownAt + remindAt(+1)", () => {
   expect(defer("ev_a", 5)).toEqual([
     { type:"flag", key:"audience:pending:ev_a", value:true },
     { type:"flag", key:"audience:promptShownAt:ev_a", value:5 },
-    { type:"flag", key:"audience:remindAt:ev_a", value:5 + AUDIENCE_REMIND_AFTER_DAYS },
+    { type:"flag", key:"audience:remindAt:ev_a", value:6 },
   ]);
 });
 test("status: not-pending=available; pending+notDue=suppressed; pending+due=pending", () => {
@@ -177,11 +208,6 @@ test("status: not-pending=available; pending+notDue=suppressed; pending+due=pend
   expect(audienceStatus(base({ "audience:pending:ev_a":true, "audience:remindAt:ev_a":99 }), "ev_a")).toBe("suppressed");
   expect(audienceStatus(base({ "audience:pending:ev_a":true, "audience:remindAt:ev_a":10 }), "ev_a")).toBe("pending");
 });
-test("shouldRemind true only when remindAt reached", () => {
-  const s = (d, r) => ({ flags:{ "audience:pending:ev_a":true, "audience:remindAt:ev_a":r }, calendar:{ dayIndex:d } } as any);
-  expect(shouldRemind(s(4,5), "ev_a")).toBe(false);
-  expect(shouldRemind(s(5,5), "ev_a")).toBe(true);
-});
 test("clearAudience zeroes all three flags", () => {
   expect(clearAudience("ev_a")).toEqual([
     { type:"flag", key:"audience:pending:ev_a", value:false },
@@ -189,10 +215,24 @@ test("clearAudience zeroes all three flags", () => {
     { type:"flag", key:"audience:remindAt:ev_a", value:0 },
   ]);
 });
-test("getAudienceQueue excludes once-fired ghost flags (no phantom count)", () => {
-  // db: ev_a once+already in eventLog, but audience:pending:ev_a still true
+test("AudienceItem carries narrowed presentation + affordable + deferred/remind days", () => {
+  const q = getAudienceQueue(db, deferredState, "zichendian"); // ev_a deferred at day 5, remind day 6
+  expect(q[0]).toMatchObject({
+    presentation: { mode:"request_audience", hostLocationId:"zichendian", audienceCharacterId:"wei_ling" },
+    affordable: true, deferredAtDayIndex: 5, remindAtDayIndex: 6,
+  });
+});
+test("queue scoped by presentation.hostLocationId, not condition.atLocation", () => {
+  // ev_b hostLocationId=zichendian — appears at zichendian, not at other locations
+  expect(getAudienceQueue(db, state, "yanhe_gong").map(i=>i.event.id)).not.toContain("ev_b");
+});
+test("getAudienceQueue excludes once-fired ghosts (no phantom count)", () => {
   expect(getAudienceQueue(db, stateWithFiredGhost, "zichendian").map(i=>i.event.id)).not.toContain("ev_a");
   expect(pendingAudienceCount(db, stateWithFiredGhost, "zichendian")).toBe(0);
+});
+test("reconciliation clears pending flag for once-fired event", () => {
+  expect(audienceReconciliationEffects(db, stateWithFiredGhost, "zichendian"))
+    .toEqual(expect.arrayContaining([{ type:"flag", key:"audience:pending:ev_a", value:false }]));
 });
 ```
 
@@ -208,18 +248,28 @@ import { getEligibleEvents } from "./engine";
 import { resolveEntryMode } from "./entryMode";
 import { hasEventFired } from "./conditions";
 
-export const AUDIENCE_REMIND_AFTER_DAYS = 3;
+export const AUDIENCE_REMIND_AFTER_PERIODS = 1; // 1 dayIndex = 1 旬（time.ts:81）
 export type AudienceStatus = "available"|"pending"|"suppressed";
-export interface AudienceItem { event: GameEventContent; status: AudienceStatus; }
+export interface AudienceItem {
+  event: GameEventContent;
+  presentation: { mode:"request_audience"; hostLocationId:string; audienceCharacterId:string; audiencePrompt:string };
+  status: AudienceStatus;
+  affordable: boolean;
+  deferredAtDayIndex?: number;
+  remindAtDayIndex?: number;
+}
 const PENDING = (id:string) => `audience:pending:${id}`;
 const SHOWN = (id:string) => `audience:promptShownAt:${id}`;
 const REMIND = (id:string) => `audience:remindAt:${id}`;
+const numFlag = (state:GameState, key:string): number | undefined => {
+  const v = state.flags[key]; return typeof v === "number" ? v : undefined;
+};
 
 export function defer(eventId:string, dayIndex:number): EventEffect[] {
   return [
     { type:"flag", key:PENDING(eventId), value:true },
     { type:"flag", key:SHOWN(eventId), value:dayIndex },
-    { type:"flag", key:REMIND(eventId), value:dayIndex + AUDIENCE_REMIND_AFTER_DAYS },
+    { type:"flag", key:REMIND(eventId), value:dayIndex + AUDIENCE_REMIND_AFTER_PERIODS },
   ];
 }
 export function clearAudience(eventId:string): EventEffect[] {
@@ -231,33 +281,61 @@ export function clearAudience(eventId:string): EventEffect[] {
 }
 export function shouldRemind(state:GameState, eventId:string): boolean {
   if (state.flags[PENDING(eventId)] !== true) return false;
-  const r = state.flags[REMIND(eventId)];
-  return typeof r === "number" && state.calendar.dayIndex >= r;
+  const r = numFlag(state, REMIND(eventId));
+  return r !== undefined && state.calendar.dayIndex >= r;
 }
 export function audienceStatus(state:GameState, eventId:string): AudienceStatus {
   if (state.flags[PENDING(eventId)] !== true) return "available";
   return shouldRemind(state, eventId) ? "pending" : "suppressed";
 }
 export function getAudienceQueue(db:ContentDB, state:GameState, locationId:string): AudienceItem[] {
-  // getEligibleEvents 已评估 condition（含 atLocation），故命中 = 当前 eligible 且宿主地点成立。
-  const eligible = getEligibleEvents(db, state, "location_enter").map((e)=>e.event);
   const loc = db.locations[locationId];
-  return eligible
-    .filter((event)=> resolveEntryMode(event, loc) === "request_audience")
-    .filter((event)=> !(event.once && hasEventFired(state, event.id)))   // once 已发 → 过期，不计数
-    .map((event)=>({ event, status: audienceStatus(state, event.id) }))
+  return getEligibleEvents(db, state, "location_enter")
+    .filter((e) => {
+      const p = e.event.presentation;
+      return resolveEntryMode(e.event, loc) === "request_audience"
+        && p?.mode === "request_audience"
+        && p.hostLocationId === locationId                       // 宿主用 hostLocationId（评审 r2 #3）
+        && !(e.event.once && hasEventFired(state, e.event.id));  // once 已发 → 过期
+    })
+    .map((e) => {
+      const p = e.event.presentation as Extract<NonNullable<GameEventContent["presentation"]>, { mode:"request_audience" }>;
+      return {
+        event: e.event,
+        presentation: p,
+        status: audienceStatus(state, e.event.id),
+        affordable: e.affordable,                                // 保留 affordable（评审 r2 #1）
+        deferredAtDayIndex: numFlag(state, SHOWN(e.event.id)),
+        remindAtDayIndex: numFlag(state, REMIND(e.event.id)),
+      } satisfies AudienceItem;
+    })
     .sort((a,b)=> b.event.priority - a.event.priority || a.event.id.localeCompare(b.event.id));
 }
 export function pendingAudienceCount(db:ContentDB, state:GameState, locationId:string): number {
   return getAudienceQueue(db, state, locationId).length;
 }
+/** 扫描现存 pending flag，对已不该 pending 者产出 clearAudience（纯函数，无副作用；评审 r2 #5）。 */
+export function audienceReconciliationEffects(db:ContentDB, state:GameState, locationId:string): EventEffect[] {
+  const out: EventEffect[] = [];
+  for (const key of Object.keys(state.flags)) {
+    if (!key.startsWith("audience:pending:") || state.flags[key] !== true) continue;
+    const id = key.slice("audience:pending:".length);
+    const ev = db.events[id];
+    const p = ev?.presentation;
+    const stale =
+      !ev ||
+      p?.mode !== "request_audience" ||
+      p.hostLocationId !== locationId ||
+      (ev.once && hasEventFired(state, id));
+    if (stale) out.push(...clearAudience(id));
+  }
+  return out;
+}
 ```
-
-> 实现注：宿主地点判定用事件 `condition` 的 `atLocation`（已有 DSL）。`getEligibleEvents` 已含 condition 评估，故 `eligibleIds` 命中即代表当前 `atLocation` 成立。
 
 - [ ] **Step 4: 运行通过。**
 
-- [ ] **Step 5: 提交** — `feat(events): 候见生命周期（三态 + 队列 + 提醒 + 清理，flags 承载）`
+- [ ] **Step 5: 提交** — `feat(events): 候见生命周期（自足 AudienceItem + hostLocationId 队列 + 对账清理）`
 
 ### Task 1.4: `EventReturnTarget` + App 接线（P0-2）
 
@@ -267,15 +345,15 @@ export function pendingAudienceCount(db:ContentDB, state:GameState, locationId:s
 - Produces（App 内或 `src/ui/eventReturn.ts`）：`export type EventReturnTarget = {kind:"map"} | {kind:"location";locationId:string} | {kind:"zichendian"} | {kind:"garden";subLocationId?:string} | {kind:"xuanzhengdian"};`
 - `startEvent(eventId: string, returnTarget: EventReturnTarget)`；`restoreReturn(target: EventReturnTarget)`。
 
-- [ ] **Step 1: 写失败测试** — 以测试替身记录：`startEvent("ev_x",{kind:"zichendian"})` 完成后 `restoreReturn` 把 view 设回 `"zichendian"`；`{kind:"garden",subLocationId:"taiyechi"}` 回 garden 且保留 subId；`{kind:"location",locationId:"yanhe_gong"}` 回该宫；中途退出按同 target 回（非 `goHome`）。
+- [ ] **Step 1: 写失败测试** — 以测试替身记录：`startEvent("ev_x",{kind:"zichendian"})` 完成后 `restoreReturn` 把 view 设回 `"zichendian"`；`{kind:"garden",subLocationId:"taiyechi"}` 回 garden 且保留 subId；`{kind:"location",locationId:"yanhe_gong"}` 回该宫；中途退出按同 target 回（非 `goHome`）。**stale-target 回归（评审 r2 建议）**：A 事件以 `{kind:"zichendian"}` 启动并完成→恢复后 target 已清空；随后 B 事件由地图入口以 `{kind:"map"}` 启动，完成后回 map（不被 A 的旧 target 污染）。链事件继承同 target，整链只恢复一次。
 
 - [ ] **Step 2: 运行确认失败。**
 
-- [ ] **Step 3: 实现** — `startEvent` 增第二参 `returnTarget`，存 `setEventReturn(target)`；`DialogueScreen.onDone` 完成/退出后调 `restoreReturn(eventReturn)`（替换 `goHome()`/`setView("location")`），其中保留既有转旬补跑（`reactionRollover`/`runCheckpoints`），仅落点按 target；`court` 会话 onDone 同理用 `{kind:"xuanzhengdian"}`。链事件继承同 target。
+- [ ] **Step 3: 实现** — `startEvent` 增第二参 `returnTarget`，**每次启动覆盖** `setEventReturn(target)`；`DialogueScreen.onDone` 完成/退出后调 `restoreReturn(eventReturn)`（替换 `goHome()`/`setView("location")`），保留既有转旬补跑（`reactionRollover`/`runCheckpoints`），落点按 target，**恢复后 `setEventReturn(null)` 清空**；链事件（scene_end/time_advance 续接）**继承**当前 target、不清空，直至整链结束才恢复一次；`court` onDone 用 `{kind:"xuanzhengdian"}`；`newGame`/`continueGame` 清空 target。
 
 - [ ] **Step 4: 运行通过 + `npm run typecheck`。**
 
-- [ ] **Step 5: 提交** — `feat(ui): EventReturnTarget 事件返回上下文，替换一律 goHome`
+- [ ] **Step 5: 提交** — `feat(ui): EventReturnTarget 返回上下文（消费即清空，防 stale），替换一律 goHome`
 
 ### Task 1.5: PR1 回归
 
@@ -294,7 +372,7 @@ export function pendingAudienceCount(db:ContentDB, state:GameState, locationId:s
 **Interfaces:** `export function SceneShell(props: { background:string; isFallback?:boolean; backgroundPosition?:string; stage?:ReactNode; narrative?:ReactNode; actions?:ReactNode; ariaLabel:string }): JSX.Element`
 
 - [ ] **Step 1: 写失败测试** — 渲染 background/narrative/actions 三槽；`backgroundPosition` 透传到 stage style。
-- [ ] **Step 2–6:** 失败 → 加 `locationSchema.backgroundPosition: nonEmpty.optional()` → 实现组件（`background-position` 用 prop，缺省 center）→ 样式：`.scene-shell__stage{background-size:cover;min-height:100dvh}`、`.scene-shell__actions{padding-bottom:env(safe-area-inset-bottom)}`、`@media(prefers-reduced-motion:reduce)` 关过渡 → 通过 → 提交 `feat(ui): SceneShell 统一外壳（裁切焦点/移动安全区）`。
+- [ ] **Step 2–6:** 失败 → 加 `locationSchema.backgroundPosition: nonEmpty.optional()` → 实现组件（`background-position` 用 prop，缺省 center）→ 样式（评审 r2 UI 修正：**不用裸 `100dvh`**，避免与 `GameShell` 顶部栏叠加溢出）：`GameShell` 容器 `display:flex;flex-direction:column;min-height:100dvh`，`.scene-shell{flex:1;min-height:0}`、`.scene-shell__stage{background-size:cover}`、`.scene-shell__actions{padding-bottom:env(safe-area-inset-bottom)}`、`@media(prefers-reduced-motion:reduce)` 关过渡 → 通过 → 提交 `feat(ui): SceneShell 统一外壳（flex 布局/裁切焦点/移动安全区）`。
 
 ### Task 2.2: AudiencePrompt（非阻塞，文案/立绘来自 presentation）
 
@@ -341,11 +419,11 @@ test("召见侍君 → 立绘入场，无 CharacterCard；结束恢复默认态"
 
 - [ ] **Step 3: 实现 ZichendianScreen** — `SceneShell`：stage=背景+事务摘要（`候见 · {pendingAudienceCount}`）；narrative=`getAudienceQueue` 中首个 `status∈{available,pending}` 项渲染 `AudiencePrompt`（文案/立绘取 `event.presentation`）；actions=奏折/召见/传乘风/休息/离开 + 「候见 · N」开 `PendingAudienceDrawer`。
 
-- [ ] **Step 4: App 接线** — `enterCurrentLocation`：`loc==="zichendian"` → `setView("zichendian")`；加 `view==="zichendian"` 渲染块；`onDefer={(id)=>{store.applyEffects(db, defer(id, dayIndex)); doAutosave();}}`；`onAdmit={(id)=>startEvent(id,{kind:"zichendian"})}`；事件**成功提交**后在 onDone 内 `store.applyEffects(db, clearAudience(id))`。召见走升级版 `BedchamberPicker` → `setSummonedConsortId(id)` → 立绘入场（复用 `CharacterScene`/`ReactionScreen`），**不渲染 CharacterCard**。
+- [ ] **Step 4: App 接线** — `enterCurrentLocation`：`loc==="zichendian"` → **先** `store.applyEffects(db, audienceReconciliationEffects(db, store.getState(), "zichendian"))` 对账清理过期 pending（评审 r2 #5；读档后首次进入同样跑）→ `setView("zichendian")`；加 `view==="zichendian"` 渲染块；`onDefer={(id)=>{store.applyEffects(db, defer(id, store.getState().calendar.dayIndex)); doAutosave();}}`；`onAdmit={(id)=>startEvent(id,{kind:"zichendian"})}`；事件**成功提交**后在 onDone 内 `store.applyEffects(db, clearAudience(id))` + 再跑一次对账。召见走升级版 `BedchamberPicker` → `setSummonedConsortId(id)` → 立绘入场（复用 `CharacterScene`/`ReactionScreen`），**不渲染 CharacterCard**。
 
 - [ ] **Step 5: 运行通过 + `npm run typecheck && npm test`。**
 
-- [ ] **Step 6: 标注 content** — 紫宸殿 `location_enter` 事件（司礼类）加 `presentation:{mode:"request_audience", audienceCharacterId:"wei_ling", audiencePrompt:"司礼卫绫正在殿外候见，似有宫务需要禀奏。"}`；`npm run validate-content`。
+- [ ] **Step 6: 标注 content** — 紫宸殿 `location_enter` 事件（司礼类）加 `presentation:{mode:"request_audience", hostLocationId:"zichendian", audienceCharacterId:"wei_ling", audiencePrompt:"司礼卫绫正在殿外候见，似有宫务需要禀奏。"}`（同时保留其 `condition.atLocation:"zichendian"`）；`npm run validate-content`。
 
 - [ ] **Step 7: 提交** — `feat(ui): 紫宸殿候见/待宣/召见立绘，移除人物卡`
 
@@ -364,7 +442,7 @@ test("召见侍君 → 立绘入场，无 CharacterCard；结束恢复默认态"
 
 # PR3 — 普通地点与御花园
 
-> 依赖 PR1。场景人物条 + 后宫直入 + 御花园探索。
+> 依赖 PR1 **与 PR2**（`GardenOverviewScreen` 用 PR2 的 `SceneShell`）。场景人物条 + 后宫直入 + 御花园探索。
 
 ### Task 3.1: SceneCharacterBar（P0-8：移除卡后保留人物入口）
 
@@ -384,25 +462,26 @@ test("召见侍君 → 立绘入场，无 CharacterCard；结束恢复默认态"
 
 ### Task 3.3: 御花园 subLocations schema + manifest + 调度
 
-**Files:** Modify `schemas.ts`（`locationSchema.subLocations?`）、`assets/manifest.json`、`content/locations/yuhuayuan.json`、`content/events/*`（御花园事件加 `presentation:{mode:"exploration",subLocationId,...}`）；Create `src/engine/map/subLocations.ts`；Test `tests/map/subLocations.test.ts`
+**Files:** Modify `schemas.ts`（`locationSchema.subLocations?`）、`assets/manifest.json`、`content/locations/yuhuayuan.json`、`content/events/*`（御花园事件加 `presentation:{mode:"exploration",hostLocationId:"yuhuayuan",subLocationId,eventHint?}`）；Create `src/engine/map/subLocations.ts`；Test `tests/map/subLocations.test.ts`
 
 > **前置同步：** `git fetch origin && git rebase origin/main`，确认 `public/assets/backgrounds/{jiangxuexuan,taiyechi,fubiting,tuixiushan}.png` 存在。
 
 **Interfaces:**
-- schema: `subLocations?: { id, name, backgroundKey, description }[]`（`description` 为静态环境，无人物暗示）。
+- schema: `subLocations?: { id, name, backgroundKey, backgroundPosition?, description }[]`（`description` 为静态环境，无人物暗示）。
 - Produces: `export function pickSubLocationEvent(db, state, locId, subId): GameEventContent | null;`
 
 - [ ] **Step 1: 写失败测试**
 
 ```ts
-test("binds via presentation.subLocationId (static, not flag)", /* 命中 subId 的 exploration 事件 */);
+test("binds via presentation.hostLocationId + subLocationId (static, not flag)", /* 命中 subId 的 exploration 事件 */);
+test("event for another hostLocationId is not picked here", /* … */);
 test("at most one event, highest priority wins; tie by id asc", /* … */);
 test("no eligible event → null (普通游览)", /* … */);
 ```
 
 - [ ] **Step 2: 运行确认失败。**
 
-- [ ] **Step 3: schema** — `subLocations: z.array(z.strictObject({ id:idSchema, name:nonEmpty, backgroundKey:nonEmpty, description:nonEmpty })).optional(),`
+- [ ] **Step 3: schema** — `subLocations: z.array(z.strictObject({ id:idSchema, name:nonEmpty, backgroundKey:nonEmpty, backgroundPosition:nonEmpty.optional(), description:nonEmpty })).optional(),`
 
 - [ ] **Step 4: manifest** — 加 4 条（同 `bg.yuhuayuan` 形）：
 
@@ -422,10 +501,14 @@ import { resolveEntryMode } from "../events/entryMode";
 export function pickSubLocationEvent(db, state, locId, subId): GameEventContent | null {
   const loc = db.locations[locId];
   return getEligibleEvents(db, state, "location_enter")
-    .filter((e)=> e.affordable
-      && resolveEntryMode(e.event, loc) === "exploration"
-      && e.event.presentation?.mode === "exploration"
-      && e.event.presentation.subLocationId === subId)
+    .filter((e)=> {
+      const p = e.event.presentation;
+      return e.affordable
+        && resolveEntryMode(e.event, loc) === "exploration"
+        && p?.mode === "exploration"
+        && p.hostLocationId === locId          // 宿主用 hostLocationId（评审 r2 #3）
+        && p.subLocationId === subId;
+    })
     .map((e)=>e.event)[0] ?? null;
 }
 ```
@@ -457,7 +540,7 @@ export function pickSubLocationEvent(db, state, locId, subId): GameEventContent 
 
 # PR4 — 宣政殿与视觉收尾
 
-> 依赖 PR1。议程/朝议结果用引擎快照 diff，不改 onDone 契约。
+> 依赖 PR1 **与 PR2**（`XuanzhengdianScreen` 用 PR2 的 `SceneShell`）。议程/朝议结果用引擎快照 diff，不改 onDone 契约。
 
 ### Task 4.1: court 议程预览 + 快照 diff（P0-7 方案 B）
 
@@ -513,18 +596,19 @@ test("empty pool → empty preview", /* … */);
 
 | 规格条目 | 任务 |
 |----------|------|
-| §3.1 presentation 契约 | Task 1.1 |
-| §3.2 中央路由（P0-1） | Task 1.2, 3.2 |
-| §3.3 候见生命周期（P0-3） | Task 1.3, 2.2, 2.3, 2.4 |
-| §3.4 返回上下文（P0-2） | Task 1.4, 2.4, 3.2, 3.4, 4.2 |
-| §4 SceneShell（P1-4） | Task 2.1 |
+| §3.1 presentation 契约（含 hostLocationId） | Task 1.1 |
+| §3.2 中央路由 / 全部自动 checkpoint（P0-1, r2#4） | Task 1.2, 3.2 |
+| §3.3 候见生命周期 / 自足 AudienceItem / 对账（P0-3, r2#1,#5,#6） | Task 1.3, 2.2, 2.3, 2.4 |
+| §3.4 返回上下文 / 消费即清空（P0-2, r2 stale-target） | Task 1.4, 2.4, 3.2, 3.4, 4.2 |
+| §3.5 内容跨引用校验（r2#2） | Task 1.1b |
+| §4 SceneShell / flex 布局（P1-4, r2 UI） | Task 2.1 |
 | §5.3 场景人物条（P0-8） | Task 3.1, 3.2 |
 | §6.1 真实摘要（P1-1） | Task 2.4 |
 | §6.2/6.3 候见/待宣 | Task 2.2, 2.3, 2.4 |
 | §6.4 召见无卡 | Task 2.4 |
 | §6.5 乘风范围（P1-2） | Task 2.5 |
 | §7 后宫直入 | Task 3.2 |
-| §8 御花园（P0-5/P0-6） | Task 3.3, 3.4 |
+| §8 御花园 / hostLocationId 绑定（P0-5/P0-6, r2#3） | Task 3.3, 3.4 |
 | §9 朝议结算（P0-7） | Task 4.1, 4.2 |
 | §11 响应式/视觉（P1-5） | Task 4.3 |
 | §12 存档零迁移 | Task 1.1,1.3,3.3 |
@@ -532,6 +616,6 @@ test("empty pool → empty preview", /* … */);
 | §14 清理 | Task 4.4 |
 
 **执行时仍需确认：**
-- `getAudienceQueue` 的「宿主地点判定」依赖事件 `condition.atLocation`（Task 1.3 实现注）；若某候见事件不写 `atLocation`，需在 content 补齐或扩判定。执行 Task 1.3 时按真实 content 复核。
 - 乘风 `interruptible` 判定（Task 2.5）：MVP 由 App 按 `view`/`activeEventId`/是否原子操作中硬判定；后续可下沉 content。
-- Task 1.4/2.4/4.2 触及 `App.tsx` rollover/checkpoint 回旋逻辑（`reactionRollover`/`runCheckpoints`）——改返回落点须保留转旬补跑路径，测试覆盖。
+- Task 1.2/1.4/2.4/4.2 触及 `App.tsx` rollover/checkpoint 回旋逻辑（`reactionRollover`/`runCheckpoints`）——改返回落点/路由须保留转旬补跑路径，测试覆盖。
+- 候见宿主已由 `presentation.hostLocationId` 静态决定（不再依赖 `condition.atLocation`）；紫宸殿候见事件须在 content 同时声明 `hostLocationId:"zichendian"` 与 `condition.atLocation`（前者定归属，后者定 eligibility）。

@@ -1,7 +1,7 @@
 # 场景 UI · 人物交互 · 事件流程重构 — 设计规格
 
 **日期：** 2026-06-22
-**状态：** 评审 r1 修订（补齐事件路由 / 返回上下文 / 候见生命周期 / 内容契约）
+**状态：** 评审 r2 修订完成，待复审批准（AudienceItem 自足 / 全部自动 checkpoint 改走 router / hostLocationId 静态归属 / 候见对账清理 / 提醒间隔修正 / presentation 强制校验）
 **相关文档：**
 [`engineering/10-current-implementation.md`](../../engineering/10-current-implementation.md)（引擎契约）·
 [`2026-06-18-yushufang-redesign-design.md`](./2026-06-18-yushufang-redesign-design.md)·
@@ -98,11 +98,13 @@
 presentation: z.discriminatedUnion("mode", [
   z.strictObject({
     mode: z.literal("request_audience"),
+    hostLocationId: idSchema,        // 候见归属地点（呈现宿主，独立于 condition.atLocation）
     audienceCharacterId: idSchema,   // 候见者（立绘/名牌来源）
     audiencePrompt: nonEmpty,        // 候见提示文案（叙事口吻，UI 不再硬编码）
   }),
   z.strictObject({
     mode: z.literal("exploration"),
+    hostLocationId: idSchema,        // 御花园等宿主地点
     subLocationId: idSchema,         // 静态绑定的子地点（P0-5：不用 flag）
     eventHint: nonEmpty.optional(),  // 事件存在时才显示的人物/事件线索（P0-6）
   }),
@@ -128,7 +130,9 @@ export function resolveEntryMode(event, location): EventEntryMode {
 }
 ```
 
-旧 content 无 `presentation` → 走推导；旧档不受影响（字段可选）。
+**呈现模式声明规则（评审 r2 #2）**：`auto_on_enter` 可由旧 content 推导（无 `presentation` 也能展示，因为不需要候见者/子地点元数据）；但 **`request_audience`/`exploration`/`manual` 必须显式声明 `presentation`**——否则会出现「`resolveEntryMode` 推导为 request_audience，但 `presentation===undefined`，候见 UI 无人物/文案可读」的合法但不可展示事件。该约束由 `validate-content` 跨引用校验保证（见 §3.5），不靠运行时兜底。
+
+旧 content 无 `presentation` 且推导为 `auto_on_enter` → 正常；推导为 request_audience/exploration 而缺 presentation → **`validate-content` 报错**（强制补齐），而非静默失败。旧档不受影响（字段可选）。
 
 ### 3.2 中央呈现路由（P0-1：entryMode 真正接入调度器）
 
@@ -144,35 +148,61 @@ export function getAudienceQueue(db, state, locationId): AudienceItem[];
 export function pickSubLocationEvent(db, state, locId, subId): GameEventContent | null;
 ```
 
-`pickAutoStartEvent` = `getEligibleEvents(db,state,checkpoint)` 过滤 `resolveEntryMode(e,loc)==="auto_on_enter"` 且 affordable 的首个。`request_audience`/`exploration`/`manual` 被排除，**不可能被 `runCheckpoints` 自动拉起**。`scheduled` 不参与自动 checkpoint（上朝由 `ev_chaohui` 专用入口）。
+`pickAutoStartEvent(db, state, checkpoint, location)` = `getEligibleEvents(db,state,checkpoint)` 过滤 `resolveEntryMode(e,loc)==="auto_on_enter"` 且 affordable 的首个。`request_audience`/`exploration`/`manual` 被排除，**不可能被任何自动 checkpoint 拉起**。`scheduled` 不参与自动 checkpoint（上朝由 `ev_chaohui` 专用入口）。
 
-`runCheckpoints`（`App.tsx`）将 `pickNextEvent(...,"time_advance")/("location_enter")` 改为 `pickAutoStartEvent(...)`；紫宸殿进入改为渲染候见队列而非 startEvent；御花园进入改为渲染子地点总览。
+**所有「系统自动启动事件」的调用点统一改走 router（评审 r2 #4）**。审计确认 `App.tsx` 有 **4 处** 自动 `pickNextEvent`，全部须改为 `pickAutoStartEvent(db, state, checkpoint, db.locations[state.playerLocation])`：
+
+| 位置 | checkpoint | 现状 → 改为 |
+|------|-----------|-----------|
+| `runCheckpoints`（`:322-323`） | time_advance / location_enter | `pickAutoStartEvent` |
+| `proceedAfterNewGame`（`:528`） | game_start | `pickAutoStartEvent` |
+| `DialogueScreen.onDone` 链（`:1191`） | scene_end | `pickAutoStartEvent` |
+| `DialogueScreen.onDone` 转旬（`:1208`） | time_advance | `pickAutoStartEvent` |
+
+否则挂在 `scene_end`/`time_advance` 上的 `manual`/`request_audience` 事件仍会被自动拉起。`pickNextEvent` 仅保留给确实不区分呈现模式的内部用途，App 层不再直接调用。紫宸殿进入改为渲染候见队列；御花园进入改为渲染子地点总览。
 
 ### 3.3 候见完整生命周期（P0-3：三态 + 列表 + 提醒 + 清理）
 
 `src/engine/events/audience.ts`（纯函数）。flag 键统一 **冒号** 分段（P1-3）：`audience:pending:<id>` / `audience:promptShownAt:<id>` / `audience:remindAt:<id>`。
 
+**提醒间隔修正（评审 r2 #6）**：`dayIndexOf = (...)*3 + PERIOD_ORDINAL`（`time.ts:81`），即 **1 个 `dayIndex` = 1 旬**，一月 = 3 个 dayIndex。故「下一旬提醒」是 `+1`，不是 `+3`（`+3` 是下月同旬）。
+
 ```ts
-const AUDIENCE_REMIND_AFTER_DAYS = 3;  // defer 后多少 dayIndex 再主动提醒（约一旬）
+const AUDIENCE_REMIND_AFTER_PERIODS = 1;  // defer 后 1 旬（=1 dayIndex）再主动提醒；紧急事件由 content 覆盖 remindAt 提前
 
 export type AudienceStatus = "available" | "pending" | "suppressed";
-export interface AudienceItem { event: GameEventContent; status: AudienceStatus; }
 
-/** 三态：从未延期且当前可呈现=available；已延期且到提醒点=pending；已延期未到点=suppressed。 */
+/** UI 唯一消费的候见项：自带呈现元数据 + 行动力 + 日期，UI 不再二次读 flags/算 ap/收窄 presentation。 */
+export interface AudienceItem {
+  event: GameEventContent;
+  presentation: {            // 类型已收窄；保证非 undefined（§3.5 校验）
+    mode: "request_audience";
+    hostLocationId: string;
+    audienceCharacterId: string;
+    audiencePrompt: string;
+  };
+  status: AudienceStatus;
+  affordable: boolean;       // 来自 getEligibleEvents().affordable（不再 .map 丢弃）
+  deferredAtDayIndex?: number;  // = promptShownAt（待宣列表「候见于 X」+ 排序）
+  remindAtDayIndex?: number;    // = remindAt（可显示「将于 X 再禀」）
+}
+
 export function audienceStatus(state, eventId): AudienceStatus;     // 读 pending + shouldRemind
 export function shouldRemind(state, eventId): boolean;             // 读 remindAt（dayIndex 已到）
-export function defer(eventId, dayIndex): EventEffect[];           // 置 pending=true, promptShownAt=dayIndex, remindAt=dayIndex+REMIND_AFTER
-export function clearAudience(eventId): EventEffect[];             // 三个 flag 归零（事件提交/过期/once 已发）
-/** 权威队列：同时校验 entryMode===request_audience、当前 eligibility、once/cooldown、pending、地点、提醒时间。 */
+export function defer(eventId, dayIndex): EventEffect[];           // pending=true, promptShownAt=dayIndex, remindAt=dayIndex+AFTER_PERIODS
+export function clearAudience(eventId): EventEffect[];             // 三个 flag 归零
+/** 权威队列：校验 resolveEntryMode===request_audience、presentation.hostLocationId===locationId、当前 eligibility、once/cooldown。 */
 export function getAudienceQueue(db, state, locationId): AudienceItem[];
 export function pendingAudienceCount(db, state, locationId): number;  // = getAudienceQueue 长度（非裸数 flag，P0-3#5）
+/** 对账：扫描现存 audience:pending:* flag，对已不该 pending 者产出 clearAudience effects（纯函数，无副作用）。 */
+export function audienceReconciliationEffects(db, state, locationId): EventEffect[];
 ```
 
-- **三态语义**：`available`（未延期、当前 eligible）→ 主动弹提示；`pending`（已延期、`shouldRemind` 真）→ 再次主动弹；`suppressed`（已延期、未到提醒点）→ 仅在「待宣列表」中，不主动弹。提示可见 = available || pending；待宣列表 = pending || suppressed。
-- **三字段全部被读**：`promptShownAt` 供待宣列表展示/排序（「候见于 X」）；`remindAt` 供 `shouldRemind`；`pending` 供状态。
-- **`defer` 真正设置 `remindAt`** = dayIndex + `AUDIENCE_REMIND_AFTER_DAYS`，故提醒确会发生；deadline/升级可由事件 effects 覆盖 `remindAt` 为更早值。
-- **`getAudienceQueue` 防幽灵待办**：只纳入「`resolveEntryMode==="request_audience"` 且宿主地点==locationId 且（当前 eligible 或仍 pending）」的事件；`once && hasEventFired` 或条件失效 → 视为过期，**不计数**（并应被 `clearAudience` 清理）。
-- **`clearAudience` 接线规则**：宣入但**中途退出** → 保留 pending（事件未结算）；事件**成功提交** → `clearAudience`；**条件失效/过期/once 已发** → `clearAudience`（队列已不计数，flag 顺手清理）。
+- **`AudienceItem` 自足（评审 r2 #1）**：携带收窄后的 `presentation` + `affordable` + `deferredAtDayIndex` + `remindAtDayIndex`。`AudiencePrompt`/`PendingAudienceDrawer` 只消费 `AudienceItem`，不再读 flags、不重算 ap、不自行收窄 `event.presentation`。
+- **宿主地点用 `presentation.hostLocationId`（评审 r2 #3）**：`getAudienceQueue` 以 `hostLocationId===locationId` 判定归属，**不依赖 `condition.atLocation`**（后者是游戏资格条件、可嵌套 all/any/not、可缺省，不适合做呈现宿主）。`condition.atLocation` 仍决定「当前是否 eligible」，`hostLocationId` 决定「属于哪个场景」，两者职责分离。
+- **三态语义**：`available`（未延期、当前 eligible）→ 主动弹；`pending`（已延期、`shouldRemind` 真）→ 再次主动弹；`suppressed`（已延期、未到提醒点）→ 仅在待宣列表。提示可见 = available||pending；待宣列表 = pending||suppressed。
+- **`defer` 真正设 `remindAt`** = dayIndex + `AUDIENCE_REMIND_AFTER_PERIODS`（提醒确会发生）；deadline/升级由事件 effects 覆盖为更早。
+- **`clearAudience` 接线 + 对账（评审 r2 #5）**：宣入但**中途退出** → 保留 pending；**成功提交** → `clearAudience`。此外，selector **不产副作用**；过期清理由独立纯函数 `audienceReconciliationEffects` 完成——它扫描现存 `audience:pending:*`，对「事件不存在 / 不再是 request_audience / hostLocation 不匹配 / once 已发 / 按规则已过期」者产出 `clearAudience` effects。在**进入紫宸殿、读档后首次进入、事件提交后**统一 `store.applyEffects(db, audienceReconciliationEffects(...))`，杜绝「条件暂失效→从队列消失→flag 残留→日后以旧 pending 复活」。
 
 ### 3.4 事件返回上下文（P0-2）
 
@@ -189,14 +219,29 @@ type EventReturnTarget =
 
 `startEvent(eventId, returnTarget)` 记录来源；`DialogueScreen.onDone` 完成/退出后调 `restoreReturn(target)` 恢复对应视图（替换一律 `goHome()`）。`restoreReturn` 内仍跑既有转旬补跑/checkpoint 路径（保留 `reactionRollover` 等结算），只是落点按 target 而非主地图。
 
+**target 生命周期（评审 r2 建议）**：`startEvent` 必覆盖旧 target（新入口启动即重置）；链事件（scene_end/time_advance 自动续接）**继承**同一 target；`restoreReturn` 恢复后**清空** `eventReturnTarget`；中途退出同样恢复并清空；新游戏/读档清空。一条链最终只恢复一次，避免上次事件的 target 污染下次由其它入口启动的事件。Task 1.4 须含 stale-target 回归测试。
+
+### 3.5 内容跨引用校验（评审 r2 #2）
+
+`tools/validate-content.ts` 增加跨引用校验（构建期失败，不留运行时兜底）：
+
+- `request_audience`/`exploration`/`manual` 事件**必须**有 `presentation`（缺失即报错）。
+- `presentation.audienceCharacterId` ∈ `db.characters`。
+- `presentation.hostLocationId` ∈ `db.locations`。
+- `exploration.hostLocationId` 对应 location 须有 `subLocations`，且 `presentation.subLocationId` ∈ 该 location 的 `subLocations[].id`。
+- `request_audience` 须同时有 `audiencePrompt` 与 `audienceCharacterId`（schema 已强制，校验再确认非空语义）。
+
+这同时满足「UI 不猜事实」与类型安全：UI 读到的 `presentation` 字段保证存在且指向真实实体。
+
 ---
 
 ## 4. Scene Shell
 
 `src/ui/components/SceneShell.tsx`（新）：背景铺满 + stage/narrative/actions 三槽 + 渐变遮罩。
 
-- **背景裁切焦点（P1-4）**：支持可选 `backgroundPosition`（location 配置，缺省 `center`），如紫宸殿 `"62% center"`，避免超宽/360px 主体被裁。
-- **移动安全区（P1-4）**：stage 用 `100dvh`；固定操作栏 `padding-bottom: env(safe-area-inset-bottom)`，避免移动浏览器地址栏抖动遮挡按钮。
+- **背景裁切焦点（P1-4）**：支持可选 `backgroundPosition`（location 顶层 + **每个 `subLocation` 亦可独立配置**，评审 r2 UI 修正；缺省 `center`），如紫宸殿 `"62% center"`，避免超宽/360px 主体被裁。
+- **布局避免溢出（评审 r2 UI 修正）**：`SceneShell` 位于既有 `GameShell` 内，**不**对 stage 用裸 `100dvh`（会与顶部栏叠加纵向溢出）。改为 `GameShell` 纵向 flex、`SceneShell` `flex:1; min-height:0`，由 flex 占满顶部栏以下剩余高度。
+- **移动安全区（P1-4）**：固定操作栏 `padding-bottom: env(safe-area-inset-bottom)`，避免移动浏览器地址栏抖动遮挡按钮。
 - `prefers-reduced-motion` 关过渡。Shell 只管布局，地点 body 各屏注入。
 
 ---
@@ -274,16 +319,17 @@ type EventReturnTarget =
 
 ```ts
 subLocations: z.array(z.strictObject({
-  id: idSchema,                 // jiangxuexuan / taiyechi / fubiting / tuixiushan
-  name: nonEmpty,               // 绛雪轩 / 太液池 / 浮碧亭 / 堆秀山
-  backgroundKey: nonEmpty,      // bg.<id>
-  description: nonEmpty,        // 静态环境（永久成立，无人物/事件暗示）
+  id: idSchema,                       // jiangxuexuan / taiyechi / fubiting / tuixiushan
+  name: nonEmpty,                     // 绛雪轩 / 太液池 / 浮碧亭 / 堆秀山
+  backgroundKey: nonEmpty,            // bg.<id>
+  backgroundPosition: nonEmpty.optional(), // 每子地点独立裁切焦点（评审 r2 UI 修正）
+  description: nonEmpty,              // 静态环境（永久成立，无人物/事件暗示）
 })).optional(),
 ```
 
 **人物/事件线索只在事件存在时显示**：来自 `event.presentation.eventHint`（§3.1）或人物 `presence`，由 `pickSubLocationEvent` 命中时生成。无事件无人时只显 `description`，**不显人物踪迹**（P0-6）。
 
-**事件↔子地点绑定 = `event.presentation.subLocationId`（静态字段，非 flag）**。`pickSubLocationEvent(db,state,locId,subId)` = `getEligibleEvents(db,state,"location_enter")` 过滤 `resolveEntryMode==="exploration"` 且 `presentation.subLocationId===subId` 且 `atLocation===locId`，按 priority desc/id asc 取首个 affordable（至多一个）。
+**事件↔子地点绑定 = `event.presentation`（静态字段，非 flag）**。`pickSubLocationEvent(db,state,locId,subId)` = `getEligibleEvents(db,state,"location_enter")` 过滤 `resolveEntryMode==="exploration"` 且 `presentation.hostLocationId===locId` 且 `presentation.subLocationId===subId`，按 priority desc/id asc 取首个 affordable（至多一个）。宿主用 `hostLocationId`，与候见同一原则（§3.3，评审 r2 #3）。
 
 **固定 4 子地点 → 资产映射**（背景图已由 `0dd9dc1 背景图` 推到 `origin/main` 的 `public/assets/backgrounds/`，**manifest 待登记**）：
 
@@ -395,7 +441,7 @@ export function diffCourtMetrics(before, after): { resourceDeltas: {...}[]; atti
 
 ## 15. 实施：拆为四个 PR
 
-详见 [`../plans/2026-06-22-scene-ui-narrative-refactor.md`](../plans/2026-06-22-scene-ui-narrative-refactor.md)。每 PR 独立可交付、独立可测。
+详见 [`../plans/2026-06-22-scene-ui-narrative-refactor.md`](../plans/2026-06-22-scene-ui-narrative-refactor.md)。**依赖顺序 PR1 → PR2 → PR3，PR2 → PR4**（PR3 的 `GardenOverviewScreen`、PR4 的 `XuanzhengdianScreen` 均依赖 PR2 引入的 `SceneShell`）。Claude 顺序执行即按 PR1、PR2、PR3、PR4。
 
 - **PR1 事件呈现基础设施**：`presentation` schema + `resolveEntryMode` + 中央 router（`pickAutoStartEvent`/`getAudienceQueue`/`pickSubLocationEvent`）+ audience 生命周期 + `EventReturnTarget` + audience content 元数据 + 单元测试。（纯引擎/类型，不动 UI 视觉。）
 - **PR2 紫宸殿**：SceneShell + ZichendianScreen + 候见提示/待宣列表 + 司礼宣入/延期 + 召见立绘 + 乘风入口 + 移除紫宸殿人物卡。
