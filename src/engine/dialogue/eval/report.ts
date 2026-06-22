@@ -35,6 +35,26 @@ export interface ModelResultGroup {
   results: EvalResult[];
 }
 
+/**
+ * A scorecard row labels a whole file by its first record's provider+model, so a
+ * file mixing providers/models would silently mislabel. Returns the first record
+ * that disagrees with results[0] (with its index), or null when the batch is
+ * homogeneous (or empty). The CLI uses this to fail fast.
+ */
+export function firstHeterogeneousRecord(
+  results: EvalResult[],
+): { index: number; provider: string; model: string } | null {
+  if (results.length === 0) return null;
+  const { provider, model } = results[0]!;
+  for (let i = 1; i < results.length; i++) {
+    const r = results[i]!;
+    if (r.provider !== provider || r.model !== model) {
+      return { index: i, provider: r.provider, model: r.model };
+    }
+  }
+  return null;
+}
+
 export function buildScorecard(groups: ModelResultGroup[], opts?: { priceTable?: PriceTable }): ScorecardRow[] {
   return groups.map((g) => {
     const r = scoreResults(g.results, { priceTable: opts?.priceTable });

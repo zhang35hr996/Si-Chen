@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildScorecard, scorecardToMarkdown, scorecardToTsv } from "../../../src/engine/dialogue/eval/report";
+import {
+  buildScorecard,
+  scorecardToMarkdown,
+  scorecardToTsv,
+  firstHeterogeneousRecord,
+} from "../../../src/engine/dialogue/eval/report";
 import type { EvalResult } from "../../../src/engine/dialogue/eval/types";
 
 function baseResult(over: Partial<EvalResult>): EvalResult {
@@ -54,5 +59,26 @@ describe("buildScorecard", () => {
     });
     expect(rows[0]!.estCostUsd).toBeNull();
     expect(() => scorecardToMarkdown(rows)).not.toThrow();
+  });
+});
+
+describe("firstHeterogeneousRecord", () => {
+  it("returns null when all records share provider+model", () => {
+    const results = [baseResult({}), baseResult({ scenarioId: "s2" }), baseResult({ scenarioId: "s3" })];
+    expect(firstHeterogeneousRecord(results)).toBeNull();
+  });
+
+  it("returns null for an empty array", () => {
+    expect(firstHeterogeneousRecord([])).toBeNull();
+  });
+
+  it("flags the first record whose provider differs", () => {
+    const results = [baseResult({}), baseResult({ provider: "google", model: "gpt-x", scenarioId: "s2" })];
+    expect(firstHeterogeneousRecord(results)).toEqual({ index: 1, provider: "google", model: "gpt-x" });
+  });
+
+  it("flags the first record whose model differs", () => {
+    const results = [baseResult({}), baseResult({ model: "gpt-y", scenarioId: "s2" })];
+    expect(firstHeterogeneousRecord(results)).toEqual({ index: 1, provider: "openai", model: "gpt-y" });
   });
 });

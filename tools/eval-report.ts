@@ -16,6 +16,7 @@ import {
   buildScorecard,
   scorecardToMarkdown,
   scorecardToTsv,
+  firstHeterogeneousRecord,
   type ModelResultGroup,
 } from "../src/engine/dialogue/eval/report";
 import { DEFAULT_PRICE_TABLE } from "../src/engine/dialogue/eval/pricing";
@@ -73,6 +74,15 @@ async function main() {
       process.exit(1);
     }
     const first = results[0]!;
+    const mismatch = firstHeterogeneousRecord(results);
+    if (mismatch) {
+      console.error(
+        `Error: ${file} mixes provider/model — the scorecard labels a file by its first record ` +
+          `(${first.provider}:${first.model}), but record #${mismatch.index} is ${mismatch.provider}:${mismatch.model}. ` +
+          `Split the runs so each file contains exactly one provider+model.`,
+      );
+      process.exit(1);
+    }
     groups.push({ provider: first.provider, model: first.model, results });
   }
 
