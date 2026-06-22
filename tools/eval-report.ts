@@ -20,6 +20,7 @@ import {
   type ModelResultGroup,
 } from "../src/engine/dialogue/eval/report";
 import { DEFAULT_PRICE_TABLE } from "../src/engine/dialogue/eval/pricing";
+import { evalResultSchema } from "../src/engine/dialogue/eval/resultSchema";
 import type { EvalResult } from "../src/engine/dialogue/eval/types";
 
 function parseArgs(argv: string[]): { input: string[]; outputDir: string } {
@@ -53,12 +54,24 @@ async function loadResults(filePath: string): Promise<EvalResult[]> {
     lineNum++;
     const trimmed = line.trim();
     if (trimmed.length === 0) continue;
+    let parsed: unknown;
     try {
-      results.push(JSON.parse(trimmed) as EvalResult);
+      parsed = JSON.parse(trimmed);
     } catch {
       console.error(`Error: invalid JSON in ${filePath} on line ${lineNum}: ${trimmed.slice(0, 80)}`);
       process.exit(1);
     }
+    const check = evalResultSchema.safeParse(parsed);
+    if (!check.success) {
+      const issue = check.error.issues[0];
+      const at = issue?.path.join(".") || "(root)";
+      console.error(
+        `Error: ${filePath} line ${lineNum} is not a valid EvalResult — ${issue?.message ?? "schema mismatch"} at "${at}". ` +
+          `Records written before the usage-accounting fix are incompatible; regenerate with eval:run.`,
+      );
+      process.exit(1);
+    }
+    results.push(check.data as EvalResult);
   }
   return results;
 }

@@ -23,6 +23,44 @@ describe("anthropicProvider — success", () => {
   });
 });
 
+describe("anthropicProvider — usage normalization", () => {
+  it("treats input_tokens as UNCACHED and folds cache read+creation into total", async () => {
+    const transport = msgTransport(
+      msg({
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "emit_dialogue_line", input: { text: "安", proposedClaims: [] } }],
+        usage: { input_tokens: 100, output_tokens: 10, cache_read_input_tokens: 30, cache_creation_input_tokens: 20 },
+      }),
+    );
+    const provider = createAnthropicProvider({ model: "claude-x", transport });
+    const r = await provider.generate(makeRequest("shen_zhibai"));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.usage).toEqual({
+        uncachedInputTokens: 100,
+        totalInputTokens: 150, // 100 uncached + 30 cache read + 20 cache creation
+        outputTokens: 10,
+        cacheReadTokens: 30,
+        cacheCreationTokens: 20,
+      });
+    }
+  });
+
+  it("preserves usage + requestId on a billed protocol failure (wrong stop_reason → no_tool_call)", async () => {
+    const transport = msgTransport(
+      msg({ stop_reason: "end_turn", content: [], usage: { input_tokens: 40, output_tokens: 0 } }),
+    );
+    const provider = createAnthropicProvider({ model: "claude-x", transport });
+    const r = await provider.generate(makeRequest("shen_zhibai"));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatchObject({ kind: "protocol", cause: "no_tool_call" });
+      expect(r.error.meta?.usage).toMatchObject({ uncachedInputTokens: 40, totalInputTokens: 40, outputTokens: 0 });
+      expect(r.error.meta?.requestId).toBe("req_f");
+    }
+  });
+});
+
 // ── WORLD_RULES_TEXT snapshot ─────────────────────────────────────────────────
 
 describe("WORLD_RULES_TEXT", () => {

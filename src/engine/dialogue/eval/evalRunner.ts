@@ -27,6 +27,8 @@ import type { DialogueProvider } from "../types";
 import type { ContentDB } from "../../content/loader";
 import type { GameState } from "../../state/types";
 import type { DialogueRequest, DialogueValidationDiagnostics } from "../types";
+import { err } from "../../infra/result";
+import type { ProviderError, ProviderResult, DialogueProviderResult } from "../providerContract";
 
 // ── evaluateExpectations ──────────────────────────────────────────────────────
 
@@ -179,12 +181,20 @@ export async function runEvalScenarioWithProvider(
   // Step 3 — create provider (fixture mode calls responseFor here; online just returns real provider)
   const provider = makeProvider(request);
 
-  // Step 4 — call provider
+  // Step 4 — call provider. Last-resort catch: an unexpected throw from a
+  // provider/transport becomes a non-fatal error Result so this run still
+  // produces an EvalResult instead of aborting the whole eval batch.
   const start = Date.now();
-  const raw = await provider.generate(request);
+  let raw: ProviderResult<DialogueProviderResult>;
+  try {
+    raw = await provider.generate(request);
+  } catch (e) {
+    raw = err<ProviderError>({ kind: "transport", retryable: true, cause: "network", meta: { message: e instanceof Error ? e.message : String(e) } });
+  }
   const durationMs = Date.now() - start;
 
-  // Step 5 — provider error
+  // Step 5 — provider error. Token usage + requestId may still be present (a
+  // billed-but-unparseable turn cost money) — preserve them.
   if (!raw.ok) {
     const providerError = raw.error;
     const cause = "cause" in providerError ? providerError.cause : undefined;
@@ -192,6 +202,9 @@ export async function runEvalScenarioWithProvider(
 
     const schemaStatus: CheckStatus = isSchemaInvalid ? "fail" : "not_run";
     const gateStatus: CheckStatus = "not_run";
+
+    const errUsage = providerError.meta?.usage;
+    const errRequestId = providerError.meta?.requestId;
 
     const expResult = evaluateExpectations(
       scenario.expectations,
@@ -208,6 +221,8 @@ export async function runEvalScenarioWithProvider(
         kind: providerError.kind,
         ...(cause !== undefined ? { cause: String(cause) } : {}),
       },
+      ...(errUsage ? { usage: errUsage } : {}),
+      ...(errRequestId !== undefined ? { requestId: errRequestId } : {}),
       expectationStatus: expResult.status,
       expectationFindings: expResult.findings,
       durationMs,
@@ -254,17 +269,7 @@ export async function runEvalScenarioWithProvider(
     text: generatedText,
     knownEventIds,
     ...(servedText !== undefined ? { servedText } : {}),
-    ...(usage !== undefined
-      ? {
-          usage: {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            ...(usage.cacheReadTokens !== undefined
-              ? { cacheReadTokens: usage.cacheReadTokens }
-              : {}),
-          },
-        }
-      : {}),
+    ...(usage !== undefined ? { usage } : {}),
     ...(requestId !== undefined ? { requestId } : {}),
     expectationStatus: expResult.status,
     expectationFindings: expResult.findings,

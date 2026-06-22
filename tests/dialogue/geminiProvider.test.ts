@@ -5,7 +5,7 @@ import {
   type GeminiTransport,
 } from "../../src/engine/dialogue/providers/geminiProvider";
 import { ok, err } from "../../src/engine/infra/result";
-import { makeDialogueRequest } from "../helpers/dialogueRequest";
+import { makeDialogueRequest } from "../../tools/fixtures/dialogueRequest";
 
 describe("sanitizeJsonSchemaForGemini", () => {
   it("strips additionalProperties, $schema, default deeply", () => {
@@ -45,7 +45,13 @@ describe("geminiProvider", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.text).toBe("臣妾告退。");
-      expect(res.value.usage).toEqual({ inputTokens: 80, outputTokens: 12, cacheReadTokens: 10 });
+      // promptTokenCount=80 (TOTAL incl. 10 cached) → uncached 70, total 80
+      expect(res.value.usage).toEqual({
+        uncachedInputTokens: 70,
+        totalInputTokens: 80,
+        outputTokens: 12,
+        cacheReadTokens: 10,
+      });
       expect(res.value.providerMeta).toMatchObject({ provider: "google", model: "gemini-x" });
     }
   });

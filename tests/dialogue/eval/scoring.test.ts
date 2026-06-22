@@ -6,6 +6,17 @@
 import { describe, it, expect } from "vitest";
 import { scoreResults } from "../../../src/engine/dialogue/eval/scoring";
 import type { EvalResult } from "../../../src/engine/dialogue/eval/types";
+import type { NormalizedUsage } from "../../../src/engine/dialogue/providerContract";
+
+// normalized-usage helper: uncached input + output (+ optional cache read)
+function nu(uncached: number, output: number, cacheRead?: number): NormalizedUsage {
+  return {
+    uncachedInputTokens: uncached,
+    totalInputTokens: uncached + (cacheRead ?? 0),
+    outputTokens: output,
+    ...(cacheRead !== undefined ? { cacheReadTokens: cacheRead } : {}),
+  };
+}
 
 // ── Minimal EvalResult stub factory ──────────────────────────────────────────
 
@@ -100,9 +111,9 @@ describe("scoreResults", () => {
 
   it("cacheHitRate = cacheReadTokens > 0 / total (not just defined)", () => {
     const results = [
-      makeResult({ usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 200 } }),  // hit
-      makeResult({ usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0 } }),    // 0 = not a hit
-      makeResult({ usage: { inputTokens: 100, outputTokens: 50 } }),                        // no cache field = not a hit
+      makeResult({ usage: nu(100, 50, 200) }),  // hit
+      makeResult({ usage: nu(100, 50, 0) }),    // 0 = not a hit
+      makeResult({ usage: nu(100, 50) }),                        // no cache field = not a hit
       makeResult({}),                                                                        // no usage = not a hit
     ];
     const report = scoreResults(results);
@@ -112,8 +123,8 @@ describe("scoreResults", () => {
 
   it("avgInputTokens only from results with usage defined", () => {
     const results = [
-      makeResult({ usage: { inputTokens: 100, outputTokens: 50 } }),
-      makeResult({ usage: { inputTokens: 200, outputTokens: 80 } }),
+      makeResult({ usage: nu(100, 50) }),
+      makeResult({ usage: nu(200, 80) }),
       makeResult({}),  // no usage — excluded from avg
     ];
     const report = scoreResults(results);
@@ -123,8 +134,8 @@ describe("scoreResults", () => {
 
   it("avgOutputTokens only from results with usage defined", () => {
     const results = [
-      makeResult({ usage: { inputTokens: 100, outputTokens: 40 } }),
-      makeResult({ usage: { inputTokens: 200, outputTokens: 60 } }),
+      makeResult({ usage: nu(100, 40) }),
+      makeResult({ usage: nu(200, 60) }),
       makeResult({}),  // no usage — excluded
     ];
     const report = scoreResults(results);
@@ -174,14 +185,14 @@ describe("scoreResults — metrics extension", () => {
         provider: "openai",
         model: "m",
         durationMs: 100,
-        usage: { inputTokens: 10, outputTokens: 5 },
+        usage: nu(10, 5),
         textFindings: [{ gate: "forbidden_lexicon", severity: "reject", matched: "皇上" }],
       }),
       makeResult({
         provider: "openai",
         model: "m",
         durationMs: 300,
-        usage: { inputTokens: 20, outputTokens: 7 },
+        usage: nu(20, 7),
         textFindings: [{ gate: "rank_title", severity: "flag", matched: "x" }],
       }),
     ];
@@ -190,16 +201,16 @@ describe("scoreResults — metrics extension", () => {
     expect(rep.p95LatencyMs).toBe(300);
     expect(rep.totalInputTokens).toBe(30);
     expect(rep.totalOutputTokens).toBe(12);
-    expect(rep.loreViolationRate).toBeCloseTo(0.5); // one of two has forbidden_lexicon
+    expect(rep.forbiddenLexiconRate).toBeCloseTo(0.5); // one of two has forbidden_lexicon
     expect(rep.gateViolationsByType).toMatchObject({ forbidden_lexicon: 1, rank_title: 1 });
-    expect(rep.estCostUsd).toBeGreaterThan(0);
+    expect(rep.knownCostUsd).toBeGreaterThan(0);
   });
 
-  it("estCostUsd is undefined when no result is priced", () => {
-    const rep = scoreResults([makeResult({ provider: "openai", model: "unpriced", usage: { inputTokens: 1, outputTokens: 1 } })], {
+  it("knownCostUsd is undefined when no result is priced", () => {
+    const rep = scoreResults([makeResult({ provider: "openai", model: "unpriced", usage: nu(1, 1) })], {
       priceTable: {},
     });
-    expect(rep.estCostUsd).toBeUndefined();
+    expect(rep.knownCostUsd).toBeUndefined();
   });
 
   it("empty input returns zeroed metrics, not NaN", () => {
@@ -207,8 +218,43 @@ describe("scoreResults — metrics extension", () => {
     expect(rep.avgLatencyMs).toBe(0);
     expect(rep.p95LatencyMs).toBe(0);
     expect(rep.totalInputTokens).toBe(0);
-    expect(rep.loreViolationRate).toBe(0);
+    expect(rep.forbiddenLexiconRate).toBe(0);
     expect(rep.gateViolationsByType).toEqual({});
-    expect(rep.estCostUsd).toBeUndefined();
+    expect(rep.knownCostUsd).toBeUndefined();
+    expect(rep.costCoverageRate).toBe(0);
+    expect(rep.usageRunCount).toBe(0);
+    expect(rep.costedRunCount).toBe(0);
+  });
+
+  it("totalInputTokens sums normalized totalInputTokens (uncached + cache), not uncached only", () => {
+    // one run: 10 uncached + 90 cache-read = 100 total prompt
+    const rep = scoreResults([makeResult({ provider: "openai", model: "m", usage: nu(10, 5, 90) })]);
+    expect(rep.totalInputTokens).toBe(100);
+  });
+});
+
+describe("scoreResults — cost coverage (partial cost must not look like total)", () => {
+  it("reports partial coverage when only some runs are priced", () => {
+    const results = [
+      makeResult({ provider: "openai", model: "priced", usage: nu(1_000_000, 0) }),
+      makeResult({ provider: "openai", model: "unpriced", usage: nu(1_000_000, 0) }),
+      makeResult({ provider: "openai", model: "priced" }), // no usage → not costable
+    ];
+    const rep = scoreResults(results, { priceTable: { "openai:priced": { inputPerMTok: 2, outputPerMTok: 4 } } });
+    expect(rep.runCount).toBe(3);
+    expect(rep.usageRunCount).toBe(2);   // two have usage
+    expect(rep.costedRunCount).toBe(1);  // only the priced+usage run is costed
+    expect(rep.costCoverageRate).toBeCloseTo(1 / 3);
+    expect(rep.knownCostUsd).toBeCloseTo(2); // 1M uncached @ $2/MTok — KNOWN, not total
+  });
+
+  it("full coverage → costCoverageRate 1", () => {
+    const results = [
+      makeResult({ provider: "openai", model: "m", usage: nu(1_000_000, 0) }),
+      makeResult({ provider: "openai", model: "m", usage: nu(1_000_000, 0) }),
+    ];
+    const rep = scoreResults(results, { priceTable: { "openai:m": { inputPerMTok: 1, outputPerMTok: 1 } } });
+    expect(rep.costCoverageRate).toBe(1);
+    expect(rep.costedRunCount).toBe(2);
   });
 });

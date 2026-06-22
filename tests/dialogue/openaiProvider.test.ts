@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createOpenAIProvider, type OpenAITransport } from "../../src/engine/dialogue/providers/openaiProvider";
 import { ok, err } from "../../src/engine/infra/result";
-import { makeDialogueRequest } from "../helpers/dialogueRequest";
+import { makeDialogueRequest } from "../../tools/fixtures/dialogueRequest";
 
 function transportReturning(args: object): OpenAITransport {
   return {
@@ -27,8 +27,40 @@ describe("openaiProvider", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.text).toBe("臣妾参见陛下。");
-      expect(res.value.usage).toEqual({ inputTokens: 100, outputTokens: 20, cacheReadTokens: 30 });
       expect(res.value.providerMeta).toMatchObject({ provider: "openai", model: "gpt-x" });
+    }
+  });
+
+  it("normalizes OpenAI prompt_tokens (TOTAL, incl. cache) into uncached + total", async () => {
+    // prompt_tokens=100 includes 30 cached → uncached 70, total 100, no cache creation
+    const provider = createOpenAIProvider({ model: "gpt-x", transport: transportReturning({ text: "好", proposedClaims: [] }) });
+    const res = await provider.generate(makeDialogueRequest());
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.usage).toEqual({
+        uncachedInputTokens: 70,
+        totalInputTokens: 100,
+        outputTokens: 20,
+        cacheReadTokens: 30,
+      });
+    }
+  });
+
+  it("preserves usage + requestId on a billed protocol failure (no_tool_call)", async () => {
+    const transport: OpenAITransport = {
+      send: async () =>
+        ok({
+          message: { finish_reason: "stop", tool_calls: [], usage: { prompt_tokens: 50, completion_tokens: 0 } },
+          requestId: "req_billed",
+        }),
+    };
+    const provider = createOpenAIProvider({ model: "gpt-x", transport });
+    const res = await provider.generate(makeDialogueRequest());
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatchObject({ kind: "protocol", cause: "no_tool_call" });
+      expect(res.error.meta?.usage).toEqual({ uncachedInputTokens: 50, totalInputTokens: 50, outputTokens: 0 });
+      expect(res.error.meta?.requestId).toBe("req_billed");
     }
   });
 
@@ -40,16 +72,6 @@ describe("openaiProvider", () => {
     const res = await provider.generate(makeDialogueRequest());
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatchObject({ kind: "protocol", cause: "schema_invalid" });
-  });
-
-  it("maps missing tool call to protocol/no_tool_call", async () => {
-    const transport: OpenAITransport = {
-      send: async () => ok({ message: { finish_reason: "stop", tool_calls: [] } }),
-    };
-    const provider = createOpenAIProvider({ model: "gpt-x", transport });
-    const res = await provider.generate(makeDialogueRequest());
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatchObject({ kind: "protocol", cause: "no_tool_call" });
   });
 
   it("maps a 401 transport failure to config/auth", async () => {

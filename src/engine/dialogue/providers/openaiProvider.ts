@@ -9,9 +9,12 @@ import { ok, err, type Result } from "../../infra/result";
 import {
   dialogueToolOutputSchema,
   dialogueToolOutputJsonSchema,
+  makeUsageFromTotal,
   type DialogueProviderResult,
   type ProviderError,
   type ProviderResult,
+  type ProviderErrorMeta,
+  type NormalizedUsage,
 } from "../providerContract";
 import type { DialogueProvider, DialogueGenerationOptions, DialogueRequest } from "../types";
 import { WORLD_RULES_TEXT, renderEtiquetteBlock } from "./anthropicProvider";
@@ -23,7 +26,8 @@ const DEFAULT_MAX_TOKENS = 800;
 
 export interface OpenAIRequestPayload {
   model: string;
-  max_tokens: number;
+  /** OpenAI deprecated max_tokens for chat completions; use max_completion_tokens. */
+  max_completion_tokens: number;
   messages: { role: "system" | "user"; content: string }[];
   tools: { type: "function"; function: { name: string; description: string; parameters: unknown; strict: true } }[];
   tool_choice: { type: "function"; function: { name: string } };
@@ -64,7 +68,7 @@ export function buildOpenAIToolRequest(
   );
   return {
     model,
-    max_tokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
+    max_completion_tokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
     messages: [
       { role: "system", content: `${WORLD_RULES_TEXT}\n\n${etiquette}` },
       { role: "user", content: JSON.stringify(payload) },
@@ -99,13 +103,27 @@ export function createOpenAIProvider(opts: { model: string; transport: OpenAITra
   };
 }
 
+function extractOpenAIUsage(m: OpenAIToolResponse): NormalizedUsage | undefined {
+  const u = m.usage;
+  if (!u) return undefined;
+  return makeUsageFromTotal({
+    totalInputTokens: u.prompt_tokens ?? 0,
+    outputTokens: u.completion_tokens ?? 0,
+    ...(u.prompt_tokens_details?.cached_tokens !== undefined ? { cacheReadTokens: u.prompt_tokens_details.cached_tokens } : {}),
+  });
+}
+
 function parseOpenAIToolCall(
   res: OpenAITransportResult,
   request: DialogueRequest,
   model: string,
 ): ProviderResult<DialogueProviderResult> {
   const m = res.message;
-  const meta = res.requestId !== undefined ? { requestId: res.requestId } : undefined;
+  const usage = extractOpenAIUsage(m);
+  const meta: ProviderErrorMeta = {
+    ...(res.requestId !== undefined ? { requestId: res.requestId } : {}),
+    ...(usage ? { usage } : {}),
+  };
   if (m.finish_reason === "length") return err<ProviderError>({ kind: "protocol", retryable: true, cause: "truncated", meta });
   if (m.finish_reason === "content_filter") return err<ProviderError>({ kind: "refused", retryable: false, meta });
   const calls = m.tool_calls ?? [];
@@ -120,23 +138,12 @@ function parseOpenAIToolCall(
   }
   const parsed = dialogueToolOutputSchema.safeParse(raw);
   if (!parsed.success) return err<ProviderError>({ kind: "protocol", retryable: true, cause: "schema_invalid", meta });
-  const u = m.usage;
   return ok<DialogueProviderResult>({
     speaker: request.speakerId,
     text: parsed.data.text,
     choices: [],
     proposedClaims: parsed.data.proposedClaims,
-    ...(u
-      ? {
-          usage: {
-            inputTokens: u.prompt_tokens ?? 0,
-            outputTokens: u.completion_tokens ?? 0,
-            ...(u.prompt_tokens_details?.cached_tokens !== undefined
-              ? { cacheReadTokens: u.prompt_tokens_details.cached_tokens }
-              : {}),
-          },
-        }
-      : {}),
+    ...(usage ? { usage } : {}),
     providerMeta: { provider: "openai", model, ...(res.requestId ? { requestId: res.requestId } : {}) },
   });
 }
