@@ -4,11 +4,10 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { EventReturnTarget } from "../../src/ui/eventReturn";
+import { type AutoCheckpointRequest, autoCheckpointEventId, autoCheckpointTriggers } from "../../src/ui/eventReturn";
 import {
   type GlobalInterruptInputs,
   pickNextGlobalInterrupt,
-  settlementBoardId,
   timeSettlementReducer,
 } from "../../src/ui/settlement";
 
@@ -56,34 +55,49 @@ describe("deterministic drain by re-selection", () => {
 });
 
 describe("timeSettlementReducer", () => {
-  const target: EventReturnTarget = { kind: "location", locationId: "yanhe_gong" };
-  it("begin carries the full return target", () => {
-    expect(timeSettlementReducer(null, { type: "begin", returnTarget: target })).toEqual({ returnTarget: target });
+  const stationary: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "yanhe_gong" } };
+  it("begin carries the full AutoCheckpointRequest", () => {
+    expect(timeSettlementReducer(null, { type: "begin", request: stationary })).toEqual({ request: stationary });
   });
   it("begin overwrites a prior pending settlement", () => {
-    const next: EventReturnTarget = { kind: "map", atRoot: false, boardId: "jingcheng" };
-    expect(timeSettlementReducer({ returnTarget: target }, { type: "begin", returnTarget: next })).toEqual({ returnTarget: next });
+    const next: AutoCheckpointRequest = { source: "travel_rollover", returnTarget: { kind: "map", atRoot: false, boardId: "jingcheng" } };
+    expect(timeSettlementReducer({ request: stationary }, { type: "begin", request: next })).toEqual({ request: next });
   });
   it("consume clears", () => {
-    expect(timeSettlementReducer({ returnTarget: target }, { type: "consume" })).toBeNull();
+    expect(timeSettlementReducer({ request: stationary }, { type: "consume" })).toBeNull();
   });
   it("clear clears", () => {
-    expect(timeSettlementReducer({ returnTarget: target }, { type: "clear" })).toBeNull();
+    expect(timeSettlementReducer({ request: stationary }, { type: "clear" })).toBeNull();
   });
 });
 
-describe("settlementBoardId", () => {
-  it("nested map board (atRoot:false) → boardId", () => {
-    expect(settlementBoardId({ kind: "map", atRoot: false, boardId: "jingcheng" })).toBe("jingcheng");
+describe("autoCheckpoint routing (stationary / travel / arrival) — Blocker 1", () => {
+  it("triggers: stationary=time only; travel=time+location; arrival=location only", () => {
+    expect(autoCheckpointTriggers("stationary_rollover")).toEqual({ timeAdvance: true, locationEnter: false });
+    expect(autoCheckpointTriggers("travel_rollover")).toEqual({ timeAdvance: true, locationEnter: true });
+    expect(autoCheckpointTriggers("arrival")).toEqual({ timeAdvance: false, locationEnter: true });
   });
-  it("root map → undefined", () => {
-    expect(settlementBoardId({ kind: "map", atRoot: true })).toBeUndefined();
-    expect(settlementBoardId({ kind: "map" })).toBeUndefined();
+
+  it("1. stationary rollover with an eligible location-enter event but no time event does NOT choose it", () => {
+    expect(autoCheckpointEventId("stationary_rollover", null, "ev_loc")).toBeNull();
   });
-  it("location / palace targets → undefined (runCheckpoints restores by playerLocation)", () => {
-    expect(settlementBoardId({ kind: "location", locationId: "yanhe_gong" })).toBeUndefined();
-    expect(settlementBoardId({ kind: "zichendian" })).toBeUndefined();
-    expect(settlementBoardId({ kind: "garden", subLocationId: "taiyechi" })).toBeUndefined();
+  it("2. stationary rollover with a time event chooses it", () => {
+    expect(autoCheckpointEventId("stationary_rollover", "ev_time", "ev_loc")).toBe("ev_time");
+  });
+  it("3. travel rollover chooses time event before location-enter", () => {
+    expect(autoCheckpointEventId("travel_rollover", "ev_time", "ev_loc")).toBe("ev_time");
+  });
+  it("4. travel rollover with no time event chooses location-enter", () => {
+    expect(autoCheckpointEventId("travel_rollover", null, "ev_loc")).toBe("ev_loc");
+  });
+  it("5. non-rollover arrival chooses location-enter only", () => {
+    expect(autoCheckpointEventId("arrival", "ev_time", "ev_loc")).toBe("ev_loc"); // time ignored at arrival
+    expect(autoCheckpointEventId("arrival", "ev_time", null)).toBeNull();
+  });
+  it("6. no trigger produces no event", () => {
+    expect(autoCheckpointEventId("stationary_rollover", null, null)).toBeNull();
+    expect(autoCheckpointEventId("travel_rollover", null, null)).toBeNull();
+    expect(autoCheckpointEventId("arrival", null, null)).toBeNull();
   });
 });
 
@@ -103,11 +117,16 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     expect(appSrc).not.toMatch(/view !== "location" \|\| daxuanPrompt/);
   });
 
-  it("rollover completers route through the settlement seam, not a bare runCheckpoints", () => {
-    // beginSettlement is the single entry; the only runCheckpoints(true, …) left for settlement is inside the drain effect
+  it("rollover completers route through the settlement seam, and completion uses completeAutoCheckpoint", () => {
     expect(appSrc).toContain("beginSettlement(");
-    // flush converts the deferred reaction context into a settlement rather than calling runCheckpoints directly
+    expect(appSrc).toContain("completeAutoCheckpoint(");
+    // flush converts the deferred reaction context into a settlement
     expect(appSrc).toMatch(/flushPendingReactionCheckpoint[\s\S]*beginSettlement\(/);
+  });
+
+  it("the overloaded runCheckpoints router and settlementBoardId are gone (Blocker 1+2)", () => {
+    expect(appSrc).not.toContain("runCheckpoints");
+    expect(appSrc).not.toContain("settlementBoardId");
   });
 
   it("settlement is cleared on new game / load / settings load / death", () => {

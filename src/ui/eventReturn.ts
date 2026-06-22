@@ -48,6 +48,43 @@ export function resolveReturnNavigation(target: EventReturnTarget): ReturnNaviga
   }
 }
 
+/**
+ * 自动 checkpoint 请求（§ separate-rollover-and-arrival）：把「跑哪些 checkpoint」显式化，取代
+ * 重载的 rolledOver:boolean + 隐式 location_enter 兜底。
+ *  - stationary_rollover：原地行动转旬 → 只跑 time_advance（玩家未进入新地点，绝不触发 location_enter）；
+ *  - travel_rollover：移动并转旬 → 先 time_advance，无则 location_enter（保留既有优先级）；
+ *  - arrival：普通移动到达（未转旬）→ 只跑 location_enter。
+ * returnTarget 为完整语义返回上下文，原样用于所选事件与无事件恢复（不经 boardId 往返重建）。
+ */
+export type AutoCheckpointSource = "stationary_rollover" | "travel_rollover" | "arrival";
+export interface AutoCheckpointRequest {
+  source: AutoCheckpointSource;
+  returnTarget: EventReturnTarget;
+}
+
+/** 该来源是否允许各 checkpoint（纯决策）。 */
+export function autoCheckpointTriggers(source: AutoCheckpointSource): { timeAdvance: boolean; locationEnter: boolean } {
+  return {
+    timeAdvance: source !== "arrival",
+    locationEnter: source !== "stationary_rollover",
+  };
+}
+
+/**
+ * 给定来源与各 checkpoint 当前命中的事件 id，决定自动启动哪个（time_advance 优先于 location_enter；
+ * stationary_rollover 永不取 location_enter）。返回 null = 无事件，应做无事件恢复。
+ */
+export function autoCheckpointEventId(
+  source: AutoCheckpointSource,
+  timeEventId: string | null,
+  locationEventId: string | null,
+): string | null {
+  const t = autoCheckpointTriggers(source);
+  if (t.timeAdvance && timeEventId) return timeEventId;
+  if (t.locationEnter && locationEventId) return locationEventId;
+  return null;
+}
+
 /** scene_end→event 链上限（plan §10 #9 latent guard）。 */
 export const MAX_EVENT_CHAIN = 3;
 
@@ -82,16 +119,15 @@ export function canChain(state: NavState): boolean {
 }
 
 /**
- * 延后补跑 checkpoint 的「待处理上下文」（§ deferred-reaction）。把原先两个可独立变动的状态
- * （reactionRollover:boolean + reactionStayOnBoardId:string|undefined）合并为单一原子值，杜绝
- * 「非转旬反应留下旧 board → 之后无关转旬反应误用」的串台。null=无待补跑；非空=反应队列结束后须
- * 补跑 time_advance，并以 boardId 决定落点（boardId 为键、值可为 undefined，避免 exactOptionalPropertyTypes 报错）。
+ * 延后补跑 checkpoint 的「待处理上下文」（§ deferred-reaction）。单一原子值，承载这段转旬反应结束后
+ * 应执行的完整 AutoCheckpointRequest（来源 + 返回上下文）。null=无待补跑（含非转旬：覆盖式清空，杜绝
+ * 「非转旬反应留下旧上下文 → 之后无关转旬反应误用」的串台）。
  */
-export type PendingReactionCheckpoint = { boardId: string | undefined } | null;
+export type PendingReactionCheckpoint = { request: AutoCheckpointRequest } | null;
 
 export type PendingReactionAction =
-  | { type: "begin"; rolledOver: boolean; boardId: string | undefined } // 一段反应开始：转旬才登记，非转旬清空
-  | { type: "consume" } // 反应队列结束、补跑后清空
+  | { type: "begin"; request: AutoCheckpointRequest | null } // 转旬登记该请求；非转旬(null)覆盖清空
+  | { type: "consume" } // 反应队列结束、转入结算后清空
   | { type: "clear" }; // 新游戏/读档/驾崩清空
 
 export function pendingReactionReducer(
@@ -100,7 +136,7 @@ export function pendingReactionReducer(
 ): PendingReactionCheckpoint {
   switch (action.type) {
     case "begin":
-      return action.rolledOver ? { boardId: action.boardId } : null;
+      return action.request ? { request: action.request } : null;
     case "consume":
     case "clear":
       return null;

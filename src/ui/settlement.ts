@@ -6,7 +6,7 @@
  * 一次结算（携带完整返回上下文）→ 同一时刻只呈现一个中断 → 逐个消化（每次读最新状态重选）→ 无中断后
  * 才跑普通 time_advance 事件 → 最终恢复返回上下文一次。
  */
-import type { EventReturnTarget } from "./eventReturn";
+import type { AutoCheckpointRequest } from "./eventReturn";
 
 export type GlobalInterruptKind =
   | "birth" // 到产生产
@@ -37,11 +37,11 @@ export function pickNextGlobalInterrupt(inputs: GlobalInterruptInputs): GlobalIn
   return null;
 }
 
-/** 原子待结算上下文：携带完整返回目标（地点/嵌套地图板/紫宸殿/御花园/宣政殿语义）。 */
-export type PendingTimeSettlement = { returnTarget: EventReturnTarget } | null;
+/** 原子待结算上下文：携带完整 AutoCheckpointRequest（来源 + 完整语义返回目标，原样用于完成）。 */
+export type PendingTimeSettlement = { request: AutoCheckpointRequest } | null;
 
 export type TimeSettlementAction =
-  | { type: "begin"; returnTarget: EventReturnTarget } // 一次成功转旬登记结算（覆盖式）
+  | { type: "begin"; request: AutoCheckpointRequest } // 一次成功转旬登记结算（覆盖式）
   | { type: "consume" } // 中断全部消化后，完成结算（跑 time_advance + 恢复）时清空
   | { type: "clear" }; // 新游戏/读档/驾崩清空
 
@@ -51,17 +51,9 @@ export function timeSettlementReducer(
 ): PendingTimeSettlement {
   switch (action.type) {
     case "begin":
-      return { returnTarget: action.returnTarget };
+      return { request: action.request };
     case "consume":
     case "clear":
       return null;
   }
-}
-
-/**
- * 完成结算时传给 runCheckpoints 的 board id：仅嵌套地图板（atRoot=false）需要显式恢复；
- * location/紫宸殿/御花园/宣政殿 由 runCheckpoints 按 playerLocation/语义回退，故返回 undefined。
- */
-export function settlementBoardId(returnTarget: EventReturnTarget): string | undefined {
-  return returnTarget.kind === "map" && returnTarget.atRoot === false ? returnTarget.boardId : undefined;
 }

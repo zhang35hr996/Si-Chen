@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  type AutoCheckpointRequest,
   type EventReturnTarget,
   type NavAction,
   type NavState,
@@ -187,61 +188,59 @@ describe("checkpointReturnTarget — explicit board-id producer contract", () =>
 });
 
 describe("pending reaction checkpoint lifecycle (deferred-reaction desync fix)", () => {
-  const begin = (rolledOver: boolean, boardId: string | undefined, from: PendingReactionCheckpoint = null) =>
-    pendingReactionReducer(from, { type: "begin", rolledOver, boardId });
+  const stationary: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "zichendian" } };
+  const board: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "map", atRoot: false, boardId: "jingcheng" } };
+  const begin = (request: AutoCheckpointRequest | null, from: PendingReactionCheckpoint = null) =>
+    pendingReactionReducer(from, { type: "begin", request });
 
-  it("1. non-rollover reaction carrying 'jingcheng' produces NO pending checkpoint", () => {
-    expect(begin(false, "jingcheng")).toBeNull();
+  it("1. non-rollover reaction (request null) produces NO pending checkpoint", () => {
+    expect(begin(null)).toBeNull();
   });
 
-  it("2. a later rollover reaction without a board id resolves to a location checkpoint, not 'jingcheng'", () => {
-    const afterNonRollover = begin(false, "jingcheng"); // null — board id discarded
-    const next = begin(true, undefined, afterNonRollover);
-    expect(next).toEqual({ boardId: undefined });
-    // the deferred checkpoint therefore returns to the player location, never the stale 京城 board
-    expect(checkpointReturnTarget(next!.boardId, "zichendian")).toEqual({ kind: "location", locationId: "zichendian" });
+  it("2. a later rollover request after a non-rollover is not contaminated by stale context", () => {
+    const afterNonRollover = begin(null, { request: board }); // null clears any stale board context
+    expect(afterNonRollover).toBeNull();
+    expect(begin(stationary, afterNonRollover)).toEqual({ request: stationary }); // returns to location, never the stale board
   });
 
-  it("3. rollover exit-palace reaction preserves 'jingcheng'", () => {
-    const p = begin(true, "jingcheng");
-    expect(p).toEqual({ boardId: "jingcheng" });
-    expect(checkpointReturnTarget(p!.boardId, "zichendian")).toEqual({ kind: "map", atRoot: false, boardId: "jingcheng" });
+  it("3. rollover exit-palace request preserves the exact board return target", () => {
+    expect(begin(board)).toEqual({ request: board });
   });
 
-  it("4. rollover ordinary-location reaction stores boardId: undefined", () => {
-    expect(begin(true, undefined)).toEqual({ boardId: undefined });
+  it("4. rollover ordinary request stores the location return target", () => {
+    expect(begin(stationary)).toEqual({ request: stationary });
   });
 
   it("5. consuming the pending context clears it exactly once", () => {
-    const pending = begin(true, "jingcheng");
-    const boardId = pending!.boardId; // captured for the one checkpoint run
-    expect(boardId).toBe("jingcheng");
+    const pending = begin(board);
+    expect(pending!.request).toEqual(board); // captured for the one checkpoint run
     const afterConsume = pendingReactionReducer(pending, { type: "consume" });
     expect(afterConsume).toBeNull();
     expect(pendingReactionReducer(afterConsume, { type: "consume" })).toBeNull(); // idempotent; nothing left
   });
 
   it("6. starting a new reaction sequence overwrites any previous pending context", () => {
-    const stale = begin(true, "jingcheng");
-    expect(begin(false, undefined, stale)).toBeNull(); // non-rollover overwrite clears
-    expect(begin(true, "jiaowai", stale)).toEqual({ boardId: "jiaowai" }); // rollover overwrite replaces
+    const stale = begin(board);
+    expect(begin(null, stale)).toBeNull(); // non-rollover overwrite clears
+    expect(begin(stationary, stale)).toEqual({ request: stationary }); // rollover overwrite replaces
   });
 
   it("7. new game / load / death clearing removes the pending context", () => {
-    expect(pendingReactionReducer(begin(true, "jingcheng"), { type: "clear" })).toBeNull();
+    expect(pendingReactionReducer(begin(board), { type: "clear" })).toBeNull();
   });
 });
 
 describe("first-night rank-admin checkpoint handoff", () => {
-  const begin = (rolledOver: boolean, boardId: string | undefined, from: PendingReactionCheckpoint = null) =>
-    pendingReactionReducer(from, { type: "begin", rolledOver, boardId });
+  const req: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "zichendian" } };
+  const begin = (rolledOver: boolean, from: PendingReactionCheckpoint = null) =>
+    pendingReactionReducer(from, { type: "begin", request: rolledOver ? req : null });
 
-  // rollover first-night bedchamber → pending {boardId: undefined} awaiting handoff
-  const rolloverFirstNightPending = () => begin(true, undefined);
+  // rollover first-night bedchamber → pending {request} awaiting handoff
+  const rolloverFirstNightPending = () => begin(true);
 
   it("1. promotion → modal close flushes the pending checkpoint exactly once", () => {
     const pending = rolloverFirstNightPending();
-    expect(pending).toEqual({ boardId: undefined });
+    expect(pending).toEqual({ request: req });
     expect(rankAdminContinuation("first_night", "close")).toBe("flush_pending");
     // flush = consume once
     const afterFlush = pendingReactionReducer(pending, { type: "consume" });
@@ -260,7 +259,7 @@ describe("first-night rank-admin checkpoint handoff", () => {
   it("4. successful rank reaction defers flush to the reaction; reaction completion flushes once", () => {
     const pending = rolloverFirstNightPending();
     expect(rankAdminContinuation("first_night", "reaction_created")).toBe("defer_to_reaction");
-    expect(pending).toEqual({ boardId: undefined }); // not flushed at rank-apply time
+    expect(pending).toEqual({ request: req }); // not flushed at rank-apply time
     // the resulting ReactionScreen.onDone flushes once
     expect(pendingReactionReducer(pending, { type: "consume" })).toBeNull();
   });
@@ -272,13 +271,13 @@ describe("first-night rank-admin checkpoint handoff", () => {
   });
 
   it("6. first-night non-rollover begin clears any stale pending context", () => {
-    expect(begin(false, undefined, { boardId: "jingcheng" })).toBeNull();
+    expect(begin(false, { request: req })).toBeNull();
   });
 
   it("7. physician/child/adoption non-rollover begin also clears stale pending (unconditional begin)", () => {
     // all those paths now dispatch begin with their actual rolledOver; non-rollover ⇒ null
-    expect(begin(false, undefined, { boardId: "jiaowai" })).toBeNull();
-    expect(begin(true, undefined, { boardId: "jiaowai" })).toEqual({ boardId: undefined }); // rollover keeps a fresh ctx
+    expect(begin(false, { request: req })).toBeNull();
+    expect(begin(true, { request: req })).toEqual({ request: req }); // rollover keeps a fresh ctx
   });
 });
 
@@ -295,12 +294,8 @@ describe("producer source contract (no jsdom)", () => {
     expect(exitBody).not.toMatch(/,\s*true\s*\)\s*;/); // old 4th-arg `true` is gone
   });
 
-  it("App.runCheckpoints applies the explicit board id on BOTH the event and no-event paths", () => {
-    const src = read("../../src/ui/App.tsx");
-    const body = src.slice(src.indexOf("const runCheckpoints"), src.indexOf("const runCheckpoints") + 900);
-    expect(body).toMatch(/checkpointReturnTarget\(stayOnMapBoardId, state\.playerLocation\)/); // event path
-    expect(body).toMatch(/else if \(stayOnMapBoardId\) \{[^}]*setCurrentBoard\(stayOnMapBoardId\)/s); // no-event path
-  });
+  // (runCheckpoints removed in the separate-rollover/arrival corrective; routing now covered by
+  // settlement.test autoCheckpoint trigger tests + the "runCheckpoints gone" source assertion.)
 
   it("8. rank-admin session origin is bundled atomically and cleared on apply/close", () => {
     const src = read("../../src/ui/App.tsx");

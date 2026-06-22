@@ -7,6 +7,8 @@ import {
   checkpointReturnTarget,
   initialNavState,
   navReducer,
+  type AutoCheckpointRequest,
+  autoCheckpointTriggers,
   pendingReactionReducer,
   rankAdminContinuation,
   resolveReturnNavigation,
@@ -14,7 +16,6 @@ import {
 import {
   type GlobalInterruptKind,
   pickNextGlobalInterrupt,
-  settlementBoardId,
   timeSettlementReducer,
 } from "./settlement";
 import rawManifest from "../../assets/manifest.json";
@@ -319,19 +320,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setView(locId === "wenzhaodian" ? "wenzhaodian" : locId === "yuqing_gong" ? "yuqing_gong" : locId === "fengxiandian" ? "fengxiandian" : "location");
   };
 
-  /**
-   * Restore the view after an event chain ends (or a scene is abandoned). Snapshots the return
-   * target, consumes it exactly once, and lands on the closest current view (specialized 紫宸殿/
-   * 御花园/宣政殿 screens arrive in later PRs — the semantic target is preserved meanwhile).
-   */
-  const restoreReturn = () => {
-    const target = navState.target;
-    navDispatch({ type: "consume" }); // clear exactly once; a stale target cannot leak to the next event
-    if (!target) { goHome(); return; }
+  /** 落到返回上下文对应的视图（原样消费完整语义目标；未建成的专用屏暂用最近现有视图，字段不丢）。 */
+  const navigateToReturnTarget = (target: EventReturnTarget) => {
     const nav = resolveReturnNavigation(target);
     if (nav.view === "map") {
-      // atRoot=true 保留既有 goHome 行为（含 maybeAutumnHunt）；atRoot=false 恢复被打断的嵌套板，
-      // 与 runCheckpoints「无事件 stayOnMap」落点一致（不置根、不掷秋猎）。
+      // atRoot=true 保留既有 goHome 行为（含 maybeAutumnHunt）；atRoot=false 恢复被打断的嵌套板（不置根、不掷秋猎）。
       if (nav.atRoot) { goHome(); return; }
       setMapAtRoot(false);
       if (nav.boardId) setCurrentBoard(nav.boardId);
@@ -340,6 +333,17 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     }
     if (nav.view === "xuanzhengdian") { goHome(); return; } // 宣政殿专用屏未建（PR4）→ 暂回主图
     setLocationView(nav.locationId!); // location / zichendian（PR2）/ garden（PR3）→ 暂用对应 location 场景
+  };
+
+  /**
+   * Restore the view after an event chain ends (or a scene is abandoned). Snapshots the return
+   * target, consumes it exactly once, then navigates via the exact semantic target.
+   */
+  const restoreReturn = () => {
+    const target = navState.target;
+    navDispatch({ type: "consume" }); // clear exactly once; a stale target cannot leak to the next event
+    if (!target) { goHome(); return; }
+    navigateToReturnTarget(target);
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -420,37 +424,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     }
   };
 
-  /** Checkpoint wiring: time_advance (after a rollover) wins over location_enter. */
-  const runCheckpoints = (rolledOver: boolean, stayOnMapBoardId?: string) => {
-    const state = store.getState();
-    // 出宫/在城内地图（stayOnMap）时玩家并未进入紫宸殿等房间，playerLocation 只是
-    // 未变的留痕；此时不可触发 location_enter 事件（否则刚点宫门就被司礼祭仪等
-    // 房间事件拦下），仅允许跨月 time_advance 事件。
-    const loc = db.locations[state.playerLocation];
-    const pick =
-      (rolledOver ? pickAutoStartEvent(db, state, "time_advance", loc) : null) ??
-      (stayOnMapBoardId ? null : pickAutoStartEvent(db, state, "location_enter", loc));
-    // 返回上下文与本函数无事件时的落点一致：stayOnMapBoardId（出宫，位置未变）恢复该嵌套板；否则回当前地点。
-    if (pick) startEvent(pick.id, checkpointReturnTarget(stayOnMapBoardId, state.playerLocation));
-    // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在被打断的地图板（权威 board ID 由调用方传入），
-    // 不能按 playerLocation 切回房间视图。
-    else if (stayOnMapBoardId) { setMapAtRoot(false); setCurrentBoard(stayOnMapBoardId); setView("map"); }
-    else if (store.getState().playerLocation === "wenzhaodian") setView("wenzhaodian");
-    else if (store.getState().playerLocation === "yuqing_gong") setView("yuqing_gong");
-    else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
-    else if (store.getState().playerLocation === "cining_gong") {
-      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); }
-      else { setView("cining_gong"); maybeShizhi(); }
-    }
-    else setView("location"); // arrived somewhere with no event → show that room
-  };
-
-  /** 终结一段过场时统一消费待补跑上下文：快照→consume→（若有）按 boardId 补跑转旬 checkpoint。 */
+  /** 终结一段过场时统一消费待补跑上下文：快照→consume→（若有）把该 request 转入全局结算。 */
   const flushPendingReactionCheckpoint = () => {
     const pending = pendingReactionCheckpoint;
     pendingReactionDispatch({ type: "consume" });
-    // 把延后的反应转旬上下文转入全局结算：先排空全局中断，再跑 time_advance + 恢复。
-    if (pending) beginSettlement(checkpointReturnTarget(pending.boardId, store.getState().playerLocation));
+    // 把延后的反应转旬请求转入全局结算：先排空全局中断，再按 request 跑相应 checkpoint + 恢复。
+    if (pending) beginSettlement(pending.request);
   };
 
   /** 为本次行动消耗的每个行动点掷骰凤后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
@@ -629,15 +608,17 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setView("title");
   };
 
-  /** 串播一组反应节拍（行动自身台词 + 凤后懿旨），空则按需补跑转旬 checkpoint。 */
-  const playReactions = (beats: DecreeReaction[], rolledOver: boolean, stayOnMapBoardId?: string) => {
+  /**
+   * 串播一组反应节拍（行动自身台词 + 凤后懿旨）。`request` 非空=本段为转旬，反应结束后须按该请求结算；
+   * null=非转旬（覆盖清空任何旧待处理上下文，杜绝串台）。空队列：转旬即时进结算。
+   */
+  const playReactions = (beats: DecreeReaction[], request: AutoCheckpointRequest | null) => {
     if (beats.length === 0) {
       pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
-      if (rolledOver) beginSettlement(checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation));
+      if (request) beginSettlement(request);
       return;
     }
-    // 转旬才登记待处理上下文（携带权威 board ID）；非转旬登记 null，覆盖任何旧值（杜绝串台）。
-    pendingReactionDispatch({ type: "begin", rolledOver, boardId: stayOnMapBoardId });
+    pendingReactionDispatch({ type: "begin", request }); // 非空登记请求；null 覆盖清空
     setReaction(beats[0]!);
     setReactionQueue(beats.slice(1));
   };
@@ -687,12 +668,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
     if (firstNight) {
       setFirstNightPromptId(plan.charId);
-      pendingReactionDispatch({ type: "begin", rolledOver: spend.value.rolledOver, boardId: undefined }); // 无条件：非转旬亦覆盖清空旧 pending（初夜提示关闭后据此补跑）
+      pendingReactionDispatch({ type: "begin", request: spend.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending（初夜提示关闭后据此补跑）
       // 初夜弹窗在上：懿旨入队，待晋升后续反应或「暂且不必」时排空。
       if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     } else {
       // 非初夜：懿旨台词即时串播（playReactions 内含转旬补跑；无懿旨且转旬也会补跑）。
-      playReactions(decreeBeats, spend.value.rolledOver);
+      playReactions(decreeBeats, spend.value.rolledOver ? stationaryRequest() : null);
     }
   };
 
@@ -820,7 +801,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (plan.actualHealing > 0) lines.push(`调理一番，气色稍复（健康 +${plan.actualHealing}）。`);
     if (lines.length === 0) lines.push("太医诊脉后嘱咐，仍需静养调理。"); // 主体中性（太后/侍君/皇嗣皆可用，不写「陛下」）
     setPhysicianReaction({ portraitSet: physician.portraitSet, speakerName: physician.name, lines });
-    pendingReactionDispatch({ type: "begin", rolledOver: settled.value.rolledOver, boardId: undefined }); // 无条件：非转旬亦覆盖清空旧 pending
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
   };
 
   // 候选承嗣注释管理（御书房）：同时段只能一位候选；传嗣/流产会自动清除。
@@ -850,7 +831,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const own: DecreeReaction[] = spend.value.rolledOver
       ? []
       : [{ speakerId: "wei_sui", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] }];
-    playReactions([...own, ...decreeBeats], spend.value.rolledOver);
+    playReactions([...own, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
   // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
@@ -860,7 +841,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!spend.ok) return;
     if (spend.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    beginSettlement(checkpointReturnTarget(undefined, store.getState().playerLocation));
+    beginSettlement(stationaryRequest());
   };
 
   // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。行动先于时间，跨月 tick 不会杀死再宠爱。
@@ -875,7 +856,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     doAutosave();
     setHeirListOpen(false);
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    pendingReactionDispatch({ type: "begin", rolledOver: settled.value.rolledOver, boardId: undefined }); // 无条件：非转旬亦覆盖清空旧 pending
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
     setChildReaction(plan);
   };
 
@@ -890,7 +871,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    pendingReactionDispatch({ type: "begin", rolledOver: settled.value.rolledOver, boardId: undefined }); // 无条件：非转旬亦覆盖清空旧 pending
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
     setChildReaction(plan);
   };
 
@@ -902,7 +883,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!spend.ok) return;
     if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver);
+    playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
   const adoptHeir = (heirId: string, fatherId: string) => {
@@ -918,7 +899,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    pendingReactionDispatch({ type: "begin", rolledOver: settled.value.rolledOver, boardId: undefined }); // 无条件：非转旬亦覆盖清空旧 pending
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
     const [first, ...rest] = reactions;
     setReactionQueue(rest);
     if (first) setReaction(first);
@@ -946,12 +927,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         { speakerId: "cheng_feng", lines: plan.chengfengLines, backgroundKey: sceneBg },
         ...decreeBeats,
       ],
-      settled.value.rolledOver,
+      settled.value.rolledOver ? stationaryRequest() : null,
     );
   };
 
   // 进店（耗 1 行动点）：先切换到 shop 视图，再串播懿旨/乘风节拍（若有）。
-  // 转旬 rollover 不触发 runCheckpoints，避免 checkpoint 视图抢占商铺界面。
+  // 转旬 rollover 不在此即时结算，避免 checkpoint 视图抢占商铺界面（关店时再走结算 seam）。
   const enterShop = (id: "wanbaolou" | "zuixianlou") => {
     if (store.getState().calendar.ap < 1) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -963,7 +944,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     shopRollover.current = spend.value.rolledOver;
     // 节拍串播以 rolledOver=false 调用，确保播完后不切走商铺视图。
     // 转旬 checkpoint 延迟到关店时执行（见 ShopScreen onClose）。
-    playReactions(decreeBeats, false);
+    playReactions(decreeBeats, null);
   };
 
   const [ceremonyOpen, setCeremonyOpen] = useState(false);
@@ -992,19 +973,48 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         grandSelectionDue: grandSelectionPrompt !== null,
       });
 
-  /** 成功转旬后登记一次结算（携带完整返回上下文）；完成由下方结算 effect 驱动。 */
-  const beginSettlement = (returnTarget: EventReturnTarget) => {
-    timeSettlementDispatch({ type: "begin", returnTarget });
+  /** 原地行动转旬请求：只跑 time_advance；返回上下文 = 当前地点（或显式 board）。 */
+  const stationaryRequest = (boardId?: string): AutoCheckpointRequest => ({
+    source: "stationary_rollover",
+    returnTarget: checkpointReturnTarget(boardId, store.getState().playerLocation),
+  });
+
+  /** 成功转旬后登记一次结算（携带完整 AutoCheckpointRequest）；完成由下方结算 effect 驱动。 */
+  const beginSettlement = (request: AutoCheckpointRequest) => {
+    timeSettlementDispatch({ type: "begin", request });
   };
 
-  // 结算完成：无场内过场、无待处理全局中断时，消费结算 → 跑 time_advance 事件路由 → 恢复返回上下文一次。
+  /**
+   * 完成自动 checkpoint：按来源决定跑哪些 checkpoint（stationary 只 time_advance；travel 先
+   * time_advance 后 location_enter；arrival 只 location_enter）；命中事件用「原样的返回上下文」启动，
+   * 否则按该上下文恢复。绝不从 playerLocation 重建目标。
+   */
+  const completeAutoCheckpoint = (request: AutoCheckpointRequest) => {
+    const state = store.getState();
+    const location = db.locations[state.playerLocation];
+    const t = autoCheckpointTriggers(request.source);
+    const timeEvent = t.timeAdvance ? pickAutoStartEvent(db, state, "time_advance", location) : null;
+    const locationEvent = !timeEvent && t.locationEnter ? pickAutoStartEvent(db, state, "location_enter", location) : null;
+    const event = timeEvent ?? locationEvent;
+    if (event) { startEvent(event.id, request.returnTarget); return; }
+    // 无事件：按完整返回上下文恢复，并保留落点处的氛围掷骰（上书房秋猎 / 慈宁宫侍疾）。
+    navigateToReturnTarget(request.returnTarget);
+    const nav = resolveReturnNavigation(request.returnTarget);
+    if (nav.view === "location") {
+      const loc2 = store.getState().playerLocation;
+      if (loc2 === "wenzhaodian") maybeAutumnHunt();
+      else if (loc2 === "cining_gong" && !store.getState().taihou.deceased) maybeShizhi();
+    }
+  };
+
+  // 结算完成：无场内过场、无待处理全局中断时，消费结算 → 按 request 跑相应 checkpoint → 恢复一次。
   // 不在此 effect 内开浮层（浮层由渲染体按 activeGlobalInterrupt 声明式呈现）；此处只做「排空后完成」。
   useEffect(() => {
     if (!pendingTimeSettlement) return;
     if (atomicFlowInProgress || activeGlobalInterrupt) return;
-    const target = pendingTimeSettlement.returnTarget;
+    const request = pendingTimeSettlement.request;
     timeSettlementDispatch({ type: "consume" });
-    runCheckpoints(true, settlementBoardId(target));
+    completeAutoCheckpoint(request);
   }, [pendingTimeSettlement, atomicFlowInProgress, activeGlobalInterrupt]);
 
   const enterGreeting = () => {
@@ -1063,7 +1073,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             const generatedLine = turnResult.value.line;
             converseTranscriptRef.current = []; // reset transcript for new conversation
             const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
-            playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver);
+            playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
             return;
           }
           // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
@@ -1073,7 +1083,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     }
 
     // Fallback path: scripted lines
-    playReactions([{ speakerId: charId, lines: fallbackLines }, ...decreeBeats], spend.value.rolledOver);
+    playReactions([{ speakerId: charId, lines: fallbackLines }, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
   // Handles a player choice click during a generative conversation turn.
@@ -1156,10 +1166,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         if (applied.ok) beats = plan.reactions;
       }
     }
-    if (beats.length) playReactions(beats, rolledOver, stayOnMapBoardId); // playReactions 自登记待处理上下文
-    // 转旬→走全局结算排空；非转旬（仅到达）→ 原 location_enter 到达路由不变。
-    else if (rolledOver) beginSettlement(checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation));
-    else runCheckpoints(false, stayOnMapBoardId);
+    // 移动结算：转旬=travel_rollover（time_advance 优先，无则 location_enter）；非转旬=arrival（仅 location_enter）。
+    const travelTarget = checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation);
+    const travelReq: AutoCheckpointRequest = { source: "travel_rollover", returnTarget: travelTarget };
+    if (beats.length) playReactions(beats, rolledOver ? travelReq : null);
+    else if (rolledOver) beginSettlement(travelReq);
+    else completeAutoCheckpoint({ source: "arrival", returnTarget: travelTarget });
   };
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
@@ -1453,7 +1465,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setShopId(null);
             // 店在京城（free-entry，playerLocation 未变）：转旬补跑亦须留在地图。currentBoard 此刻已稳定
             // （进店前 onBoardChange 早已生效，无卸载时序问题），作为显式权威板传入；无转旬则直接回该板。
-            if (shopRollover.current) { shopRollover.current = false; beginSettlement(checkpointReturnTarget(currentBoard, store.getState().playerLocation)); }
+            if (shopRollover.current) { shopRollover.current = false; beginSettlement(stationaryRequest(currentBoard)); }
             else { setView("map"); }
           }} />
       )}
