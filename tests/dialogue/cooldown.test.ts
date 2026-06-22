@@ -164,20 +164,10 @@ describe("event reaction writeback", () => {
     const event = makeEligibleEvent("evt_rxn_004");
     const base = stateWithEvent(event);
 
-    // Assemble to discover offeredContextIds so we can propose a valid claim
-    const tempReqResult = assembleDialogueRequest(db, base, SPEAKER, LOCATION);
-    if (!tempReqResult.ok) throw new Error(tempReqResult.error.message);
-    const tempPolicy = {
-      offeredContextIds: new Set<string>([
-        ...tempReqResult.value.speakerContext.relevantMemories.map((m) => m.id),
-        ...tempReqResult.value.promptContext.knownEvents.map((e) => e.id),
-      ]),
-    };
-
-    // Provider that proposes a claim using a memory sourceRef (if any)
-    const memoryIds = [...tempPolicy.offeredContextIds].filter((id) => !id.startsWith("evt_"));
-    const firstMemoryId = memoryIds[0];
-
+    // T11: gate runs in CLOSED mode when allowedClaims.length > 0 (from event assembleClaims).
+    // The eligible event is rank_changed for lu_huaijin → allowedClaims has holds_rank(lu_huaijin, chenghui).
+    // Propose that event-authorized claim (about lu_huaijin, not the speaker shen_zhibai) so
+    // the gate accepts it and mention writeback fires — exercises the belief bypass path.
     const claimProvider: DialogueProvider = {
       id: "gen-claim-t10",
       kind: "generative",
@@ -187,19 +177,18 @@ describe("event reaction writeback", () => {
           speaker: req.speakerId,
           text: VALID_TEXT,
           choices: [],
-          // If a memory id is available, propose a valid claim to trigger mention writeback
-          proposedClaims: firstMemoryId
+          // Propose the event-authorized holds_rank claim for lu_huaijin (not the speaker).
+          // In CLOSED mode this is accepted because it matches the authorized claim from the
+          // rank_changed event. The sourceRef is the event id from the request's knownEvents.
+          proposedClaims: req.promptContext.allowedClaims.length > 0
             ? [
                 {
                   claim: {
-                    id: "c_t10",
-                    predicate: "holds_rank",
-                    subjectId: SPEAKER,
-                    object: "fenghou",
-                    modality: "assert",
+                    ...req.promptContext.allowedClaims[0]!.claim,
+                    id: "c_t10_event_auth",
                   },
-                  sourceRefs: [{ kind: "memory" as const, id: firstMemoryId }],
-                  modality: "assert",
+                  sourceRefs: req.promptContext.allowedClaims[0]!.sourceRefs,
+                  modality: req.promptContext.allowedClaims[0]!.claim.modality,
                   certainty: 90,
                 },
               ]

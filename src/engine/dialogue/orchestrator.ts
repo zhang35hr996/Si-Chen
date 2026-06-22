@@ -333,12 +333,23 @@ export function validateDialogueProviderResult(
   }
 
   // ── 2. Claim gate ─────────────────────────────────────────────────
+  // Pass allowedClaims/forbiddenClaims from the policy so the gate enforces
+  // CLOSED mode when the speaker has event-authorized claims from T6 assembleClaims.
+  // When allowedClaims is [] (no events produced authorized claims), the gate runs
+  // in backward-compat open mode (allowedClaims: undefined). This preserves compatibility
+  // for scenarios with no chronicle events while enabling CLOSED mode for event-rich turns.
   const claimResult = validateDialogueClaims({
     speakerId: request.speakerId,
     audience: policy.audience,
     beliefs: policy.beliefProjection,
     offeredContextIds: policy.offeredContextIds,
     proposedClaims: response.proposedClaims,
+    ...(policy.allowedClaims.length > 0
+      ? { allowedClaims: policy.allowedClaims }
+      : {}),
+    ...(policy.forbiddenClaims.length > 0
+      ? { forbiddenClaims: policy.forbiddenClaims }
+      : {}),
   });
   diagnostics.claimFindings = claimResult.findings;
   diagnostics.acceptedClaims = claimResult.acceptedClaims;

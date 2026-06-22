@@ -11,7 +11,7 @@ export type EvalExecutionMode = "fixture" | "online";
 export type CheckStatus = "pass" | "fail" | "not_run";
 
 export interface EvalExpectationFinding {
-  code: "unexpected_gate_result" | "forbidden_text_present" | "required_source_not_cited";
+  code: "unexpected_gate_result" | "forbidden_text_present" | "required_source_not_cited" | "required_event_not_in_prompt";
   detail: string;
 }
 
@@ -46,6 +46,12 @@ export interface EvalScenario {
   locationId: string;
   sceneDirective?: string;
   transcript?: { speaker: string; text: string }[];
+  /**
+   * If set, all listed event ids must appear in the assembled request's
+   * promptContext.knownEvents (i.e. the speaker must know these events).
+   * Failing → finding { code: "required_event_not_in_prompt", detail: eventId }.
+   */
+  mustKnowEventIds?: string[];
   expectations?: {
     gatePass?: boolean;
     forbiddenTexts?: string[];
