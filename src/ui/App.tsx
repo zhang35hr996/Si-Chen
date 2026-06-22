@@ -11,6 +11,12 @@ import {
   rankAdminContinuation,
   resolveReturnNavigation,
 } from "./eventReturn";
+import {
+  type GlobalInterruptKind,
+  pickNextGlobalInterrupt,
+  settlementBoardId,
+  timeSettlementReducer,
+} from "./settlement";
 import rawManifest from "../../assets/manifest.json";
 import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
@@ -176,12 +182,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
   const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
   const [giftItemId, setGiftItemId] = useState<string | null>(null);
-  const [daxuanPrompt, setDaxuanPrompt] = useState<ChengFengPrompt | null>(null);
   const [dianxuan, setDianxuan] = useState<{ candidates: Candidate[]; year: number } | null>(null);
   const lastBoardRef = useRef<string>("palace");
   // 事件返回上下文 + 链预算（scene-ui-narrative-refactor §3.4）：玩家发起覆盖 target 并重置
   // chainDepth；自动续接继承 target、不重置；整链结束/弃场恢复一次并清空；新游戏/读档/驾崩清空。
   const [navState, navDispatch] = useReducer(navReducer, initialNavState);
+  // 时间推进后的全局中断结算（§ post-time-advance settlement）：成功转旬登记一次（携带返回上下文），
+  // 待场内过场与全局中断逐个消化完毕后，再跑 time_advance 事件并恢复。
+  const [pendingTimeSettlement, timeSettlementDispatch] = useReducer(timeSettlementReducer, null);
   const rolledSlots = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
@@ -398,6 +406,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       navDispatch({ type: "clear" }); // 读档清空事件返回上下文（场景态从不入档）
       pendingReactionDispatch({ type: "clear" });
       setRankAdmin(null);
+      timeSettlementDispatch({ type: "clear" });
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
       if (store.getState().gameOver) {
         setContinueError("先帝已崩，请开新局。");
@@ -440,7 +449,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const flushPendingReactionCheckpoint = () => {
     const pending = pendingReactionCheckpoint;
     pendingReactionDispatch({ type: "consume" });
-    if (pending) runCheckpoints(true, pending.boardId);
+    // 把延后的反应转旬上下文转入全局结算：先排空全局中断，再跑 time_advance + 恢复。
+    if (pending) beginSettlement(checkpointReturnTarget(pending.boardId, store.getState().playerLocation));
   };
 
   /** 为本次行动消耗的每个行动点掷骰凤后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
@@ -614,6 +624,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
+    timeSettlementDispatch({ type: "clear" });
     doAutosave();
     setView("title");
   };
@@ -622,7 +633,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const playReactions = (beats: DecreeReaction[], rolledOver: boolean, stayOnMapBoardId?: string) => {
     if (beats.length === 0) {
       pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
-      if (rolledOver) runCheckpoints(true, stayOnMapBoardId);
+      if (rolledOver) beginSettlement(checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation));
       return;
     }
     // 转旬才登记待处理上下文（携带权威 board ID）；非转旬登记 null，覆盖任何旧值（杜绝串台）。
@@ -644,6 +655,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
+    timeSettlementDispatch({ type: "clear" });
     setView("coronation");
   };
 
@@ -848,7 +860,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!spend.ok) return;
     if (spend.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    runCheckpoints(true);
+    beginSettlement(checkpointReturnTarget(undefined, store.getState().playerLocation));
   };
 
   // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。行动先于时间，跨月 tick 不会杀死再宠爱。
@@ -956,6 +968,44 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
   const [ceremonyOpen, setCeremonyOpen] = useState(false);
   const [morningAfterOpen, setMorningAfterOpen] = useState(false);
+
+  // ── 时间推进后全局中断结算（§ post-time-advance settlement）────────────────
+  // 大选提示不再依赖 view==="location"：作为结算选择器的输入随状态派生（修复 view-gated 发现缺陷）。
+  const grandSelectionPrompt =
+    dianxuan || view === "dianxuan" ? null : buildDaxuanDianxuanPrompt(db, liveState);
+  // 场内原子过场（对话/反应/侍寝/初夜/封赏/场景/朝会/即时 prompt）须先结束，全局中断才呈现。
+  const atomicFlowInProgress =
+    reaction !== null || childReaction !== null || physicianReaction !== null ||
+    firstNightPromptId !== null || namePetHeirId !== null ||
+    bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
+    prompt !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
+    view === "event" || view === "court" || view === "dianxuan" ||
+    view === "title" || view === "coronation"; // 标题/登基（开局前）不呈现全局中断
+  // 同一时刻只呈现一个全局中断（确定性优先级）；场内过场进行中时一律不呈现。
+  const activeGlobalInterrupt: GlobalInterruptKind | null = atomicFlowInProgress
+    ? null
+    : pickNextGlobalInterrupt({
+        birthDue: activeBirthPlan !== null,
+        pregnancyDisclosureDue: jingshifangDue,
+        successorDue: successorAutoDue && selfCarrying,
+        centennialDue: centennialHeir !== null,
+        grandSelectionDue: grandSelectionPrompt !== null,
+      });
+
+  /** 成功转旬后登记一次结算（携带完整返回上下文）；完成由下方结算 effect 驱动。 */
+  const beginSettlement = (returnTarget: EventReturnTarget) => {
+    timeSettlementDispatch({ type: "begin", returnTarget });
+  };
+
+  // 结算完成：无场内过场、无待处理全局中断时，消费结算 → 跑 time_advance 事件路由 → 恢复返回上下文一次。
+  // 不在此 effect 内开浮层（浮层由渲染体按 activeGlobalInterrupt 声明式呈现）；此处只做「排空后完成」。
+  useEffect(() => {
+    if (!pendingTimeSettlement) return;
+    if (atomicFlowInProgress || activeGlobalInterrupt) return;
+    const target = pendingTimeSettlement.returnTarget;
+    timeSettlementDispatch({ type: "consume" });
+    runCheckpoints(true, settlementBoardId(target));
+  }, [pendingTimeSettlement, atomicFlowInProgress, activeGlobalInterrupt]);
 
   const enterGreeting = () => {
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -1107,7 +1157,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       }
     }
     if (beats.length) playReactions(beats, rolledOver, stayOnMapBoardId); // playReactions 自登记待处理上下文
-    else runCheckpoints(rolledOver, stayOnMapBoardId);
+    // 转旬→走全局结算排空；非转旬（仅到达）→ 原 location_enter 到达路由不变。
+    else if (rolledOver) beginSettlement(checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation));
+    else runCheckpoints(false, stayOnMapBoardId);
   };
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
@@ -1401,7 +1453,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setShopId(null);
             // 店在京城（free-entry，playerLocation 未变）：转旬补跑亦须留在地图。currentBoard 此刻已稳定
             // （进店前 onBoardChange 早已生效，无卸载时序问题），作为显式权威板传入；无转旬则直接回该板。
-            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true, currentBoard); }
+            if (shopRollover.current) { shopRollover.current = false; beginSettlement(checkpointReturnTarget(currentBoard, store.getState().playerLocation)); }
             else { setView("map"); }
           }} />
       )}
@@ -1550,8 +1602,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       {prompt && !reaction && (
         <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={prompt} onChoose={resolvePromptAction} />
       )}
-      {daxuanPrompt && !reaction && (
-        <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={daxuanPrompt} onChoose={onDaxuanChoose} />
+      {activeGlobalInterrupt === "grand_selection" && grandSelectionPrompt && (
+        <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={grandSelectionPrompt} onChoose={onDaxuanChoose} />
       )}
       {giftItemId && (
         <BestowModal db={db} store={store} itemId={giftItemId}
@@ -1651,7 +1703,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           </div>
         </div>
       )}
-      {activeBirthPlan && (
+      {activeGlobalInterrupt === "birth" && activeBirthPlan && (
         <BirthScreen
           db={db}
           store={store}
@@ -1661,7 +1713,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onDone={commitBirth}
         />
       )}
-      {jingshifangDue && (
+      {activeGlobalInterrupt === "pregnancy_disclosure" && (
         <JingshifangModal
           db={db}
           state={liveState}
@@ -1670,7 +1722,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onDesignate={designateCandidates}
         />
       )}
-      {(successorAutoDue || successorOpen) && selfCarrying && (
+      {((activeGlobalInterrupt === "successor") || successorOpen) && selfCarrying && (
         <SuccessorModal
           db={db}
           state={liveState}
@@ -1718,7 +1770,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           }}
         />
       )}
-      {!namePetHeirId && centennialHeir && (
+      {activeGlobalInterrupt === "centennial_heir" && centennialHeir && (
         <HeirNameModal
           title="百日宴 · 为皇嗣赐名"
           hint="皇嗣已满百日，请陛下赐下正名。"
@@ -1868,7 +1920,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); setSettingsOpen(false); enterCurrentLocation(); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
