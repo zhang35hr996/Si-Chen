@@ -22,7 +22,11 @@ export function monthlyIllnessRate(health: number, age: number): number {
 export function projectMonthlyHealth(ctx: MonthlyHealthContext): MonthlyHealthOutcome {
   const previousHealth = ctx.health, previousStatus = ctx.status, k = ctx.seedKey;
   let h = ctx.health, nextStatus = ctx.status;
-  if (ctx.pregnancyMonthlyCost) h -= healthRollRange(`${k}:preg`, 0, 5);
+  // 1) 承养月度成本 — 若本身致死，归因 pregnancy
+  const pregnancyLoss = ctx.pregnancyMonthlyCost ? healthRollRange(`${k}:preg`, 0, 5) : 0;
+  h = clampPct(h - pregnancyLoss);
+  if (h <= 0) return { previousHealth, nextHealth: 0, previousStatus, nextStatus: previousStatus, died: true, deathCause: "pregnancy" };
+  // 2) 衰老 + 病损 — 归因 illness
   if (ctx.isYearStart && ctx.age >= 35) h -= 1 + Math.floor(ageOver35(ctx.age) / 10);
   if (previousStatus === "sick") h -= healthRollRange(`${k}:sickdmg`, 1, 2);
   else if (previousStatus === "critical") h -= healthRollRange(`${k}:critdmg`, 3, 5);
@@ -112,7 +116,8 @@ export function buildMonthlyHealthTick(db: ContentDB, state: GameState): Monthly
     const st = state.standing[consortId];
     const health = st?.health ?? 100;
     const status = st?.healthStatus ?? "healthy";
-    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
+    const carrying = state.resources.bloodline.gestations.some((g) => g.carrier === consortId);
+    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: carrying, seedKey });
     const { effects: fx } = planHealthChange(state, {
       subject: { kind: "consort", id: consortId },
       ...(out.nextHealth !== health ? { healthDelta: out.nextHealth - health } : {}),
