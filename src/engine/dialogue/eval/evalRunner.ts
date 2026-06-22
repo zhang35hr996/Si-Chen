@@ -122,6 +122,7 @@ export async function runEvalScenarioWithProvider(
   runIndex: number,
   model: string,
   mode: EvalExecutionMode,
+  providerName: string = mode === "fixture" ? "fixture" : "unknown",
 ): Promise<EvalResult> {
   const runId = `${evaluationId}-r${runIndex}`;
 
@@ -131,6 +132,8 @@ export async function runEvalScenarioWithProvider(
     runIndex,
     fixtureId: scenario.fixtureId,
     model,
+    provider: providerName,
+    speakerId: scenario.speakerId,
     mode,
     sceneDirective: scenario.sceneDirective,
     claimFindings: [] as { code: string; claimId: string }[],

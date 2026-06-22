@@ -40,5 +40,5 @@ export type ProviderError =
   | { kind: "refused"; retryable: false; meta?: ProviderErrorMeta };
 
 export type ProviderResult<T> = Result<T, ProviderError>;
-export interface ModelRef { provider: "anthropic" | "openai" | "qwen" | "kimi" | "deepseek"; model: string; }
+export interface ModelRef { provider: "anthropic" | "openai" | "google" | "qwen" | "kimi" | "deepseek"; model: string; }
 export interface ProviderCapabilities { strictTools: boolean; promptCaching: boolean; batch: boolean; }
