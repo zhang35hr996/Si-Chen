@@ -46,8 +46,10 @@ export function MapScreen({
    *  false when opened from a location's 宫城图 button (start on that board). */
   atRoot: boolean;
   /** spentAp=false 表示宫内免行动点移动（不掷懿旨/敲打、不跑转旬）。
-   *  sovereignDied=true 表示本次跨月 tick 皇帝崩逝，调用方须 short-circuit 回 title。 */
-  onTravelled: (rolledOver: boolean, spentAp: boolean, sovereignDied?: boolean) => void;
+   *  sovereignDied=true 表示本次跨月 tick 皇帝崩逝，调用方须 short-circuit 回 title。
+   *  stayOnMap=true（出宫）表示玩家位置未变，结算后须留在地图（京城板），
+   *  不可按 playerLocation 把视图切回房间（否则点宫门会错落到紫宸殿）。 */
+  onTravelled: (rolledOver: boolean, spentAp: boolean, sovereignDied?: boolean, stayOnMap?: boolean) => void;
   onEnterCurrent: () => void;
   onOpenView: (locationId: string) => void;
   onOpenSettings: () => void;
@@ -137,7 +139,7 @@ export function MapScreen({
     const result = store.travelAndAdvance(db, [], { type: "SPEND_AP", amount: 1 });
     if (!result.ok) return;
     enterBoard(to);
-    onTravelled(result.value.rolledOver, true, result.value.healthOutcome?.sovereignDied === true);
+    onTravelled(result.value.rolledOver, true, result.value.healthOutcome?.sovereignDied === true, true);
   };
 
   // 点击节点直接执行动作（无信息栏中转）。

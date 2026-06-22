@@ -887,6 +887,11 @@ button:active:enabled {
   color: var(--c-text);
   transition: transform 0.14s ease;
 }
+/* 地图节点用 translate(-50%,-50%) 居中定位；覆盖全局 button:active 的
+   translateY(1px) 按压位移，否则点击时会丢失居中、节点跳动一下。 */
+.map-node:active:enabled {
+  transform: translate(-50%, -50%);
+}
 .map-node__dot {
   width: 12px;
   height: 12px;

@@ -109,6 +109,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   const [reactionRollover, setReactionRollover] = useState(false);
+  // 出宫结算若需延后补跑 checkpoint（懿旨过场后换旬），记下「留在地图」意图，
+  // 使补跑不按 playerLocation 把视图切回房间（玩家在京城板，位置未变）。
+  const [reactionStayOnMap, setReactionStayOnMap] = useState(false);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
   const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
@@ -311,12 +314,15 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   /** Checkpoint wiring: time_advance (after a rollover) wins over location_enter. */
-  const runCheckpoints = (rolledOver: boolean) => {
+  const runCheckpoints = (rolledOver: boolean, stayOnMap = false) => {
     const state = store.getState();
     const pick =
       (rolledOver ? pickNextEvent(db, state, "time_advance") : null) ??
       pickNextEvent(db, state, "location_enter");
     if (pick) startEvent(pick.id);
+    // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在京城地图板，
+    // 不能按 playerLocation 切回房间视图。
+    else if (stayOnMap) setView("map");
     else if (store.getState().playerLocation === "wenzhaodian") setView("wenzhaodian");
     else if (store.getState().playerLocation === "yuqing_gong") setView("yuqing_gong");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
@@ -861,7 +867,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   /** 旅行结算（MapScreen.onTravelled 与院子 enterConsortQuarters 共用）。 */
-  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false) => {
+  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false, stayOnMap = false) => {
     if (sovereignDied) { onSovereignDeath(); return; } // 跨月旅行皇帝崩逝：清场回 title。
     doAutosave();
     // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
@@ -877,8 +883,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         if (applied.ok) beats = plan.reactions;
       }
     }
-    if (beats.length) playReactions(beats, rolledOver);
-    else runCheckpoints(rolledOver);
+    if (beats.length) { setReactionStayOnMap(stayOnMap); playReactions(beats, rolledOver); }
+    else runCheckpoints(rolledOver, stayOnMap);
   };
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
@@ -1283,7 +1289,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
               setManageCharId(id);
             } else if (reactionRollover) {
               setReactionRollover(false);
-              runCheckpoints(true); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
+              setReactionStayOnMap(false);
+              runCheckpoints(true, reactionStayOnMap); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
             }
           }}
         />
