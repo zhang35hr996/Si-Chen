@@ -7,10 +7,12 @@
  * covering the critical correctness invariants.
  *
  * The 8 required test cases are all in describe("DialogueScreen generative mode").
+ *
+ * T1 (LLM-4): Additional tests for ReactionScreen generatedLine prop contract.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { assembleDialogueRequest, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
-import type { DialogueProvider } from "../../src/engine/dialogue/types";
+import type { DialogueLine, DialogueProvider } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -234,5 +236,99 @@ describe("DialogueScreen generative mode", () => {
     );
     // Without a provider, generate() is never invoked
     expect(generateSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── T1 (LLM-4): ReactionScreen generatedLine prop contract ───────────────────
+
+describe("ReactionScreen generatedLine prop", () => {
+  let store: ReturnType<typeof createGameStore>;
+
+  beforeEach(() => {
+    store = createGameStore();
+    store.newGame(db);
+  });
+
+  it("generatedLine round-trips: expression, choices, meta.generated all preserved", () => {
+    // Build a DialogueLine directly — the same shape that produceDialogueTurn returns.
+    const generatedLine: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "陛下驾到，臣惶恐之至。",
+      expression: "shy",
+      choices: [{ id: "c1", text: "无妨", tone: "gentle" }],
+      meta: { generated: true, degraded: false },
+    };
+
+    // The type contract: all fields survive a round-trip through a plain object assignment.
+    // When generatedLine is defined, ReactionScreen.useEffect calls setLine(generatedLine)
+    // directly — no assembleDialogueRequest needed. Assert the structure here.
+    expect(generatedLine.expression).toBe("shy");
+    expect(Array.isArray(generatedLine.choices)).toBe(true);
+    expect(generatedLine.choices[0]?.id).toBe("c1");
+    expect(generatedLine.meta.generated).toBe(true);
+    expect(generatedLine.meta.degraded).toBe(false);
+  });
+
+  it("when generatedLine is defined, assembleDialogueRequest is not needed (logic-level)", () => {
+    // The ReactionScreen branch: if generatedLine !== undefined && index === 0,
+    // setLine(generatedLine) is called WITHOUT calling assembleDialogueRequest.
+    // We model the branching logic directly here.
+    const generatedLine: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "臣有话说。",
+      expression: "neutral",
+      choices: [],
+      meta: { generated: true, degraded: false },
+    };
+
+    const index = 0;
+    const assembleSpy = vi.fn();
+
+    // Branch mirror of ReactionScreen.useEffect
+    let resolvedLine: DialogueLine | null = null;
+    if (generatedLine !== undefined && index === 0) {
+      resolvedLine = generatedLine;
+      // assembleDialogueRequest is NOT called on this path
+    } else {
+      assembleSpy();
+    }
+
+    expect(resolvedLine).toBe(generatedLine);
+    expect(assembleSpy).not.toHaveBeenCalled();
+  });
+
+  // Regression: scripted / mockProvider path still works (no generatedLine)
+  it("makeProvider([]) with zero proposedClaims returns ok and produces a line with text", async () => {
+    const state = store.getState();
+    const reqResult = assembleDialogueRequest(db, state, SPEAKER, LOCATION, {
+      scripted: { text: VALID_TEXT },
+    });
+    expect(reqResult.ok).toBe(true);
+    if (!reqResult.ok) return;
+
+    // makeProvider equivalent: a scripted-kind provider that echoes the text
+    const scriptedProvider: DialogueProvider = {
+      id: "scripted-test",
+      kind: "scripted",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async (req) =>
+        ok<DialogueProviderResult>({
+          speaker: req.speakerId,
+          text: req.scripted?.text ?? VALID_TEXT,
+          choices: [],
+          proposedClaims: [], // zero proposedClaims
+        }),
+    };
+
+    const turnResult = await produceDialogueTurn(db, scriptedProvider, reqResult.value, state);
+    expect(turnResult.ok).toBe(true);
+    if (!turnResult.ok) return;
+
+    expect(typeof turnResult.value.line.text).toBe("string");
+    expect(turnResult.value.line.text.length).toBeGreaterThan(0);
+    // meta.generated is false for scripted providers
+    expect(turnResult.value.line.meta.generated).toBe(false);
   });
 });

@@ -16,7 +16,7 @@ import { getCharacterLocation } from "../engine/characters/presence";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue/orchestrator";
-import type { DialogueProvider } from "../engine/dialogue/types";
+import type { DialogueLine, DialogueProvider } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
@@ -113,7 +113,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [manageCharId, setManageCharId] = useState<string | null>(null);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
-  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string } | null>(null);
+  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   const [reactionRollover, setReactionRollover] = useState(false);
@@ -146,7 +146,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [physicianHeirPickerOpen, setPhysicianHeirPickerOpen] = useState(false);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
-  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string }[]>([]);
+  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   // 国库与国情一致：浮层，任意画面可开，关闭后回到原处（不切 view）。
   const [storehouseOpen, setStorehouseOpen] = useState(false);
@@ -1338,6 +1338,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           speakerId={reaction.speakerId}
           lines={reaction.lines}
           backgroundKey={reaction.backgroundKey}
+          generatedLine={reaction.generatedLine}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {

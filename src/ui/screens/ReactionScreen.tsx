@@ -16,6 +16,7 @@ export function ReactionScreen({
   speakerId,
   lines,
   backgroundKey,
+  generatedLine,
   onDone,
 }: {
   db: ContentDB;
@@ -25,6 +26,8 @@ export function ReactionScreen({
   lines: string[];
   /** 覆盖背景（带时段变体）；缺省用玩家当前所在地点背景。 */
   backgroundKey?: string;
+  /** If provided and index === 0, renders this line directly without calling mockProvider. */
+  generatedLine?: DialogueLine;
   onDone: () => void;
 }) {
   const state = useGameState(store);
@@ -32,6 +35,12 @@ export function ReactionScreen({
   const [line, setLine] = useState<DialogueLine | null>(null);
 
   useEffect(() => {
+    // Generative path: skip assembleDialogueRequest + mockProvider entirely.
+    if (generatedLine !== undefined && index === 0) {
+      setLine(generatedLine);
+      return;
+    }
+
     let alive = true;
     const text = lines[index];
     if (text === undefined) return;
