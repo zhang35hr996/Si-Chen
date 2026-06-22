@@ -21,6 +21,8 @@ export interface EvalResult {
   runIndex: number;
   fixtureId: string;
   model: string;
+  provider: string;          // vendor name ("anthropic"|"openai"|"google") or "fixture"
+  speakerId: string;         // scenario.speakerId — needed by proxy scorers (PR3)
   mode: EvalExecutionMode;
   schemaStatus: CheckStatus;
   gateStatus: CheckStatus;

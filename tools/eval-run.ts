@@ -2,12 +2,14 @@
  * eval-run — CLI entry point for running dialogue eval scenarios (T6, LLM-2).
  *
  * Usage:
- *   tsx tools/eval-run.ts --provider <anthropic|fixture> [--model <id>]
+ *   tsx tools/eval-run.ts --provider <anthropic|openai|google|gemini|fixture> [--model <id>]
  *                         [--runs <N>] [--scenarios <path>] [--output <path>]
  *
  * --provider anthropic  → mode=online, needs ANTHROPIC_API_KEY env var
+ * --provider openai     → mode=online, needs OPENAI_API_KEY env var
+ * --provider google     → mode=online, needs GEMINI_API_KEY env var (alias: --provider gemini)
  * --provider fixture    → mode=fixture, loads evalFixtures from tests/eval/fixtures/builders
- * --model <id>          → required when provider=anthropic, ignored for fixture
+ * --model <id>          → required for any online provider, ignored for fixture
  * --runs <N>            → number of runs per scenario (default 1)
  * --scenarios <path>    → path to JSONL file (default tests/eval/golden/scenarios.jsonl)
  * --output <path>       → output JSONL file (default eval-results-<timestamp>.jsonl)
@@ -32,7 +34,7 @@ const PROJECT_ROOT = path.resolve(__dirname, "..");
 // ── Argument parsing ──────────────────────────────────────────────────────────
 
 function parseArgs(argv: string[]): {
-  provider: "anthropic" | "fixture";
+  provider: "anthropic" | "openai" | "google" | "fixture";
   model?: string;
   runs: number;
   scenarios: string;
@@ -45,9 +47,12 @@ function parseArgs(argv: string[]): {
     return i !== -1 && i + 1 < args.length ? args[i + 1] : undefined;
   }
 
-  const provider = flag("--provider");
-  if (provider !== "anthropic" && provider !== "fixture") {
-    console.error(`Error: --provider must be "anthropic" or "fixture", got: ${provider ?? "(missing)"}`);
+  let provider = flag("--provider");
+  if (provider === "gemini") provider = "google"; // CLI alias → vendor name
+  if (provider !== "anthropic" && provider !== "openai" && provider !== "google" && provider !== "fixture") {
+    console.error(
+      `Error: --provider must be anthropic|openai|google|gemini|fixture, got: ${provider ?? "(missing)"}`,
+    );
     process.exit(1);
   }
 
@@ -105,26 +110,43 @@ async function loadFixtures(): Promise<Record<string, EvalFixtureDefinition>> {
   return evalFixtures;
 }
 
-// ── Anthropic provider setup ──────────────────────────────────────────────────
+// ── Online provider setup (anthropic | openai | google) ───────────────────────
 
-async function buildAnthropicProvider(model: string) {
-  const apiKey = process.env["ANTHROPIC_API_KEY"];
-  if (!apiKey) {
-    console.error("Error: ANTHROPIC_API_KEY environment variable is required for --provider anthropic");
+function requireKey(env: string, providerName: string): string {
+  const v = process.env[env];
+  if (!v) {
+    console.error(`Error: ${env} environment variable is required for --provider ${providerName}`);
     process.exit(1);
   }
+  return v;
+}
 
+async function buildOnlineProvider(providerName: "anthropic" | "openai" | "google", model: string) {
   const { createDialogueProvider } = await import(
     path.join(PROJECT_ROOT, "src/engine/dialogue/providers/remoteProvider.ts")
   ) as typeof import("../src/engine/dialogue/providers/remoteProvider");
 
-  const { createSdkAnthropicTransport } = await import(
-    path.join(PROJECT_ROOT, "server/llm/anthropicSdkTransport.ts")
-  ) as { createSdkAnthropicTransport: (apiKey: string) => import("../src/engine/dialogue/providers/anthropicProvider").AnthropicTransport };
+  if (providerName === "anthropic") {
+    const apiKey = requireKey("ANTHROPIC_API_KEY", "anthropic");
+    const { createAnthropicSdkTransport } = await import(
+      path.join(PROJECT_ROOT, "server/llm/anthropicSdkTransport.ts")
+    ) as typeof import("../server/llm/anthropicSdkTransport");
+    return createDialogueProvider({ model: { provider: "anthropic", model }, transport: createAnthropicSdkTransport(apiKey) });
+  }
 
-  const transport = createSdkAnthropicTransport(apiKey);
-  const provider = createDialogueProvider({ model: { provider: "anthropic", model }, transport });
-  return provider;
+  if (providerName === "openai") {
+    const apiKey = requireKey("OPENAI_API_KEY", "openai");
+    const { createOpenAISdkTransport } = await import(
+      path.join(PROJECT_ROOT, "server/llm/openaiSdkTransport.ts")
+    ) as typeof import("../server/llm/openaiSdkTransport");
+    return createDialogueProvider({ model: { provider: "openai", model }, transport: createOpenAISdkTransport(apiKey) });
+  }
+
+  const apiKey = requireKey("GEMINI_API_KEY", "google");
+  const { createGeminiSdkTransport } = await import(
+    path.join(PROJECT_ROOT, "server/llm/geminiSdkTransport.ts")
+  ) as typeof import("../server/llm/geminiSdkTransport");
+  return createDialogueProvider({ model: { provider: "google", model }, transport: createGeminiSdkTransport(apiKey) });
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -133,8 +155,8 @@ async function main() {
   const opts = parseArgs(process.argv);
   const { provider: providerName, model, runs, scenarios: scenariosPath, output } = opts;
 
-  if (providerName === "anthropic" && !model) {
-    console.error("Error: --model is required when --provider is anthropic");
+  if (providerName !== "fixture" && !model) {
+    console.error(`Error: --model is required when --provider is ${providerName}`);
     process.exit(1);
   }
 
@@ -152,12 +174,12 @@ async function main() {
   const outputStream = fs.createWriteStream(outputPath, { flags: "w" });
 
   let fixtures: Record<string, EvalFixtureDefinition> | undefined;
-  let anthropicProvider: Awaited<ReturnType<typeof buildAnthropicProvider>> | undefined;
+  let onlineProvider: Awaited<ReturnType<typeof buildOnlineProvider>> | undefined;
 
   if (providerName === "fixture") {
     fixtures = await loadFixtures();
   } else {
-    anthropicProvider = await buildAnthropicProvider(model!);
+    onlineProvider = await buildOnlineProvider(providerName, model!);
   }
 
   let count = 0;
@@ -180,9 +202,9 @@ async function main() {
           }
           result = await runEvalScenario(scenario, fixture, evaluationId, runIndex);
         } else {
-          // Anthropic online mode: use shared runEvalScenarioWithProvider so
-          // expectations are evaluated identically to fixture mode.
-          const realProvider = anthropicProvider!;
+          // Online mode: use shared runEvalScenarioWithProvider so expectations
+          // are evaluated identically to fixture mode.
+          const realProvider = onlineProvider!;
           const { createNewGameState } = await import(
             path.join(PROJECT_ROOT, "src/engine/state/newGame.ts")
           ) as typeof import("../src/engine/state/newGame");
@@ -202,6 +224,7 @@ async function main() {
             runIndex,
             model!,
             "online",
+            providerName,
           );
         }
 

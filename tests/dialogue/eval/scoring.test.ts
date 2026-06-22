@@ -16,6 +16,8 @@ function makeResult(overrides: Partial<EvalResult> = {}): EvalResult {
     runIndex: 0,
     fixtureId: "base_palace",
     model: "fixture",
+    provider: "fixture",
+    speakerId: "shen_zhibai",
     mode: "fixture",
     schemaStatus: "pass",
     gateStatus: "pass",
