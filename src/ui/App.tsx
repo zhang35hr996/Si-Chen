@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  type EventReturnTarget,
+  MAX_EVENT_CHAIN,
+  canChain,
+  initialNavState,
+  navReducer,
+  resolveReturnNavigation,
+} from "./eventReturn";
 import rawManifest from "../../assets/manifest.json";
 import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
@@ -86,9 +94,6 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-/** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
-const MAX_EVENT_CHAIN = 3;
-
 type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan";
 
 /**
@@ -170,7 +175,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [daxuanPrompt, setDaxuanPrompt] = useState<ChengFengPrompt | null>(null);
   const [dianxuan, setDianxuan] = useState<{ candidates: Candidate[]; year: number } | null>(null);
   const lastBoardRef = useRef<string>("palace");
-  const chainDepth = useRef(0);
+  // 事件返回上下文 + 链预算（scene-ui-narrative-refactor §3.4）：玩家发起覆盖 target 并重置
+  // chainDepth；自动续接继承 target、不重置；整链结束/弃场恢复一次并清空；新游戏/读档/驾崩清空。
+  const [navState, navDispatch] = useReducer(navReducer, initialNavState);
   const rolledSlots = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
@@ -233,13 +240,15 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     characters: { ...content.value.characters, ...store.getState().generatedConsorts },
   };
 
-  const startEvent = (eventId: string) => {
+  /** Player-initiated event start: overwrite the return target and reset the chain budget. */
+  const startEvent = (eventId: string, returnTarget: EventReturnTarget) => {
     // 上朝是一场会话而非单个事件：进殿即扣 1 行动点，随机抽 2–3 件事务逐件处理。
+    // 上朝自带 xuanzhengdian 返回上下文（beginCourt 内设），忽略此处传入的 target。
     if (eventId === "ev_chaohui") {
       beginCourt();
       return;
     }
-    chainDepth.current = 0; // player-initiated start resets the chain budget
+    navDispatch({ type: "playerStart", target: returnTarget }); // 覆盖旧 target + 重置 chainDepth
     setActiveEventId(eventId);
     setView("event");
   };
@@ -266,7 +275,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       goHome();
       return;
     }
-    chainDepth.current = 0;
+    navDispatch({ type: "playerStart", target: { kind: "xuanzhengdian" } }); // 上朝返回 → 宣政殿（当前落主图，PR4 接专用屏）
     setCourt({ queue, index: 0 });
     setView("court");
   };
@@ -287,6 +296,29 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     }
     setView(loc === "wenzhaodian" ? "wenzhaodian" : loc === "yuqing_gong" ? "yuqing_gong" : loc === "fengxiandian" ? "fengxiandian" : "location");
     if (loc === "wenzhaodian") maybeAutumnHunt();
+  };
+
+  /** Set the room view for a given location id (no entry-time flavor rolls — used on event return). */
+  const setLocationView = (locId: string) => {
+    if (locId === "cining_gong") {
+      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
+      setView("cining_gong"); return;
+    }
+    setView(locId === "wenzhaodian" ? "wenzhaodian" : locId === "yuqing_gong" ? "yuqing_gong" : locId === "fengxiandian" ? "fengxiandian" : "location");
+  };
+
+  /**
+   * Restore the view after an event chain ends (or a scene is abandoned). Snapshots the return
+   * target, consumes it exactly once, and lands on the closest current view (specialized 紫宸殿/
+   * 御花园/宣政殿 screens arrive in later PRs — the semantic target is preserved meanwhile).
+   */
+  const restoreReturn = () => {
+    const target = navState.target;
+    navDispatch({ type: "consume" }); // clear exactly once; a stale target cannot leak to the next event
+    if (!target) { goHome(); return; }
+    const nav = resolveReturnNavigation(target);
+    if (nav.view === "map" || nav.view === "xuanzhengdian") { goHome(); return; } // 宣政殿专用屏未建（PR4）→ 暂回主图
+    setLocationView(nav.locationId!); // location / zichendian（PR2）/ garden（PR3）→ 暂用对应 location 场景
   };
 
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
@@ -344,6 +376,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (result.ok) {
       store.loadState(result.value.state);
       resetRollGuards();
+      navDispatch({ type: "clear" }); // 读档清空事件返回上下文（场景态从不入档）
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
       if (store.getState().gameOver) {
         setContinueError("先帝已崩，请开新局。");
@@ -367,7 +400,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const pick =
       (rolledOver ? pickAutoStartEvent(db, state, "time_advance", loc) : null) ??
       (stayOnMap ? null : pickAutoStartEvent(db, state, "location_enter", loc));
-    if (pick) startEvent(pick.id);
+    // 返回上下文与本函数无事件时的落点一致：stayOnMap（出宫，位置未变）回主图；否则回当前地点。
+    if (pick) startEvent(pick.id, stayOnMap ? { kind: "map" } : { kind: "location", locationId: state.playerLocation });
     // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在京城地图板，
     // 不能按 playerLocation 切回房间视图。
     else if (stayOnMap) setView("map");
@@ -549,6 +583,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const onSovereignDeath = () => {
     setReaction(null);
     setReactionQueue([]);
+    navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
     doAutosave();
     setView("title");
   };
@@ -567,13 +602,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const proceedAfterNewGame = () => {
     const state = store.getState();
     const pick = pickAutoStartEvent(db, state, "game_start", db.locations[state.playerLocation]);
-    if (pick) startEvent(pick.id);
+    if (pick) startEvent(pick.id, { kind: "map" });
     else goHome();
   };
 
   const newGame = () => {
     store.newGame(db);
     resetRollGuards();
+    navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     setView("coronation");
   };
 
@@ -1191,7 +1227,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setSummonedConsortId(null);
             setSettingsOpen(true);
           }}
-          onStartEvent={startEvent}
+          onStartEvent={(id) => startEvent(id, { kind: "location", locationId: store.getState().playerLocation })}
           onManage={(id) => setManageCharId(id)}
           onRelocate={(id) => setRelocateCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
@@ -1266,7 +1302,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
           onOpenSettings={() => setSettingsOpen(true)}
           // ev_taihou_converse 用 checkpoint:"game_start" 故永不自动触发，只由此按钮手动开启；勿改成 location_enter（会变强制弹出）。
-          onConverse={() => startEvent("ev_taihou_converse")}
+          onConverse={() => startEvent("ev_taihou_converse", { kind: "location", locationId: "cining_gong" })}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
         />
@@ -1341,7 +1377,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           store={store}
           registry={registry}
           locationId={freeViewId}
-          onStartEvent={startEvent}
+          onStartEvent={(id) => startEvent(id, { kind: "map" })}
           onClose={() => setView("map")}
           onOfferIncense={() => templeAction("incense")}
           onDrawFortune={() => templeAction("fortune")}
@@ -1362,9 +1398,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               const sceneEndState = store.getState();
               const pick = pickAutoStartEvent(db, sceneEndState, "scene_end", db.locations[sceneEndState.playerLocation]);
               if (pick) {
-                if (chainDepth.current < MAX_EVENT_CHAIN) {
-                  chainDepth.current += 1;
-                  setActiveEventId(pick.id); // chained event keeps the depth budget
+                if (canChain(navState)) {
+                  navDispatch({ type: "chainAdvance" }); // 链事件继承 target、不重置、不消费
+                  setActiveEventId(pick.id);
                   return;
                 }
                 logger?.logGameError(
@@ -1379,17 +1415,17 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               if (rolledOver) {
                 const taState = store.getState();
                 const t = pickAutoStartEvent(db, taState, "time_advance", db.locations[taState.playerLocation]);
-                if (t && chainDepth.current < MAX_EVENT_CHAIN) {
-                  chainDepth.current += 1;
+                if (t && canChain(navState)) {
+                  navDispatch({ type: "chainAdvance" });
                   setActiveEventId(t.id);
                   return;
                 }
               }
-              goHome(); // 事件结束 → 跳回皇城主地图
+              restoreReturn(); // 整链结束 → 按返回上下文恢复（消费一次）
               return;
             }
-            // Abandoned mid-scene (零代价离开): back to the room you were in.
-            setView("location");
+            // Abandoned mid-scene (零代价离开): restore via the same return target (consumes it).
+            restoreReturn();
           }}
         />
       )}
@@ -1414,7 +1450,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             }
             if (committed) doAutosave();
             setCourt(null);
-            goHome(); // 上朝结束 / 退朝 → 直接回到紫禁城主地图
+            restoreReturn(); // 上朝结束 / 退朝 → 按返回上下文（xuanzhengdian，当前落主图）恢复
           }}
         />
       )}
@@ -1804,7 +1840,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
@@ -1829,7 +1865,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onSilent={silentLeave}
         />
       )}
-      <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
+      <DebugPanel store={store} db={db} logger={logger} onForceEvent={(id) => startEvent(id, { kind: "map" })} />
     </>
   );
 }
