@@ -8,7 +8,7 @@
  * role="dialog" landmark。三种前景组件都各自持有 document-level Escape；因此非活跃 surface 必须卸载（而非视觉隐藏），
  * 否则一次 Escape 会被多个组件处理。乘风谕令为业务交接：先关菜单，再在同一交互内发出对应回调（原子切换）。
  */
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { SceneShell } from "../components/SceneShell";
 import { AudiencePrompt } from "../components/AudiencePrompt";
 import { PendingAudienceDrawer, type PendingAudienceViewItem } from "../components/PendingAudienceDrawer";
@@ -97,6 +97,17 @@ export function ZichendianScreen({
   const [foreground, setForeground] = useState<ZichendianForeground>({ kind: "none" });
   const reasonId = useId();
 
+  // busy = 外部业务面板（册封/搬迁/赏赐/请医/召见/批阅/事件/原子操作）已接管前景。屏内不得再持有任何前景对话：
+  // 立即用 !busy 渲染门控（见下），并在 busy 起始时重置陈旧的本地前景，避免「旧内部对话 + 新外部模态」同帧并存。
+  const internalSurfacesAllowed = !busy;
+  useEffect(() => {
+    if (busy) setForeground({ kind: "none" });
+  }, [busy]);
+
+  // 任一内部前景打开即视为本屏正进行一次交互会话——背景场景动作（含离开）一律禁用，由前景独占；busy 同理。
+  const internalForegroundOpen = foreground.kind !== "none";
+  const screenActionsLocked = busy || internalForegroundOpen;
+
   // 前景切换：开启 surface 仅可从 none 出发（守住单一前景不变量）；关闭一律回 none。
   const openPending = () => setForeground((f) => (f.kind === "none" ? { kind: "pending-audience" } : f));
   const openChengfeng = () => setForeground((f) => (f.kind === "none" ? { kind: "chengfeng" } : f));
@@ -113,7 +124,6 @@ export function ZichendianScreen({
     onAdmitPendingAudience(eventId);
   };
 
-  const chengfengDisabled = busy || !interruptible;
   const showInterruptReason = !interruptible && Boolean(interruptDisabledReason);
 
   const stage = (
@@ -134,9 +144,10 @@ export function ZichendianScreen({
     </div>
   );
 
-  // narrative 槽仅在无前景对话且仍有 activeAudience 时渲染候见提示——开抽屉/乘风立即卸载它。
+  // narrative 槽仅在 !busy（外部未接管）、无内部前景对话、且仍有 activeAudience 时渲染候见提示——
+  // 开抽屉/乘风或外部 busy 接管时立即卸载它。
   const narrative =
-    foreground.kind === "none" && activeAudience ? (
+    internalSurfacesAllowed && foreground.kind === "none" && activeAudience ? (
       <AudiencePrompt
         promptId={activeAudience.eventId}
         visitorName={activeAudience.visitorName}
@@ -153,28 +164,28 @@ export function ZichendianScreen({
 
   const actions = (
     <>
-      <button type="button" className="action-btn action-btn--key" onClick={onReviewMemorials} disabled={busy}>
+      <button type="button" className="action-btn action-btn--key" onClick={onReviewMemorials} disabled={screenActionsLocked}>
         批阅奏折
       </button>
-      <button type="button" className="action-btn" onClick={onSummonConsort} disabled={busy}>
+      <button type="button" className="action-btn" onClick={onSummonConsort} disabled={screenActionsLocked}>
         召见侍君
       </button>
       <button
         type="button"
         className="action-btn"
         onClick={openChengfeng}
-        disabled={chengfengDisabled}
+        disabled={screenActionsLocked || !interruptible}
         aria-describedby={showInterruptReason ? reasonId : undefined}
       >
         传乘风
       </button>
-      <button type="button" className="action-btn" onClick={onRest} disabled={busy}>
+      <button type="button" className="action-btn" onClick={onRest} disabled={screenActionsLocked}>
         休息
       </button>
-      <button type="button" className="action-btn" onClick={onLeave}>
+      <button type="button" className="action-btn" onClick={onLeave} disabled={screenActionsLocked}>
         离开
       </button>
-      <button type="button" className="action-btn" onClick={openPending} disabled={busy}>
+      <button type="button" className="action-btn" onClick={openPending} disabled={screenActionsLocked}>
         待宣 · {deferredAudienceCount}
       </button>
       {showInterruptReason && (
@@ -196,7 +207,7 @@ export function ZichendianScreen({
         narrative={narrative}
         actions={actions}
       />
-      {foreground.kind === "pending-audience" && (
+      {internalSurfacesAllowed && foreground.kind === "pending-audience" && (
         <PendingAudienceDrawer
           items={pendingAudienceItems}
           busy={busy}
@@ -204,7 +215,7 @@ export function ZichendianScreen({
           onClose={closeForeground}
         />
       )}
-      {foreground.kind === "chengfeng" && (
+      {internalSurfacesAllowed && foreground.kind === "chengfeng" && (
         <ChengfengDispatch
           interruptible={interruptible}
           disabledReason={interruptDisabledReason}

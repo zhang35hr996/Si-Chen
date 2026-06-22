@@ -1,8 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ZichendianScreen, type ZichendianScreenProps } from "../../src/ui/screens/ZichendianScreen";
 import type { PendingAudienceViewItem } from "../../src/ui/components/PendingAudienceDrawer";
+
+const SCENE_ACTIONS = ["批阅奏折", "召见侍君", "传乘风", "休息", "离开"] as const;
 
 const audience: ZichendianScreenProps["activeAudience"] = {
   eventId: "ev_a",
@@ -257,12 +260,9 @@ describe("ZichendianScreen — summoned consort presentation", () => {
 });
 
 describe("ZichendianScreen — busy & per-action routing", () => {
-  it("20. busy disables conflicting screen actions", () => {
+  it("20. busy disables all six screen actions (including 离开)", () => {
     render(<ZichendianScreen {...makeProps({ busy: true })} />);
-    expect(action("批阅奏折")).toBeDisabled();
-    expect(action("召见侍君")).toBeDisabled();
-    expect(action("传乘风")).toBeDisabled();
-    expect(action("休息")).toBeDisabled();
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
     expect(action(/^待宣/)).toBeDisabled();
   });
 
@@ -283,5 +283,131 @@ describe("ZichendianScreen — busy & per-action routing", () => {
       }
       unmount();
     }
+  });
+});
+
+describe("ZichendianScreen — Blocker 1: an open internal surface owns the session", () => {
+  it("pending drawer open disables all six scene actions, none fire, and closing re-enables them", async () => {
+    const user = userEvent.setup();
+    const props = makeProps({ deferredAudienceCount: 1, pendingAudienceItems: pendingItems });
+    render(<ZichendianScreen {...props} />);
+    await user.click(action(/^待宣/));
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
+    expect(action(/^待宣/)).toBeDisabled();
+    await user.click(action("批阅奏折"));
+    await user.click(action("召见侍君"));
+    await user.click(action("休息"));
+    await user.click(action("离开"));
+    expect(props.onReviewMemorials).not.toHaveBeenCalled();
+    expect(props.onSummonConsort).not.toHaveBeenCalled();
+    expect(props.onRest).not.toHaveBeenCalled();
+    expect(props.onLeave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeEnabled();
+  });
+
+  it("Chengfeng open disables all six scene actions, none fire, and closing re-enables them", async () => {
+    const user = userEvent.setup();
+    const props = makeProps();
+    render(<ZichendianScreen {...props} />);
+    await user.click(action("传乘风"));
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
+    expect(action(/^待宣/)).toBeDisabled();
+    await user.click(action("批阅奏折"));
+    await user.click(action("召见侍君"));
+    await user.click(action("休息"));
+    await user.click(action("离开"));
+    expect(props.onReviewMemorials).not.toHaveBeenCalled();
+    expect(props.onSummonConsort).not.toHaveBeenCalled();
+    expect(props.onRest).not.toHaveBeenCalled();
+    expect(props.onLeave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "作罢" }));
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeEnabled();
+  });
+});
+
+describe("ZichendianScreen — Blocker 2: busy transfers foreground ownership", () => {
+  it("busy false → true immediately unmounts AudiencePrompt, zeroes dialogs, and disables every action", () => {
+    const { rerender } = render(<ZichendianScreen {...makeProps({ activeAudience: audience, busy: false })} />);
+    expect(dialogs()).toHaveLength(1);
+    rerender(<ZichendianScreen {...makeProps({ activeAudience: audience, busy: true })} />);
+    expect(dialogs()).toHaveLength(0);
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
+    expect(action(/^待宣/)).toBeDisabled();
+  });
+
+  it("an open pending drawer unmounts on busy=true and does not resurrect when busy returns false", async () => {
+    const user = userEvent.setup();
+    const open = { deferredAudienceCount: 1, pendingAudienceItems: pendingItems } as const;
+    const { rerender } = render(<ZichendianScreen {...makeProps({ ...open, busy: false })} />);
+    await user.click(action(/^待宣/));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("待宣事务");
+    rerender(<ZichendianScreen {...makeProps({ ...open, busy: true })} />);
+    expect(dialogs()).toHaveLength(0);
+    rerender(<ZichendianScreen {...makeProps({ ...open, busy: false })} />);
+    expect(dialogs()).toHaveLength(0); // session did not resurrect
+  });
+
+  it("an open Chengfeng menu unmounts on busy=true and does not resurrect when busy returns false", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ZichendianScreen {...makeProps({ busy: false })} />);
+    await user.click(action("传乘风"));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("传乘风");
+    rerender(<ZichendianScreen {...makeProps({ busy: true })} />);
+    expect(dialogs()).toHaveLength(0);
+    rerender(<ZichendianScreen {...makeProps({ busy: false })} />);
+    expect(dialogs()).toHaveLength(0); // session did not resurrect
+  });
+
+  it("AudiencePrompt reappears after busy clears only because activeAudience is still supplied", () => {
+    const { rerender } = render(<ZichendianScreen {...makeProps({ activeAudience: audience, busy: true })} />);
+    expect(dialogs()).toHaveLength(0);
+    rerender(<ZichendianScreen {...makeProps({ activeAudience: audience, busy: false })} />);
+    expect(dialogs()).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toHaveTextContent("卫绥");
+  });
+});
+
+describe("ZichendianScreen — realistic external-modal handoff", () => {
+  function HandoffHarness() {
+    const [businessOpen, setBusinessOpen] = useState(false);
+    return (
+      <>
+        <ZichendianScreen
+          {...makeProps()}
+          activeAudience={audience}
+          busy={businessOpen}
+          onManageRank={() => setBusinessOpen(true)}
+        />
+        {businessOpen && (
+          <div role="dialog" aria-label="位分管理">
+            <button type="button" onClick={() => setBusinessOpen(false)}>关闭位分管理</button>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  it("Chengfeng decree hands off to an external business modal atomically, then AudiencePrompt returns", async () => {
+    const user = userEvent.setup();
+    render(<HandoffHarness />);
+    // 1. initial: AudiencePrompt is the only dialog
+    expect(dialogs()).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toHaveTextContent("卫绥");
+    // 2. open Chengfeng — the only dialog
+    await user.click(action("传乘风"));
+    expect(dialogs()).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("传乘风");
+    // 3-5. choose 调整位分 → Chengfeng unmounts, external 位分管理 is the only dialog
+    await user.click(screen.getByRole("button", { name: "调整位分" }));
+    expect(dialogs()).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("位分管理");
+    // 6. AudiencePrompt absent while busy
+    expect(screen.queryByText("卫绥")).toBeNull();
+    expect(screen.queryByRole("button", { name: "调整位分" })).toBeNull(); // Chengfeng gone
+    // 7-8. close external → busy=false → AudiencePrompt returns
+    await user.click(screen.getByRole("button", { name: "关闭位分管理" }));
+    expect(dialogs()).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toHaveTextContent("卫绥");
   });
 });
