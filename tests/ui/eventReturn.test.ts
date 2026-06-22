@@ -188,8 +188,8 @@ describe("checkpointReturnTarget — explicit board-id producer contract", () =>
 });
 
 describe("pending reaction checkpoint lifecycle (deferred-reaction desync fix)", () => {
-  const stationary: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "zichendian" } };
-  const board: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "map", atRoot: false, boardId: "jingcheng" } };
+  const stationary: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "zichendian" }, dispatch: "new_chain" };
+  const board: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "map", atRoot: false, boardId: "jingcheng" }, dispatch: "new_chain" };
   const begin = (request: AutoCheckpointRequest | null, from: PendingReactionCheckpoint = null) =>
     pendingReactionReducer(from, { type: "begin", request });
 
@@ -231,7 +231,7 @@ describe("pending reaction checkpoint lifecycle (deferred-reaction desync fix)",
 });
 
 describe("first-night rank-admin checkpoint handoff", () => {
-  const req: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "zichendian" } };
+  const req: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "zichendian" }, dispatch: "new_chain" };
   const begin = (rolledOver: boolean, from: PendingReactionCheckpoint = null) =>
     pendingReactionReducer(from, { type: "begin", request: rolledOver ? req : null });
 

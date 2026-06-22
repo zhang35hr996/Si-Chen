@@ -9,6 +9,7 @@ import {
   navReducer,
   type AutoCheckpointRequest,
   autoCheckpointTriggers,
+  deferredAutoCheckpointMode,
   pendingReactionReducer,
   rankAdminContinuation,
   resolveReturnNavigation,
@@ -191,6 +192,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // 时间推进后的全局中断结算（§ post-time-advance settlement）：成功转旬登记一次（携带返回上下文），
   // 待场内过场与全局中断逐个消化完毕后，再跑 time_advance 事件并恢复。
   const [pendingTimeSettlement, timeSettlementDispatch] = useReducer(timeSettlementReducer, null);
+  // 生成式对话在 await provider 期间的 in-flight 标记（计入 atomicFlowInProgress，避免孕/产提示插队）。
+  const [dialogueInFlight, setDialogueInFlight] = useState(false);
+  // 操作令牌：新游戏/读档/驾崩自增，使 await 中的旧对话完成被忽略（防止 stale async 重开反应）。
+  const dialogueOpRef = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
@@ -411,6 +416,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       pendingReactionDispatch({ type: "clear" });
       setRankAdmin(null);
       timeSettlementDispatch({ type: "clear" });
+      dialogueOpRef.current += 1; setDialogueInFlight(false); // 作废 await 中的旧对话完成
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
       if (store.getState().gameOver) {
         setContinueError("先帝已崩，请开新局。");
@@ -428,8 +434,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const flushPendingReactionCheckpoint = () => {
     const pending = pendingReactionCheckpoint;
     pendingReactionDispatch({ type: "consume" });
-    // 把延后的反应转旬请求转入全局结算：先排空全局中断，再按 request 跑相应 checkpoint + 恢复。
-    if (pending) beginSettlement(pending.request);
+    // 反应队列结束后续接：arrival 即时完成（仅 location_enter，不排空全局中断）；转旬进结算排空。
+    if (pending) completeDeferredAutoCheckpoint(pending.request);
   };
 
   /** 为本次行动消耗的每个行动点掷骰凤后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
@@ -604,6 +610,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
     timeSettlementDispatch({ type: "clear" });
+    dialogueOpRef.current += 1; setDialogueInFlight(false); // 作废 await 中的旧对话完成
     doAutosave();
     setView("title");
   };
@@ -615,7 +622,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const playReactions = (beats: DecreeReaction[], request: AutoCheckpointRequest | null) => {
     if (beats.length === 0) {
       pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
-      if (request) beginSettlement(request);
+      if (request) completeDeferredAutoCheckpoint(request);
       return;
     }
     pendingReactionDispatch({ type: "begin", request }); // 非空登记请求；null 覆盖清空
@@ -637,6 +644,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
     timeSettlementDispatch({ type: "clear" });
+    dialogueOpRef.current += 1; setDialogueInFlight(false); // 作废 await 中的旧对话完成
     setView("coronation");
   };
 
@@ -954,13 +962,15 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // 大选提示不再依赖 view==="location"：作为结算选择器的输入随状态派生（修复 view-gated 发现缺陷）。
   const grandSelectionPrompt =
     dianxuan || view === "dianxuan" ? null : buildDaxuanDianxuanPrompt(db, liveState);
-  // 场内原子过场（对话/反应/侍寝/初夜/封赏/场景/朝会/即时 prompt）须先结束，全局中断才呈现。
+  // 场内原子过场（对话/反应/侍寝/初夜/封赏/场景/朝会/商铺/进贡/赏赐/生成式对话）须先结束，全局中断才呈现。
+  // 用状态而非 view 字符串判定：事件结束时 activeEventId 先置 null（view 可能仍是 "event"），避免结算死锁。
   const atomicFlowInProgress =
     reaction !== null || childReaction !== null || physicianReaction !== null ||
     firstNightPromptId !== null || namePetHeirId !== null ||
     bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
-    prompt !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
-    view === "event" || view === "court" || view === "dianxuan" ||
+    prompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
+    activeEventId !== null || court !== null || dianxuan !== null ||
+    shopId !== null || view === "shop" || dialogueInFlight ||
     view === "title" || view === "coronation"; // 标题/登基（开局前）不呈现全局中断
   // 同一时刻只呈现一个全局中断（确定性优先级）；场内过场进行中时一律不呈现。
   const activeGlobalInterrupt: GlobalInterruptKind | null = atomicFlowInProgress
@@ -973,15 +983,25 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         grandSelectionDue: grandSelectionPrompt !== null,
       });
 
-  /** 原地行动转旬请求：只跑 time_advance；返回上下文 = 当前地点（或显式 board）。 */
+  /** 原地行动转旬请求：只跑 time_advance；返回上下文 = 当前地点（或显式 board）；开新链。 */
   const stationaryRequest = (boardId?: string): AutoCheckpointRequest => ({
     source: "stationary_rollover",
     returnTarget: checkpointReturnTarget(boardId, store.getState().playerLocation),
+    dispatch: "new_chain",
   });
 
   /** 成功转旬后登记一次结算（携带完整 AutoCheckpointRequest）；完成由下方结算 effect 驱动。 */
   const beginSettlement = (request: AutoCheckpointRequest) => {
     timeSettlementDispatch({ type: "begin", request });
+  };
+
+  /**
+   * 反应队列/过场结束后统一续接：arrival（未转旬，仅 location_enter）即时完成、不进全局结算排空；
+   * 其余（转旬）进结算排空全局中断后再补跑。
+   */
+  const completeDeferredAutoCheckpoint = (request: AutoCheckpointRequest) => {
+    if (deferredAutoCheckpointMode(request) === "complete_now") completeAutoCheckpoint(request);
+    else beginSettlement(request);
   };
 
   /**
@@ -996,8 +1016,29 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const timeEvent = t.timeAdvance ? pickAutoStartEvent(db, state, "time_advance", location) : null;
     const locationEvent = !timeEvent && t.locationEnter ? pickAutoStartEvent(db, state, "location_enter", location) : null;
     const event = timeEvent ?? locationEvent;
-    if (event) { startEvent(event.id, request.returnTarget); return; }
-    // 无事件：按完整返回上下文恢复，并保留落点处的氛围掷骰（上书房秋猎 / 慈宁宫侍疾）。
+    if (event) {
+      if (request.dispatch === "continue_chain") {
+        // 事件场景转旬产生的 time_advance：留在当前链（chainAdvance，不重置 chainDepth、不消费返回上下文）。
+        if (canChain(navState)) {
+          navDispatch({ type: "chainAdvance" });
+          setActiveEventId(event.id);
+          setView("event");
+        } else {
+          logger?.logGameError(
+            stateError("EVENT_CHAIN_LIMIT", `time_advance chain capped at ${MAX_EVENT_CHAIN}`, {
+              severity: "warn",
+              context: { deferred: event.id },
+            }),
+          );
+          restoreReturn(); // 链满：恢复原始返回上下文一次
+        }
+      } else {
+        startEvent(event.id, request.returnTarget); // 新链
+      }
+      return;
+    }
+    // 无事件：continue_chain 经 restoreReturn 消费导航上下文一次；new_chain 按完整目标恢复 + 落点氛围掷骰。
+    if (request.dispatch === "continue_chain") { restoreReturn(); return; }
     navigateToReturnTarget(request.returnTarget);
     const nav = resolveReturnNavigation(request.returnTarget);
     if (nav.view === "location") {
@@ -1060,25 +1101,34 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setSummonedConsortId(null);
     doAutosave();
 
-    // Generative path: assemble request, snapshot expected state, produce turn, CAS
+    // Generative path: assemble request, snapshot expected state, produce turn, CAS。
+    // 期间标记 in-flight（计入 atomicFlowInProgress，孕/产等全局中断不得插队）；以操作令牌防 stale async：
+    // 若 await 期间发生新游戏/读档/驾崩（令牌自增），则丢弃本次完成，不串播、不结算。
     if (dialogueProvider) {
       const expectedState = store.getState();
       const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation);
       if (reqResult.ok) {
-        const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
-        if (turnResult.ok) {
-          const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
-          if (committed) {
-            doAutosave();
-            const generatedLine = turnResult.value.line;
-            converseTranscriptRef.current = []; // reset transcript for new conversation
-            const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
-            playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
-            return;
+        const opToken = dialogueOpRef.current;
+        setDialogueInFlight(true);
+        try {
+          const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+          if (dialogueOpRef.current !== opToken) return; // stale：读档/新局/驾崩已发生，忽略本次完成
+          if (turnResult.ok) {
+            const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
+            if (committed) {
+              doAutosave();
+              const generatedLine = turnResult.value.line;
+              converseTranscriptRef.current = []; // reset transcript for new conversation
+              const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
+              playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
+              return;
+            }
+            // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
           }
-          // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
+          // produceDialogueTurn failed — fall through to fallback (AP already spent)
+        } finally {
+          setDialogueInFlight(false);
         }
-        // produceDialogueTurn failed — fall through to fallback (AP already spent)
       }
     }
 
@@ -1168,10 +1218,13 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     }
     // 移动结算：转旬=travel_rollover（time_advance 优先，无则 location_enter）；非转旬=arrival（仅 location_enter）。
     const travelTarget = checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation);
-    const travelReq: AutoCheckpointRequest = { source: "travel_rollover", returnTarget: travelTarget };
-    if (beats.length) playReactions(beats, rolledOver ? travelReq : null);
-    else if (rolledOver) beginSettlement(travelReq);
-    else completeAutoCheckpoint({ source: "arrival", returnTarget: travelTarget });
+    // 转旬=travel_rollover（time_advance 优先，无则 location_enter）；未转旬=arrival（仅 location_enter）。
+    // 两者都开新链；arrival 也须在反应队列结束后跑 location_enter（不可丢，见 Blocker 1）。
+    const request: AutoCheckpointRequest = rolledOver
+      ? { source: "travel_rollover", returnTarget: travelTarget, dispatch: "new_chain" }
+      : { source: "arrival", returnTarget: travelTarget, dispatch: "new_chain" };
+    if (beats.length) playReactions(beats, request);
+    else completeDeferredAutoCheckpoint(request);
   };
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
@@ -1508,21 +1561,21 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
                   }),
                 );
               }
-              // 若本场景消耗行动点导致转旬/转月，立刻触发 time_advance 事件，
-              // 不必等玩家转换地图再 trigger。
+              // 本场景转旬（无 scene_end 续接）：交全局结算——先排空 birth/孕事/承嗣/百日/大选等全局
+              // 中断，再补跑 time_advance 事件（continue_chain：留在当前链、不重置 chainDepth、不提前消费
+              // 导航上下文），最终恢复原始返回上下文一次。不在此直接 restoreReturn（否则会先于结算消费）。
               if (rolledOver) {
-                const taState = store.getState();
-                const t = pickAutoStartEvent(db, taState, "time_advance", db.locations[taState.playerLocation]);
-                if (t && canChain(navState)) {
-                  navDispatch({ type: "chainAdvance" });
-                  setActiveEventId(t.id);
-                  return;
-                }
+                beginSettlement({
+                  source: "stationary_rollover",
+                  returnTarget: navState.target ?? { kind: "map", atRoot: true },
+                  dispatch: "continue_chain",
+                });
+                return;
               }
-              restoreReturn(); // 整链结束 → 按返回上下文恢复（消费一次）
+              restoreReturn(); // 未转旬、无续接 → 恢复一次
               return;
             }
-            // Abandoned mid-scene (零代价离开): restore via the same return target (consumes it).
+            // Abandoned mid-scene (零代价离开): restore via the same return target (consumes it). 不进结算。
             restoreReturn();
           }}
         />
@@ -1932,7 +1985,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); setSettingsOpen(false); enterCurrentLocation(); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); dialogueOpRef.current += 1; setDialogueInFlight(false); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />

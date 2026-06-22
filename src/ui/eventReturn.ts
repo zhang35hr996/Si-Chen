@@ -57,9 +57,16 @@ export function resolveReturnNavigation(target: EventReturnTarget): ReturnNaviga
  * returnTarget 为完整语义返回上下文，原样用于所选事件与无事件恢复（不经 boardId 往返重建）。
  */
 export type AutoCheckpointSource = "stationary_rollover" | "travel_rollover" | "arrival";
+/**
+ * 事件分发模式：new_chain=玩家发起/移动到达，自动启动的事件开新链（playerStart，重置 chainDepth）；
+ * continue_chain=由已提交的事件场景转旬产生，自动启动的 time_advance 事件须留在当前链（chainAdvance，
+ * 不重置 chainDepth，不消费返回上下文）。
+ */
+export type AutoCheckpointDispatch = "new_chain" | "continue_chain";
 export interface AutoCheckpointRequest {
   source: AutoCheckpointSource;
   returnTarget: EventReturnTarget;
+  dispatch: AutoCheckpointDispatch;
 }
 
 /** 该来源是否允许各 checkpoint（纯决策）。 */
@@ -83,6 +90,14 @@ export function autoCheckpointEventId(
   if (t.timeAdvance && timeEventId) return timeEventId;
   if (t.locationEnter && locationEventId) return locationEventId;
   return null;
+}
+
+/**
+ * 反应队列结束后如何续接：arrival（未转旬，仅 location_enter）即时完成、不进全局结算排空；
+ * 其余（转旬）须进结算先排空全局中断。纯决策，便于测试。
+ */
+export function deferredAutoCheckpointMode(request: AutoCheckpointRequest): "complete_now" | "settle" {
+  return request.source === "arrival" ? "complete_now" : "settle";
 }
 
 /** scene_end→event 链上限（plan §10 #9 latent guard）。 */

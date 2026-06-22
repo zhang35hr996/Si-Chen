@@ -4,7 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { type AutoCheckpointRequest, autoCheckpointEventId, autoCheckpointTriggers } from "../../src/ui/eventReturn";
+import { type AutoCheckpointRequest, autoCheckpointEventId, autoCheckpointTriggers, deferredAutoCheckpointMode } from "../../src/ui/eventReturn";
 import {
   type GlobalInterruptInputs,
   pickNextGlobalInterrupt,
@@ -55,12 +55,12 @@ describe("deterministic drain by re-selection", () => {
 });
 
 describe("timeSettlementReducer", () => {
-  const stationary: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "yanhe_gong" } };
+  const stationary: AutoCheckpointRequest = { source: "stationary_rollover", returnTarget: { kind: "location", locationId: "yanhe_gong" }, dispatch: "new_chain" };
   it("begin carries the full AutoCheckpointRequest", () => {
     expect(timeSettlementReducer(null, { type: "begin", request: stationary })).toEqual({ request: stationary });
   });
   it("begin overwrites a prior pending settlement", () => {
-    const next: AutoCheckpointRequest = { source: "travel_rollover", returnTarget: { kind: "map", atRoot: false, boardId: "jingcheng" } };
+    const next: AutoCheckpointRequest = { source: "travel_rollover", returnTarget: { kind: "map", atRoot: false, boardId: "jingcheng" }, dispatch: "new_chain" };
     expect(timeSettlementReducer({ request: stationary }, { type: "begin", request: next })).toEqual({ request: next });
   });
   it("consume clears", () => {
@@ -132,5 +132,57 @@ describe("App settlement wiring source contract (no jsdom)", () => {
   it("settlement is cleared on new game / load / settings load / death", () => {
     const clears = appSrc.match(/timeSettlementDispatch\(\{ type: "clear" \}\)/g) ?? [];
     expect(clears.length).toBeGreaterThanOrEqual(4);
+  });
+
+  // ── Blocker 1: reactionful arrival keeps location_enter ──
+  it("deferred completion is centralized; reactionful arrival is not lost", () => {
+    expect(appSrc).toContain("completeDeferredAutoCheckpoint(");
+    // travel passes the request even when beats exist (non-rollover arrival not replaced by null)
+    expect(appSrc).toMatch(/if \(beats\.length\) playReactions\(beats, request\)/);
+    expect(appSrc).toMatch(/else completeDeferredAutoCheckpoint\(request\)/);
+    // flush + empty playReactions both route through the centralized continuation
+    expect(appSrc).toMatch(/flushPendingReactionCheckpoint[\s\S]*completeDeferredAutoCheckpoint\(pending\.request\)/);
+  });
+
+  // ── Blocker 2: event-scene rollover goes through global settlement with continue_chain ──
+  it("committed event rollover begins settlement with dispatch continue_chain (not a direct time_advance chain)", () => {
+    const onDone = appSrc.slice(appSrc.indexOf("if (rolledOver) {", appSrc.indexOf("scene-commit autosave")));
+    expect(onDone).toMatch(/beginSettlement\(\{[\s\S]*dispatch: "continue_chain"/);
+    // completion honors continue_chain via chainAdvance (preserve chain), not playerStart
+    expect(appSrc).toMatch(/request\.dispatch === "continue_chain"[\s\S]*chainAdvance/);
+  });
+
+  // ── Blocker 3: atomic-flow gating (state-based, not stale view strings) ──
+  it("atomicFlowInProgress gates on event/court/dianxuan/shop/gift/dialogue state, not a stale view string", () => {
+    const block = appSrc.slice(appSrc.indexOf("const atomicFlowInProgress"), appSrc.indexOf("const atomicFlowInProgress") + 700);
+    expect(block).toContain("activeEventId !== null");
+    expect(block).toContain("court !== null");
+    expect(block).toContain("dianxuan !== null");
+    expect(block).toContain("shopId !== null");
+    expect(block).toContain("giftItemId !== null");
+    expect(block).toContain("dialogueInFlight");
+    expect(block).not.toMatch(/view === "event"/); // replaced by activeEventId !== null (avoids deadlock)
+  });
+
+  it("generative dialogue is in-flight-guarded with an op token cleared in finally", () => {
+    const conv = appSrc.slice(appSrc.indexOf("const converse"), appSrc.indexOf("const transferTo"));
+    expect(conv).toContain("setDialogueInFlight(true)");
+    expect(conv).toMatch(/dialogueOpRef\.current !== opToken/); // stale completion ignored
+    expect(conv).toMatch(/finally[\s\S]*setDialogueInFlight\(false\)/);
+  });
+
+  it("dialogue op token is invalidated on new game / load / settings load / death", () => {
+    const bumps = appSrc.match(/dialogueOpRef\.current \+= 1/g) ?? [];
+    expect(bumps.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("deferredAutoCheckpointMode (Blocker 1 routing)", () => {
+  it("arrival completes immediately (no global drain)", () => {
+    expect(deferredAutoCheckpointMode({ source: "arrival", returnTarget: { kind: "map", atRoot: true }, dispatch: "new_chain" })).toBe("complete_now");
+  });
+  it("stationary/travel rollovers settle (drain global interrupts first)", () => {
+    expect(deferredAutoCheckpointMode({ source: "stationary_rollover", returnTarget: { kind: "map", atRoot: true }, dispatch: "new_chain" })).toBe("settle");
+    expect(deferredAutoCheckpointMode({ source: "travel_rollover", returnTarget: { kind: "map", atRoot: true }, dispatch: "new_chain" })).toBe("settle");
   });
 });
