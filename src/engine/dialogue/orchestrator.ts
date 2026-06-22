@@ -14,18 +14,22 @@ import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { CharacterStanding, GameState } from "../state/types";
 import { buildAudienceContext } from "./audience";
+import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
-import { buildMemoryContext } from "./memoryContext";
+import { buildMemoryContext, selectPromptEvents } from "./memoryContext";
 import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
 import { mapProviderErrorToGameError } from "./providerError";
 import {
+  toPromptEvent,
   toPromptMemory,
   type DialogueSpeakerStanding,
   type DialoguePromptContext,
 } from "./promptPayload";
+import { buildReactionPlan } from "./reactionAssembler";
 import {
+  contextRefKey,
   type DialogueAssemblyOptions,
   type DialogueLine,
   type DialogueProvider,
@@ -75,22 +79,56 @@ export function assembleDialogueRequest(
   } else {
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
   }
+  const now = toGameTime(state.calendar);
   const memCtx = buildMemoryContext(
     state,
-    { speakerId },
+    { speakerId, subjectIds: [speakerId] },
     // audienceId, targetId, speakerId all use the resolved targetId — single source.
-    { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
+    { now, topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
   );
   const audience = buildAudienceContext(state, db, { speakerId, targetId });
+
+  // §5 assembly order: reaction → promptEvents → claims → promptContext
+
+  // 1. Build reaction plan (suppressed by sceneDirective inside buildReactionPlan)
+  const builtReaction = buildReactionPlan({
+    speakerId,
+    audienceId: targetId,
+    knownEventsAll: memCtx.knownEventsAll,
+    chronicle: state.chronicle,
+    state,
+    currentDayIndex: now.dayIndex,
+    sceneDirective: options.sceneDirective,
+  });
+
+  // 2. Select prompt events BEFORE assembleClaims (pinned event always first)
+  const promptEvents = selectPromptEvents({
+    events: Array.from(memCtx.knownEventsAll),
+    pinnedEventId: builtReaction?.sourceEventId,
+    limit: 3,
+  });
+
+  // 3. assembleClaims receives offeredEvents = promptEvents (NOT knownEventsAll)
+  const assembled = assembleClaims({
+    speakerId,
+    builtReaction,
+    offeredMemories: memCtx.activatedMemories,
+    offeredEvents: promptEvents,
+    beliefs: new GroundTruthBeliefProjection(state),
+    state,
+    audience,
+  });
+
   const promptContext: DialoguePromptContext = {
     speakerDisplayName: resolveDisplayName(character, contextStanding, rank),
     rankDisplay,
     audience,
     relevantMemories: memCtx.activatedMemories.map(toPromptMemory),
-    reactionPlan: undefined,
-    knownEvents: [],
-    allowedClaims: [],
-    forbiddenClaims: [],
+    reactionPlan: builtReaction?.plan,
+    reactionSourceEventId: builtReaction?.sourceEventId,
+    knownEvents: promptEvents.map((e) => toPromptEvent(e, db, state)),
+    allowedClaims: assembled.allowed,
+    forbiddenClaims: assembled.forbidden,
     choiceCandidates: [],
   };
   const { scripted, sceneDirective, transcript } = options;
@@ -231,19 +269,28 @@ export function buildDialoguePolicyContext(
 ): DialoguePolicyContext {
   void db; // intentionally unused: callers keep passing db; internally not needed
   const { time: now } = request;
-  // knownEvents are intentionally NOT part of offeredContextIds: they are built
-  // in memoryContext but never placed on DialogueRequest yet, so the provider
-  // never receives them — the gate must not bless a source it wasn't sent.
-  const offeredContextIds = new Set<string>(
-    request.speakerContext.relevantMemories.map((m) => m.id),
-  );
+  const { allowedClaims, forbiddenClaims } = request.promptContext;
+
+  // offeredContextIds: union of all source refs that were actually sent to the LLM.
+  // Includes memory refs (from relevantMemories) + event refs (from knownEvents) +
+  // any additional refs from allowedClaims.sourceRefs that point to offered context.
+  // Single-source invariant: derived from what was actually placed on the request.
+  const offeredContextIds = new Set<string>([
+    // Memory refs: memory ids of the relevantMemories handed to the provider
+    ...request.speakerContext.relevantMemories.map((m) => m.id),
+    // Event refs: event ids in the knownEvents prompt window
+    ...request.promptContext.knownEvents.map((e) => e.id),
+    // AllowedClaims sourceRefs: all ref keys from the authorized claim set
+    ...allowedClaims.flatMap((ac) => ac.sourceRefs.map(contextRefKey)),
+  ]);
+
   // Single-source invariant: audience comes from request.promptContext.audience,
   // not from an independent buildAudienceContext call. This guarantees the gate
   // sees exactly the same audience context the LLM was given.
   const audience = request.promptContext.audience;
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
-  return { audience, beliefProjection, offeredContextIds, now, allowedClaims: [], forbiddenClaims: [] };
+  return { audience, beliefProjection, offeredContextIds, now, allowedClaims, forbiddenClaims };
 }
 
 /**
