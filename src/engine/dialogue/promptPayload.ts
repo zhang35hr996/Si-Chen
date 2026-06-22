@@ -5,11 +5,12 @@
  * the compiler boundary stays clean.
  */
 import type { GameTime } from "../calendar/time";
-import type { CharacterRank } from "../content/schemas";
+import type { CharacterContent, CharacterRank } from "../content/schemas";
 import type { MemoryEntry, MemoryKind, MemoryPerspective, MemoryEmotion, CourtEventType, CourtEventParticipant } from "../state/types";
 import type { ReactionPlan } from "./reactionTypes";
 import type { DialogueAudienceContext } from "./audience";
 import type { DialogueClaim } from "./claims";
+import type { DialogueRequest } from "./types";
 
 // ── Scalar value type for structured facts ────────────────────────────────────
 
@@ -81,5 +82,71 @@ export function toPromptMemory(m: MemoryEntry): PromptMemory {
     emotions: m.emotions,
     unresolved: m.unresolved,
     createdAt: m.createdAt,
+  };
+}
+
+// ── DialogueSpeakerPayload ────────────────────────────────────────────────────
+
+export interface DialogueSpeakerPayload {
+  id: string;
+  name: string;
+  standing: DialogueSpeakerStanding;
+  speechStyle: string;
+  personalityTraits: string[];
+  coreFacts: string[];
+  voice: CharacterContent["voice"];
+}
+
+// ── DialoguePromptPayload ─────────────────────────────────────────────────────
+
+export interface DialoguePromptPayload {
+  speaker: DialogueSpeakerPayload;
+  audience: DialogueAudienceContext;
+  reactionPlan?: ReactionPlan;
+  relevantMemories: PromptMemory[];
+  knownEvents: PromptEvent[];
+  allowedClaims: DialogueClaim[];
+  forbiddenClaims: DialogueClaim[];
+  choiceCandidates: DialogueChoiceCandidate[];
+  currentScene: {
+    location: string;
+    directive?: string;             // present only when request.sceneDirective is set
+    topicTags: string[];
+    recentLines: { speaker: string; text: string }[];
+  };
+}
+
+// ── compilePromptPayload ──────────────────────────────────────────────────────
+
+/**
+ * Pure compiler: assembles a DialoguePromptPayload from a DialogueRequest.
+ * No GameState or ContentDB references — all data comes from request.promptContext
+ * and request.speakerContext.
+ */
+export function compilePromptPayload(request: DialogueRequest): DialoguePromptPayload {
+  const ctx = request.promptContext;
+  return {
+    speaker: {
+      id: request.speakerId,
+      name: ctx.speakerDisplayName,
+      standing: ctx.rankDisplay,
+      speechStyle: request.speakerContext.profile.speechStyle,
+      personalityTraits: request.speakerContext.profile.personalityTraits,
+      coreFacts: request.speakerContext.profile.coreFacts,
+      voice: request.speakerContext.voice,
+    },
+    audience: ctx.audience,
+    reactionPlan: ctx.reactionPlan,
+    relevantMemories: ctx.relevantMemories,
+    knownEvents: ctx.knownEvents,
+    allowedClaims: ctx.allowedClaims,
+    forbiddenClaims: ctx.forbiddenClaims,
+    choiceCandidates: ctx.choiceCandidates,
+    currentScene: {
+      location: request.locationId,
+      ...(request.sceneDirective ? { directive: request.sceneDirective } : {}),
+      topicTags: [],
+      recentLines: request.transcript.slice(-6),
+    },
   };
 }

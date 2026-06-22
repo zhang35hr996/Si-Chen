@@ -211,3 +211,138 @@ describe("buildDialoguePolicyContext", () => {
     expect(policy.audience).toBe(request.promptContext.audience);
   });
 });
+
+// ── compilePromptPayload ──────────────────────────────────────────────────────
+
+import { compilePromptPayload } from "../../src/engine/dialogue/promptPayload";
+
+describe("compilePromptPayload", () => {
+  it("speaker.id = request.speakerId", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const payload = compilePromptPayload(r.value);
+    expect(payload.speaker.id).toBe(SPEAKER);
+  });
+
+  it("speaker.name = promptContext.speakerDisplayName", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = r.value;
+    const payload = compilePromptPayload(req);
+    expect(payload.speaker.name).toBe(req.promptContext.speakerDisplayName);
+  });
+
+  it("ranked: speaker.standing has kind=ranked, name, grade, selfRefs", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = r.value;
+    const payload = compilePromptPayload(req);
+    const standing = payload.speaker.standing;
+    expect(standing.kind).toBe("ranked");
+    if (standing.kind !== "ranked") return;
+    expect(standing.name).toBeDefined();
+    expect(standing.grade).toBeDefined();
+    expect(standing.selfRefs).toBeDefined();
+    expect(standing.selfRefs.toPlayer).toBeInstanceOf(Array);
+  });
+
+  it("elder: speaker.standing has kind=unranked, role, selfRefs", () => {
+    const r = assembleDialogueRequest(db, state, ELDER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = r.value;
+    const payload = compilePromptPayload(req);
+    const standing = payload.speaker.standing;
+    expect(standing.kind).toBe("unranked");
+    if (standing.kind !== "unranked") return;
+    expect(standing.role).toBeDefined();
+    expect(standing.selfRefs).toBeDefined();
+    expect(standing.selfRefs.toPlayer).toBeInstanceOf(Array);
+  });
+
+  it("speaker.speechStyle = profile.speechStyle (not voice.register)", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = r.value;
+    const payload = compilePromptPayload(req);
+    expect(payload.speaker.speechStyle).toBe(req.speakerContext.profile.speechStyle);
+    // Must not equal voice.register (different fields)
+    expect(payload.speaker.speechStyle).not.toBe(req.speakerContext.voice.register);
+  });
+
+  it("speaker.personalityTraits = profile.personalityTraits (array)", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = r.value;
+    const payload = compilePromptPayload(req);
+    expect(payload.speaker.personalityTraits).toEqual(req.speakerContext.profile.personalityTraits);
+    expect(Array.isArray(payload.speaker.personalityTraits)).toBe(true);
+  });
+
+  it("speaker.coreFacts = profile.coreFacts", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = r.value;
+    const payload = compilePromptPayload(req);
+    expect(payload.speaker.coreFacts).toEqual(req.speakerContext.profile.coreFacts);
+  });
+
+  it("currentScene.directive present when sceneDirective set", () => {
+    const directive = "今日风雪，气氛压抑。";
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC, { sceneDirective: directive });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const payload = compilePromptPayload(r.value);
+    expect(payload.currentScene.directive).toBe(directive);
+    expect("directive" in payload.currentScene).toBe(true);
+  });
+
+  it("currentScene has no directive key when sceneDirective absent", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const payload = compilePromptPayload(r.value);
+    expect("directive" in payload.currentScene).toBe(false);
+  });
+
+  it("currentScene.recentLines = last 6 of transcript (slice(-6))", () => {
+    const transcript = [
+      { speaker: "a", text: "line1" },
+      { speaker: "b", text: "line2" },
+      { speaker: "a", text: "line3" },
+      { speaker: "b", text: "line4" },
+      { speaker: "a", text: "line5" },
+      { speaker: "b", text: "line6" },
+      { speaker: "a", text: "line7" },
+      { speaker: "b", text: "line8" },
+    ];
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC, { transcript });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const payload = compilePromptPayload(r.value);
+    expect(payload.currentScene.recentLines).toEqual(transcript.slice(-6));
+  });
+
+  it("result has no ownerId/strength/retention", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const payload = compilePromptPayload(r.value);
+    // Check speaker
+    expect("ownerId" in payload.speaker).toBe(false);
+    expect("strength" in payload.speaker).toBe(false);
+    expect("retention" in payload.speaker).toBe(false);
+    // Check relevantMemories
+    for (const mem of payload.relevantMemories) {
+      expect("ownerId" in mem).toBe(false);
+      expect("strength" in mem).toBe(false);
+      expect("retention" in mem).toBe(false);
+    }
+  });
+});
