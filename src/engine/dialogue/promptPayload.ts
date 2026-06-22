@@ -6,7 +6,9 @@
  */
 import type { GameTime } from "../calendar/time";
 import type { CharacterContent, CharacterRank } from "../content/schemas";
-import type { MemoryEntry, MemoryKind, MemoryPerspective, MemoryEmotion, CourtEventType, CourtEventParticipant } from "../state/types";
+import type { ContentDB } from "../content/loader";
+import type { MemoryEntry, MemoryKind, MemoryPerspective, MemoryEmotion, CourtEventType, CourtEvent } from "../state/types";
+import type { GameState } from "../state/types";
 import type { ReactionPlan } from "./reactionTypes";
 import type { DialogueAudienceContext } from "./audience";
 import type { DialogueClaim } from "./claims";
@@ -30,6 +32,15 @@ export interface PromptMemory {
   createdAt: GameTime;   // maps from m.createdAt (NOT occurredAt)
 }
 
+// ── PromptEventParticipant: participant enriched with display name ────────────
+
+/** Court event participant as seen by the LLM prompt — adds displayName resolved from game state. */
+export interface PromptEventParticipant {
+  charId: string;
+  role: string;
+  displayName: string;
+}
+
 // ── PromptEvent: stripped-down CourtEvent for the LLM ────────────────────────
 
 /** Court event as seen by the LLM prompt — no publicity, publicSalience, retention, tags. */
@@ -37,7 +48,7 @@ export interface PromptEvent {
   id: string;
   type: CourtEventType;
   occurredAt: GameTime;
-  participants: CourtEventParticipant[];
+  participants: PromptEventParticipant[];
   locationId?: string;
   facts: Record<string, PromptFactValue>;
 }
@@ -113,6 +124,95 @@ export interface DialoguePromptPayload {
     directive?: string;             // present only when request.sceneDirective is set
     topicTags: string[];
     recentLines: { speaker: string; text: string }[];
+  };
+}
+
+// ── resolvePromptEntityName ───────────────────────────────────────────────────
+
+/**
+ * Resolve a game-world entity id to its human-readable display name.
+ * Resolution order (|| not ??, so empty-string falls through):
+ *   "player" → "陛下"
+ *   db.characters[id] → profile.name
+ *   state.generatedConsorts?.[id] → profile.name
+ *   bloodline.heirs[id] → givenName || petName || "皇嗣"
+ *   state.officials?.[id] → surname + givenName
+ *   fallback → "某人"
+ */
+export function resolvePromptEntityName(id: string, db: ContentDB, state: GameState): string {
+  if (id === "player") return "陛下";
+  const char = db.characters[id];
+  if (char) return char.profile.name;
+  const consort = state.generatedConsorts?.[id];
+  if (consort) return consort.profile.name;
+  const heir = state.resources.bloodline.heirs.find((h) => h.id === id);
+  if (heir) return heir.givenName || heir.petName || "皇嗣";
+  const official = state.officials?.[id];
+  if (official) return `${official.surname}${official.givenName}`;
+  return "某人";
+}
+
+// ── toPromptEvent ─────────────────────────────────────────────────────────────
+
+/** Whether a value is safe to include in LLM facts (no NaN or Infinity). */
+function isSafeFactValue(v: unknown): v is PromptFactValue {
+  if (v === null || typeof v === "boolean" || typeof v === "string") return true;
+  if (typeof v === "number") return Number.isFinite(v);
+  return false;
+}
+
+/**
+ * Convert a CourtEvent to a PromptEvent:
+ * - Strips: publicity, publicSalience, retention, tags (internal engine fields)
+ * - Enriches participants with displayName via resolvePromptEntityName
+ * - Whitelists and transforms payload fields per event type:
+ *     rank_changed      → { from, to } (rank id → display name), direction (string)
+ *     residence_changed → { from, to } (location id → display name)
+ *     heir_born         → { heirId } (string scalar)
+ *     heir_died         → { heirId } (string scalar)
+ *     all others        → facts: {}
+ * - Excludes NaN/Infinity values from facts
+ */
+export function toPromptEvent(e: CourtEvent, db: ContentDB, state: GameState): PromptEvent {
+  const participants: PromptEventParticipant[] = e.participants.map((p) => ({
+    charId: p.charId,
+    role: p.role,
+    displayName: resolvePromptEntityName(p.charId, db, state),
+  }));
+
+  let facts: Record<string, PromptFactValue> = {};
+
+  if (e.type === "rank_changed") {
+    const from = typeof e.payload["from"] === "string" ? e.payload["from"] : undefined;
+    const to = typeof e.payload["to"] === "string" ? e.payload["to"] : undefined;
+    const direction = e.payload["direction"];
+    facts = {
+      from: from !== undefined ? (db.ranks[from]?.name ?? "某位分") : "某位分",
+      to: to !== undefined ? (db.ranks[to]?.name ?? "某位分") : "某位分",
+      ...(isSafeFactValue(direction) ? { direction } : {}),
+    };
+  } else if (e.type === "residence_changed") {
+    const from = typeof e.payload["from"] === "string" ? e.payload["from"] : undefined;
+    const to = typeof e.payload["to"] === "string" ? e.payload["to"] : undefined;
+    facts = {
+      from: from !== undefined ? (db.locations[from]?.name ?? "某处") : "某处",
+      to: to !== undefined ? (db.locations[to]?.name ?? "某处") : "某处",
+    };
+  } else if (e.type === "heir_born" || e.type === "heir_died") {
+    const heirId = e.payload["heirId"];
+    if (isSafeFactValue(heirId)) {
+      facts = { heirId };
+    }
+  }
+  // All other types: facts = {} (already initialized)
+
+  return {
+    id: e.id,
+    type: e.type,
+    occurredAt: e.occurredAt,
+    participants,
+    ...(e.locationId !== undefined ? { locationId: e.locationId } : {}),
+    facts,
   };
 }
 

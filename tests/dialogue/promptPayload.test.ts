@@ -346,3 +346,226 @@ describe("compilePromptPayload", () => {
     }
   });
 });
+
+// ── T1: resolvePromptEntityName ───────────────────────────────────────────────
+
+import { resolvePromptEntityName, toPromptEvent } from "../../src/engine/dialogue/promptPayload";
+import { createInitialState } from "../../src/engine/state/initialState";
+import { makeGameTime } from "../../src/engine/calendar/time";
+import type { CourtEvent } from "../../src/engine/state/types";
+
+function makeMinimalDB() {
+  return {
+    characters: {
+      shen_zhibai: { profile: { name: "沈芝白" } },
+    } as unknown as import("../../src/engine/content/loader").ContentDB["characters"],
+    ranks: {
+      fenghou: { name: "后" },
+      meiren: { name: "美人" },
+    } as unknown as import("../../src/engine/content/loader").ContentDB["ranks"],
+    locations: {
+      zichendian: { name: "紫宸殿" },
+      lengong: { name: "冷宫" },
+    } as unknown as import("../../src/engine/content/loader").ContentDB["locations"],
+  } as unknown as import("../../src/engine/content/loader").ContentDB;
+}
+
+function makeMinimalState() {
+  const s = createInitialState();
+  return s;
+}
+
+describe("resolvePromptEntityName", () => {
+  it("returns '陛下' for 'player'", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    expect(resolvePromptEntityName("player", d, s)).toBe("陛下");
+  });
+
+  it("returns profile.name for static character", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    expect(resolvePromptEntityName("shen_zhibai", d, s)).toBe("沈芝白");
+  });
+
+  it("returns givenName for heir; petName when givenName is '' (|| not ??)", () => {
+    const s = makeMinimalState();
+    const heir = {
+      id: "heir_000001", sex: "son" as const, fatherId: null, bearer: "sovereign",
+      birthAt: makeGameTime(1, 1, "early"), favor: 50, legitimate: true,
+      petName: "小宝", givenName: "",          // givenName='' → falls through
+      education: { scholarship: 0, martial: 0, virtue: 0 },
+      health: 100, talent: 50, diligence: 50,
+      ambition: 10, closeness: 50, support: 50, faction: "none" as const,
+      lifecycle: "alive" as const,
+    };
+    s.resources.bloodline.heirs.push(heir);
+    const d = makeMinimalDB();
+    expect(resolvePromptEntityName("heir_000001", d, s)).toBe("小宝");
+  });
+
+  it("returns '皇嗣' when both names are ''", () => {
+    const s = makeMinimalState();
+    const heir = {
+      id: "heir_000002", sex: "daughter" as const, fatherId: null, bearer: "sovereign",
+      birthAt: makeGameTime(1, 1, "early"), favor: 50, legitimate: false,
+      petName: "", givenName: "",
+      education: { scholarship: 0, martial: 0, virtue: 0 },
+      health: 100, talent: 50, diligence: 50,
+      ambition: 10, closeness: 50, support: 50, faction: "none" as const,
+      lifecycle: "alive" as const,
+    };
+    s.resources.bloodline.heirs.push(heir);
+    const d = makeMinimalDB();
+    expect(resolvePromptEntityName("heir_000002", d, s)).toBe("皇嗣");
+  });
+
+  it("returns surname+givenName for official", () => {
+    const s = makeMinimalState();
+    s.officials["wei_qinghe"] = { id: "wei_qinghe", surname: "魏", givenName: "清和", postId: "shangshu", loyalty: 60 };
+    const d = makeMinimalDB();
+    expect(resolvePromptEntityName("wei_qinghe", d, s)).toBe("魏清和");
+  });
+
+  it("returns '某人' for unknown — never returns raw id", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const result = resolvePromptEntityName("ghost_999", d, s);
+    expect(result).toBe("某人");
+    expect(result).not.toBe("ghost_999");
+  });
+
+  it("returns generatedConsort profile.name when consort is generated", () => {
+    const s = makeMinimalState();
+    s.generatedConsorts["gen_consort_001"] = {
+      id: "gen_consort_001", kind: "consort",
+      profile: { name: "柔嘉", surname: "刘", age: 18, role: "贵人", appearance: "清秀", personalityTraits: ["温婉"], coreFacts: ["入宫半年"], goals: ["获得宠爱"], speechStyle: "温婉" },
+    } as unknown as import("../../src/engine/content/schemas").CharacterContent;
+    const d = makeMinimalDB();
+    expect(resolvePromptEntityName("gen_consort_001", d, s)).toBe("柔嘉");
+  });
+});
+
+// ── T1: toPromptEvent ─────────────────────────────────────────────────────────
+
+function makeCourtEvent(overrides: Partial<CourtEvent> = {}): CourtEvent {
+  return {
+    id: "evt_000001",
+    type: "rank_changed",
+    occurredAt: makeGameTime(1, 1, "early"),
+    participants: [{ charId: "shen_zhibai", role: "subject" }],
+    payload: { from: "meiren", to: "fenghou", direction: "promote" },
+    publicity: { scope: "palace", persistence: "institutional" },
+    publicSalience: 70,
+    retention: "slow",
+    tags: ["rank"],
+    ...overrides,
+  };
+}
+
+describe("toPromptEvent", () => {
+  it("participant.displayName via resolvePromptEntityName", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent();
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.participants[0]!.charId).toBe("shen_zhibai");
+    expect(pe.participants[0]!.role).toBe("subject");
+    expect(pe.participants[0]!.displayName).toBe("沈芝白");
+  });
+
+  it("whitelisted payload fields only per type — rank_changed: from/to display, direction", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ type: "rank_changed", payload: { from: "meiren", to: "fenghou", direction: "promote" } });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.facts["from"]).toBe("美人");
+    expect(pe.facts["to"]).toBe("后");
+    expect(pe.facts["direction"]).toBe("promote");
+  });
+
+  it("non-whitelisted type → facts: {}", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ type: "conflict", payload: { reason: "jealousy", severity: 80 } });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.facts).toEqual({});
+  });
+
+  it("rank id fallback display '某位分' when rank not in db.ranks", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ type: "rank_changed", payload: { from: "unknown_rank", to: "fenghou", direction: "demote" } });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.facts["from"]).toBe("某位分");
+    expect(pe.facts["to"]).toBe("后");
+  });
+
+  it("location id fallback display '某处' when location not in db.locations", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ type: "residence_changed", payload: { from: "unknown_place", to: "zichendian" } });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.facts["from"]).toBe("某处");
+    expect(pe.facts["to"]).toBe("紫宸殿");
+  });
+
+  it("strips publicity/publicSalience/retention/tags", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent();
+    const pe = toPromptEvent(e, d, s);
+    expect("publicity" in pe).toBe(false);
+    expect("publicSalience" in pe).toBe(false);
+    expect("retention" in pe).toBe(false);
+    expect("tags" in pe).toBe(false);
+  });
+
+  it("excludes NaN/Infinity from facts", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({
+      type: "heir_born",
+      payload: { heirId: "heir_000001", badNaN: NaN, badInf: Infinity },
+    });
+    const pe = toPromptEvent(e, d, s);
+    expect("badNaN" in pe.facts).toBe(false);
+    expect("badInf" in pe.facts).toBe(false);
+  });
+
+  it("heir_born: preserves heirId", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ type: "heir_born", payload: { heirId: "heir_000001" } });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.facts["heirId"]).toBe("heir_000001");
+  });
+
+  it("heir_died: preserves heirId", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ type: "heir_died", payload: { heirId: "heir_000002" } });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.facts["heirId"]).toBe("heir_000002");
+  });
+
+  it("residence_changed: from/to location display names", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ type: "residence_changed", payload: { from: "zichendian", to: "lengong" } });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.facts["from"]).toBe("紫宸殿");
+    expect(pe.facts["to"]).toBe("冷宫");
+  });
+
+  it("id/type/occurredAt/locationId are preserved", () => {
+    const s = makeMinimalState();
+    const d = makeMinimalDB();
+    const e = makeCourtEvent({ locationId: "zichendian" });
+    const pe = toPromptEvent(e, d, s);
+    expect(pe.id).toBe("evt_000001");
+    expect(pe.type).toBe("rank_changed");
+    expect(pe.occurredAt).toEqual(makeGameTime(1, 1, "early"));
+    expect(pe.locationId).toBe("zichendian");
+  });
+});
