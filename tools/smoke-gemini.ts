@@ -6,7 +6,7 @@
  */
 import { createGeminiSdkTransport } from "../server/llm/geminiSdkTransport";
 import { createDialogueProvider } from "../src/engine/dialogue/providers/remoteProvider";
-import { makeDialogueRequest } from "../tests/helpers/dialogueRequest";
+import { makeDialogueRequest } from "./fixtures/dialogueRequest";
 
 function flag(name: string, fallback: string): string {
   const i = process.argv.indexOf(name);

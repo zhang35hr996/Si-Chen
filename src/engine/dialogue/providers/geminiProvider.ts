@@ -10,9 +10,12 @@ import { ok, err, type Result } from "../../infra/result";
 import {
   dialogueToolOutputSchema,
   dialogueToolOutputJsonSchema,
+  makeUsageFromTotal,
   type DialogueProviderResult,
   type ProviderError,
   type ProviderResult,
+  type ProviderErrorMeta,
+  type NormalizedUsage,
 } from "../providerContract";
 import type { DialogueProvider, DialogueGenerationOptions, DialogueRequest } from "../types";
 import { WORLD_RULES_TEXT, renderEtiquetteBlock } from "./anthropicProvider";
@@ -109,12 +112,26 @@ export function createGeminiProvider(opts: { model: string; transport: GeminiTra
   };
 }
 
+function extractGeminiUsage(res: GeminiTransportResult): NormalizedUsage | undefined {
+  const u = res.usage;
+  if (!u) return undefined;
+  return makeUsageFromTotal({
+    totalInputTokens: u.promptTokenCount ?? 0,
+    outputTokens: u.candidatesTokenCount ?? 0,
+    ...(u.cachedContentTokenCount !== undefined ? { cacheReadTokens: u.cachedContentTokenCount } : {}),
+  });
+}
+
 function parseGeminiCall(
   res: GeminiTransportResult,
   request: DialogueRequest,
   model: string,
 ): ProviderResult<DialogueProviderResult> {
-  const meta = res.requestId !== undefined ? { requestId: res.requestId } : undefined;
+  const usage = extractGeminiUsage(res);
+  const meta: ProviderErrorMeta = {
+    ...(res.requestId !== undefined ? { requestId: res.requestId } : {}),
+    ...(usage ? { usage } : {}),
+  };
   if (res.finishReason === "MAX_TOKENS") return err<ProviderError>({ kind: "protocol", retryable: true, cause: "truncated", meta });
   if (res.finishReason === "SAFETY" || res.finishReason === "PROHIBITED_CONTENT")
     return err<ProviderError>({ kind: "refused", retryable: false, meta });
@@ -124,21 +141,12 @@ function parseGeminiCall(
   if (calls[0]!.name !== TOOL_NAME) return err<ProviderError>({ kind: "protocol", retryable: true, cause: "wrong_tool", meta });
   const parsed = dialogueToolOutputSchema.safeParse(calls[0]!.args);
   if (!parsed.success) return err<ProviderError>({ kind: "protocol", retryable: true, cause: "schema_invalid", meta });
-  const u = res.usage;
   return ok<DialogueProviderResult>({
     speaker: request.speakerId,
     text: parsed.data.text,
     choices: [],
     proposedClaims: parsed.data.proposedClaims,
-    ...(u
-      ? {
-          usage: {
-            inputTokens: u.promptTokenCount ?? 0,
-            outputTokens: u.candidatesTokenCount ?? 0,
-            ...(u.cachedContentTokenCount !== undefined ? { cacheReadTokens: u.cachedContentTokenCount } : {}),
-          },
-        }
-      : {}),
+    ...(usage ? { usage } : {}),
     providerMeta: { provider: "google", model, ...(res.requestId ? { requestId: res.requestId } : {}) },
   });
 }

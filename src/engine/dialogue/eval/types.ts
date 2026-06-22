@@ -6,6 +6,7 @@
  * servedText is only set when the full validation pipeline succeeded (outcome.ok).
  */
 import type { ContextRef } from "../claims";
+import type { NormalizedUsage } from "../providerContract";
 
 export type EvalExecutionMode = "fixture" | "online";
 export type CheckStatus = "pass" | "fail" | "not_run";
@@ -31,7 +32,7 @@ export interface EvalResult {
   textFindings: { gate: string; severity: string; matched: string }[];
   expectationStatus: CheckStatus;
   expectationFindings: EvalExpectationFinding[];
-  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number };
+  usage?: NormalizedUsage;   // normalized token accounting; carried even on billed failures
   requestId?: string;
   text?: string;             // model's raw generated text (preserved even if gate fails)
   servedText?: string;       // only set when outcome.ok === true

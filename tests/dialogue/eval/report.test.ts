@@ -24,7 +24,7 @@ function baseResult(over: Partial<EvalResult>): EvalResult {
     expectationStatus: "pass",
     expectationFindings: [],
     durationMs: 100,
-    usage: { inputTokens: 10, outputTokens: 5 },
+    usage: { uncachedInputTokens: 10, totalInputTokens: 10, outputTokens: 5 },
     ...over,
   } as EvalResult;
 }
@@ -53,11 +53,12 @@ describe("buildScorecard", () => {
     expect(tsv.split("\n")[1]).toContain("gpt-x");
   });
 
-  it("estCostUsd null renders without throwing when unpriced", () => {
+  it("knownCostUsd null renders without throwing when unpriced", () => {
     const rows = buildScorecard([{ provider: "openai", model: "unpriced", results: [baseResult({ model: "unpriced" })] }], {
       priceTable: {},
     });
-    expect(rows[0]!.estCostUsd).toBeNull();
+    expect(rows[0]!.knownCostUsd).toBeNull();
+    expect(rows[0]!.costCoverageRate).toBe(0);
     expect(() => scorecardToMarkdown(rows)).not.toThrow();
   });
 });

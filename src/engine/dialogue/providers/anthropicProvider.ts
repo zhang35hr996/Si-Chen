@@ -1,6 +1,7 @@
 import { ok, err, type Result } from "../../infra/result";
-import { dialogueToolOutputSchema, dialogueToolOutputJsonSchema,
-         type DialogueProviderResult, type ProviderError, type ProviderResult } from "../providerContract";
+import { dialogueToolOutputSchema, dialogueToolOutputJsonSchema, makeUsage,
+         type DialogueProviderResult, type ProviderError, type ProviderResult,
+         type ProviderErrorMeta, type NormalizedUsage } from "../providerContract";
 import type { DialogueProvider, DialogueRequest, DialogueGenerationOptions } from "../types";
 import type { CharacterRank } from "../../content/schemas";
 import type { AudienceRole } from "../reactionTypes";
@@ -132,9 +133,24 @@ export function createAnthropicProvider(opts: { model: string; transport: Anthro
   };
 }
 
+function extractAnthropicUsage(m: AnthropicToolUseResponse): NormalizedUsage | undefined {
+  const u = m.usage;
+  if (!u) return undefined;
+  return makeUsage({
+    uncachedInputTokens: u.input_tokens ?? 0,
+    outputTokens: u.output_tokens ?? 0,
+    ...(u.cache_read_input_tokens !== undefined ? { cacheReadTokens: u.cache_read_input_tokens } : {}),
+    ...(u.cache_creation_input_tokens !== undefined ? { cacheCreationTokens: u.cache_creation_input_tokens } : {}),
+  });
+}
+
 function parseToolUse(res: AnthropicTransportResult, request: DialogueRequest, model: string): ProviderResult<DialogueProviderResult> {
   const m = res.message;
-  const meta = res.requestId !== undefined ? { requestId: res.requestId } : undefined;
+  const usage = extractAnthropicUsage(m);
+  const meta: ProviderErrorMeta = {
+    ...(res.requestId !== undefined ? { requestId: res.requestId } : {}),
+    ...(usage ? { usage } : {}),
+  };
   switch (m.stop_reason) {
     case "tool_use": break;
     case "max_tokens": return err<ProviderError>({ kind: "protocol", retryable: true, cause: "truncated", meta });
@@ -149,15 +165,12 @@ function parseToolUse(res: AnthropicTransportResult, request: DialogueRequest, m
   if (blocks[0]!.name !== TOOL_NAME) return err<ProviderError>({ kind: "protocol", retryable: true, cause: "wrong_tool", meta });
   const parsed = dialogueToolOutputSchema.safeParse(blocks[0]!.input);
   if (!parsed.success) return err<ProviderError>({ kind: "protocol", retryable: true, cause: "schema_invalid", meta });
-  const u = m.usage;
   return ok<DialogueProviderResult>({
     speaker: request.speakerId,
     text: parsed.data.text,
     choices: [],
     proposedClaims: parsed.data.proposedClaims,
-    ...(u ? { usage: { inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0,
-      ...(u.cache_read_input_tokens !== undefined ? { cacheReadTokens: u.cache_read_input_tokens } : {}),
-      ...(u.cache_creation_input_tokens !== undefined ? { cacheCreationTokens: u.cache_creation_input_tokens } : {}) } } : {}),
+    ...(usage ? { usage } : {}),
     providerMeta: { provider: "anthropic", model, ...(res.requestId ? { requestId: res.requestId } : {}) },
   });
 }

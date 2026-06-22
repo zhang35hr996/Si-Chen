@@ -21,17 +21,24 @@ export interface ScoreReport {
   gatePassRate: number;          // same logic
   expectationPassRate: number;   // same logic
   cacheHitRate: number;          // results with cacheReadTokens > 0 / total
-  avgInputTokens: number;        // only from results with usage defined
-  avgOutputTokens: number;       // only from results with usage defined
+  avgInputTokens: number;        // mean usage.totalInputTokens over results with usage
+  avgOutputTokens: number;       // mean usage.outputTokens over results with usage
   // ── metrics extension (PR2) ──
   avgLatencyMs: number;          // mean durationMs across all results
   p95LatencyMs: number;          // 95th percentile durationMs
-  totalInputTokens: number;      // sum of usage.inputTokens
+  totalInputTokens: number;      // sum of usage.totalInputTokens (full prompt size, normalized)
   totalOutputTokens: number;     // sum of usage.outputTokens
-  estCostUsd?: number;           // sum of costForUsage; undefined if nothing priced
-  loreViolationRate: number;     // share of results with ≥1 forbidden_lexicon finding
+  forbiddenLexiconRate: number;  // share of results with ≥1 forbidden_lexicon finding
   gateViolationsByType: Record<string, number>; // count of all textFindings by gate
+  // ── cost coverage (fix branch) ──
+  usageRunCount: number;         // results carrying usage
+  costedRunCount: number;        // results that produced a known cost (usage present AND model priced)
+  costCoverageRate: number;      // costedRunCount / runCount — 1 means complete
+  knownCostUsd?: number;         // sum of KNOWN costs only; undefined if none costed. NOT a guaranteed total.
 }
+
+/** The gate id whose findings count as forbidden-lexicon (lore) violations. */
+export const FORBIDDEN_LEXICON_GATE = "forbidden_lexicon";
 
 function passRate(results: EvalResult[], field: keyof Pick<EvalResult, "schemaStatus" | "gateStatus" | "expectationStatus">): number {
   let pass = 0;
@@ -61,9 +68,12 @@ export function scoreResults(results: EvalResult[], opts?: { priceTable?: PriceT
       p95LatencyMs: 0,
       totalInputTokens: 0,
       totalOutputTokens: 0,
-      estCostUsd: undefined,
-      loreViolationRate: 0,
+      forbiddenLexiconRate: 0,
       gateViolationsByType: {},
+      usageRunCount: 0,
+      costedRunCount: 0,
+      costCoverageRate: 0,
+      knownCostUsd: undefined,
     };
   }
 
@@ -72,12 +82,12 @@ export function scoreResults(results: EvalResult[], opts?: { priceTable?: PriceT
   // Cache hit: results where usage.cacheReadTokens > 0
   const cacheHits = results.filter((r) => (r.usage?.cacheReadTokens ?? 0) > 0).length;
 
-  // Avg tokens: only results with usage defined
+  // Avg tokens: only results with usage defined; input uses normalized total.
   const withUsage = results.filter((r) => r.usage !== undefined);
   const avgInputTokens =
     withUsage.length === 0
       ? 0
-      : withUsage.reduce((sum, r) => sum + r.usage!.inputTokens, 0) / withUsage.length;
+      : withUsage.reduce((sum, r) => sum + r.usage!.totalInputTokens, 0) / withUsage.length;
   const avgOutputTokens =
     withUsage.length === 0
       ? 0
@@ -91,11 +101,11 @@ export function scoreResults(results: EvalResult[], opts?: { priceTable?: PriceT
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   for (const r of results) {
-    totalInputTokens += r.usage?.inputTokens ?? 0;
+    totalInputTokens += r.usage?.totalInputTokens ?? 0;
     totalOutputTokens += r.usage?.outputTokens ?? 0;
   }
 
-  const loreHits = results.filter((r) => r.textFindings.some((f) => f.gate === "forbidden_lexicon")).length;
+  const loreHits = results.filter((r) => r.textFindings.some((f) => f.gate === FORBIDDEN_LEXICON_GATE)).length;
 
   const gateViolationsByType: Record<string, number> = {};
   for (const r of results) {
@@ -104,10 +114,15 @@ export function scoreResults(results: EvalResult[], opts?: { priceTable?: PriceT
     }
   }
 
+  // Cost coverage: a run is "costed" only if it has usage AND its model is priced.
+  // knownCostUsd sums ONLY costed runs and must not be presented as a guaranteed total.
+  const usageRunCount = withUsage.length;
   const costs = results
     .map((r) => costForUsage(`${r.provider}:${r.model}`, r.usage, opts?.priceTable))
     .filter((c): c is number => c !== undefined);
-  const estCostUsd = costs.length > 0 ? costs.reduce((sum, c) => sum + c, 0) : undefined;
+  const costedRunCount = costs.length;
+  const knownCostUsd = costedRunCount > 0 ? costs.reduce((sum, c) => sum + c, 0) : undefined;
+  const costCoverageRate = costedRunCount / results.length;
 
   return {
     scenarioCount: scenarioIds.size,
@@ -122,8 +137,11 @@ export function scoreResults(results: EvalResult[], opts?: { priceTable?: PriceT
     p95LatencyMs,
     totalInputTokens,
     totalOutputTokens,
-    estCostUsd,
-    loreViolationRate: loreHits / results.length,
+    forbiddenLexiconRate: loreHits / results.length,
     gateViolationsByType,
+    usageRunCount,
+    costedRunCount,
+    costCoverageRate,
+    knownCostUsd,
   };
 }

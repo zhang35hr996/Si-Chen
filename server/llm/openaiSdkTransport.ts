@@ -30,7 +30,7 @@ export function createOpenAISdkTransport(apiKey: string): OpenAITransport {
         const resp = await client.chat.completions.create(
           {
             model: p.model,
-            max_tokens: p.max_tokens,
+            max_completion_tokens: p.max_completion_tokens,
             messages: p.messages,
             tools: p.tools.map((t) => ({
               type: "function" as const,

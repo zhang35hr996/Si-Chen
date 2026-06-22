@@ -18,7 +18,7 @@ export interface ScorecardRow {
   schemaPassRate: number;
   gatePassRate: number;
   expectationPassRate: number;
-  loreViolationRate: number;
+  forbiddenLexiconRate: number;
   gateViolationsByType: Record<string, number>;
   characterProxyScore: number | null;
   styleProxyScore: number | null;
@@ -26,7 +26,10 @@ export interface ScorecardRow {
   p95LatencyMs: number;
   totalInputTokens: number;
   totalOutputTokens: number;
-  estCostUsd: number | null;
+  usageRunCount: number;
+  costedRunCount: number;
+  costCoverageRate: number;
+  knownCostUsd: number | null; // sum of KNOWN costs only — read together with costCoverageRate
 }
 
 export interface ModelResultGroup {
@@ -65,7 +68,7 @@ export function buildScorecard(groups: ModelResultGroup[], opts?: { priceTable?:
       schemaPassRate: r.schemaPassRate,
       gatePassRate: r.gatePassRate,
       expectationPassRate: r.expectationPassRate,
-      loreViolationRate: r.loreViolationRate,
+      forbiddenLexiconRate: r.forbiddenLexiconRate,
       gateViolationsByType: r.gateViolationsByType,
       characterProxyScore: null,
       styleProxyScore: null,
@@ -73,7 +76,10 @@ export function buildScorecard(groups: ModelResultGroup[], opts?: { priceTable?:
       p95LatencyMs: r.p95LatencyMs,
       totalInputTokens: r.totalInputTokens,
       totalOutputTokens: r.totalOutputTokens,
-      estCostUsd: r.estCostUsd ?? null,
+      usageRunCount: r.usageRunCount,
+      costedRunCount: r.costedRunCount,
+      costCoverageRate: r.costCoverageRate,
+      knownCostUsd: r.knownCostUsd ?? null,
     };
   });
 }
@@ -87,21 +93,22 @@ const COLUMNS: { key: keyof ScorecardRow; label: string }[] = [
   { key: "schemaPassRate", label: "schema" },
   { key: "gatePassRate", label: "gate" },
   { key: "expectationPassRate", label: "expect" },
-  { key: "loreViolationRate", label: "lore_viol" },
+  { key: "forbiddenLexiconRate", label: "forbidden_lex" },
   { key: "characterProxyScore", label: "char_proxy" },
   { key: "styleProxyScore", label: "style_proxy" },
   { key: "avgLatencyMs", label: "avg_ms" },
   { key: "p95LatencyMs", label: "p95_ms" },
   { key: "totalInputTokens", label: "in_tok" },
   { key: "totalOutputTokens", label: "out_tok" },
-  { key: "estCostUsd", label: "cost_usd" },
+  { key: "costCoverageRate", label: "cost_cov" },
+  { key: "knownCostUsd", label: "known_cost" },
 ];
 
 function cell(row: ScorecardRow, key: keyof ScorecardRow): string {
   const v = row[key];
   if (v === null || v === undefined) return "n/a";
   if (typeof v === "number") {
-    if (key === "estCostUsd") return v.toFixed(4);
+    if (key === "knownCostUsd") return v.toFixed(4);
     if (key.endsWith("Rate") || key.endsWith("ProxyScore")) return v.toFixed(3);
     if (key.endsWith("Ms")) return Math.round(v).toString();
     return v.toString();

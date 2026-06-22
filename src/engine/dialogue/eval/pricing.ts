@@ -6,10 +6,12 @@
  * without touching scorer/report code. Unknown model or missing usage → undefined
  * (rendered "n/a" upstream); never throws, never NaN.
  *
- * Convention: cacheReadTokens are a discounted slice of inputTokens, so plain
- * (uncached) input = inputTokens - cacheReadTokens, billed at inputPerMTok, while
- * the cached slice is billed at cacheReadPerMTok (falling back to inputPerMTok).
+ * Bills on NormalizedUsage: uncachedInputTokens at inputPerMTok, cacheReadTokens
+ * at cacheReadPerMTok, cacheCreationTokens at cacheCreationPerMTok, outputTokens
+ * at outputPerMTok (cache rates fall back to inputPerMTok when unset).
  */
+import type { NormalizedUsage } from "../providerContract";
+
 export interface ModelPricing {
   inputPerMTok: number;
   outputPerMTok: number;
@@ -26,7 +28,7 @@ export const DEFAULT_PRICE_TABLE: PriceTable = {
 
 export function costForUsage(
   key: string,
-  usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number } | undefined,
+  usage: NormalizedUsage | undefined,
   table: PriceTable = DEFAULT_PRICE_TABLE,
 ): number | undefined {
   const p = table[key];
@@ -34,9 +36,8 @@ export function costForUsage(
   const M = 1_000_000;
   const cacheRead = usage.cacheReadTokens ?? 0;
   const cacheCreate = usage.cacheCreationTokens ?? 0;
-  const plainInput = Math.max(0, usage.inputTokens - cacheRead);
   return (
-    (plainInput * p.inputPerMTok +
+    (usage.uncachedInputTokens * p.inputPerMTok +
       usage.outputTokens * p.outputPerMTok +
       cacheRead * (p.cacheReadPerMTok ?? p.inputPerMTok) +
       cacheCreate * (p.cacheCreationPerMTok ?? p.inputPerMTok)) /
