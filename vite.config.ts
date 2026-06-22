@@ -13,7 +13,23 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
-    include: ["tests/**/*.test.ts"],
+    projects: [
+      {
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+        },
+      },
+      {
+        plugins: [react()],
+        test: {
+          name: "jsdom",
+          environment: "jsdom",
+          include: ["tests/**/*.test.tsx"],
+          setupFiles: ["tests/setup.ui.ts"],
+        },
+      },
+    ],
   },
 });

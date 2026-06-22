@@ -18,6 +18,7 @@ export function ReactionScreen({
   backgroundKey,
   generatedLine,
   onChoice,
+  choicePending,
   onDone,
 }: {
   db: ContentDB;
@@ -31,6 +32,8 @@ export function ReactionScreen({
   generatedLine?: DialogueLine;
   /** Called when the player clicks a choice button (generative path only). Does NOT advance the line. */
   onChoice?: (choice: { id: string; text: string; tone?: string }) => void;
+  /** True while onChoice is in-flight; disables all choice buttons. */
+  choicePending?: boolean;
   onDone: () => void;
 }) {
   const state = useGameState(store);
@@ -73,6 +76,7 @@ export function ReactionScreen({
     : null;
 
   const next = () => (index + 1 < lines.length ? setIndex(index + 1) : onDone());
+  const hasChoices = generatedLine !== undefined && line !== null && line.choices.length > 0;
 
   return (
     <main
@@ -88,23 +92,25 @@ export function ReactionScreen({
         data-fallback={portrait.isFallback || undefined}
       />
 
-      <section className="dialogue-screen__box" onClick={next}>
+      {/* When choices are visible, clicking the box must not advance/close the dialogue. */}
+      <section className="dialogue-screen__box" onClick={hasChoices ? undefined : next}>
         <p className="dialogue-screen__speaker">{line.speakerName}</p>
         <p className="dialogue-screen__line">{line.text}</p>
         <div className="dialogue-screen__choices">
-          {generatedLine !== undefined && line !== null && line.choices.length > 0 ? (
+          {hasChoices ? (
             line.choices.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 data-tone={c.tone}
-                onClick={() => onChoice?.(c)}
+                disabled={choicePending}
+                onClick={(event) => { event.stopPropagation(); onChoice?.(c); }}
               >
                 {c.text}
               </button>
             ))
           ) : (
-            <button type="button" onClick={next}>
+            <button type="button" onClick={(event) => { event.stopPropagation(); next(); }}>
               （继续）
             </button>
           )}

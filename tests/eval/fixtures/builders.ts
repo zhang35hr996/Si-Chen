@@ -420,10 +420,11 @@ const latest_mutation_test: EvalFixtureDefinition = {
 // ── 9. forbidden_claim_test ───────────────────────────────────────────────────
 
 /**
- * Fixture where wenya is forbidden from asserting a higher rank (zhaoyi).
- * wenya.dialoguePolicy.forbiddenClaims includes holds_rank(wenya, zhaoyi, assert).
+ * Fixture where wenya is forbidden from asserting she holds the rank of fenghou.
+ * wenya.dialoguePolicy.forbiddenClaims includes holds_rank(wenya, fenghou, assert).
  * The gate fires claim_explicitly_forbidden regardless of the proposed sourceRef —
  * source-independence: the forbidden check is fact+polarity only, no source check.
+ * fenghou (empress) is the unique consort apex role — wenya cannot hold it.
  *
  * Exercises: claim_explicitly_forbidden (source-independent).
  */
@@ -433,14 +434,14 @@ const forbidden_claim_test: EvalFixtureDefinition = {
   },
   responseFor() {
     return {
-      text: "侍身以为，侍身曾为昭仪……",
+      text: "侍身以为，侍身应居中宫之位……",
       proposedClaims: [
         {
           claim: {
             id: "c_eval_forbidden_wenya_rank",
             predicate: "holds_rank",
             subjectId: "wenya",
-            object: "zhaoyi",
+            object: "fenghou",
             modality: "assert",
           },
           sourceRefs: [{ kind: "fact" as const, id: "identity" }],

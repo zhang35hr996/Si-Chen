@@ -166,6 +166,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
   const converseTranscriptRef = useRef<{ speaker: string; text: string }[]>([]);
+  // Single-flight guard for onConverseChoice — prevents concurrent choice requests.
+  const choiceInFlightRef = useRef(false);
+  const [choicePending, setChoicePending] = useState(false);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   // BGM effect: compute zone defensively (content may not be ok)
@@ -924,44 +927,54 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // No extra AP is spent here — AP was already spent in converse().
   const onConverseChoice = useCallback(async (choice: { id: string; text: string; tone?: string }) => {
     if (!dialogueProvider || !reaction?.generatedLine) return;
+    // Single-flight guard: prevent concurrent choice requests (double-tap, etc.)
+    if (choiceInFlightRef.current) return;
+    choiceInFlightRef.current = true;
+    setChoicePending(true);
+
     const currentLine = reaction.generatedLine;
     const speakerId = reaction.speakerId;
 
-    // Append speaker's last line + player's chosen response
-    const transcript = [
-      ...converseTranscriptRef.current,
-      { speaker: speakerId, text: currentLine.text },
-      { speaker: "player", text: choice.text },
-    ];
-    converseTranscriptRef.current = transcript;
+    try {
+      // Append speaker's last line + player's chosen response
+      const transcript = [
+        ...converseTranscriptRef.current,
+        { speaker: speakerId, text: currentLine.text },
+        { speaker: "player", text: choice.text },
+      ];
+      converseTranscriptRef.current = transcript;
 
-    // Re-snapshot state AFTER previous CAS was committed
-    const expectedState = store.getState();
-    const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { transcript });
-    if (!reqResult.ok) {
-      // Request assembly failed — close conversation gracefully
-      setReaction(null);
-      return;
+      // Re-snapshot state AFTER previous CAS was committed
+      const expectedState = store.getState();
+      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { transcript });
+      if (!reqResult.ok) {
+        // Assembly failed — strip generatedLine so normal onDone drains the queue/rollover
+        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        return;
+      }
+
+      const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+      if (!turnResult.ok) {
+        // Turn failed — same graceful path
+        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        return;
+      }
+
+      const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
+      if (!committed) {
+        // CAS failed (stale state) — same graceful path
+        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        return;
+      }
+
+      doAutosave();
+      const nextLine = turnResult.value.line;
+      // Update reaction state with the new generated line; carry decree beats from the queue
+      setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
+    } finally {
+      choiceInFlightRef.current = false;
+      setChoicePending(false);
     }
-
-    const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
-    if (!turnResult.ok) {
-      // Turn failed — close conversation gracefully (no extra AP spent)
-      setReaction(null);
-      return;
-    }
-
-    const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
-    if (!committed) {
-      // CAS failed (stale state) — close conversation gracefully
-      setReaction(null);
-      return;
-    }
-
-    doAutosave();
-    const nextLine = turnResult.value.line;
-    // Update reaction state with the new generated line; carry decree beats from the queue
-    setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
   }, [dialogueProvider, reaction, store, db, logger]);
 
   const transferTo = (carrierId: string) => {
@@ -1388,6 +1401,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           backgroundKey={reaction.backgroundKey}
           generatedLine={reaction.generatedLine}
           onChoice={reaction?.generatedLine && dialogueProvider ? onConverseChoice : undefined}
+          choicePending={choicePending}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {
