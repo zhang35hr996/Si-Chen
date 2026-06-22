@@ -12,6 +12,10 @@
     "speechStyle": "言语温缓，话里有分量；训诫时不疾不徐，慈中带戒。"
   },
   "defaultLocation": "cining_gong",
+  "selfRefs": {
+    "toPlayer": ["哀家"],
+    "formal": ["哀家"]
+  },
   "portraitSet": "taihou",
   "expressions": ["neutral"],
   "voice": {

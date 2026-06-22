@@ -68,6 +68,18 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
     expect(retry.ok).toBe(true);
   });
 
+  it("尊长对话路径：太后（elder，无位分）的脚本场景可经 orchestrator 渲染", async () => {
+    // 回归：太后 kind=elder 无 standing，旧 assembleDialogueRequest 直接 BAD_SPEAKER。
+    const runner = new SceneRunner(db, mockProvider);
+    const first = asFrame(unwrap(await runner.start(fresh(), "ev_taihou_converse")));
+    expect(first.awaiting).toBe("choice");
+    expect(first.line.speakerId).toBe("taihou");
+    expect(first.line.speakerName).toBe("太后"); // elder：无位分，显示本名
+    expect(first.line.text).toContain("皇帝");
+    expect(first.line.meta).toEqual({ generated: false, degraded: false });
+    expect(first.line.choices.map((c) => c.id)).toEqual(["c_filial", "c_heir"]);
+  });
+
   it("start enforces affordability engine-side (行动点不足, no rollover) and once", async () => {
     const runner = new SceneRunner(db, mockProvider);
     const base = fresh();

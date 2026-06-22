@@ -300,6 +300,13 @@ export const consortHiddenSchema = z.strictObject({
 
 export type ConsortHidden = z.infer<typeof consortHiddenSchema>;
 
+// 自称（位分 selfRefs 复用；尊长无位分时由 character.selfRefs 直接提供）。
+export const selfRefsSchema = z.strictObject({
+  toPlayer: z.array(nonEmpty).min(1),
+  formal: z.array(nonEmpty).min(1),
+  informal: z.array(nonEmpty).optional(),
+});
+
 // ── characters ────────────────────────────────────────────────────────
 export const characterSchema = z
   .strictObject({
@@ -329,6 +336,8 @@ export const characterSchema = z
       tabooTopics: z.array(nonEmpty),
     }),
     initialStanding: characterStandingSchema.optional(),
+    /** 尊长（elder）无位分，自称由此提供（如太后『哀家』）。位分角色用 rank.selfRefs。 */
+    selfRefs: selfRefsSchema.optional(),
     initialMemories: z.array(initialMemoryDraftSchema),
     secrets: z.array(z.never()).max(0), // schema present, empty in the skeleton (plan §4)
     stances: z.array(z.strictObject({ charId: idSchema, attitude: nonEmpty })).optional(),
@@ -373,12 +382,6 @@ export const officialPostSchema = z.strictObject({
 export type OfficialPost = z.infer<typeof officialPostSchema>;
 
 // ── ranks (位分 table row — world.json) ───────────────────────────────
-export const selfRefsSchema = z.strictObject({
-  toPlayer: z.array(nonEmpty).min(1),
-  formal: z.array(nonEmpty).min(1),
-  informal: z.array(nonEmpty).optional(),
-});
-
 export const characterRankSchema = z.strictObject({
   id: idSchema,
   name: nonEmpty,

@@ -6,12 +6,13 @@
  */
 import { toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
+import type { CharacterRank } from "../content/schemas";
 import { resolveDisplayName } from "../characters/standing";
 import { GroundTruthBeliefProjection } from "../chronicle/belief";
 import { aiError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
-import type { GameState } from "../state/types";
+import type { CharacterStanding, GameState } from "../state/types";
 import { buildAudienceContext } from "./audience";
 import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
@@ -26,6 +27,11 @@ import {
   type DialogueRequest,
 } from "./types";
 
+/** 尊长（elder）合成 standing 的占位位分 id；故意不入 db.ranks，下游按无位分降级。 */
+const ELDER_STANDING_RANK = "__elder__";
+/** content 未给 elder.selfRefs 时的兜底自称（尊长原型即太后，自称『哀家』）。 */
+const DEFAULT_ELDER_SELF_REFS: CharacterRank["selfRefs"] = { toPlayer: ["哀家"], formal: ["哀家"] };
+
 export function assembleDialogueRequest(
   db: ContentDB,
   state: GameState,
@@ -38,12 +44,23 @@ export function assembleDialogueRequest(
     return err(aiError("BAD_SPEAKER", `unknown speaker "${speakerId}"`));
   }
   const standing = state.standing[speakerId] ?? character.initialStanding;
-  if (!standing) {
-    return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing (elder — use elder dialogue path)`));
-  }
-  const rank = db.ranks[standing.rank];
-  if (!rank) {
-    return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" holds unknown rank "${standing.rank}"`));
+  // 位分角色用 rank.selfRefs；尊长（elder）走「尊长对话路径」：无位分，
+  // 自称取 character.selfRefs，并合成占位 standing 使其台词可经统一 orchestrator 渲染。
+  let contextStanding: CharacterStanding & { selfRefs: CharacterRank["selfRefs"] };
+  if (standing) {
+    const rank = db.ranks[standing.rank];
+    if (!rank) {
+      return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" holds unknown rank "${standing.rank}"`));
+    }
+    contextStanding = { ...standing, selfRefs: rank.selfRefs };
+  } else if (character.kind === "elder") {
+    contextStanding = {
+      rank: ELDER_STANDING_RANK,
+      favor: 0,
+      selfRefs: character.selfRefs ?? DEFAULT_ELDER_SELF_REFS,
+    };
+  } else {
+    return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
   }
   return ok({
     speakerId,
@@ -53,7 +70,7 @@ export function assembleDialogueRequest(
     speakerContext: {
       profile: character.profile,
       voice: character.voice,
-      standing: { ...standing, selfRefs: rank.selfRefs },
+      standing: contextStanding,
       relevantMemories: buildMemoryContext(
         state,
         { speakerId },
