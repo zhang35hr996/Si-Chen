@@ -59,6 +59,7 @@ export const characterStandingSchema = z.strictObject({
   availableFromMonth: z.number().int().min(1).optional(),
   health: percent.optional(),
   healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
+  lastPhysicianVisitMonthKey: z.string().optional(),
   ageAtEntry: z.number().int().min(0).optional(),
   enteredAtYear: z.number().int().min(1).optional(),
   deathRecord: deathRecordSchema.optional(),
@@ -271,6 +272,16 @@ export const eventEffectSchema = z.union([
     kind: z.enum(["taihou", "consort", "heir"]),
     subjectId: idSchema,
     at: gameTimeShape,
+  }),
+  z.strictObject({
+    type: z.literal("record_physician_visit"),
+    subject: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("sovereign") }),
+      z.strictObject({ kind: z.literal("taihou") }),
+      z.strictObject({ kind: z.literal("consort"), id: idSchema }),
+      z.strictObject({ kind: z.literal("heir"), id: idSchema }),
+    ]),
+    monthKey: z.string().min(1),
   }),
 ]);
 

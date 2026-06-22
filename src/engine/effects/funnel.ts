@@ -39,6 +39,10 @@ export function validateEffects(
   const bad = (index: number, code: string, message: string, context?: Record<string, unknown>) =>
     errors.push(stateError(code, `effect #${index}: ${message}`, { context: { index, ...context } }));
 
+  // 批内去重：validate 逐项读批前原始 state，故同批多条 record_physician_visit 对同一人都会过单条校验；
+  // 用本集合在批内强制「每月每人一次」，使引擎（含未来事件/AI 生成 effects 的统一入口）真正兜底。
+  const physicianVisitsInBatch = new Set<string>();
+
   effects.forEach((effect, index) => {
     const parsed = eventEffectSchema.safeParse(effect);
     if (!parsed.success) {
@@ -259,6 +263,38 @@ export function validateEffects(
         }
         break;
       }
+      case "record_physician_visit": {
+        const sub = e.subject;
+        const expectedKey = `${state.calendar.year}:${state.calendar.month}`;
+        if (e.monthKey !== expectedKey) {
+          bad(index, "BAD_EFFECT_TARGET", `physician visit monthKey "${e.monthKey}" != current "${expectedKey}"`, {});
+          break;
+        }
+        let alive = false;
+        let lastKey: string | undefined;
+        if (sub.kind === "sovereign") { alive = true; lastKey = state.resources.sovereign.lastPhysicianVisitMonthKey; }
+        else if (sub.kind === "taihou") { alive = state.taihou.deceased !== true; lastKey = state.taihou.lastPhysicianVisitMonthKey; }
+        else if (sub.kind === "consort") {
+          const st = state.standing[sub.id];
+          const c = db.characters[sub.id] ?? state.generatedConsorts[sub.id];
+          alive = !!st && st.lifecycle !== "deceased" && !!c && c.kind === "consort";
+          lastKey = st?.lastPhysicianVisitMonthKey;
+        } else {
+          const h = state.resources.bloodline.heirs.find((x) => x.id === sub.id);
+          alive = !!h && h.lifecycle === "alive";
+          lastKey = h?.lastPhysicianVisitMonthKey;
+        }
+        if (!alive) bad(index, "BAD_EFFECT_TARGET", `physician visit on missing/deceased subject`, {});
+        else if (lastKey === expectedKey) bad(index, "BAD_EFFECT_TARGET", `physician already visited subject this month`, {});
+        const subjectKey = sub.kind === "sovereign" || sub.kind === "taihou" ? sub.kind : `${sub.kind}:${sub.id}`;
+        const batchKey = `${expectedKey}:${subjectKey}`;
+        if (physicianVisitsInBatch.has(batchKey)) {
+          bad(index, "BAD_EFFECT_TARGET", `duplicate physician visit in the same batch`, { batchKey });
+        } else {
+          physicianVisitsInBatch.add(batchKey);
+        }
+        break;
+      }
       case "relocate": {
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
@@ -459,7 +495,6 @@ export function applyEffects(
       case "birth": {
         const bl = next.resources.bloodline;
         const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";
-        const bearerSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "child_dies";
         if (childSurvives) {
           bl.heirs.push({
             id: nextHeirId(bl.heirs.length),
@@ -484,17 +519,17 @@ export function applyEffects(
           });
         }
         if (effect.bearer !== "sovereign") {
-          const st = next.standing[effect.bearer]!;
-          if (!bearerSurvives) {
-            st.lifecycle = "deceased";
-            delete st.recoverUntilMonth;
-          } else if (effect.bearerOutcome === "safe") {
-            st.lifecycle = "delivered";
-            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
-          } else {
-            // child_dies, bearer survives → 不晋升，回 normal，难产三月休养
-            st.lifecycle = "normal";
-            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+          const st = next.standing[effect.bearer];
+          if (st) {
+            if (effect.bearerOutcome === "safe") {
+              st.lifecycle = "delivered";
+              if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+            } else if (effect.bearerOutcome === "child_dies") {
+              st.lifecycle = "normal";
+              if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+            }
+            // bearer_dies / both: 母方死亡由后续 consort_decease 统一处理
+            //（写 deathRecord.cause="childbirth" + 断胎 + enqueue_aftermath）；此处不置死。
           }
         }
         // 仅移除生产对应的那条胎息；帝王可能另有自孕，故只在自孕生产时才清 pregnancy。
@@ -562,6 +597,14 @@ export function applyEffects(
         }
         break;
       }
+      case "record_physician_visit": {
+        const sub = effect.subject;
+        if (sub.kind === "sovereign") next.resources.sovereign.lastPhysicianVisitMonthKey = effect.monthKey;
+        else if (sub.kind === "taihou") next.taihou.lastPhysicianVisitMonthKey = effect.monthKey;
+        else if (sub.kind === "consort") { const st = next.standing[sub.id]; if (st) st.lastPhysicianVisitMonthKey = effect.monthKey; }
+        else { const h = next.resources.bloodline.heirs.find((x) => x.id === sub.id); if (h) h.lastPhysicianVisitMonthKey = effect.monthKey; }
+        break;
+      }
       case "set_consort_posthumous": {
         const st = next.standing[effect.char]!;
         if (st.deathRecord) {
@@ -574,6 +617,7 @@ export function applyEffects(
         const st = next.standing[effect.char];
         if (st && st.lifecycle !== "deceased") {       // idempotent: skip if already dead
           st.lifecycle = "deceased";
+          delete st.recoverUntilMonth; // 清陈旧休养截止月（顺产/child_dies 先写 recoverUntilMonth，成本随后致死时勿留「已故仍在休养」状态）
           st.deathRecord = {
             diedAt: effect.at,
             cause: effect.cause,
@@ -590,8 +634,11 @@ export function applyEffects(
         break;
       }
       case "taihou_decease": {
-        next.taihou.deceased = true;
-        next.taihou.diedAt = effect.at;
+        if (!next.taihou.deceased) {
+          next.taihou.deceased = true;
+          next.taihou.diedAt = effect.at;
+          next.taihou.mourningUntilDayExclusive = effect.at.dayIndex + 3; // 死亡当日计第1日，独占上界
+        }
         break;
       }
       case "enqueue_aftermath": {

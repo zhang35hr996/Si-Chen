@@ -16,6 +16,8 @@ export interface SovereignState {
   health: number;
   /** 病情状态（与 health 数值独立）。 */
   healthStatus: HealthStatus;
+  /** 本月已请脉月键 "{year}:{month}"；当月已看诊则禁再请脉（设计 §4.2）。 */
+  lastPhysicianVisitMonthKey?: string;
   /** 勤政 */
   diligence: number;
   /** 威望（原 court.authority 圣威） */
@@ -166,6 +168,8 @@ export interface Heir {
   deceasedAt?: GameTime;
   /** 病情状态（出生置 healthy；旧存档可能无此字段）。 */
   healthStatus?: HealthStatus;
+  /** 本月已请脉月键 "{year}:{month}"；当月已看诊则禁再请脉（设计 §4.2）。 */
+  lastPhysicianVisitMonthKey?: string;
 }
 
 export interface BloodlineState {
@@ -241,6 +245,8 @@ export interface CharacterStanding {
   health?: number;
   /** 病情状态（健康/生病/重病；官员无此字段）。 */
   healthStatus?: HealthStatus;
+  /** 本月已请脉月键 "{year}:{month}"；当月已看诊则禁再请脉（设计 §4.2）。 */
+  lastPhysicianVisitMonthKey?: string;
   /** 动态入宫侍君的入宫年龄（选秀用）；预置侍君用 profile.age。 */
   ageAtEntry?: number;
   /** 动态入宫侍君的入宫年份。 */
@@ -344,6 +350,8 @@ export interface TaihouState {
   health: number;
   /** 病情状态。 */
   healthStatus: HealthStatus;
+  /** 本月已请脉月键 "{year}:{month}"；当月已看诊则禁再请脉（设计 §4.2）。 */
+  lastPhysicianVisitMonthKey?: string;
   /** 是否已薨。 */
   deceased?: boolean;
   /** 薨逝时刻。 */

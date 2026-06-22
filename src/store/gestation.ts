@@ -16,6 +16,8 @@ import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { GameState, GestationState } from "../engine/state/types";
 import { bedchamberConfig } from "./bedchamber";
+import { childbirthCostDelta } from "./pregnancyCost";
+import { planHealthChange } from "./health";
 
 export function gestationConfig(db: ContentDB): GestationConfig {
   return db.world.gestation ?? DEFAULT_GESTATION;
@@ -108,19 +110,30 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
   const childNoun = verdict.sex === "daughter" ? "皇子" : "皇郎";
   const lines = buildBirthLines(db, state, gest.carrier, verdict.bearerOutcome, childNoun);
 
+  const birthEffect: EventEffect = {
+    type: "birth",
+    sex: verdict.sex,
+    fatherId: verdict.fatherId,
+    bearer: verdict.bearer,
+    legitimate: verdict.legitimate,
+    favor: verdict.favor,
+    bearerOutcome: verdict.bearerOutcome,
+    ...(recover !== undefined ? { recoverUntilMonth: recover } : {}),
+  };
+
+  const bearerSurvives = verdict.bearerOutcome === "safe" || verdict.bearerOutcome === "child_dies";
+  const costDelta = childbirthCostDelta(verdict.bearerOutcome); // safe −5 / child_dies −10 / 其它 0
+  let maternalFx: EventEffect[] = [];
+  if (gest.carrier !== "sovereign") {
+    maternalFx = bearerSurvives
+      ? (costDelta !== 0
+          ? planHealthChange(state, { subject: { kind: "consort", id: gest.carrier }, healthDelta: costDelta, cause: "childbirth", at: now }).effects
+          : [])
+      : planHealthChange(state, { subject: { kind: "consort", id: gest.carrier }, forceDeath: true, cause: "childbirth", at: now }).effects;
+  }
+
   return {
-    effects: [
-      {
-        type: "birth",
-        sex: verdict.sex,
-        fatherId: verdict.fatherId,
-        bearer: verdict.bearer,
-        legitimate: verdict.legitimate,
-        favor: verdict.favor,
-        bearerOutcome: verdict.bearerOutcome,
-        ...(recover !== undefined ? { recoverUntilMonth: recover } : {}),
-      },
-    ],
+    effects: [birthEffect, ...maternalFx], // 先落库皇嗣/移除 gestation，再扣血/置死母方（§5 顺序）
     lines,
     bearer: gest.carrier,
     bearerOutcome: verdict.bearerOutcome,

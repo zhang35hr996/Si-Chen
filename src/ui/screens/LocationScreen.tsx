@@ -7,6 +7,7 @@ import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { canSummon } from "../../store/bedchamber";
+import { canBedchamber as canBedchamberGate } from "../../store/gating";
 import { hasChambers } from "../../engine/characters/chambers";
 import { CharacterCard } from "../components/CharacterCard";
 import { GameShell } from "../components/GameShell";
@@ -89,6 +90,7 @@ export function LocationScreen({
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const eligible = getEligibleEvents(db, state, "location_enter");
   const canBedchamber = state.calendar.ap >= 1;
+  const flipGate = canBedchamberGate(store.getState()); // gating：重病 + 服丧
   const greetingHere =
     location.id === "kunninggong" &&
     isGreetingSlot(state.calendar) &&
@@ -167,9 +169,12 @@ export function LocationScreen({
                   </button>
                 )}
                 {onFlipTablet && (
-                  <button type="button" disabled={!canBedchamber} onClick={onFlipTablet}>
+                  <button type="button" disabled={!canBedchamber || !flipGate.ok} onClick={onFlipTablet} title={!flipGate.ok ? flipGate.reason : undefined}>
                     翻牌子
                   </button>
+                )}
+                {onFlipTablet && !flipGate.ok && (
+                  <p className="location-screen__empty">{flipGate.reason}</p>
                 )}
               </div>
               {(onSummonPhysician || onSummonZongzheng) && (

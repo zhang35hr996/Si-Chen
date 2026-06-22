@@ -29,6 +29,18 @@ describe("health funnel effects", () => {
     expect(JSON.stringify(r2.value.standing[id]!.deathRecord)).toBe(before);
   });
 
+  it("consort_decease 首次置死时清陈旧 recoverUntilMonth（勿留「已故仍在休养」）", () => {
+    const { db, state } = freshState();
+    const id = Object.keys(state.standing).find((c) => db.characters[c]?.kind === "consort")!;
+    const at = toGameTime(state.calendar);
+    state.standing[id]!.recoverUntilMonth = 9; // 顺产/child_dies 先写休养截止
+    const r = applyEffects(db, state, [{ type: "consort_decease", char: id, at, cause: "childbirth" }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.standing[id]!.lifecycle).toBe("deceased");
+    expect(r.value.standing[id]!.recoverUntilMonth).toBeUndefined();
+  });
+
   it("set_taihou_health clamps and sets status", () => {
     const { db, state } = freshState();
     const r = applyEffects(db, state, [
