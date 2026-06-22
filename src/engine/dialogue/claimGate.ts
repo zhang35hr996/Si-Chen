@@ -20,7 +20,7 @@ import { claimToFactKey, type ProposedClaim } from "./claims";
 import type { DialogueClaim } from "./claims";
 import type { DialogueAudienceContext } from "./audience";
 import type { AuthorizedClaim } from "./types";
-import { claimPolarity } from "./types";
+import { claimPolarity, claimFactKey } from "./types";
 
 export type ClaimViolationCode =
   | "contradicts_speaker_belief" | "reveals_unknown_fact" | "claims_excessive_certainty"
@@ -107,6 +107,21 @@ export function isCoveredByAllowedClaim(
 }
 
 /**
+ * Returns true when `proposed` matches `authorized` on fact key + polarity ONLY.
+ * Does NOT check modality ceiling or source intersection.
+ * Use this as Phase 1 of the allowedClaims check (§3a).
+ */
+export function matchesFactAndPolarity(
+  proposed: ProposedClaim,
+  authorized: AuthorizedClaim,
+): boolean {
+  return (
+    claimFactKey(proposed.claim) === claimFactKey(authorized.claim) &&
+    claimPolarity(proposed.claim.modality) === claimPolarity(authorized.claim.modality)
+  );
+}
+
+/**
  * Returns true when `proposed` is covered by a forbidden claim.
  * Only checks fact key + polarity — NO source check.
  */
@@ -154,24 +169,21 @@ function findingsFor(pc: ProposedClaim, ctx: ClaimGateContext): ClaimGateFinding
     // which are the memory/context ids offered to the LLM
     const offeredRefs: ReadonlySet<string> = ctx.offeredContextIds;
 
-    // 3a: find matching authorized claim
-    const matchingAuthorized = allowedClaims.find((auth) =>
-      isCoveredByAllowedClaim(pc, auth, offeredRefs),
-    );
+    // Phase 1 (§3a/3b): Is there ANY allowed claim for this fact+polarity?
+    const factPolarityMatch = allowedClaims.find((auth) => matchesFactAndPolarity(pc, auth));
 
-    if (!matchingAuthorized) {
-      // 3b: no match → claim_not_allowed
+    if (!factPolarityMatch) {
+      // 3b: no fact+polarity match at all → claim_not_allowed
       out.push({ code: "claim_not_allowed", claimId: id, message: "claim 不在本轮授权列表中" });
       return out;
     }
 
-    // 3c: has match — but we need to verify source intersection more carefully
-    // Check that every proposed sourceRef ∈ matchingAuthorized.sourceRefs ∩ offeredRefs
-    // Actually per spec: check proposed sourceRef ∈ authorized.sourceRefs ∩ offeredRefs
-    // (isCoveredByAllowedClaim already handles source intersection for at-least-one;
-    // the "source_not_authorized" fires when isCoveredByAllowedClaim failed for source reasons)
-    // Re-check: if there's a match on fact+polarity but source fails → source_not_authorized
-    // We already verified intersection in isCoveredByAllowedClaim, so source is OK here.
+    // Phase 2 (§3c/3d): Full check — modality ceiling + source intersection
+    if (!isCoveredByAllowedClaim(pc, factPolarityMatch, offeredRefs)) {
+      // 3c: fact+polarity matched but source or modality ceiling fails → source_not_authorized
+      out.push({ code: "source_not_authorized", claimId: id, message: "claim 来源不在授权来源交集中" });
+      return out;
+    }
 
     // 3d: match + source ok → eventAuthorized = true
     eventAuthorized = true;

@@ -5,6 +5,7 @@ import {
   isContradictedByBelief,
   isCoveredByAllowedClaim,
   isCoveredByForbiddenClaim,
+  matchesFactAndPolarity,
   type ClaimGateContext,
 } from "../../src/engine/dialogue/claimGate";
 import type { BeliefProjection, FactKey, BelievedFact } from "../../src/engine/chronicle/belief";
@@ -341,14 +342,14 @@ describe("claim gate — new violation codes", () => {
   });
 
   it("source_not_authorized: sourceRef not in authorized.sourceRefs or not in offeredRefs", () => {
-    // allowedClaims exists, claim matches by fact, but source intersection fails
+    // allowedClaims exists, claim matches by fact+polarity, but source intersection fails
     const auth: AuthorizedClaim = {
       claim: { id: "auth_ok", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
       sourceRefs: [evtRef("evt_001")], // authorized by evt_001
     };
     const proposed: ProposedClaim = {
       claim: { id: "c_badsrc", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
-      sourceRefs: [evtRef("evt_999")], // not in authorized.sourceRefs
+      sourceRefs: [evtRef("evt_999")], // not in authorized.sourceRefs → source intersection fails
       modality: "assert",
       certainty: 80,
     };
@@ -359,7 +360,8 @@ describe("claim gate — new violation codes", () => {
       allowedClaims: [auth],
     }));
     expect(r.ok).toBe(false);
-    expect(r.findings.map((f) => f.code)).toContain("claim_not_allowed");
+    // fact+polarity matches but source fails → source_not_authorized (not claim_not_allowed)
+    expect(r.findings.map((f) => f.code)).toContain("source_not_authorized");
   });
 
   it("existing gate tests all pass (no regression — resides_at belief check)", () => {
@@ -448,6 +450,41 @@ describe("isCoveredByForbiddenClaim", () => {
     // Different source ref — still matches (forbidden check doesn't care about sources)
     const p2: ProposedClaim = { ...proposed, sourceRefs: [evtRef("evt_never_offered")] };
     expect(isCoveredByForbiddenClaim(p2, forbidden)).toBe(true);
+  });
+});
+
+// ── matchesFactAndPolarity ────────────────────────────────────────────────────
+
+describe("matchesFactAndPolarity", () => {
+  const auth: AuthorizedClaim = {
+    claim: { id: "a1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+    sourceRefs: [evtRef("evt_001")],
+  };
+  const matchingProposed: ProposedClaim = {
+    claim: { id: "p1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+    sourceRefs: [evtRef("evt_999")], // different source — doesn't matter for this check
+    modality: "assert",
+    certainty: 80,
+  };
+
+  it("returns true when fact+polarity match (regardless of source)", () => {
+    expect(matchesFactAndPolarity(matchingProposed, auth)).toBe(true);
+  });
+  it("returns false when predicate differs", () => {
+    const p2 = { ...matchingProposed, claim: { ...matchingProposed.claim, predicate: "resides_at" as const } };
+    expect(matchesFactAndPolarity(p2, auth)).toBe(false);
+  });
+  it("returns false when subjectId differs", () => {
+    const p2 = { ...matchingProposed, claim: { ...matchingProposed.claim, subjectId: "lu_huaijin" } };
+    expect(matchesFactAndPolarity(p2, auth)).toBe(false);
+  });
+  it("returns false when polarity differs (assert vs deny)", () => {
+    const p2: ProposedClaim = { ...matchingProposed, claim: { ...matchingProposed.claim, modality: "deny" }, modality: "deny" };
+    expect(matchesFactAndPolarity(p2, auth)).toBe(false);
+  });
+  it("returns true even when sourceRef does not match — source not checked here", () => {
+    // Specifically verifies Phase 1 ignores source (Phase 2 handles it)
+    expect(matchesFactAndPolarity(matchingProposed, auth)).toBe(true);
   });
 });
 
