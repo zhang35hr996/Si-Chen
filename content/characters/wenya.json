@@ -33,5 +33,16 @@
     }
   ],
   "secrets": [],
-  "maternalClan": { "postId": "zhifu", "legitimate": false, "birthOrder": 4 }
+  "maternalClan": { "postId": "zhifu", "legitimate": false, "birthOrder": 4 },
+  "dialoguePolicy": {
+    "forbiddenClaims": [
+      {
+        "id": "forbid_wenya_rank_zhaoyi",
+        "predicate": "holds_rank",
+        "subjectId": "wenya",
+        "object": "zhaoyi",
+        "modality": "assert"
+      }
+    ]
+  }
 }

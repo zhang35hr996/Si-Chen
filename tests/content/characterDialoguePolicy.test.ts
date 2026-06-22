@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { characterSchema } from "../../src/engine/content/schemas";
+import { loadRealContent } from "../helpers/contentFixture";
 
 /**
  * Minimal valid character for testing (includes only required fields).
@@ -112,5 +113,12 @@ describe("characterSchema dialoguePolicy", () => {
 
     const result = characterSchema.safeParse(charWithTooManyClaims);
     expect(result.success).toBe(false);
+  });
+
+  it("wenya content has dialoguePolicy.forbiddenClaims entry", () => {
+    const db = loadRealContent();
+    expect(db.characters["wenya"]?.dialoguePolicy).toBeDefined();
+    expect(db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims.length).toBe(1);
+    expect(db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims[0]?.id).toBe("forbid_wenya_rank_zhaoyi");
   });
 });
