@@ -9,6 +9,7 @@ import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { canHoldCourt } from "../../store/gating";
 
 export function FreeViewScreen({
   db,
@@ -39,6 +40,8 @@ export function FreeViewScreen({
   const affordable = action ? state.calendar.ap >= action.apCost : false;
   // actionFirstSlotOnly：仅每日首个行动点（卯时早朝，ap===apMax）可行动。
   const slotBlocked = location.actionFirstSlotOnly === true && state.calendar.ap !== state.calendar.apMax;
+  // 上朝 gating（重病 + 服丧）：仅 ev_chaohui 入口受约束。
+  const courtGate = location.actionEventId === "ev_chaohui" ? canHoldCourt(store.getState()) : { ok: true as const };
 
   return (
     <main className="location-screen">
@@ -72,13 +75,16 @@ export function FreeViewScreen({
             <button
               type="button"
               className="location-screen__event"
-              disabled={!affordable || slotBlocked}
+              disabled={!affordable || slotBlocked || !courtGate.ok}
               onClick={() => onStartEvent(action.id)}
             >
               {action.title}
             </button>
             {slotBlocked && (
               <p className="location-screen__empty">朝时已过，请明日卯时早朝。</p>
+            )}
+            {!slotBlocked && !courtGate.ok && (
+              <p className="location-screen__empty">{courtGate.reason}</p>
             )}
           </>
         ) : (

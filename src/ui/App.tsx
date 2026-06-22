@@ -67,6 +67,7 @@ import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
 import { MorningAfterOverlay } from "./components/MorningAfterOverlay";
 import { buildRelocate } from "../store/relocate";
 import { planPregnancyTransfer } from "../store/pregnancyCost";
+import { canHoldCourt, canBedchamber } from "../store/gating";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
 import { ResourcePanel } from "./components/ResourcePanel";
@@ -213,6 +214,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
    * 卯时满点扣 1 不会转旬，故无需处理 rollover。
    */
   const beginCourt = () => {
+    const courtGate = canHoldCourt(store.getState());
+    if (!courtGate.ok) { setReaction({ speakerId: "wei_sui", lines: [courtGate.reason] }); return; }
     const before = store.getState();
     const ev = db.events["ev_chaohui"];
     if (!ev || before.calendar.ap < ev.apCost || before.calendar.ap !== before.calendar.apMax) return;
@@ -551,6 +554,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   const commitBedchamber = (plan: BedchamberPlan) => {
     setBedchamberRun(null);
+    const g = canBedchamber(store.getState()); // re-check with fresh state (state may have changed while scene was open)
+    if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -1055,7 +1060,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onManage={(id) => setManageCharId(id)}
           onRelocate={(id) => setRelocateCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
-          onFlipTablet={() => setFlipOpen(true)}
+          onFlipTablet={() => {
+            const g = canBedchamber(store.getState());
+            if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
+            setFlipOpen(true);
+          }}
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
           onSummonPhysician={() => setPhysicianOpen(true)}
           onOpenHeirs={() => setHeirListOpen(true)}
