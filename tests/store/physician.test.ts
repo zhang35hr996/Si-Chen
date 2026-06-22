@@ -23,6 +23,19 @@ describe("physicianMonthKey / visitedThisMonth", () => {
     if (!r.ok) return;
     expect(physicianVisitedThisMonth(r.value, { kind: "sovereign" })).toBe(true);
   });
+
+  it("同一批内重复记录同一目标的看诊 → 整批拒绝，原 state 不变（引擎层批内强制）", () => {
+    const s0 = createNewGameState(db);
+    const mk = physicianMonthKey(s0.calendar);
+    const dup = [
+      { type: "record_physician_visit", subject: { kind: "sovereign" }, monthKey: mk },
+      { type: "record_physician_visit", subject: { kind: "sovereign" }, monthKey: mk },
+    ] as const;
+    const r = applyEffects(db, s0, dup);
+    expect(r.ok).toBe(false); // 第二条须被批内去重拒绝
+    // 整批拒绝：原 state 未记录看诊
+    expect(physicianVisitedThisMonth(s0, { kind: "sovereign" })).toBe(false);
+  });
 });
 
 describe("planPhysicianVisit", () => {

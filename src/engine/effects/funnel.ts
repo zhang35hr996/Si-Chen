@@ -39,6 +39,10 @@ export function validateEffects(
   const bad = (index: number, code: string, message: string, context?: Record<string, unknown>) =>
     errors.push(stateError(code, `effect #${index}: ${message}`, { context: { index, ...context } }));
 
+  // 批内去重：validate 逐项读批前原始 state，故同批多条 record_physician_visit 对同一人都会过单条校验；
+  // 用本集合在批内强制「每月每人一次」，使引擎（含未来事件/AI 生成 effects 的统一入口）真正兜底。
+  const physicianVisitsInBatch = new Set<string>();
+
   effects.forEach((effect, index) => {
     const parsed = eventEffectSchema.safeParse(effect);
     if (!parsed.success) {
@@ -282,6 +286,13 @@ export function validateEffects(
         }
         if (!alive) bad(index, "BAD_EFFECT_TARGET", `physician visit on missing/deceased subject`, {});
         else if (lastKey === expectedKey) bad(index, "BAD_EFFECT_TARGET", `physician already visited subject this month`, {});
+        const subjectKey = sub.kind === "sovereign" || sub.kind === "taihou" ? sub.kind : `${sub.kind}:${sub.id}`;
+        const batchKey = `${expectedKey}:${subjectKey}`;
+        if (physicianVisitsInBatch.has(batchKey)) {
+          bad(index, "BAD_EFFECT_TARGET", `duplicate physician visit in the same batch`, { batchKey });
+        } else {
+          physicianVisitsInBatch.add(batchKey);
+        }
         break;
       }
       case "relocate": {
@@ -606,6 +617,7 @@ export function applyEffects(
         const st = next.standing[effect.char];
         if (st && st.lifecycle !== "deceased") {       // idempotent: skip if already dead
           st.lifecycle = "deceased";
+          delete st.recoverUntilMonth; // 清陈旧休养截止月（顺产/child_dies 先写 recoverUntilMonth，成本随后致死时勿留「已故仍在休养」状态）
           st.deathRecord = {
             diedAt: effect.at,
             cause: effect.cause,
