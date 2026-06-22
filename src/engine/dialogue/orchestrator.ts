@@ -243,7 +243,7 @@ export function buildDialoguePolicyContext(
   const audience = request.promptContext.audience;
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
-  return { audience, beliefProjection, offeredContextIds, now };
+  return { audience, beliefProjection, offeredContextIds, now, allowedClaims: [], forbiddenClaims: [] };
 }
 
 /**

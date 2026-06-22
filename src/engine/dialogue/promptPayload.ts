@@ -12,6 +12,7 @@ import type { GameState } from "../state/types";
 import type { ReactionPlan } from "./reactionTypes";
 import type { DialogueAudienceContext } from "./audience";
 import type { DialogueClaim } from "./claims";
+import type { AuthorizedClaim } from "./types";
 import type { DialogueRequest } from "./types";
 
 // ── Scalar value type for structured facts ────────────────────────────────────
@@ -73,11 +74,13 @@ export interface DialoguePromptContext {
   rankDisplay: DialogueSpeakerStanding;
   audience: DialogueAudienceContext;
   relevantMemories: PromptMemory[];
-  reactionPlan?: ReactionPlan;           // undefined until LLM-3
-  knownEvents: PromptEvent[];            // [] until LLM-3
-  allowedClaims: DialogueClaim[];        // [] until LLM-3
-  forbiddenClaims: DialogueClaim[];      // [] until LLM-3
-  choiceCandidates: DialogueChoiceCandidate[];  // [] until LLM-2
+  reactionPlan?: ReactionPlan;                    // undefined until LLM-3
+  knownEvents: PromptEvent[];                     // [] until LLM-3
+  allowedClaims: readonly AuthorizedClaim[];      // [] until T6
+  forbiddenClaims: readonly DialogueClaim[];      // [] until T7
+  /** The event id that triggered the speaker's reactionPlan, if any (populated in T6+). */
+  reactionSourceEventId?: string;
+  choiceCandidates: DialogueChoiceCandidate[];    // [] until LLM-2
 }
 
 // ── Conversion helper ─────────────────────────────────────────────────────────
@@ -114,10 +117,12 @@ export interface DialoguePromptPayload {
   speaker: DialogueSpeakerPayload;
   audience: DialogueAudienceContext;
   reactionPlan?: ReactionPlan;
+  /** The event id that triggered the reactionPlan, if any. */
+  reactionSourceEventId?: string;
   relevantMemories: PromptMemory[];
   knownEvents: PromptEvent[];
-  allowedClaims: DialogueClaim[];
-  forbiddenClaims: DialogueClaim[];
+  allowedClaims: readonly AuthorizedClaim[];
+  forbiddenClaims: readonly DialogueClaim[];
   choiceCandidates: DialogueChoiceCandidate[];
   currentScene: {
     location: string;
@@ -237,6 +242,7 @@ export function compilePromptPayload(request: DialogueRequest): DialoguePromptPa
     },
     audience: ctx.audience,
     reactionPlan: ctx.reactionPlan,
+    ...(ctx.reactionSourceEventId !== undefined ? { reactionSourceEventId: ctx.reactionSourceEventId } : {}),
     relevantMemories: ctx.relevantMemories,
     knownEvents: ctx.knownEvents,
     allowedClaims: ctx.allowedClaims,
