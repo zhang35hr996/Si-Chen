@@ -59,7 +59,7 @@ export function ReactionScreen({
     return () => {
       alive = false;
     };
-  }, [index]); // intentional: re-run only when line index changes
+  }, [index, generatedLine]); // intentional: re-run on index change (scripted) or new generatedLine (choice turn)
 
   if (!line) return null;
 
