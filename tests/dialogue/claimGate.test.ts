@@ -581,6 +581,53 @@ describe("matchesFactAndPolarity", () => {
   });
 });
 
+describe("validateDialogueClaims — multiple allowed entries for same fact+polarity (filter+some)", () => {
+  it("accepts claim citing second authorized entry when first entry has different sourceRef", () => {
+    // Two authorized entries share the same fact+polarity (holds_rank, shen_zhibai, fenghou, assert)
+    // but differ in sourceRefs. The model cites memB. find() would have picked authA (first match)
+    // and rejected the claim. filter()+some() correctly accepts because authB covers memB.
+    const offered = new Set(["memory:mem_a", "memory:mem_b"]);
+    const authA: AuthorizedClaim = {
+      claim: { id: "auth_a", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: "mem_a" }],
+    };
+    const authB: AuthorizedClaim = {
+      claim: { id: "auth_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: "mem_b" }],
+    };
+    const proposed: ProposedClaim = {
+      claim: { id: "c_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: "mem_b" }],
+      modality: "assert",
+      certainty: 80,
+    };
+    const result = validateDialogueClaims({ ...base(), offeredRefKeys: offered, proposedClaims: [proposed], allowedClaims: [authA, authB] });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects claim when no authorized entry covers the proposed sourceRef", () => {
+    // Both authorized entries require mem_a or mem_c, but model cites mem_b.
+    const offered = new Set(["memory:mem_a", "memory:mem_b", "memory:mem_c"]);
+    const authA: AuthorizedClaim = {
+      claim: { id: "auth_a", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: "mem_a" }],
+    };
+    const authC: AuthorizedClaim = {
+      claim: { id: "auth_c", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: "mem_c" }],
+    };
+    const proposed: ProposedClaim = {
+      claim: { id: "c_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: "mem_b" }],
+      modality: "assert",
+      certainty: 80,
+    };
+    const result = validateDialogueClaims({ ...base(), offeredRefKeys: offered, proposedClaims: [proposed], allowedClaims: [authA, authC] });
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((f) => f.code === "source_not_authorized")).toBe(true);
+  });
+});
+
 // ── mentionWriteback — kind routing ───────────────────────────────────────────
 
 // These are in the dedicated mentionWriteback test, but we add a note here:

@@ -1,10 +1,13 @@
 /**
- * PR5 integration: proves the 4 claim-gate chains through produceDialogueTurn (generative path).
+ * PR5 integration: proves the 4 claim-gate chains.
  *
- * (a) HAPPY PATH   — valid claim with real offeredContextId → line passes, mentionLog grows
- * (b) CLAIM REJECT — claim contradicts belief (wrong rank value) → CLAIM_REJECTED error
+ * (a) CLOSED MODE  — allowedClaims=[] blocks factual claims (P0.1 fix)
+ * (b) BELIEF GATE  — authorized claim contradicts belief → contradicts_speaker_belief
  * (c) NO CLAIMS    — proposedClaims:[] → line passes unchanged, mentionLog unchanged
- * (d) UNKNOWN SRC  — claim with fake sourceContextId → unknown_source_context → CLAIM_REJECTED
+ * (d) SOURCE GATE  — authorized fact but proposed sourceRef not in offeredRefKeys ∩ authorized → source_not_authorized
+ *
+ * Chains (b) and (d) use validateDialogueClaims directly with explicit allowedClaims so
+ * the CLOSED gate is bypassed and the downstream belief/source checks are reachable.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -12,7 +15,11 @@ import {
   buildDialoguePolicyContext,
   produceDialogueTurn,
 } from "../../src/engine/dialogue/orchestrator";
-import type { DialogueProvider } from "../../src/engine/dialogue/types";
+import { validateDialogueClaims } from "../../src/engine/dialogue/claimGate";
+import { buildAudienceContext } from "../../src/engine/dialogue/audience";
+import { GroundTruthBeliefProjection } from "../../src/engine/chronicle/belief";
+import type { DialogueProvider, AuthorizedClaim } from "../../src/engine/dialogue/types";
+import { contextRefKey } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -28,10 +35,6 @@ function makeRequest() {
   const r = assembleDialogueRequest(db, state, SPEAKER, "zichendian");
   if (!r.ok) throw new Error(r.error.message);
   return r.value;
-}
-
-function makePolicy() {
-  return buildDialoguePolicyContext(db, state, makeRequest());
 }
 
 function makeProvider(proposedClaims: ProposedClaim[], text = VALID_TEXT): DialogueProvider {
@@ -69,21 +72,21 @@ describe("buildDialoguePolicyContext", () => {
     if (!result.ok) expect(result.error.code).toBe("BAD_SPEAKER");
   });
 
-  it("offeredRefKeys is derived from the request actually sent (single source, no re-compute)", () => {
-    // Single-source contract: offeredRefKeys MUST be derived from the exact
-    // relevantMemories carried by the DialogueRequest handed to the provider.
-    // Tampering the request's memories must be reflected verbatim in offeredRefKeys.
+  it("offeredRefKeys derives from promptContext.relevantMemories (single-source invariant)", () => {
+    // Single-source contract: offeredRefKeys MUST be derived from promptContext.relevantMemories —
+    // the exact memories that appear in the LLM prompt — not from speakerContext.relevantMemories.
+    // Tampering promptContext.relevantMemories must be reflected verbatim in offeredRefKeys.
     const request = makeRequest();
-    const original = request.speakerContext.relevantMemories[0];
+    const original = request.promptContext.relevantMemories[0];
     expect(original).toBeDefined();
     const sentinelId = "sentinel_offered_id";
     const tampered = {
       ...request,
-      speakerContext: {
-        ...request.speakerContext,
+      promptContext: {
+        ...request.promptContext,
         relevantMemories: [{ ...original!, id: sentinelId }],
+        knownEvents: [],
       },
-      promptContext: { ...request.promptContext, knownEvents: [] },
     };
     const policy = buildDialoguePolicyContext(db, state, tampered);
     expect(policy.offeredRefKeys).toBeInstanceOf(Set);
@@ -119,12 +122,12 @@ describe("produceDialogueTurn — chain (a): CLOSED mode — no factual claims a
   });
 
   it("rejects factual claim with claim_not_allowed when allowedClaims=[] (CLOSED E2E — P0.1)", async () => {
-    // Verifies P0.1 fix: empty allowedClaims must pass to gate as CLOSED, not silently drop to OPEN.
-    // Before fix: allowedClaims=[] was converted to undefined → OPEN mode → claim passed.
-    // After fix: allowedClaims=[] is passed directly → CLOSED → claim_not_allowed.
+    // Verifies P0.1 fix: empty allowedClaims=[] is passed as CLOSED, not silently dropped to OPEN.
+    // Before fix: allowedClaims=[] was converted to undefined → OPEN → claim passed.
+    // After fix: allowedClaims=[] → CLOSED → claim_not_allowed finding.
     const request = makeRequest();
     expect(request.promptContext.allowedClaims).toHaveLength(0);
-    const firstMemoryId = request.speakerContext.relevantMemories[0]!.id;
+    const firstMemoryId = request.promptContext.relevantMemories[0]!.id;
     const factualClaim: ProposedClaim = {
       claim: { id: "c_closed", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: firstMemoryId }],
@@ -135,60 +138,89 @@ describe("produceDialogueTurn — chain (a): CLOSED mode — no factual claims a
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("CLAIM_REJECTED");
+      // Verify the specific violation — not just any CLAIM_REJECTED
+      const findings = result.error.context?.findings as Array<{ code: string }> | undefined;
+      expect(findings?.some((f) => f.code === "claim_not_allowed")).toBe(true);
     }
   });
 });
 
-describe("produceDialogueTurn — chain (b): claim contradicts belief", () => {
-  it("rejects a claim that contradicts what shen_zhibai should believe about their rank", async () => {
+describe("validateDialogueClaims — chain (b): authorized claim contradicts belief", () => {
+  it("fires contradicts_speaker_belief when fact passes allowed gate but value contradicts belief", () => {
+    // shen_zhibai is fenghou. We authorize holds_rank(shen_zhibai, zhaoyi) explicitly so it passes
+    // the CLOSED gate, then the belief gate catches the contradiction.
     const request = makeRequest();
+    const firstMemoryId = request.promptContext.relevantMemories[0]!.id;
+    const offeredRefKeys = new Set([contextRefKey({ kind: "memory", id: firstMemoryId })]);
+    const audience = buildAudienceContext(state, db, { speakerId: SPEAKER, targetId: "player" });
+    const beliefs = new GroundTruthBeliefProjection(state);
 
-    const firstOfferedId = request.speakerContext.relevantMemories[0]!.id;
-
-    // shen_zhibai is fenghou; claim says "zhaoyi" → contradicts belief
+    const authorized: AuthorizedClaim = {
+      claim: { id: "auth_b", predicate: "holds_rank", subjectId: SPEAKER, object: "zhaoyi", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: firstMemoryId }],
+    };
     const wrongRankClaim: ProposedClaim = {
-      claim: {
-        id: "c2",
-        predicate: "holds_rank",
-        subjectId: SPEAKER,
-        object: "zhaoyi",
-        modality: "assert",
-      },
-      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
+      claim: { id: "c2", predicate: "holds_rank", subjectId: SPEAKER, object: "zhaoyi", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: firstMemoryId }],
       modality: "assert",
       certainty: 90,
     };
 
-    const result = await produceDialogueTurn(db, makeProvider([wrongRankClaim]), request, state);
+    const result = validateDialogueClaims({
+      speakerId: SPEAKER,
+      audience,
+      beliefs,
+      offeredRefKeys,
+      proposedClaims: [wrongRankClaim],
+      allowedClaims: [authorized],
+    });
+
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe("CLAIM_REJECTED");
-    }
+    expect(result.findings.some((f) => f.code === "contradicts_speaker_belief")).toBe(true);
   });
 });
 
-describe("produceDialogueTurn — chain (d): unknown source context", () => {
-  it("rejects a claim with a sourceRef not in offered memories", async () => {
+describe("validateDialogueClaims — chain (d): authorized fact, unauthorized source", () => {
+  it("fires source_not_authorized when proposed sourceRef is not in authorized sourceRefs", () => {
+    // Authorize holds_rank(shen_zhibai, fenghou) with memory sourceRef X.
+    // Propose the same claim but cite a DIFFERENT memory not in authorized sourceRefs.
+    // The fact+polarity passes Phase 1 but Phase 2 (source intersection) fails → source_not_authorized.
     const request = makeRequest();
+    const realMemoryId = request.promptContext.relevantMemories[0]!.id;
+    const fakeSourceId = "fake_memory_id_not_in_authorized_xyz";
+    // Both real and fake must be in offeredRefKeys to prove the rejection is source-authorization,
+    // not mere "not offered" — the fake ID is not in offered but passes as "offered" for this test
+    const offeredRefKeys = new Set([
+      contextRefKey({ kind: "memory", id: realMemoryId }),
+      contextRefKey({ kind: "memory", id: fakeSourceId }),
+    ]);
+    const audience = buildAudienceContext(state, db, { speakerId: SPEAKER, targetId: "player" });
+    const beliefs = new GroundTruthBeliefProjection(state);
 
-    const unknownSrcClaim: ProposedClaim = {
-      claim: {
-        id: "c3",
-        predicate: "holds_rank",
-        subjectId: SPEAKER,
-        object: "fenghou",
-        modality: "assert",
-      },
-      sourceRefs: [{ kind: "memory" as const, id: "fake_memory_id_not_offered_xyz" }],
+    const authorized: AuthorizedClaim = {
+      claim: { id: "auth_d", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      // Only realMemoryId is authorized; fakeSourceId is NOT
+      sourceRefs: [{ kind: "memory" as const, id: realMemoryId }],
+    };
+    const wrongSrcClaim: ProposedClaim = {
+      claim: { id: "c3", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      // Claims the wrong source — not in authorized.sourceRefs
+      sourceRefs: [{ kind: "memory" as const, id: fakeSourceId }],
       modality: "assert",
       certainty: 90,
     };
 
-    const result = await produceDialogueTurn(db, makeProvider([unknownSrcClaim]), request, state);
+    const result = validateDialogueClaims({
+      speakerId: SPEAKER,
+      audience,
+      beliefs,
+      offeredRefKeys,
+      proposedClaims: [wrongSrcClaim],
+      allowedClaims: [authorized],
+    });
+
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe("CLAIM_REJECTED");
-    }
+    expect(result.findings.some((f) => f.code === "source_not_authorized")).toBe(true);
   });
 });
 

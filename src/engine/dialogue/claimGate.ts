@@ -177,23 +177,27 @@ function findingsFor(pc: ProposedClaim, ctx: ClaimGateContext): ClaimGateFinding
   const allowedClaims = ctx.allowedClaims;
 
   if (allowedClaims !== undefined) {
-    // Phase 1 (§3a/3b): Is there ANY allowed claim for this fact+polarity?
-    const factPolarityMatch = allowedClaims.find((auth) => matchesFactAndPolarity(pc, auth));
+    // Phase 1 (§3a/3b): Are there ANY allowed claims for this fact+polarity?
+    const factPolarityMatches = allowedClaims.filter((auth) => matchesFactAndPolarity(pc, auth));
 
-    if (!factPolarityMatch) {
+    if (factPolarityMatches.length === 0) {
       // 3b: no fact+polarity match at all → claim_not_allowed
       out.push({ code: "claim_not_allowed", claimId: id, message: "claim 不在本轮授权列表中" });
       return out;
     }
 
-    // Phase 2 (§3c/3d): Full check — modality strength + certainty ceiling + source intersection
-    if (!isCoveredByAllowedClaim(pc, factPolarityMatch, ctx.offeredRefKeys)) {
-      // 3c: fact+polarity matched but modality/certainty/source fails → source_not_authorized
+    // Phase 2 (§3c/3d): At least ONE matching authorized claim must pass the full check
+    // (modality strength + certainty ceiling + source intersection).
+    // Using some() over all matches handles the case where multiple authorized entries share
+    // the same fact+polarity but differ in sourceRefs (e.g. two events independently authorize
+    // the same claim — any valid authorization suffices).
+    if (!factPolarityMatches.some((auth) => isCoveredByAllowedClaim(pc, auth, ctx.offeredRefKeys))) {
+      // 3c: fact+polarity matched but no auth entry covers modality/certainty/source → source_not_authorized
       out.push({ code: "source_not_authorized", claimId: id, message: "claim 来源不在授权来源交集中" });
       return out;
     }
 
-    // 3d: match + source ok → eventAuthorized = true
+    // 3d: at least one match + source ok → eventAuthorized = true
     eventAuthorized = true;
   }
 

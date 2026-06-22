@@ -253,13 +253,11 @@ async function produceDialogueLine(
  * Build a DialoguePolicyContext from the ALREADY-ASSEMBLED DialogueRequest.
  *
  * Single-source invariant (plan §gate boundary): `offeredRefKeys` is derived
- * directly from `request.speakerContext.relevantMemories` — the exact memories
- * handed to the provider — never from an independent buildMemoryContext call.
- * Re-computing would let the gate's notion of "what was offered" drift from what
- * the provider actually received (e.g. once targetId becomes dynamic), causing a
- * legitimate source to be flagged unknown_source_context, or — worse — a source
- * the provider never saw to be silently accepted. `now` likewise reuses
- * `request.time` so time has one source too.
+ * from `request.promptContext.relevantMemories` — the exact memories that appear
+ * in the LLM prompt payload — never from `speakerContext.relevantMemories` (which
+ * may diverge if prompt assembly adds filtering, truncation, or redaction). Using
+ * the prompt-side array ensures the gate and the model agree on what was actually
+ * offered. `now` likewise reuses `request.time` so time has one source too.
  *
  * The speaker was already validated when the request was assembled, so this
  * cannot fail and returns the context directly (no Result wrapper).
@@ -278,7 +276,7 @@ export function buildDialoguePolicyContext(
   // are NOT added here (they are authorization constraints, not offered content).
   // Single-source invariant: derived solely from what was placed on the request.
   const offeredRefKeys = new Set<string>([
-    ...request.speakerContext.relevantMemories.map((m) => contextRefKey({ kind: "memory", id: m.id })),
+    ...request.promptContext.relevantMemories.map((m) => contextRefKey({ kind: "memory", id: m.id })),
     ...request.promptContext.knownEvents.map((e) => contextRefKey({ kind: "event", id: e.id })),
   ]);
 
