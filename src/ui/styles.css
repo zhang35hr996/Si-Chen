@@ -3403,3 +3403,86 @@ button:active:enabled {
 .audience-prompt__actions { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 .audience-prompt__reason { color: var(--cinnabar-soft); font-size: 0.8rem; }
 @media (prefers-reduced-motion: reduce) { .audience-prompt { animation: none; } }
+
+/* ── 待宣事务抽屉（宽屏右侧 drawer / 窄屏底部 sheet）─────────────────────── */
+.pending-drawer {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--ink-750), var(--ink-850));
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-deep);
+  /* 宽屏：右侧抽屉 */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 92vw);
+  border-right: none;
+  animation: slide-in-right 0.28s ease both;
+}
+.pending-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.pending-drawer__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: var(--gold-bright);
+  letter-spacing: 0.15em;
+}
+.pending-drawer__header .action-btn { min-height: 44px; }
+.pending-drawer__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 1.2rem calc(1rem + env(safe-area-inset-bottom));
+}
+.pending-drawer__empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 2.4rem 0;
+}
+.pending-drawer__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.8rem; }
+.pending-drawer__item {
+  display: flex;
+  gap: 0.8rem;
+  padding: 0.9rem;
+  background: rgba(20, 16, 12, 0.6);
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--gold-dim);
+  border-radius: 6px;
+}
+.pending-drawer__item[data-status="suppressed"] { border-left-color: var(--faint); opacity: 0.92; }
+.pending-drawer__portrait { width: 40px; height: 40px; object-fit: cover; border-radius: 50%; border: 1px solid var(--line-gold); flex: 0 0 auto; }
+.pending-drawer__item-body { flex: 1; min-width: 0; }
+.pending-drawer__visitor { margin: 0 0 0.3rem; display: flex; gap: 0.55rem; align-items: baseline; flex-wrap: wrap; }
+.pending-drawer__name { color: var(--gold-bright); font-family: var(--font-display); font-size: 1rem; }
+.pending-drawer__role, .pending-drawer__deferred { color: var(--muted); font-size: 0.78rem; }
+.pending-drawer__message { margin: 0 0 0.6rem; color: var(--cream); line-height: 1.55; font-size: 0.92rem; }
+.pending-drawer__item-actions { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.pending-drawer__item-actions .action-btn { min-height: 44px; }
+.pending-drawer__reason { color: var(--cinnabar-soft); font-size: 0.8rem; }
+@media (max-width: 560px) {
+  /* 窄屏：底部 sheet */
+  .pending-drawer {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: 82dvh;
+    border-radius: 12px 12px 0 0;
+    animation: slide-in-up 0.28s ease both;
+  }
+}
+@keyframes slide-in-right { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slide-in-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .pending-drawer { animation: none; }
+}
