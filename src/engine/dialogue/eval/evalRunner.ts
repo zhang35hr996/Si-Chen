@@ -97,6 +97,7 @@ export async function runEvalScenario(
     fixtureId: scenario.fixtureId,
     model: "fixture",
     mode: "fixture" as const,
+    sceneDirective: scenario.sceneDirective,
     claimFindings: [] as { code: string; claimId: string }[],
     textFindings: [] as { gate: string; severity: string; matched: string }[],
     expectationFindings: [] as EvalExpectationFinding[],

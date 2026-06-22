@@ -208,9 +208,7 @@ async function main() {
     const scenarioId = candA.scenarioId;
     const runIndex = String(candA.runIndex);
 
-    // sceneDirective: not on EvalResult directly — use empty string if not available
-    // We carry it from the scenario, but EvalResult doesn't store it. Use empty string.
-    const sceneDirective = "";
+    const sceneDirective = candA.sceneDirective ?? "";
 
     const textA = candA.text ?? "";
     const textB = candB.text ?? "";

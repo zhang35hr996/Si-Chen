@@ -32,6 +32,7 @@ export interface EvalResult {
   requestId?: string;
   text?: string;             // model's raw generated text (preserved even if gate fails)
   servedText?: string;       // only set when outcome.ok === true
+  sceneDirective?: string;   // populated from EvalScenario.sceneDirective
   durationMs: number;
 }
 

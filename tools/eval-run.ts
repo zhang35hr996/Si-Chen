@@ -210,8 +210,10 @@ async function main() {
               fixtureId: scenario.fixtureId,
               model: model!,
               mode: "online" as const,
+              sceneDirective: scenario.sceneDirective,
               schemaStatus: "not_run" as const,
               gateStatus: "not_run" as const,
+              // expectations not evaluated in online mode (LLM-2): requires fixture-controlled responses
               expectationStatus: "not_run" as const,
               claimFindings: [],
               textFindings: [],
@@ -238,8 +240,10 @@ async function main() {
               fixtureId: scenario.fixtureId,
               model: model!,
               mode: "online" as const,
+              sceneDirective: scenario.sceneDirective,
               schemaStatus: "not_run" as const,
               gateStatus: "not_run" as const,
+              // expectations not evaluated in online mode (LLM-2): requires fixture-controlled responses
               expectationStatus: "not_run" as const,
               claimFindings: [],
               textFindings: [],
@@ -276,6 +280,7 @@ async function main() {
             fixtureId: scenario.fixtureId,
             model: model!,
             mode: "online" as const,
+            sceneDirective: scenario.sceneDirective,
             schemaStatus: "pass" as const,
             gateStatus,
             claimFindings,
@@ -290,6 +295,7 @@ async function main() {
               },
             } : {}),
             ...(requestId !== undefined ? { requestId } : {}),
+            // expectations not evaluated in online mode (LLM-2): requires fixture-controlled responses
             expectationStatus: "not_run" as const,
             expectationFindings: [],
             durationMs,
