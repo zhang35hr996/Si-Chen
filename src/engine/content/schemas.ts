@@ -491,6 +491,28 @@ export const gameEventSchema = z
     once: z.boolean(),
     cooldown: z.strictObject({ actionDays: z.number().int().min(1) }).optional(),
     apCost: z.number().int().min(0), // reserved at entry, spent at commit (plan §6)
+    // 呈现契约（可选）：声明事件「如何呈现」。checkpoint 仍负责 eligibility；
+    // presentation.mode 负责呈现分流（候见/探索/手动/上朝/进门直开）。缺省由
+    // resolveEntryMode 按 checkpoint+地点推导。详见 scene-ui-narrative-refactor 设计规格 §3.1。
+    presentation: z
+      .discriminatedUnion("mode", [
+        z.strictObject({
+          mode: z.literal("request_audience"),
+          hostLocationId: idSchema, // 候见归属地点（呈现宿主，独立于 condition.atLocation）
+          audienceCharacterId: idSchema, // 候见者（立绘/名牌来源）
+          audiencePrompt: nonEmpty, // 候见提示文案（叙事口吻，UI 不硬编码）
+        }),
+        z.strictObject({
+          mode: z.literal("exploration"),
+          hostLocationId: idSchema, // 御花园等宿主地点
+          subLocationId: idSchema, // 静态绑定的子地点
+          eventHint: nonEmpty.optional(), // 仅事件存在时显示的线索
+        }),
+        z.strictObject({ mode: z.literal("auto_on_enter") }),
+        z.strictObject({ mode: z.literal("manual") }),
+        z.strictObject({ mode: z.literal("scheduled") }),
+      ])
+      .optional(),
     public: z.boolean().optional(),
     headline: z.string().min(1).max(60).optional(),
   })
