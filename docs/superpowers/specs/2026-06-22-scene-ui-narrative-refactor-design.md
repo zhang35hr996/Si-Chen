@@ -1,7 +1,7 @@
 # 场景 UI · 人物交互 · 事件流程重构 — 设计规格
 
 **日期：** 2026-06-22
-**状态：** 评审 r3 修订完成，待复审批准（对账按 eligibility 清理且不误删他 host / 候见数与待宣数分离 / 修正 manual 不可检测的校验承诺 / 文字一致性）
+**状态：** ✅ Approved for implementation（评审 r3 通过；r4 仅 PR1 执行顺序与一处非阻塞 UI 验收点，已并入实现计划）
 **相关文档：**
 [`engineering/10-current-implementation.md`](../../engineering/10-current-implementation.md)（引擎契约）·
 [`2026-06-18-yushufang-redesign-design.md`](./2026-06-18-yushufang-redesign-design.md)·

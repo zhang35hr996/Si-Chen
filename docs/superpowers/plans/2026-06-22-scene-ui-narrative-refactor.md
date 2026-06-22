@@ -8,7 +8,8 @@
 
 **Tech Stack:** TypeScript · React · Vite · Vitest · Zod · 现有 Effect 漏斗 · localStorage 存档
 
-**配套设计规格：** [`../specs/2026-06-22-scene-ui-narrative-refactor-design.md`](../specs/2026-06-22-scene-ui-narrative-refactor-design.md)（评审 r3）
+**状态：** ✅ Approved for implementation（评审 r3 通过 + r4 执行顺序并入）
+**配套设计规格：** [`../specs/2026-06-22-scene-ui-narrative-refactor-design.md`](../specs/2026-06-22-scene-ui-narrative-refactor-design.md)（评审 r3，Approved）
 
 ## Global Constraints
 
@@ -99,9 +100,11 @@ export function resolveEntryMode(event: GameEventContent, location: LocationCont
 
 - [ ] **Step 6: 提交** — `feat(events): 事件 presentation 契约 + resolveEntryMode`
 
-### Task 1.1b: validate-content 跨引用校验（评审 r2 #2）
+### Task 1.1b: validate-content 跨引用校验 + 现有违规 content 补齐（评审 r2 #2 / r4 执行顺序）
 
-**Files:** Modify `tools/validate-content.ts`；Test `tests/tools/validateContent.test.ts`（若无则新建）
+**Files:** Modify `tools/validate-content.ts`、`content/events/ev_menses_rite.json`、`content/events/ev_shen_neglect.json`；Test `tests/tools/validateContent.test.ts`（若无则新建）
+
+> **执行顺序铁律（评审 r4）**：validator 与「使现有 content 通过」必须在**同一 commit**落地——绝不留 `npm run validate-content` 在 main 持续失败的中间态。审计实测两处现有 `location_enter` 事件无 `presentation` 会被新规则判错：`ev_menses_rite`（@zichendian，推导 request_audience）、`ev_shen_neglect`（@yuhuayuan，推导 exploration）。本 Task 同 commit 补齐二者。
 
 **Interfaces:** 构建期校验，违例使 `npm run validate-content` 退出非零。
 
@@ -113,8 +116,11 @@ export function resolveEntryMode(event: GameEventContent, location: LocationCont
   - （**不**测「manual 缺 presentation」——无推导路径不可检测，评审 r3 #3；可加一例：显式 `mode:"manual"` 结构合法则通过。）
 - [ ] **Step 2: 运行确认失败。**
 - [ ] **Step 3: 实现校验**（在现有 content 加载后追加跨引用遍历，聚合错误信息）。
-- [ ] **Step 4: 运行通过 + `npm run validate-content`（现有 content 全过）。**
-- [ ] **Step 5: 提交** — `feat(tools): validate-content 强制非自动事件声明 presentation 并校验引用`
+- [ ] **Step 4: 补齐现有违规 content（同 commit）**：
+  - `ev_menses_rite` 加 `presentation:{mode:"request_audience", hostLocationId:"zichendian", audienceCharacterId:"wei_ling", audiencePrompt:"司礼卫绫请示传月祭仪。"}`（真实目标态，PR2 直接复用）。
+  - `ev_shen_neglect` 加 `presentation:{mode:"auto_on_enter"}` **作为过渡桥**：PR1 阶段御花园仍走旧 `LocationScreen`、无子地点总览，故先保持「进园自动开始」（与当前行为一致，显式 `auto_on_enter` 覆盖推导的 exploration）。**PR3 Task 3.3 再转为 `exploration` + `subLocationId`**（届时 `subLocations`/总览同 commit 落地，避免 exploration 引用空 `subLocations`）。
+- [ ] **Step 5: 运行通过 + `npm run validate-content`（现有 content 全过，main 保持绿色）。**
+- [ ] **Step 6: 提交** — `feat(tools): validate-content 校验 presentation 引用 + 补齐 ev_menses_rite/ev_shen_neglect`
 
 ### Task 1.2: 中央 router — `pickAutoStartEvent` + 全部自动 checkpoint 改走 router（P0-1 / 评审 r2 #4）
 
@@ -421,8 +427,8 @@ export function audienceReconciliationEffects(db:ContentDB, state:GameState, loc
 
 **Interfaces:** `export function PendingAudienceDrawer(props: { items: AudienceItem[]; onAdmit:(eventId:string)=>void; onClose:()=>void }): JSX.Element` — `items` 由 `getDeferredAudienceQueue` 提供（已是 pending+suppressed，**组件不再过滤**）；每项的候见者名/文案取 `item.presentation.audienceCharacterId`/`audiencePrompt`，候见时间取 `item.deferredAtDayIndex`。
 
-- [ ] **Step 1: 写失败测试** — 列出 pending/suppressed 项（候见者名 + prompt）；点某项 → `onAdmit(eventId)`；空列表显「当前无待宣事务」。
-- [ ] **Step 2–5:** 失败 → 实现（底部 Sheet/右抽屉，焦点管理 + Escape 关闭）→ 通过 → 提交 `feat(ui): 待宣列表 PendingAudienceDrawer`。
+- [ ] **Step 1: 写失败测试** — 列出 pending/suppressed 项（候见者名 + prompt）；点某项 → `onAdmit(eventId)`；空列表显「当前无待宣事务」；**`item.affordable===false` 的项「宣入」禁用并显原因（评审 r4 非阻塞点：affordability 不能只在首个 `AudiencePrompt` 处理而 Drawer 遗漏）**。
+- [ ] **Step 2–5:** 失败 → 实现（底部 Sheet/右抽屉，焦点管理 + Escape 关闭；每项读 `item.affordable` 控制宣入可用性）→ 通过 → 提交 `feat(ui): 待宣列表 PendingAudienceDrawer（含 affordability 门槛）`。
 
 ### Task 2.4: ZichendianScreen + App 接线（候见 + 默认态 + 召见立绘）
 
@@ -495,7 +501,7 @@ test("召见侍君 → 立绘入场，无 CharacterCard；结束恢复默认态"
 
 ### Task 3.3: 御花园 subLocations schema + manifest + 调度
 
-**Files:** Modify `schemas.ts`（`locationSchema.subLocations?`）、`assets/manifest.json`、`content/locations/yuhuayuan.json`、`content/events/*`（御花园事件加 `presentation:{mode:"exploration",hostLocationId:"yuhuayuan",subLocationId,eventHint?}`）；Create `src/engine/map/subLocations.ts`；Test `tests/map/subLocations.test.ts`
+**Files:** Modify `schemas.ts`（`locationSchema.subLocations?`）、`assets/manifest.json`、`content/locations/yuhuayuan.json`、`content/events/*`（御花园事件加 `presentation:{mode:"exploration",hostLocationId:"yuhuayuan",subLocationId,eventHint?}`——**含把 PR1 桥接为 `auto_on_enter` 的 `ev_shen_neglect` 正式转为 `exploration` 并绑定一个 `subLocationId`**，与本 Task 的 `subLocations`/manifest 同 commit）；Create `src/engine/map/subLocations.ts`；Test `tests/map/subLocations.test.ts`
 
 > **前置同步：** `git fetch origin && git rebase origin/main`，确认 `public/assets/backgrounds/{jiangxuexuan,taiyechi,fubiting,tuixiushan}.png` 存在。
 
