@@ -22,7 +22,7 @@ import {
 import { DEFAULT_PRICE_TABLE } from "../src/engine/dialogue/eval/pricing";
 import { evalResultSchema } from "../src/engine/dialogue/eval/resultSchema";
 import { buildSpeakerProfiles } from "../src/engine/dialogue/eval/speakerProfile";
-import { loadRealContent } from "../tests/helpers/contentFixture";
+import { loadRealContent } from "./lib/loadRealContent";
 import type { EvalResult } from "../src/engine/dialogue/eval/types";
 
 function parseArgs(argv: string[]): { input: string[]; outputDir: string } {

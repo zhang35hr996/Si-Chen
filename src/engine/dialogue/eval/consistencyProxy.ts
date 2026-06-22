@@ -55,10 +55,30 @@ function hasFinding(results: EvalResult[], gate: string): boolean {
   return results.some((r) => r.textFindings.some((f) => f.gate === gate));
 }
 
-/** Pull 『…』-quoted lexemes out of free-form quirk strings; non-quoted quirks are ignored. */
+/**
+ * Markers that declare an UNCONDITIONAL fixed phrase (the character always uses
+ * it). Only quirks containing one of these contribute a mandatory lexeme.
+ */
+const FIXED_QUIRK_MARKERS = ["自称", "称玩家", "常说", "口头禅"];
+/**
+ * Conditional markers ("偶尔/失落时/…"): the『…』inside describes something said
+ * only under a condition, so it must NOT be treated as a per-turn requirement.
+ */
+const CONDITIONAL_QUIRK_MARKERS = ["偶尔", "有时", "失落时", "动情时", "生气时", "私下", "脱口而出"];
+
+/**
+ * Extract only MANDATORY 『…』 lexemes from free-form quirk strings: a quirk
+ * qualifies when it declares a fixed phrase (FIXED_QUIRK_MARKERS) and is not
+ * gated by a condition (CONDITIONAL_QUIRK_MARKERS). e.g. 「自称『侍身』」→ 侍身,
+ * but 「失落时偶尔会脱口而出『曾经』」→ (ignored, conditional). Conditional or
+ * undeclared quotes are skipped so the character isn't penalized for not saying
+ * them in ordinary turns.
+ */
 export function extractQuirkLexemes(quirks: string[]): string[] {
   const out: string[] = [];
   for (const q of quirks) {
+    if (CONDITIONAL_QUIRK_MARKERS.some((c) => q.includes(c))) continue;
+    if (!FIXED_QUIRK_MARKERS.some((mk) => q.includes(mk))) continue;
     const re = /『([^』]+)』/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(q)) !== null) out.push(m[1]!);
@@ -80,28 +100,40 @@ export function characterProxyScore(resultsForSpeaker: EvalResult[], profile: Sp
     evidence: selfRefFinding ? "self_ref gate finding present" : usesOwnSelfRef ? "own self-ref used" : "no own self-ref observed",
   };
 
-  // 2. player-address correctness (reuses the rank_title gate)
+  // 2. player-address correctness. A wrong honorific (rank_title gate) → 0; the
+  // expected address actually observed → 1; no address at all → 0.5 (no evidence
+  // either way — not full marks). Lines need not address the player every turn.
   const rankTitleFinding = hasFinding(resultsForSpeaker, "rank_title");
+  const usesExpectedAddress = texts.some((t) => t.includes(profile.addressTerm));
   const addressSignal: Signal = {
     name: "address_correctness",
     weight: 0.2,
-    value: rankTitleFinding ? 0 : 1,
-    evidence: rankTitleFinding ? "rank_title gate finding present" : `addresses player as ${profile.addressTerm}`,
+    value: rankTitleFinding ? 0 : usesExpectedAddress ? 1 : 0.5,
+    evidence: rankTitleFinding
+      ? "rank_title gate finding present"
+      : usesExpectedAddress
+        ? `expected address ${profile.addressTerm} observed`
+        : "no player address observed",
   };
 
-  // 3. checkable quirk adherence (only 『…』 lexemes are scorable)
-  let quirkValue: number;
-  let quirkEvidence: string;
-  if (profile.quirkLexemes.length === 0) {
-    quirkValue = 1;
-    quirkEvidence = "not_scorable (no quoted quirk lexemes)";
-  } else {
-    const present = profile.quirkLexemes.filter((q) => texts.some((t) => t.includes(q)));
-    quirkValue = present.length / profile.quirkLexemes.length;
-    const missing = profile.quirkLexemes.filter((q) => !present.includes(q));
-    quirkEvidence = missing.length === 0 ? "all quirk lexemes present" : `missing: ${missing.join("、")}`;
-  }
-  const quirkSignal: Signal = { name: "quirk_adherence", weight: 0.2, value: quirkValue, evidence: quirkEvidence };
+  // 3. checkable quirk adherence (only MANDATORY 『…』 lexemes). With no scorable
+  // lexemes this is not_scorable → weight 0 so it neither inflates nor deflates
+  // the score (weightedScore renormalizes over the remaining weight). Note: a
+  // lexeme equal to a selfRef/addressTerm is also counted by signals 1/2 — an
+  // accepted, small double-weight for declared signature phrases.
+  const hasQuirks = profile.quirkLexemes.length > 0;
+  const presentQuirks = profile.quirkLexemes.filter((q) => texts.some((t) => t.includes(q)));
+  const missingQuirks = profile.quirkLexemes.filter((q) => !presentQuirks.includes(q));
+  const quirkSignal: Signal = {
+    name: "quirk_adherence",
+    weight: hasQuirks ? 0.2 : 0,
+    value: hasQuirks ? presentQuirks.length / profile.quirkLexemes.length : 0,
+    evidence: !hasQuirks
+      ? "not_scorable (no mandatory quirk lexemes)"
+      : missingQuirks.length === 0
+        ? "all quirk lexemes present"
+        : `missing: ${missingQuirks.join("、")}`,
+  };
 
   // 4. taboo avoidance
   const raisedTaboos = profile.tabooTopics.filter((t) => texts.some((line) => line.includes(t)));
@@ -112,16 +144,21 @@ export function characterProxyScore(resultsForSpeaker: EvalResult[], profile: Sp
     evidence: raisedTaboos.length === 0 ? "no taboo topics surfaced" : `raised: ${raisedTaboos.join("、")}`,
   };
 
-  // 5. cross-scenario stability — variance of own-self-ref presence across the speaker's lines
+  // 5. cross-scenario stability — variance of own-self-ref presence across lines.
+  // Needs ≥2 lines to be measurable; with <2 it is not_scorable → weight 0 (a
+  // single line is NOT evidence of stability).
   const presence: number[] = texts.map((t) => (profile.selfRefs.some((s) => t.includes(s)) ? 1 : 0));
+  const measurable = presence.length >= 2;
   const p = presence.length > 0 ? presence.reduce((s, x) => s + x, 0) / presence.length : 0;
   const variance = presence.length > 0 ? presence.reduce((s, x) => s + (x - p) * (x - p), 0) / presence.length : 0;
   const stabilityValue = clamp01(1 - 4 * variance); // boolean variance maxes at 0.25 → maps to 0
   const stabilitySignal: Signal = {
     name: "cross_scenario_stability",
-    weight: 0.15,
-    value: stabilityValue,
-    evidence: presence.length <= 1 ? "single line (trivially stable)" : `self-ref present in ${presence.reduce((s, x) => s + x, 0)}/${presence.length} lines`,
+    weight: measurable ? 0.15 : 0,
+    value: measurable ? stabilityValue : 0,
+    evidence: measurable
+      ? `self-ref present in ${presence.reduce((s, x) => s + x, 0)}/${presence.length} lines`
+      : "not_scorable (<2 lines)",
   };
 
   const signals = [selfRefSignal, addressSignal, quirkSignal, tabooSignal, stabilitySignal];
