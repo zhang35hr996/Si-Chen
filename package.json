@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:relay": "tsx server/llm/anthropicRelay.ts",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:relay\"",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -18,9 +20,11 @@
     "new:character": "tsx tools/new-content.ts character",
     "new:location": "tsx tools/new-content.ts location",
     "new:event": "tsx tools/new-content.ts event",
-    "new:scene": "tsx tools/new-content.ts scene"
+    "new:scene": "tsx tools/new-content.ts scene",
+    "smoke:anthropic": "tsx tools/smoke-anthropic.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zod": "^4.4.3"
@@ -31,6 +35,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.1.2",
     "eslint": "^10.4.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
