@@ -56,16 +56,21 @@ export function PendingAudienceDrawer({ items, busy = false, onAdmit, onClose }:
   const closeCallbackRef = useRef(close);
   closeCallbackRef.current = close;
 
-  // 挂载：记下原焦点元素并把焦点移入抽屉（关闭按钮，busy 时对话容器）；卸载：若原元素仍在文档则还焦。
+  // Effect A：仅 mount/unmount 生命周期——记下原焦点元素，卸载时若仍在文档则还焦。
   useEffect(() => {
     prevFocusRef.current = document.activeElement;
-    if (busy) dialogRef.current?.focus();
-    else closeBtnRef.current?.focus();
     return () => {
       const prev = prevFocusRef.current as HTMLElement | null;
       if (prev && prev.isConnected && typeof prev.focus === "function") prev.focus();
     };
   }, []);
+
+  // Effect B：按当前状态管焦点——busy/已派发→对话容器（不停留在 disabled 按钮）；否则→关闭按钮。
+  // busy 动态变化、终结动作认领后父层未卸载、busy 复位 等都会重算。终结认领锁不随 busy 重置。
+  useEffect(() => {
+    if (busy || dispatched) dialogRef.current?.focus();
+    else closeBtnRef.current?.focus();
+  }, [busy, dispatched]);
 
   // Escape = 关闭。作用域内注册、卸载即移除；callback ref 取最新避免闭包陈旧。
   useEffect(() => {
@@ -106,6 +111,7 @@ export function PendingAudienceDrawer({ items, busy = false, onAdmit, onClose }:
                     <button
                       type="button"
                       className="action-btn action-btn--key"
+                      aria-label={`宣进来：${item.visitorName}`}
                       onClick={() => admit(item.eventId)}
                       disabled={locked || !item.affordable}
                       title={!item.affordable ? item.disabledReason : undefined}

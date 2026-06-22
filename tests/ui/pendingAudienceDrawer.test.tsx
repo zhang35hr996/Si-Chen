@@ -12,7 +12,9 @@ const items: PendingAudienceViewItem[] = [
   { eventId: "ev_c", visitorName: "陆参", message: "边关急报。", status: "pending", affordable: false, disabledReason: "行动力不足" },
 ];
 
-const admitButtons = () => screen.getAllByRole("button", { name: "宣进来" });
+// All admit buttons regardless of visitor (identity-specific names start with 宣进来).
+const allAdmitButtons = () => screen.getAllByRole("button", { name: /^宣进来/ });
+const admitFor = (visitorName: string) => screen.getByRole("button", { name: `宣进来：${visitorName}` });
 const noop = () => {};
 
 describe("PendingAudienceDrawer", () => {
@@ -25,37 +27,44 @@ describe("PendingAudienceDrawer", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(3); // includes the suppressed one
   });
 
-  it("18. dialog + buttons expose accessible names", () => {
+  it("Blocker 1. each admit button has an identity-specific accessible name", () => {
+    render(<PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />);
+    expect(admitFor("卫绥")).toBeInTheDocument();
+    expect(admitFor("沈砚")).toBeInTheDocument();
+    expect(admitFor("陆参")).toBeInTheDocument();
+    expect(allAdmitButtons()).toHaveLength(3);
+  });
+
+  it("18. dialog + close button expose accessible names", () => {
     render(<PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />);
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
     expect(screen.getByRole("dialog")).toHaveAccessibleName("待宣事务");
     expect(screen.getByRole("button", { name: "关闭" })).toBeInTheDocument();
-    expect(admitButtons().length).toBe(3);
   });
 
-  it("4. clicking an enabled item calls onAdmit with the exact eventId", async () => {
+  it("4. clicking 卫绥's action emits ev_a (by identity, not position)", async () => {
     const user = userEvent.setup();
     const onAdmit = vi.fn();
     render(<PendingAudienceDrawer items={items} onAdmit={onAdmit} onClose={noop} />);
-    await user.click(admitButtons()[0]!);
+    await user.click(admitFor("卫绥"));
     expect(onAdmit).toHaveBeenCalledExactlyOnceWith("ev_a");
   });
 
-  it("5/8. selecting item B emits B's id (and items remain actionable alongside an unaffordable one)", async () => {
+  it("5/8. clicking 沈砚's action emits ev_b (actionable alongside an unaffordable sibling)", async () => {
     const user = userEvent.setup();
     const onAdmit = vi.fn();
     render(<PendingAudienceDrawer items={items} onAdmit={onAdmit} onClose={noop} />);
-    await user.click(admitButtons()[1]!); // ev_b
+    await user.click(admitFor("沈砚"));
     expect(onAdmit).toHaveBeenCalledExactlyOnceWith("ev_b");
   });
 
-  it("6/7. unaffordable item: admit disabled, reason shown, no onAdmit", async () => {
+  it("6/7. unaffordable 陆参: admit disabled, reason shown, no onAdmit", async () => {
     const user = userEvent.setup();
     const onAdmit = vi.fn();
     render(<PendingAudienceDrawer items={items} onAdmit={onAdmit} onClose={noop} />);
-    const evC = screen.getByText("陆参").closest("li")!;
-    const admitC = within(evC).getByRole("button", { name: "宣进来" });
+    const admitC = admitFor("陆参");
     expect(admitC).toBeDisabled();
+    const evC = screen.getByText("陆参").closest("li")!;
     expect(within(evC).getByRole("note")).toHaveTextContent("行动力不足");
     await user.click(admitC);
     expect(onAdmit).not.toHaveBeenCalled();
@@ -64,7 +73,7 @@ describe("PendingAudienceDrawer", () => {
   it("9. empty list shows 当前无待宣事务 and no admit buttons", () => {
     render(<PendingAudienceDrawer items={[]} onAdmit={noop} onClose={noop} />);
     expect(screen.getByText("当前无待宣事务")).toBeInTheDocument();
-    expect(screen.queryAllByRole("button", { name: "宣进来" })).toHaveLength(0);
+    expect(screen.queryAllByRole("button", { name: /^宣进来/ })).toHaveLength(0);
   });
 
   it("10. merely rendering calls neither onAdmit nor onClose", () => {
@@ -96,18 +105,17 @@ describe("PendingAudienceDrawer", () => {
     const user = userEvent.setup();
     const onAdmit = vi.fn();
     render(<PendingAudienceDrawer items={items} onAdmit={onAdmit} onClose={noop} />);
-    await user.dblClick(admitButtons()[0]!);
+    await user.dblClick(admitFor("卫绥"));
     expect(onAdmit).toHaveBeenCalledExactlyOnceWith("ev_a");
   });
 
-  it("14. rapid clicks on two different items emit only the first selection", async () => {
+  it("14. rapid clicks on two NAMED visitors emit only the first visitor's id", async () => {
     const user = userEvent.setup();
     const onAdmit = vi.fn();
     render(<PendingAudienceDrawer items={items} onAdmit={onAdmit} onClose={noop} />);
-    const [a, b] = admitButtons();
-    await user.click(a!);
-    await user.click(b!);
-    expect(onAdmit).toHaveBeenCalledExactlyOnceWith("ev_a");
+    await user.click(admitFor("卫绥"));
+    await user.click(admitFor("沈砚"));
+    expect(onAdmit).toHaveBeenCalledExactlyOnceWith("ev_a"); // exact id, not by DOM order
   });
 
   it("15. initial focus lands on the close button", () => {
@@ -115,16 +123,40 @@ describe("PendingAudienceDrawer", () => {
     expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
   });
 
-  it("16. busy disables all actions and focuses the dialog landmark", async () => {
+  it("16. initial busy disables all actions, focuses the dialog, Escape inert", async () => {
     const user = userEvent.setup();
-    const onAdmit = vi.fn();
     const onClose = vi.fn();
-    render(<PendingAudienceDrawer items={items} busy onAdmit={onAdmit} onClose={onClose} />);
+    render(<PendingAudienceDrawer items={items} busy onAdmit={noop} onClose={onClose} />);
     expect(screen.getByRole("dialog")).toHaveFocus();
     expect(screen.getByRole("button", { name: "关闭" })).toBeDisabled();
-    for (const b of admitButtons()) expect(b).toBeDisabled();
+    for (const b of allAdmitButtons()) expect(b).toBeDisabled();
     await user.keyboard("{Escape}");
-    expect(onClose).not.toHaveBeenCalled(); // busy → escape inert
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("Blocker 2 / regr 3. busy false → true moves focus from close to dialog", () => {
+    const { rerender } = render(<PendingAudienceDrawer items={items} busy={false} onAdmit={noop} onClose={noop} />);
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+    rerender(<PendingAudienceDrawer items={items} busy={true} onAdmit={noop} onClose={noop} />);
+    expect(screen.getByRole("dialog")).toHaveFocus();
+  });
+
+  it("Blocker 2 / regr 4. busy true → false (no dispatch) moves focus from dialog to close", () => {
+    const { rerender } = render(<PendingAudienceDrawer items={items} busy={true} onAdmit={noop} onClose={noop} />);
+    expect(screen.getByRole("dialog")).toHaveFocus();
+    rerender(<PendingAudienceDrawer items={items} busy={false} onAdmit={noop} onClose={noop} />);
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+  });
+
+  it("Blocker 2 / regr 5. after admit is claimed but the drawer stays mounted, focus moves to dialog and all actions disable", async () => {
+    const user = userEvent.setup();
+    const onAdmit = vi.fn();
+    render(<PendingAudienceDrawer items={items} onAdmit={onAdmit} onClose={noop} />);
+    await user.click(admitFor("卫绥"));
+    expect(onAdmit).toHaveBeenCalledExactlyOnceWith("ev_a");
+    expect(screen.getByRole("dialog")).toHaveFocus(); // not stranded on the now-disabled button
+    expect(screen.getByRole("button", { name: "关闭" })).toBeDisabled();
+    for (const b of allAdmitButtons()) expect(b).toBeDisabled();
   });
 
   it("17. unmount restores focus to the element that opened the drawer", () => {
