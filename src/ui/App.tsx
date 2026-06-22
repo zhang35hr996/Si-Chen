@@ -15,6 +15,8 @@ import { monthOrdinal, isGreetingSlot } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
+import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue/orchestrator";
+import type { DialogueProvider } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
@@ -95,7 +97,7 @@ interface CourtSession {
   index: number;
 }
 
-export function App({ store, logger }: { store: GameStore; logger?: RingBufferLogger }) {
+export function App({ store, logger, dialogueProvider }: { store: GameStore; logger?: RingBufferLogger; dialogueProvider?: DialogueProvider }) {
   const content = useMemo(() => loadGameContent(), []);
   const manifest = useMemo(() => assetManifestSchema.safeParse(rawManifest), []);
   const registry = useMemo(
@@ -879,17 +881,38 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     goHome();
   };
 
-  // 与在场侍君对话（耗 1 行动点）：脚本化反应台词。
-  const converse = (charId: string) => {
-    const lines = buildConversation(db, store.getState(), charId);
-    if (!lines) return;
+  // 与在场侍君对话（耗 1 行动点）：脚本化反应台词；若 dialogueProvider 可用则走生成式路径。
+  const converse = async (charId: string) => {
+    const fallbackLines = buildConversation(db, store.getState(), charId);
+    if (!fallbackLines) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
     if (!spend.ok) return;
     if (sovereignDied) { onSovereignDeath(); return; }
     store.recordOvernight(db, charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
-    playReactions([{ speakerId: charId, lines }, ...decreeBeats], spend.value.rolledOver);
+
+    // Generative path: assemble request, snapshot expected state, produce turn, CAS
+    if (dialogueProvider) {
+      const expectedState = store.getState();
+      const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation);
+      if (reqResult.ok) {
+        const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+        if (turnResult.ok) {
+          const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
+          if (committed) {
+            const generatedLine = turnResult.value.line;
+            playReactions([{ speakerId: charId, lines: [generatedLine.text] }, ...decreeBeats], spend.value.rolledOver);
+            return;
+          }
+          // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
+        }
+        // produceDialogueTurn failed — fall through to fallback (AP already spent)
+      }
+    }
+
+    // Fallback path: scripted lines
+    playReactions([{ speakerId: charId, lines: fallbackLines }, ...decreeBeats], spend.value.rolledOver);
   };
 
   const transferTo = (carrierId: string) => {

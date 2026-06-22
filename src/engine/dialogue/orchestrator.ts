@@ -234,8 +234,10 @@ function finalizeLine(
  * lives in engine/effects (PR 6). A "reject" gate finding fails the line; a
  * "flag" finding serves it with meta.degraded set. All findings are logged so
  * they surface in the debug panel's diagnostics.
+ *
+ * @internal Use `produceDialogueTurn` instead.
  */
-export async function produceDialogueLine(
+async function produceDialogueLine(
   db: ContentDB,
   provider: DialogueProvider,
   request: DialogueRequest,
@@ -414,8 +416,10 @@ export function validateDialogueProviderResult(
 /**
  * Full policy-aware pipeline: provider call → validateDialogueProviderResult → memory write-back.
  * Returns both the rendered line and the updated GameState (mentionLog updated).
+ *
+ * @internal Use `produceDialogueTurn` instead.
  */
-export async function produceDialogueLineWithPolicy(
+async function produceDialogueLineWithPolicy(
   db: ContentDB,
   provider: DialogueProvider,
   request: DialogueRequest,
@@ -438,4 +442,46 @@ export async function produceDialogueLineWithPolicy(
   );
 
   return ok({ line: outcome.line, nextState });
+}
+
+// ── T9: produceDialogueTurn — THE public entry point ─────────────────────────
+
+/**
+ * The ONLY exported dialogue entry point.
+ *
+ * Routes by provider kind:
+ *   - `scripted`: text gate only (no claim gate, no mention/reaction writeback).
+ *     Returns `{ line, nextState: state }` (state unchanged).
+ *   - `generative`: full policy pipeline (claim gate + mention writeback).
+ *     Returns `{ line, nextState }` with mentionLog updated.
+ *
+ * Error cases:
+ *   - `generative` provider + `request.scripted` set → `invalid_combination`.
+ */
+export async function produceDialogueTurn(
+  db: ContentDB,
+  provider: DialogueProvider,
+  request: DialogueRequest,
+  state: GameState,
+  logger?: RingBufferLogger,
+): Promise<Result<{ line: DialogueLine; nextState: GameState }, GameError>> {
+  // Guard: generative provider must not receive a scripted request
+  if (provider.kind === "generative" && request.scripted !== undefined) {
+    return err(
+      aiError("INVALID_COMBINATION", "generative provider cannot process a scripted request", {
+        context: { providerId: provider.id, speakerId: request.speakerId },
+      }),
+    );
+  }
+
+  if (provider.kind === "scripted") {
+    // Scripted path: text gates only, no claim gate, no state mutation
+    const lineResult = await produceDialogueLine(db, provider, request, logger);
+    if (!lineResult.ok) return err(lineResult.error);
+    return ok({ line: lineResult.value, nextState: state });
+  }
+
+  // Generative path: full policy pipeline
+  const policy = buildDialoguePolicyContext(db, state, request);
+  return produceDialogueLineWithPolicy(db, provider, request, policy, state, logger);
 }

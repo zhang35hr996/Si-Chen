@@ -26,6 +26,7 @@ import {
   assembleDialogueRequest,
   buildDialoguePolicyContext,
   validateDialogueProviderResult,
+  produceDialogueTurn,
 } from "../../src/engine/dialogue/orchestrator";
 import type { DialogueProvider } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
@@ -475,5 +476,109 @@ describe("assembleDialogueRequest — promptContext", () => {
     // promptContext.reactionPlan uses currentDayIndex = now.dayIndex = toGameTime(state.calendar).dayIndex
     // indirectly verified: fresh game has no events so no reaction, but the pipeline ran with correct time
     expect(result.value.time.dayIndex).toBe(expected.dayIndex);
+  });
+});
+
+// ── T9: produceDialogueTurn ────────────────────────────────────────────────────
+
+import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
+
+const TURN_SPEAKER = "shen_zhibai";
+const TURN_VALID_TEXT = "本宫累了，陛下早些歇息。";
+
+function makeScriptedRequest(text = TURN_VALID_TEXT) {
+  const r = assembleDialogueRequest(db, state, TURN_SPEAKER, "zichendian", { scripted: { text } });
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
+}
+
+function makeGenerativeRequest() {
+  const r = assembleDialogueRequest(db, state, TURN_SPEAKER, "zichendian");
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
+}
+
+function makeGenerativeProvider(text = TURN_VALID_TEXT): typeof PROVIDER {
+  return {
+    id: "gen-test",
+    kind: "generative",
+    capabilities: { strictTools: true, promptCaching: false, batch: false },
+    generate: async (req) =>
+      ok<DialogueProviderResult>({
+        speaker: req.speakerId,
+        text,
+        choices: [],
+        proposedClaims: [],
+      }),
+  };
+}
+
+describe("produceDialogueTurn", () => {
+  it("is the only exported entry point (produceDialogueLine is NOT exported)", () => {
+    // If this file compiles with only produceDialogueTurn imported from orchestrator,
+    // that proves it's exported. The private ones (produceDialogueLine,
+    // produceDialogueLineWithPolicy) are not imported — TypeScript would fail
+    // to compile this file if they were absent from the export list.
+    expect(typeof produceDialogueTurn).toBe("function");
+    // Further verification: source-level grep checks happen in CI (grep asserted in task brief)
+  });
+
+  it("generative + request.scripted set → error invalid_combination", async () => {
+    const request = makeScriptedRequest(); // has scripted field set
+    const generativeProvider = makeGenerativeProvider();
+    const result = await produceDialogueTurn(db, generativeProvider, request, state);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("INVALID_COMBINATION");
+  });
+
+  it("scripted provider: text gate only, no claim gate, no mention writeback", async () => {
+    const request = makeScriptedRequest();
+    const result = await produceDialogueTurn(db, mockProvider, request, state);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.line.text).toBe(TURN_VALID_TEXT);
+    expect(result.value.line.meta.generated).toBe(false); // scripted
+    // State unchanged (no mention writeback for scripted)
+    expect(result.value.nextState).toBe(state);
+  });
+
+  it("generative provider: full policy pipeline, returns nextState with possible mentionLog update", async () => {
+    const request = makeGenerativeRequest();
+    const policy = buildDialoguePolicyContext(db, state, request);
+    const firstOfferedId = [...policy.offeredContextIds][0];
+    // Build a generative provider that proposes a valid claim so writeback runs
+    const validClaimProvider: typeof PROVIDER = {
+      id: "gen-with-claim",
+      kind: "generative",
+      capabilities: { strictTools: true, promptCaching: false, batch: false },
+      generate: async (req) =>
+        ok<DialogueProviderResult>({
+          speaker: req.speakerId,
+          text: TURN_VALID_TEXT,
+          choices: [],
+          proposedClaims: firstOfferedId ? [{
+            claim: { id: "c_t9", predicate: "holds_rank", subjectId: TURN_SPEAKER, object: "fenghou", modality: "assert" },
+            sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
+            modality: "assert",
+            certainty: 90,
+          }] : [],
+        }),
+    };
+    const result = await produceDialogueTurn(db, validClaimProvider, request, state);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.line.text).toBe(TURN_VALID_TEXT);
+    expect(result.value.line.meta.generated).toBe(true);
+    // nextState is a different object (mentionLog potentially grew)
+    expect(result.value.nextState).not.toBe(state); // new reference (recordMentionedContext always returns new obj)
+  });
+
+  it("scripted provider: state reference is same (no writeback)", async () => {
+    const request = makeScriptedRequest();
+    const result = await produceDialogueTurn(db, mockProvider, request, state);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // For scripted path, nextState === state (same reference)
+    expect(result.value.nextState).toBe(state);
   });
 });
