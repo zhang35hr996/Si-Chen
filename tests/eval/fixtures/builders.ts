@@ -434,7 +434,7 @@ const forbidden_claim_test: EvalFixtureDefinition = {
   },
   responseFor() {
     return {
-      text: "侍身以为，侍身应居中宫之位……",
+      text: "侍身如今已居中宫，位列凤后。",
       proposedClaims: [
         {
           claim: {

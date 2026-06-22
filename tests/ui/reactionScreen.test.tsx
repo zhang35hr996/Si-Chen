@@ -3,6 +3,10 @@
  *
  * Verifies click-propagation fix, single-flight guard, and failure-path
  * queue/rollover behaviour without coupling to the full App component.
+ *
+ * With the direct-prop rendering refactor (generatedLine bypasses local state),
+ * tests for the generative path can use synchronous getBy* queries — no effects
+ * need to flush before the line is rendered.
  */
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -46,10 +50,10 @@ beforeEach(() => {
   store.newGame(db);
 });
 
-// ── 1. Choice click does not call onDone ──────────────────────────────────────
+// ── 1. Click propagation ──────────────────────────────────────────────────────
 
 describe("click-propagation fix", () => {
-  it("clicking a choice button does NOT call onDone", async () => {
+  it("clicking a choice button does NOT call onDone", () => {
     const onDone = vi.fn();
     const onChoice = vi.fn();
     const line = makeGeneratedLine([{ id: "c1", text: "询问" }]);
@@ -67,15 +71,14 @@ describe("click-propagation fix", () => {
       />,
     );
 
-    // Wait for the effect to set line state and render the button
-    const btn = await screen.findByRole("button", { name: "询问" });
-    fireEvent.click(btn);
+    // generatedLine is rendered directly from prop — no effect wait needed
+    fireEvent.click(screen.getByRole("button", { name: "询问" }));
 
     expect(onChoice).toHaveBeenCalledWith({ id: "c1", text: "询问", tone: undefined });
     expect(onDone).not.toHaveBeenCalled();
   });
 
-  it("clicking the dialogue box does NOT call onDone when choices are visible", async () => {
+  it("clicking the dialogue box does NOT call onDone when choices are visible", () => {
     const onDone = vi.fn();
     const line = makeGeneratedLine([{ id: "c1", text: "询问" }]);
 
@@ -91,9 +94,6 @@ describe("click-propagation fix", () => {
       />,
     );
 
-    // Wait for buttons to appear (effect flushed)
-    await screen.findByRole("button", { name: "询问" });
-
     const box = document.querySelector(".dialogue-screen__box") as HTMLElement;
     fireEvent.click(box);
     expect(onDone).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe("click-propagation fix", () => {
 // ── 2. choicePending disables buttons ────────────────────────────────────────
 
 describe("choicePending prop", () => {
-  it("disables all choice buttons when choicePending is true", async () => {
+  it("disables all choice buttons when choicePending is true", () => {
     const line = makeGeneratedLine([
       { id: "c1", text: "询问" },
       { id: "c2", text: "离开" },
@@ -123,15 +123,13 @@ describe("choicePending prop", () => {
       />,
     );
 
-    // Wait for choice buttons to appear, then check disabled
-    await screen.findByRole("button", { name: "询问" });
     const buttons = screen.getAllByRole("button");
     for (const btn of buttons) {
       expect((btn as HTMLButtonElement).disabled).toBe(true);
     }
   });
 
-  it("leaves choice buttons enabled when choicePending is false", async () => {
+  it("leaves choice buttons enabled when choicePending is false", () => {
     const line = makeGeneratedLine([{ id: "c1", text: "询问" }]);
 
     render(
@@ -148,19 +146,18 @@ describe("choicePending prop", () => {
       />,
     );
 
-    const btn = await screen.findByRole("button", { name: "询问" }) as HTMLButtonElement;
+    const btn = screen.getByRole("button", { name: "询问" }) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
   });
 });
 
-// ── 3. Double-click calls onChoice only once when pending ─────────────────────
+// ── 3. Single-flight guard ────────────────────────────────────────────────────
 
 describe("single-flight via choicePending", () => {
-  it("second click while pending is ignored (button disabled)", async () => {
+  it("second click while pending is blocked — button is disabled", async () => {
     const line = makeGeneratedLine([{ id: "c1", text: "询问" }]);
     const onChoice = vi.fn();
 
-    // First render: not pending
     const { rerender } = render(
       <ReactionScreen
         db={db}
@@ -175,14 +172,11 @@ describe("single-flight via choicePending", () => {
       />,
     );
 
-    // Wait for button
-    await screen.findByRole("button", { name: "询问" });
-
-    // First click goes through (choicePending=false)
+    // First click (not pending)
     fireEvent.click(screen.getByRole("button", { name: "询问" }));
     expect(onChoice).toHaveBeenCalledTimes(1);
 
-    // Simulate App setting choicePending=true (in-flight)
+    // App sets choicePending=true (in-flight)
     await act(async () => {
       rerender(
         <ReactionScreen
@@ -199,19 +193,18 @@ describe("single-flight via choicePending", () => {
       );
     });
 
-    // Button is now disabled; click is blocked
+    // Button disabled; click does not fire onChoice
     const btn = screen.getByRole("button", { name: "询问" }) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     fireEvent.click(btn);
-    // onChoice still at 1
     expect(onChoice).toHaveBeenCalledTimes(1);
   });
 });
 
-// ── 4. generatedLine update renders the next turn ─────────────────────────────
+// ── 4. Atomic turn swap — no stale-frame window ───────────────────────────────
 
-describe("generatedLine update", () => {
-  it("updating generatedLine prop renders the new line text (effect re-run on new prop)", async () => {
+describe("generatedLine direct prop rendering", () => {
+  it("new generatedLine prop atomically replaces displayed line in same render", () => {
     const line1 = makeGeneratedLine([{ id: "c1", text: "询问" }]);
 
     const { rerender } = render(
@@ -222,14 +215,13 @@ describe("generatedLine update", () => {
         speakerId="shen_zhibai"
         lines={[line1.text]}
         generatedLine={line1}
-        choicePending={false}
         onChoice={vi.fn()}
         onDone={vi.fn()}
       />,
     );
 
-    // Turn 1 text visible
-    await screen.findByText(line1.text);
+    // Turn 1 choices are visible
+    expect(screen.getByRole("button", { name: "询问" })).toBeDefined();
 
     const line2: DialogueLine = {
       speakerId: "shen_zhibai",
@@ -240,32 +232,31 @@ describe("generatedLine update", () => {
       meta: { generated: true, degraded: false },
     };
 
-    await act(async () => {
-      rerender(
-        <ReactionScreen
-          db={db}
-          store={store}
-          registry={makeRegistry()}
-          speakerId="shen_zhibai"
-          lines={[line2.text]}
-          generatedLine={line2}
-          choicePending={false}
-          onChoice={vi.fn()}
-          onDone={vi.fn()}
-        />,
-      );
-    });
+    rerender(
+      <ReactionScreen
+        db={db}
+        store={store}
+        registry={makeRegistry()}
+        speakerId="shen_zhibai"
+        lines={[line2.text]}
+        generatedLine={line2}
+        onChoice={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    );
 
-    // Turn 2 text now visible; turn 1 text gone
-    await screen.findByText(line2.text);
-    expect(screen.queryByText(line1.text)).toBeNull();
+    // Turn 2 content appears; turn 1 choices are gone — no stale window
+    expect(screen.getByText(line2.text)).toBeDefined();
+    expect(screen.queryByRole("button", { name: "询问" })).toBeNull();
+    // Turn 2 has no choices, so （继续） is shown
+    expect(screen.getByRole("button", { name: "（继续）" })).toBeDefined();
   });
 });
 
-// ── 5. Failure-path interruption notice renders （继续） affordance ─────────────
+// ── 5. Failure-path interruption notice ──────────────────────────────────────
 
 describe("failure-path interruption notice", () => {
-  it("interruption line renders with （继续） when choices is empty", async () => {
+  it("interruption line renders with （继续） and calls onDone on click", async () => {
     const onDone = vi.fn();
     const interruptLine: DialogueLine = {
       speakerId: "shen_zhibai",
@@ -288,12 +279,8 @@ describe("failure-path interruption notice", () => {
       />,
     );
 
-    // The interruption text and continue button appear
-    await screen.findByText("（对话暂时中断）");
-    const continueBtn = await screen.findByRole("button", { name: "（继续）" });
-    expect(continueBtn).toBeDefined();
-
-    // Clicking continue calls onDone (normal queue-draining path)
+    expect(screen.getByText("（对话暂时中断）")).toBeDefined();
+    const continueBtn = screen.getByRole("button", { name: "（继续）" });
     fireEvent.click(continueBtn);
 
     await waitFor(() => {
