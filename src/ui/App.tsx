@@ -66,6 +66,7 @@ import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
 import { MorningAfterOverlay } from "./components/MorningAfterOverlay";
 import { buildRelocate } from "../store/relocate";
+import { planPregnancyTransfer } from "../store/pregnancyCost";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
 import { DebugPanel } from "./debug/DebugPanel";
 import { ResourcePanel } from "./components/ResourcePanel";
@@ -880,7 +881,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   const transferTo = (carrierId: string) => {
     setSuccessorOpen(false);
-    const r = store.applyEffects(db, [{ type: "pregnancy_transfer", carrierId, atMonth: gestMonth }]);
+    const r = store.applyEffects(db, planPregnancyTransfer(liveState, carrierId, gestMonth, { ...liveState.calendar }));
     if (r.ok) {
       doAutosave();
       setReaction({ speakerId: carrierId, lines: ["臣领旨。臣定以血躯护持皇嗣，不负圣恩。"] });
