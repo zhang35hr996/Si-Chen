@@ -171,7 +171,7 @@ export function LocationScreen({
                   </button>
                 )}
                 {onFlipTablet && !flipGate.ok && (
-                  <p className="location-screen__hint">{flipGate.reason}</p>
+                  <p className="location-screen__empty">{flipGate.reason}</p>
                 )}
               </div>
               {(onSummonPhysician || onSummonZongzheng) && (
