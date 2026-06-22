@@ -1339,6 +1339,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           lines={reaction.lines}
           backgroundKey={reaction.backgroundKey}
           generatedLine={reaction.generatedLine}
+          onChoice={undefined}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {

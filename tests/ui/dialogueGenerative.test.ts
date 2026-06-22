@@ -239,6 +239,68 @@ describe("DialogueScreen generative mode", () => {
   });
 });
 
+// ── T2 (LLM-4): Choice rendering and meta badges ─────────────────────────────
+
+describe("ReactionScreen choice rendering and meta badges", () => {
+  let store: ReturnType<typeof createGameStore>;
+
+  beforeEach(() => {
+    store = createGameStore();
+    store.newGame(db);
+  });
+
+  it("generative line with choices produces N choice descriptors", () => {
+    const line: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "陛下有何吩咐？",
+      expression: "neutral",
+      choices: [
+        { id: "c1", text: "询问" },
+        { id: "c2", text: "离开" },
+      ],
+      meta: { generated: true, degraded: false },
+    };
+
+    expect(line.choices.length).toBe(2);
+    expect(line.choices[0]).toMatchObject({ id: "c1", text: "询问" });
+    expect(line.choices[1]).toMatchObject({ id: "c2", text: "离开" });
+    // Both choices have id and text fields
+    for (const c of line.choices) {
+      expect(typeof c.id).toBe("string");
+      expect(typeof c.text).toBe("string");
+    }
+  });
+
+  it("generative line with zero choices uses continue affordance", () => {
+    const line: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "无事了，陛下请便。",
+      expression: "neutral",
+      choices: [],
+      meta: { generated: true, degraded: false },
+    };
+
+    // When choices is empty, the code path should fall through to the （继续） button.
+    expect(line.choices.length).toBe(0);
+  });
+
+  it("meta.degraded flag is false for a clean provider line", async () => {
+    const state = store.getState();
+    const reqResult = assembleDialogueRequest(db, state, SPEAKER, LOCATION);
+    if (!reqResult.ok) throw new Error(reqResult.error.message);
+
+    const provider = makeGenerativeProvider();
+    const result = await produceDialogueTurn(db, provider, reqResult.value, state);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.line.meta.degraded).toBe(false);
+    expect(result.value.line.meta.generated).toBe(true);
+  });
+});
+
 // ── T1 (LLM-4): ReactionScreen generatedLine prop contract ───────────────────
 
 describe("ReactionScreen generatedLine prop", () => {

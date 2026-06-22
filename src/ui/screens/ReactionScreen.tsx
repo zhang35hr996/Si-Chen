@@ -17,6 +17,7 @@ export function ReactionScreen({
   lines,
   backgroundKey,
   generatedLine,
+  onChoice,
   onDone,
 }: {
   db: ContentDB;
@@ -28,6 +29,8 @@ export function ReactionScreen({
   backgroundKey?: string;
   /** If provided and index === 0, renders this line directly without calling mockProvider. */
   generatedLine?: DialogueLine;
+  /** Called when the player clicks a choice button (generative path only). Does NOT advance the line. */
+  onChoice?: (choice: { id: string; text: string; tone?: string }) => void;
   onDone: () => void;
 }) {
   const state = useGameState(store);
@@ -74,6 +77,8 @@ export function ReactionScreen({
   return (
     <main
       className="dialogue-screen"
+      data-generated={line?.meta.generated || undefined}
+      data-degraded={line?.meta.degraded || undefined}
       style={background ? { backgroundImage: `url("${background.url}")` } : undefined}
     >
       <img
@@ -87,9 +92,22 @@ export function ReactionScreen({
         <p className="dialogue-screen__speaker">{line.speakerName}</p>
         <p className="dialogue-screen__line">{line.text}</p>
         <div className="dialogue-screen__choices">
-          <button type="button" onClick={next}>
-            （继续）
-          </button>
+          {generatedLine !== undefined && line !== null && line.choices.length > 0 ? (
+            line.choices.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                data-tone={c.tone}
+                onClick={() => onChoice?.(c)}
+              >
+                {c.text}
+              </button>
+            ))
+          ) : (
+            <button type="button" onClick={next}>
+              （继续）
+            </button>
+          )}
         </div>
       </section>
     </main>
