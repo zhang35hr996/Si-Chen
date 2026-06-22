@@ -14,6 +14,7 @@ import {
   initialNavState,
   navReducer,
   pendingReactionReducer,
+  rankAdminContinuation,
   resolveReturnNavigation,
 } from "../../src/ui/eventReturn";
 
@@ -231,6 +232,56 @@ describe("pending reaction checkpoint lifecycle (deferred-reaction desync fix)",
   });
 });
 
+describe("first-night rank-admin checkpoint handoff", () => {
+  const begin = (rolledOver: boolean, boardId: string | undefined, from: PendingReactionCheckpoint = null) =>
+    pendingReactionReducer(from, { type: "begin", rolledOver, boardId });
+
+  // rollover first-night bedchamber → pending {boardId: undefined} awaiting handoff
+  const rolloverFirstNightPending = () => begin(true, undefined);
+
+  it("1. promotion → modal close flushes the pending checkpoint exactly once", () => {
+    const pending = rolloverFirstNightPending();
+    expect(pending).toEqual({ boardId: undefined });
+    expect(rankAdminContinuation("first_night", "close")).toBe("flush_pending");
+    // flush = consume once
+    const afterFlush = pendingReactionReducer(pending, { type: "consume" });
+    expect(afterFlush).toBeNull();
+    expect(pendingReactionReducer(afterFlush, { type: "consume" })).toBeNull(); // not run twice
+  });
+
+  it("2. no-op rank result flushes the pending checkpoint", () => {
+    expect(rankAdminContinuation("first_night", "no_op")).toBe("flush_pending");
+  });
+
+  it("3. failed applyEffects flushes the pending checkpoint", () => {
+    expect(rankAdminContinuation("first_night", "failed")).toBe("flush_pending");
+  });
+
+  it("4. successful rank reaction defers flush to the reaction; reaction completion flushes once", () => {
+    const pending = rolloverFirstNightPending();
+    expect(rankAdminContinuation("first_night", "reaction_created")).toBe("defer_to_reaction");
+    expect(pending).toEqual({ boardId: undefined }); // not flushed at rank-apply time
+    // the resulting ReactionScreen.onDone flushes once
+    expect(pendingReactionReducer(pending, { type: "consume" })).toBeNull();
+  });
+
+  it("5. normal rank-admin never flushes a rollover checkpoint on any outcome", () => {
+    for (const outcome of ["close", "no_op", "failed", "reaction_created"] as const) {
+      expect(rankAdminContinuation("normal", outcome)).toBe("none");
+    }
+  });
+
+  it("6. first-night non-rollover begin clears any stale pending context", () => {
+    expect(begin(false, undefined, { boardId: "jingcheng" })).toBeNull();
+  });
+
+  it("7. physician/child/adoption non-rollover begin also clears stale pending (unconditional begin)", () => {
+    // all those paths now dispatch begin with their actual rolledOver; non-rollover ⇒ null
+    expect(begin(false, undefined, { boardId: "jiaowai" })).toBeNull();
+    expect(begin(true, undefined, { boardId: "jiaowai" })).toEqual({ boardId: undefined }); // rollover keeps a fresh ctx
+  });
+});
+
 describe("producer source contract (no jsdom)", () => {
   const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 
@@ -249,5 +300,26 @@ describe("producer source contract (no jsdom)", () => {
     const body = src.slice(src.indexOf("const runCheckpoints"), src.indexOf("const runCheckpoints") + 900);
     expect(body).toMatch(/checkpointReturnTarget\(stayOnMapBoardId, state\.playerLocation\)/); // event path
     expect(body).toMatch(/else if \(stayOnMapBoardId\) \{[^}]*setCurrentBoard\(stayOnMapBoardId\)/s); // no-event path
+  });
+
+  it("8. rank-admin session origin is bundled atomically and cleared on apply/close", () => {
+    const src = read("../../src/ui/App.tsx");
+    // single source of truth: { charId, origin } — no separate origin boolean
+    expect(src).toMatch(/setRankAdmin\(\{ charId: id, origin: "first_night" \}\)/);
+    expect(src).toMatch(/setRankAdmin\(\{ charId: id, origin: "normal" \}\)/);
+    expect(src).toContain("setRankAdmin(null)"); // applyRankOp + modal close clear the session
+    expect(src).not.toMatch(/setManageCharId/); // old independent state fully removed
+  });
+
+  it("9. new game / load / SettingsMenu load / death clear pending context AND rank-admin session", () => {
+    const src = read("../../src/ui/App.tsx");
+    // every nav clear site sits next to a pending clear and a rank-admin clear
+    const navClears = src.match(/navDispatch\(\{ type: "clear" \}\)/g) ?? [];
+    expect(navClears.length).toBeGreaterThanOrEqual(4);
+    const pendingClears = src.match(/pendingReactionDispatch\(\{ type: "clear" \}\)/g) ?? [];
+    expect(pendingClears.length).toBe(navClears.length);
+    const rankClears = src.match(/setRankAdmin\(null\)/g) ?? [];
+    // applyRankOp + modal close + 4 lifecycle sites
+    expect(rankClears.length).toBeGreaterThanOrEqual(navClears.length);
   });
 });

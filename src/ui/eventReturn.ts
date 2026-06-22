@@ -108,6 +108,24 @@ export function pendingReactionReducer(
 }
 
 /**
+ * 位分管理会话来源（§ first-night-handoff）。把 origin 与 charId 绑成原子会话，避免 origin 独立于
+ * 选中角色变陈旧。first_night：由初夜「晋升」进入——关闭/无变化/失败都须补跑被搁置的转旬 checkpoint；
+ * 成功（生成反应）则交由该反应 onDone 补跑。normal：普通管理，关闭绝不因此补跑转旬。
+ */
+export type RankAdminOrigin = "normal" | "first_night";
+export type RankAdminSession = { charId: string; origin: RankAdminOrigin } | null;
+export type RankAdminOutcome = "close" | "no_op" | "failed" | "reaction_created";
+
+/** 位分管理结束后如何处理待补跑的转旬 checkpoint（纯决策，App 据此调用 flush 或交给反应）。 */
+export function rankAdminContinuation(
+  origin: RankAdminOrigin,
+  outcome: RankAdminOutcome,
+): "flush_pending" | "defer_to_reaction" | "none" {
+  if (origin !== "first_night") return "none"; // normal：关闭不补跑转旬
+  return outcome === "reaction_created" ? "defer_to_reaction" : "flush_pending";
+}
+
+/**
  * runCheckpoints 自动启动事件时的返回上下文。**board ID 由发起动作（出宫 exitPalace 的目标板）
  * 显式传入**，不读异步镜像的父级 currentBoard——避免子组件先于 onBoardChange 生效就卸载导致捕获
  * 旧板（常为 "palace"）的时序耦合。board ID 在场 → 恢复该嵌套板；缺省 → 回事件所在地点。
