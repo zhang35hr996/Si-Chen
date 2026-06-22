@@ -1460,7 +1460,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onPickConsort={() => { setPhysicianConsortPickerOpen(true); }}
           onPickHeir={() => { setPhysicianHeirPickerOpen(true); }}
           onAbort={abortPregnancy}
-          onClose={() => setPhysicianOpen(false)}
+          onClose={() => { setPhysicianOpen(false); setPhysicianConsortPickerOpen(false); setPhysicianHeirPickerOpen(false); }}
         />
       )}
       {heirListOpen && (
