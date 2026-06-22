@@ -145,9 +145,10 @@ describe("App settlement wiring source contract (no jsdom)", () => {
   });
 
   // ── Blocker 2: event-scene rollover goes through global settlement with continue_chain ──
+  // ── + chained-settlement retention via eventSceneCompletionPlan (Blocker 1 of this round) ──
   it("committed event rollover begins settlement with dispatch continue_chain (not a direct time_advance chain)", () => {
-    const onDone = appSrc.slice(appSrc.indexOf("if (rolledOver) {", appSrc.indexOf("scene-commit autosave")));
-    expect(onDone).toMatch(/beginSettlement\(\{[\s\S]*dispatch: "continue_chain"/);
+    expect(appSrc).toContain("eventSceneCompletionPlan("); // rollover retained across scene_end chains
+    expect(appSrc).toMatch(/beginSettlement\(\{[\s\S]*dispatch: "continue_chain"/);
     // completion honors continue_chain via chainAdvance (preserve chain), not playerStart
     expect(appSrc).toMatch(/request\.dispatch === "continue_chain"[\s\S]*chainAdvance/);
   });
@@ -164,15 +165,16 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     expect(block).not.toMatch(/view === "event"/); // replaced by activeEventId !== null (avoids deadlock)
   });
 
-  it("generative dialogue is in-flight-guarded with an op token cleared in finally", () => {
+  it("generative dialogue is in-flight-guarded with a unique op token cleared only by its owner", () => {
     const conv = appSrc.slice(appSrc.indexOf("const converse"), appSrc.indexOf("const transferTo"));
-    expect(conv).toContain("setDialogueInFlight(true)");
-    expect(conv).toMatch(/dialogueOpRef\.current !== opToken/); // stale completion ignored
-    expect(conv).toMatch(/finally[\s\S]*setDialogueInFlight\(false\)/);
+    expect(conv).toContain("dialogueOpRef.current.activeOp !== null"); // concurrent rejected before AP spend
+    expect(conv).toContain("startDialogueOp(dialogueOpRef.current)"); // unique token allocated
+    expect(conv).toMatch(/!isCurrentDialogueOp\(dialogueOpRef\.current, opToken\)/); // stale completion ignored
+    expect(conv).toMatch(/finally[\s\S]*finishDialogueOp\(dialogueOpRef\.current, opToken\)/); // owner-only release
   });
 
-  it("dialogue op token is invalidated on new game / load / settings load / death", () => {
-    const bumps = appSrc.match(/dialogueOpRef\.current \+= 1/g) ?? [];
+  it("dialogue ops are invalidated on new game / load / settings load / death (and return-to-title)", () => {
+    const bumps = appSrc.match(/dialogueOpRef\.current = invalidateDialogueOps\(/g) ?? [];
     expect(bumps.length).toBeGreaterThanOrEqual(4);
   });
 });

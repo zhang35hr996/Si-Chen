@@ -134,6 +134,28 @@ export function canChain(state: NavState): boolean {
 }
 
 /**
+ * 事件提交后的完成决策（§ chained-settlement）。任一链内事件转旬都须保留待结算，直至整条 scene_end
+ * 链走完才排空全局中断 + 补跑 time_advance + 恢复一次。
+ *  - startSceneEnd：续接下一 scene_end 事件（chainAdvance）；
+ *  - beginSettlement：登记/刷新 continue_chain 结算（本事件转旬 或 已有 pending → 保留，不丢转旬）；
+ *  - restore：立即恢复（无续接、无转旬、无 pending）。
+ * 三者关系：startSceneEnd 时不 restore（结算保留、由 activeEventId 守住不排空）；终端有结算则不 restore。
+ */
+export function eventSceneCompletionPlan(input: {
+  committed: boolean;
+  rolledOver: boolean;
+  hasSceneEndEvent: boolean;
+  canChain: boolean;
+  hasPendingSettlement: boolean;
+}): { startSceneEnd: boolean; beginSettlement: boolean; restore: boolean } {
+  if (!input.committed) return { startSceneEnd: false, beginSettlement: false, restore: true }; // 弃场：仅恢复
+  const startSceneEnd = input.hasSceneEndEvent && input.canChain;
+  const beginSettlement = input.rolledOver || input.hasPendingSettlement; // 保留任何（本/链内先前）转旬
+  const restore = !startSceneEnd && !beginSettlement; // 无续接且无待结算才立即恢复
+  return { startSceneEnd, beginSettlement, restore };
+}
+
+/**
  * 延后补跑 checkpoint 的「待处理上下文」（§ deferred-reaction）。单一原子值，承载这段转旬反应结束后
  * 应执行的完整 AutoCheckpointRequest（来源 + 返回上下文）。null=无待补跑（含非转旬：覆盖式清空，杜绝
  * 「非转旬反应留下旧上下文 → 之后无关转旬反应误用」的串台）。

@@ -10,10 +10,19 @@ import {
   type AutoCheckpointRequest,
   autoCheckpointTriggers,
   deferredAutoCheckpointMode,
+  eventSceneCompletionPlan,
   pendingReactionReducer,
   rankAdminContinuation,
   resolveReturnNavigation,
 } from "./eventReturn";
+import {
+  type DialogueOpState,
+  finishDialogueOp,
+  initialDialogueOpState,
+  invalidateDialogueOps,
+  isCurrentDialogueOp,
+  startDialogueOp,
+} from "./dialogueOp";
 import {
   type GlobalInterruptKind,
   pickNextGlobalInterrupt,
@@ -194,8 +203,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [pendingTimeSettlement, timeSettlementDispatch] = useReducer(timeSettlementReducer, null);
   // 生成式对话在 await provider 期间的 in-flight 标记（计入 atomicFlowInProgress，避免孕/产提示插队）。
   const [dialogueInFlight, setDialogueInFlight] = useState(false);
-  // 操作令牌：新游戏/读档/驾崩自增，使 await 中的旧对话完成被忽略（防止 stale async 重开反应）。
-  const dialogueOpRef = useRef(0);
+  // 对话操作所有权状态机（唯一 token + 单活动操作）：拒绝并发、防 stale async 串播、旧操作不清新操作忙碌位。
+  const dialogueOpRef = useRef<DialogueOpState>(initialDialogueOpState);
   const rolledSlots = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
@@ -416,7 +425,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       pendingReactionDispatch({ type: "clear" });
       setRankAdmin(null);
       timeSettlementDispatch({ type: "clear" });
-      dialogueOpRef.current += 1; setDialogueInFlight(false); // 作废 await 中的旧对话完成
+      dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); // 作废 await 中的旧对话
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
       if (store.getState().gameOver) {
         setContinueError("先帝已崩，请开新局。");
@@ -610,7 +619,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
     timeSettlementDispatch({ type: "clear" });
-    dialogueOpRef.current += 1; setDialogueInFlight(false); // 作废 await 中的旧对话完成
+    dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); // 作废 await 中的旧对话
     doAutosave();
     setView("title");
   };
@@ -644,7 +653,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
     timeSettlementDispatch({ type: "clear" });
-    dialogueOpRef.current += 1; setDialogueInFlight(false); // 作废 await 中的旧对话完成
+    dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); // 作废 await 中的旧对话
     setView("coronation");
   };
 
@@ -1092,6 +1101,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词；若 dialogueProvider 可用则走生成式路径。
   const converse = async (charId: string) => {
+    if (dialogueOpRef.current.activeOp !== null) return; // 已有对话操作进行中：拒绝并发，且不扣行动点
     const fallbackLines = buildConversation(db, store.getState(), charId);
     if (!fallbackLines) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -1108,26 +1118,32 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       const expectedState = store.getState();
       const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation);
       if (reqResult.ok) {
-        const opToken = dialogueOpRef.current;
-        setDialogueInFlight(true);
-        try {
-          const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
-          if (dialogueOpRef.current !== opToken) return; // stale：读档/新局/驾崩已发生，忽略本次完成
-          if (turnResult.ok) {
-            const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
-            if (committed) {
-              doAutosave();
-              const generatedLine = turnResult.value.line;
-              converseTranscriptRef.current = []; // reset transcript for new conversation
-              const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
-              playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
-              return;
+        const started = startDialogueOp(dialogueOpRef.current); // 唯一 token + 占用
+        if (started.token !== null) {
+          dialogueOpRef.current = started.state;
+          const opToken = started.token;
+          setDialogueInFlight(true);
+          try {
+            const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+            if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略
+            if (turnResult.ok) {
+              const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
+              if (committed) {
+                doAutosave();
+                const generatedLine = turnResult.value.line;
+                converseTranscriptRef.current = []; // reset transcript for new conversation
+                const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
+                playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
+                return;
+              }
+              // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
             }
-            // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
+            // produceDialogueTurn failed — fall through to fallback (AP already spent)
+          } finally {
+            // 仅当 token 仍是当前操作才释放（旧操作绝不清新操作的忙碌位）。
+            dialogueOpRef.current = finishDialogueOp(dialogueOpRef.current, opToken);
+            if (dialogueOpRef.current.activeOp === null) setDialogueInFlight(false);
           }
-          // produceDialogueTurn failed — fall through to fallback (AP already spent)
-        } finally {
-          setDialogueInFlight(false);
         }
       }
     }
@@ -1515,11 +1531,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       {view === "shop" && shopId && (
         <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
           onClose={() => {
+            // 先离开 shop 视图回到被动地图板，再视情况结算——否则 shopId=null 但 view 仍 "shop" 会让
+            // atomicFlow 永久判真、结算永不排空（§ Blocker 2 死锁）。currentBoard 此刻已稳定。
+            const rolled = shopRollover.current;
+            shopRollover.current = false;
             setShopId(null);
-            // 店在京城（free-entry，playerLocation 未变）：转旬补跑亦须留在地图。currentBoard 此刻已稳定
-            // （进店前 onBoardChange 早已生效，无卸载时序问题），作为显式权威板传入；无转旬则直接回该板。
-            if (shopRollover.current) { shopRollover.current = false; beginSettlement(stationaryRequest(currentBoard)); }
-            else { setView("map"); }
+            setMapAtRoot(false);
+            setView("map");
+            if (rolled) beginSettlement(stationaryRequest(currentBoard));
           }} />
       )}
       {view === "freeview" && freeViewId && (
@@ -1544,39 +1563,41 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           logger={logger}
           onDone={(committed, rolledOver) => {
             setActiveEventId(null);
-            if (committed) {
-              doAutosave(); // scene-commit autosave (plan §9)
-              const sceneEndState = store.getState();
-              const pick = pickAutoStartEvent(db, sceneEndState, "scene_end", db.locations[sceneEndState.playerLocation]);
-              if (pick) {
-                if (canChain(navState)) {
-                  navDispatch({ type: "chainAdvance" }); // 链事件继承 target、不重置、不消费
-                  setActiveEventId(pick.id);
-                  return;
-                }
-                logger?.logGameError(
-                  stateError("EVENT_CHAIN_LIMIT", `scene_end chain capped at ${MAX_EVENT_CHAIN}`, {
-                    severity: "warn",
-                    context: { deferred: pick.id },
-                  }),
-                );
-              }
-              // 本场景转旬（无 scene_end 续接）：交全局结算——先排空 birth/孕事/承嗣/百日/大选等全局
-              // 中断，再补跑 time_advance 事件（continue_chain：留在当前链、不重置 chainDepth、不提前消费
-              // 导航上下文），最终恢复原始返回上下文一次。不在此直接 restoreReturn（否则会先于结算消费）。
-              if (rolledOver) {
-                beginSettlement({
-                  source: "stationary_rollover",
-                  returnTarget: navState.target ?? { kind: "map", atRoot: true },
-                  dispatch: "continue_chain",
-                });
-                return;
-              }
-              restoreReturn(); // 未转旬、无续接 → 恢复一次
+            if (!committed) { restoreReturn(); return; } // 弃场：恢复一次，不进结算
+            doAutosave(); // scene-commit autosave (plan §9)
+            const sceneEndState = store.getState();
+            const pick = pickAutoStartEvent(db, sceneEndState, "scene_end", db.locations[sceneEndState.playerLocation]);
+            const plan = eventSceneCompletionPlan({
+              committed: true,
+              rolledOver: rolledOver === true,
+              hasSceneEndEvent: pick !== null,
+              canChain: canChain(navState),
+              hasPendingSettlement: pendingTimeSettlement !== null,
+            });
+            // 任一链内事件转旬都登记/刷新 continue_chain 结算（保留转旬至整条 scene_end 链走完才排空）。
+            if (plan.beginSettlement) {
+              beginSettlement({
+                source: "stationary_rollover",
+                returnTarget: navState.target ?? { kind: "map", atRoot: true },
+                dispatch: "continue_chain",
+              });
+            }
+            if (plan.startSceneEnd) {
+              navDispatch({ type: "chainAdvance" }); // 续接 scene_end：继承 target、不重置、不消费；结算（若有）由 activeEventId 守住不排空
+              setActiveEventId(pick!.id);
               return;
             }
-            // Abandoned mid-scene (零代价离开): restore via the same return target (consumes it). 不进结算。
-            restoreReturn();
+            if (pick && !canChain(navState)) {
+              logger?.logGameError(
+                stateError("EVENT_CHAIN_LIMIT", `scene_end chain capped at ${MAX_EVENT_CHAIN}`, {
+                  severity: "warn",
+                  context: { deferred: pick.id },
+                }),
+              );
+            }
+            // 终端：有待结算则交结算 effect 排空全局中断 + 补跑 time_advance + 恢复一次（不在此 restoreReturn）；
+            // 否则（无转旬、无 pending）立即恢复。
+            if (plan.restore) restoreReturn();
           }}
         />
       )}
@@ -1985,8 +2006,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); dialogueOpRef.current += 1; setDialogueInFlight(false); setSettingsOpen(false); enterCurrentLocation(); }}
-          onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); setSettingsOpen(false); enterCurrentLocation(); }}
+          onReturnTitle={() => { doAutosave(); dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
       )}
