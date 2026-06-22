@@ -10,6 +10,7 @@
 import { scoreResults } from "./scoring";
 import type { PriceTable } from "./pricing";
 import type { EvalResult } from "./types";
+import { characterProxyScore, styleProxyScore, type SpeakerProfile } from "./consistencyProxy";
 
 export interface ScorecardRow {
   provider: string;
@@ -58,9 +59,43 @@ export function firstHeterogeneousRecord(
   return null;
 }
 
-export function buildScorecard(groups: ModelResultGroup[], opts?: { priceTable?: PriceTable }): ScorecardRow[] {
+const mean = (xs: number[]): number | null => (xs.length === 0 ? null : xs.reduce((s, x) => s + x, 0) / xs.length);
+
+/**
+ * Per-model proxy scores: group the model's results by speakerId, score each
+ * speaker that HAS a profile over its own lines, and average across those
+ * speakers. Speakers without a profile are ignored (never crash); if no speaker
+ * has a profile — or no `profiles` map is supplied — the columns stay null.
+ */
+function proxyScoresFor(
+  results: EvalResult[],
+  profiles?: Record<string, SpeakerProfile>,
+): { character: number | null; style: number | null } {
+  if (!profiles) return { character: null, style: null };
+  const bySpeaker = new Map<string, EvalResult[]>();
+  for (const r of results) {
+    const arr = bySpeaker.get(r.speakerId) ?? [];
+    arr.push(r);
+    bySpeaker.set(r.speakerId, arr);
+  }
+  const charScores: number[] = [];
+  const styleScores: number[] = [];
+  for (const [speakerId, speakerResults] of bySpeaker) {
+    const profile = profiles[speakerId];
+    if (!profile) continue; // no profile → ignored, not scored
+    charScores.push(characterProxyScore(speakerResults, profile).score);
+    styleScores.push(styleProxyScore(speakerResults, profile).score);
+  }
+  return { character: mean(charScores), style: mean(styleScores) };
+}
+
+export function buildScorecard(
+  groups: ModelResultGroup[],
+  opts?: { priceTable?: PriceTable; profiles?: Record<string, SpeakerProfile> },
+): ScorecardRow[] {
   return groups.map((g) => {
     const r = scoreResults(g.results, { priceTable: opts?.priceTable });
+    const proxy = proxyScoresFor(g.results, opts?.profiles);
     return {
       provider: g.provider,
       model: g.model,
@@ -70,8 +105,8 @@ export function buildScorecard(groups: ModelResultGroup[], opts?: { priceTable?:
       expectationPassRate: r.expectationPassRate,
       forbiddenLexiconRate: r.forbiddenLexiconRate,
       gateViolationsByType: r.gateViolationsByType,
-      characterProxyScore: null,
-      styleProxyScore: null,
+      characterProxyScore: proxy.character,
+      styleProxyScore: proxy.style,
       avgLatencyMs: r.avgLatencyMs,
       p95LatencyMs: r.p95LatencyMs,
       totalInputTokens: r.totalInputTokens,
