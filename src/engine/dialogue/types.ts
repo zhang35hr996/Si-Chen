@@ -87,3 +87,30 @@ export interface DialoguePolicyContext {
 
 // Re-export ProposedClaim so callers can import from types without reaching into claims
 export type { ProposedClaim };
+
+// ── Validation pipeline types (T3: validateDialogueProviderResult) ────────────
+
+import type { ClaimGateFinding } from "./claimGate";
+import type { GateFinding } from "./gates";
+
+/**
+ * Structured findings gathered during the shared validation pipeline.
+ * Always present on DialogueValidationOutcome — even ok=false paths fill in
+ * whatever was gathered before the first failure.
+ */
+export interface DialogueValidationDiagnostics {
+  /** Claim gate findings (all findings, including rejected ones). */
+  claimFindings: ClaimGateFinding[];
+  /** Text gate findings (all findings, including rejected ones). */
+  textFindings: GateFinding[];
+  /** Claims accepted by the claim gate (empty on claim-gate failure). */
+  acceptedClaims: import("./claims").ProposedClaim[];
+}
+
+/**
+ * Return shape of validateDialogueProviderResult.
+ * Always carries diagnostics — T4 eval runner reads them even on ok=false.
+ */
+export type DialogueValidationOutcome =
+  | { ok: true;  line: DialogueLine; diagnostics: DialogueValidationDiagnostics }
+  | { ok: false; error: import("../infra/errors").GameError; diagnostics: DialogueValidationDiagnostics };
