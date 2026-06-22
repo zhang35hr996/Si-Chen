@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AudiencePrompt } from "../../src/ui/components/AudiencePrompt";
 
 const base = {
+  promptId: "ev_a",
   visitorName: "卫绥",
   visitorTitle: "礼官",
   message: "礼官卫绥在殿外候见，为传月祭仪向陛下请示。",
@@ -102,5 +103,62 @@ describe("AudiencePrompt", () => {
   it("no .modal-backdrop overlay (non-blocking, in-scene prompt)", () => {
     const { container } = render(<AudiencePrompt {...base} />);
     expect(container.querySelector(".modal-backdrop")).toBeNull();
+  });
+});
+
+describe("AudiencePrompt — per-promptId dispatch lock (Blocker 1)", () => {
+  it("changing promptId at the same position re-enables actions and dispatches B once; A is not re-fired", async () => {
+    const user = userEvent.setup();
+    const onAdmitA = vi.fn();
+    const onDeferB = vi.fn();
+    const { rerender } = render(<AudiencePrompt {...base} promptId="ev_a" onAdmit={onAdmitA} />);
+    await user.click(screen.getByRole("button", { name: "宣进来" }));
+    expect(onAdmitA).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "宣进来" })).toBeDisabled(); // A now locked
+
+    // same component position, new logical prompt B
+    rerender(<AudiencePrompt {...base} promptId="ev_b" onDefer={onDeferB} />);
+    const admitB = screen.getByRole("button", { name: "宣进来" });
+    const deferB = screen.getByRole("button", { name: "记入待宣" });
+    expect(admitB).toBeEnabled(); // B inherits no lock
+    expect(deferB).toBeEnabled();
+    await user.click(deferB);
+    expect(onDeferB).toHaveBeenCalledTimes(1); // B dispatched once
+    expect(onAdmitA).toHaveBeenCalledTimes(1); // A callback not fired again
+  });
+
+  it("re-rendering with the SAME promptId keeps the action locked", async () => {
+    const user = userEvent.setup();
+    const onAdmit = vi.fn();
+    const { rerender } = render(<AudiencePrompt {...base} promptId="ev_a" onAdmit={onAdmit} />);
+    await user.click(screen.getByRole("button", { name: "宣进来" }));
+    rerender(<AudiencePrompt {...base} promptId="ev_a" onAdmit={onAdmit} />); // same id
+    expect(screen.getByRole("button", { name: "宣进来" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "宣进来" }));
+    expect(onAdmit).toHaveBeenCalledTimes(1); // still locked
+  });
+});
+
+describe("AudiencePrompt — identity-aware initial focus (Blocker 2)", () => {
+  it("affordable prompt focuses 宣进来", () => {
+    render(<AudiencePrompt {...base} affordable />);
+    expect(screen.getByRole("button", { name: "宣进来" })).toHaveFocus();
+  });
+
+  it("unaffordable prompt focuses 记入待宣 (admit is disabled, can't hold focus)", () => {
+    render(<AudiencePrompt {...base} affordable={false} disabledReason="行动力不足" />);
+    expect(screen.getByRole("button", { name: "记入待宣" })).toHaveFocus();
+  });
+
+  it("busy prompt focuses the dialog landmark", () => {
+    render(<AudiencePrompt {...base} busy />);
+    expect(screen.getByRole("dialog")).toHaveFocus();
+  });
+
+  it("changing promptId moves focus to the new prompt's appropriate target", () => {
+    const { rerender } = render(<AudiencePrompt {...base} promptId="ev_a" affordable />);
+    expect(screen.getByRole("button", { name: "宣进来" })).toHaveFocus();
+    rerender(<AudiencePrompt {...base} promptId="ev_b" affordable={false} disabledReason="行动力不足" />);
+    expect(screen.getByRole("button", { name: "记入待宣" })).toHaveFocus(); // refocus on the new prompt's enabled target
   });
 });
