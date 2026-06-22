@@ -72,7 +72,7 @@ function makeWrongClaimResponse(): DialogueProviderResult {
       object: "zhaoyi",
       modality: "assert",
     },
-    sourceContextIds: [firstOfferedId],
+    sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
     modality: "assert",
     certainty: 90,
   };
@@ -201,7 +201,7 @@ describe("validateDialogueProviderResult", () => {
         object: "fenghou",
         modality: "assert",
       },
-      sourceContextIds: [firstOfferedId],
+      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
       modality: "assert",
       certainty: 90,
     };

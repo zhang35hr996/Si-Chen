@@ -115,7 +115,7 @@ const consort_with_grievance: EvalFixtureDefinition = {
             object: "chenghui",
             modality: "assert",
           },
-          sourceContextIds: [GRIEVANCE_MEMORY_ID],
+          sourceRefs: [{ kind: "memory" as const, id: GRIEVANCE_MEMORY_ID }],
           modality: "assert",
           certainty: 80,
         },

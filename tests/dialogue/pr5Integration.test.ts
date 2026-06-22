@@ -122,7 +122,7 @@ describe("produceDialogueLineWithPolicy — chain (a): happy path with valid cla
         object: "fenghou",
         modality: "assert",
       },
-      sourceContextIds: [firstOfferedId],
+      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
       modality: "assert",
       certainty: 90,
     };
@@ -158,7 +158,7 @@ describe("produceDialogueLineWithPolicy — chain (b): claim contradicts belief"
         object: "zhaoyi",
         modality: "assert",
       },
-      sourceContextIds: [firstOfferedId],
+      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
       modality: "assert",
       certainty: 90,
     };
@@ -190,7 +190,7 @@ describe("produceDialogueLineWithPolicy — chain (d): unknown source context", 
         object: "fenghou",
         modality: "assert",
       },
-      sourceContextIds: ["fake_memory_id_not_offered_xyz"],
+      sourceRefs: [{ kind: "memory" as const, id: "fake_memory_id_not_offered_xyz" }],
       modality: "assert",
       certainty: 90,
     };

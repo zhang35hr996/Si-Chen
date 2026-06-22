@@ -75,11 +75,13 @@ export function evaluateExpectations(
     }
   }
 
-  for (const id of expectations.requiredSourceContextIds ?? []) {
+  for (const ref of expectations.requiredSourceRefs ?? []) {
     const cited =
-      diagnostics?.acceptedClaims.some((c) => c.sourceContextIds.includes(id)) ?? false;
+      diagnostics?.acceptedClaims.some((c) =>
+        c.sourceRefs.some((r) => r.kind === ref.kind && r.id === ref.id),
+      ) ?? false;
     if (!cited) {
-      findings.push({ code: "required_source_not_cited", detail: id });
+      findings.push({ code: "required_source_not_cited", detail: ref.id });
     }
   }
 

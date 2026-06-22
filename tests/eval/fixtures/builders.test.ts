@@ -85,7 +85,7 @@ describe("golden scenarios smoke", () => {
     expect(result.schemaStatus).toBe("pass");
     expect(result.gateStatus).toBe("pass");
     // The fixture proposes a claim citing GRIEVANCE_MEMORY_ID
-    // expectations.requiredSourceContextIds = [GRIEVANCE_MEMORY_ID] → pass
+    // expectations.requiredSourceRefs = [{ kind: "memory", id: GRIEVANCE_MEMORY_ID }] → pass
     expect(result.expectationStatus).toBe("pass");
     expect(GRIEVANCE_MEMORY_ID).toBe("mem_eval_grievance_001");
   });
@@ -163,11 +163,11 @@ describe("scenarios.jsonl coverage", () => {
     expect(withForbiddenTexts.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("has ≥2 scenarios with expectations.requiredSourceContextIds citing GRIEVANCE_MEMORY_ID", () => {
+  it("has ≥2 scenarios with expectations.requiredSourceRefs citing GRIEVANCE_MEMORY_ID", () => {
     const withRequired = allScenarios.filter(
       (s) =>
-        s.expectations?.requiredSourceContextIds !== undefined &&
-        s.expectations.requiredSourceContextIds.includes(GRIEVANCE_MEMORY_ID),
+        s.expectations?.requiredSourceRefs !== undefined &&
+        s.expectations.requiredSourceRefs.some((r) => r.id === GRIEVANCE_MEMORY_ID),
     );
     expect(withRequired.length).toBeGreaterThanOrEqual(2);
   });

@@ -1,5 +1,7 @@
 /**
  * 记忆冷却写回（spec §数据流末步）
+ * 仅对 kind === "memory" 的 sourceRef 写回 MemoryMentionRecord。
+ * kind === "event" 和 kind === "fact" 的引用不写入 mentionLog。
  */
 import type { GameTime } from "../calendar/time";
 import type { GameState } from "../state/types";
@@ -14,8 +16,11 @@ export function recordMentionedContext(
 ): GameState {
   const ids = new Set<string>();
   for (const pc of acceptedClaims) {
-    for (const sid of pc.sourceContextIds) {
-      if (offeredContextIds.has(sid)) ids.add(sid);
+    for (const ref of pc.sourceRefs) {
+      // Only memory-kind refs are written back to the mentionLog
+      if (ref.kind === "memory" && offeredContextIds.has(ref.id)) {
+        ids.add(ref.id);
+      }
     }
   }
   let next = state;

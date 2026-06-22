@@ -44,8 +44,8 @@ describe("WORLD_RULES_TEXT", () => {
     expect(WORLD_RULES_TEXT).toContain("不得凭空引入");
   });
 
-  it("contains sourceContextIds", () => {
-    expect(WORLD_RULES_TEXT).toContain("sourceContextIds");
+  it("contains sourceRefs", () => {
+    expect(WORLD_RULES_TEXT).toContain("sourceRefs");
   });
 
   it("contains forbiddenClaims", () => {

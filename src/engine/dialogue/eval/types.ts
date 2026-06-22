@@ -5,6 +5,7 @@
  * even when the gate fails so evaluateExpectations can still check forbiddenTexts.
  * servedText is only set when the full validation pipeline succeeded (outcome.ok).
  */
+import type { ContextRef } from "../claims";
 
 export type EvalExecutionMode = "fixture" | "online";
 export type CheckStatus = "pass" | "fail" | "not_run";
@@ -34,6 +35,7 @@ export interface EvalResult {
   servedText?: string;       // only set when outcome.ok === true
   sceneDirective?: string;   // populated from EvalScenario.sceneDirective
   durationMs: number;
+  knownEventIds?: string[];  // event ids known to the speaker in this turn
 }
 
 export interface EvalScenario {
@@ -47,6 +49,6 @@ export interface EvalScenario {
   expectations?: {
     gatePass?: boolean;
     forbiddenTexts?: string[];
-    requiredSourceContextIds?: string[];
+    requiredSourceRefs?: ContextRef[];
   };
 }

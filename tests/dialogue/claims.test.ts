@@ -8,15 +8,34 @@ const claim = (over: Partial<DialogueClaim> = {}): DialogueClaim => ({
 });
 
 describe("proposedClaimSchema", () => {
-  it("accepts a well-formed proposed claim", () => {
+  it("accepts sourceRefs ContextRef objects", () => {
     const parsed = proposedClaimSchema.safeParse({
-      claim: claim(), sourceContextIds: ["mem_shen_zhibai_000001"], modality: "assert", certainty: 90,
+      claim: claim(), sourceRefs: [{ kind: "memory", id: "mem_shen_zhibai_000001" }], modality: "assert", certainty: 90,
     });
     expect(parsed.success).toBe(true);
   });
+  it("rejects sourceContextIds string array (old format)", () => {
+    const parsed = proposedClaimSchema.safeParse({
+      claim: claim(), sourceContextIds: ["mem_shen_zhibai_000001"], modality: "assert", certainty: 90,
+    });
+    expect(parsed.success).toBe(false);
+  });
+  it("rejects sourceRefs: [] (min 1)", () => {
+    expect(proposedClaimSchema.safeParse({
+      claim: claim(), sourceRefs: [], modality: "assert", certainty: 90,
+    }).success).toBe(false);
+  });
+  it("rejects modality mismatch (superRefine)", () => {
+    expect(proposedClaimSchema.safeParse({
+      claim: claim({ modality: "assert" }),
+      sourceRefs: [{ kind: "memory", id: "mem_1" }],
+      modality: "deny",  // mismatch
+      certainty: 80,
+    }).success).toBe(false);
+  });
   it("rejects certainty out of 0–100", () => {
     expect(proposedClaimSchema.safeParse({
-      claim: claim(), sourceContextIds: [], modality: "assert", certainty: 150,
+      claim: claim(), sourceRefs: [{ kind: "memory", id: "mem_1" }], modality: "assert", certainty: 150,
     }).success).toBe(false);
   });
   it("normalizes a missing proposedClaims array to []", () => {

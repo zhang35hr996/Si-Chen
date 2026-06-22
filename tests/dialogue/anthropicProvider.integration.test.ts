@@ -21,7 +21,7 @@ function ctx(text: string, claims: ProposedClaim[]) {
   return { req: req.value, policy, provider };
 }
 const rankClaim = (id: string, object: string, sourceIds: string[]): ProposedClaim =>
-  ({ claim: { id, predicate: "holds_rank", subjectId: SPEAKER, object, modality: "assert" }, sourceContextIds: sourceIds, modality: "assert", certainty: 90 });
+  ({ claim: { id, predicate: "holds_rank", subjectId: SPEAKER, object, modality: "assert" }, sourceRefs: sourceIds.map((id) => ({ kind: "memory" as const, id })), modality: "assert", certainty: 90 });
 function firstOffered(ids: ReadonlySet<string>): string {
   const offered = [...ids][0];
   expect(offered).toBeDefined();

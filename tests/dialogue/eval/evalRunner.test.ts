@@ -92,7 +92,7 @@ function makeValidClaim(): ProposedClaim {
       object: "fenghou",
       modality: "assert",
     },
-    sourceContextIds: [firstOfferedId],
+    sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
     modality: "assert",
     certainty: 90,
   };
@@ -350,10 +350,10 @@ describe("runEvalScenario", () => {
     expect(result.text).toBe(VALID_TEXT);
   });
 
-  it("requiredSourceContextIds: fail when claim not in acceptedClaims.sourceContextIds", async () => {
+  it("requiredSourceRefs: fail when claim not in acceptedClaims.sourceRefs", async () => {
     const offeredId = firstOfferedContextId();
     const scenario = makeScenario({
-      expectations: { requiredSourceContextIds: [offeredId] },
+      expectations: { requiredSourceRefs: [{ kind: "memory" as const, id: offeredId }] },
     });
     // No proposedClaims in the response → acceptedClaims is empty → id not cited
     const result = await runEvalScenario(scenario, makeFixture(), "eval-1", 0);
@@ -366,12 +366,12 @@ describe("runEvalScenario", () => {
     });
   });
 
-  it("requiredSourceContextIds: pass when claim cited in fixture proposedClaims", async () => {
+  it("requiredSourceRefs: pass when claim cited in fixture proposedClaims", async () => {
     const validClaim = makeValidClaim();
-    const offeredId = validClaim.sourceContextIds[0]!;
+    const offeredId = validClaim.sourceRefs[0]!.id;
 
     const scenario = makeScenario({
-      expectations: { requiredSourceContextIds: [offeredId] },
+      expectations: { requiredSourceRefs: [{ kind: "memory" as const, id: offeredId }] },
     });
     const result = await runEvalScenario(
       scenario,
@@ -440,7 +440,7 @@ describe("evaluateExpectations", () => {
 
   it("pass when all expectations met", () => {
     const r = evaluateExpectations(
-      { gatePass: true, forbiddenTexts: ["龙颜"], requiredSourceContextIds: [] },
+      { gatePass: true, forbiddenTexts: ["龙颜"], requiredSourceRefs: [] },
       { ...PASS_RESULT, text: "无违禁词" },
       { claimFindings: [], textFindings: [], acceptedClaims: [] },
     );
@@ -484,7 +484,7 @@ describe("evaluateExpectations", () => {
 
   it("fail on required_source_not_cited", () => {
     const r = evaluateExpectations(
-      { requiredSourceContextIds: ["mem_001"] },
+      { requiredSourceRefs: [{ kind: "memory" as const, id: "mem_001" }] },
       PASS_RESULT,
       { claimFindings: [], textFindings: [], acceptedClaims: [] },
     );
@@ -504,12 +504,12 @@ describe("evaluateExpectations", () => {
         object: "fenghou",
         modality: "assert",
       },
-      sourceContextIds: ["mem_001"],
+      sourceRefs: [{ kind: "memory" as const, id: "mem_001" }],
       modality: "assert",
       certainty: 90,
     };
     const r = evaluateExpectations(
-      { requiredSourceContextIds: ["mem_001"] },
+      { requiredSourceRefs: [{ kind: "memory" as const, id: "mem_001" }] },
       PASS_RESULT,
       { claimFindings: [], textFindings: [], acceptedClaims: [claim] },
     );
@@ -522,7 +522,7 @@ describe("evaluateExpectations", () => {
       {
         gatePass: true,                         // fails: gate is actually "fail"
         forbiddenTexts: ["some text"],           // fails: text contains "some text"
-        requiredSourceContextIds: ["mem_999"],   // fails: no acceptedClaims
+        requiredSourceRefs: [{ kind: "memory" as const, id: "mem_999" }],   // fails: no acceptedClaims
       },
       FAIL_GATE_RESULT,
       { claimFindings: [], textFindings: [], acceptedClaims: [] },
