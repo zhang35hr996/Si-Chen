@@ -56,6 +56,21 @@ describe("geminiProvider", () => {
     }
   });
 
+  it("omits usage when a required token field is missing (no faked zero)", async () => {
+    const transport: GeminiTransport = {
+      send: async () =>
+        ok({
+          functionCalls: [{ name: "emit_dialogue_line", args: { text: "好", proposedClaims: [] } }],
+          finishReason: "STOP",
+          usage: { promptTokenCount: 80 }, // candidatesTokenCount missing
+        }),
+    };
+    const provider = createGeminiProvider({ model: "gemini-x", transport });
+    const res = await provider.generate(makeDialogueRequest());
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.usage).toBeUndefined();
+  });
+
   it("maps missing function call to protocol/no_tool_call", async () => {
     const transport: GeminiTransport = { send: async () => ok({ functionCalls: [], finishReason: "STOP" }) };
     const provider = createGeminiProvider({ model: "gemini-x", transport });

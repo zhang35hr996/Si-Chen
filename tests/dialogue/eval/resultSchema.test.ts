@@ -43,4 +43,16 @@ describe("evalResultSchema", () => {
   it("rejects an invalid mode", () => {
     expect(evalResultSchema.safeParse({ ...valid, mode: "batch" }).success).toBe(false);
   });
+
+  it("rejects a usage that violates the total = uncached + cache invariant", () => {
+    const bad = { ...valid, usage: { uncachedInputTokens: 70, totalInputTokens: 200, outputTokens: 20, cacheReadTokens: 30 } };
+    const r = evalResultSchema.safeParse(bad);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues.some((i) => /totalInputTokens must equal/.test(i.message))).toBe(true);
+  });
+
+  it("rejects negative and fractional token counts", () => {
+    expect(evalResultSchema.safeParse({ ...valid, usage: { uncachedInputTokens: -1, totalInputTokens: -1, outputTokens: 0 } }).success).toBe(false);
+    expect(evalResultSchema.safeParse({ ...valid, usage: { uncachedInputTokens: 1.5, totalInputTokens: 1.5, outputTokens: 0 } }).success).toBe(false);
+  });
 });

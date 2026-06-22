@@ -11,7 +11,6 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as readline from "node:readline";
 import {
   buildScorecard,
   scorecardToMarkdown,
@@ -20,10 +19,9 @@ import {
   type ModelResultGroup,
 } from "../src/engine/dialogue/eval/report";
 import { DEFAULT_PRICE_TABLE } from "../src/engine/dialogue/eval/pricing";
-import { evalResultSchema } from "../src/engine/dialogue/eval/resultSchema";
 import { buildSpeakerProfiles } from "../src/engine/dialogue/eval/speakerProfile";
 import { loadRealContent } from "./lib/loadRealContent";
-import type { EvalResult } from "../src/engine/dialogue/eval/types";
+import { loadEvalResults } from "./lib/loadEvalResults";
 
 function parseArgs(argv: string[]): { input: string[]; outputDir: string } {
   const args = argv.slice(2);
@@ -43,47 +41,12 @@ function parseArgs(argv: string[]): { input: string[]; outputDir: string } {
   return { input, outputDir };
 }
 
-async function loadResults(filePath: string): Promise<EvalResult[]> {
-  const resolved = path.resolve(filePath);
-  if (!fs.existsSync(resolved)) {
-    console.error(`Error: file not found: ${resolved}`);
-    process.exit(1);
-  }
-  const rl = readline.createInterface({ input: fs.createReadStream(resolved), crlfDelay: Infinity });
-  const results: EvalResult[] = [];
-  let lineNum = 0;
-  for await (const line of rl) {
-    lineNum++;
-    const trimmed = line.trim();
-    if (trimmed.length === 0) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      console.error(`Error: invalid JSON in ${filePath} on line ${lineNum}: ${trimmed.slice(0, 80)}`);
-      process.exit(1);
-    }
-    const check = evalResultSchema.safeParse(parsed);
-    if (!check.success) {
-      const issue = check.error.issues[0];
-      const at = issue?.path.join(".") || "(root)";
-      console.error(
-        `Error: ${filePath} line ${lineNum} is not a valid EvalResult — ${issue?.message ?? "schema mismatch"} at "${at}". ` +
-          `Records written before the usage-accounting fix are incompatible; regenerate with eval:run.`,
-      );
-      process.exit(1);
-    }
-    results.push(check.data as EvalResult);
-  }
-  return results;
-}
-
 async function main() {
   const { input, outputDir } = parseArgs(process.argv);
 
   const groups: ModelResultGroup[] = [];
   for (const file of input) {
-    const results = await loadResults(file);
+    const results = loadEvalResults(file);
     if (results.length === 0) {
       console.error(`Error: ${file} contains no results`);
       process.exit(1);

@@ -46,6 +46,19 @@ describe("anthropicProvider — usage normalization", () => {
     }
   });
 
+  it("omits usage when input_tokens is missing (no faked zero)", async () => {
+    const t = msgTransport(
+      msg({
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "emit_dialogue_line", input: { text: "安", proposedClaims: [] } }],
+        usage: { output_tokens: 10 }, // input_tokens missing
+      }),
+    );
+    const r = await createAnthropicProvider({ model: "claude-x", transport: t }).generate(makeRequest("shen_zhibai"));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.usage).toBeUndefined();
+  });
+
   it("preserves usage + requestId on a billed protocol failure (wrong stop_reason → no_tool_call)", async () => {
     const transport = msgTransport(
       msg({ stop_reason: "end_turn", content: [], usage: { input_tokens: 40, output_tokens: 0 } }),

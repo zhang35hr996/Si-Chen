@@ -106,9 +106,10 @@ export function createOpenAIProvider(opts: { model: string; transport: OpenAITra
 function extractOpenAIUsage(m: OpenAIToolResponse): NormalizedUsage | undefined {
   const u = m.usage;
   if (!u) return undefined;
+  // Raw values (no `?? 0`): a missing required token count → undefined usage.
   return makeUsageFromTotal({
-    totalInputTokens: u.prompt_tokens ?? 0,
-    outputTokens: u.completion_tokens ?? 0,
+    totalInputTokens: u.prompt_tokens,
+    outputTokens: u.completion_tokens,
     ...(u.prompt_tokens_details?.cached_tokens !== undefined ? { cacheReadTokens: u.prompt_tokens_details.cached_tokens } : {}),
   });
 }

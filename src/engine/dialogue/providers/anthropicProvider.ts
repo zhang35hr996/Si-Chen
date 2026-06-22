@@ -136,9 +136,11 @@ export function createAnthropicProvider(opts: { model: string; transport: Anthro
 function extractAnthropicUsage(m: AnthropicToolUseResponse): NormalizedUsage | undefined {
   const u = m.usage;
   if (!u) return undefined;
+  // Pass raw values (no `?? 0`): makeUsage returns undefined if a required field
+  // is absent, so a partial usage object isn't faked into a priced zero-cost run.
   return makeUsage({
-    uncachedInputTokens: u.input_tokens ?? 0,
-    outputTokens: u.output_tokens ?? 0,
+    uncachedInputTokens: u.input_tokens,
+    outputTokens: u.output_tokens,
     ...(u.cache_read_input_tokens !== undefined ? { cacheReadTokens: u.cache_read_input_tokens } : {}),
     ...(u.cache_creation_input_tokens !== undefined ? { cacheCreationTokens: u.cache_creation_input_tokens } : {}),
   });

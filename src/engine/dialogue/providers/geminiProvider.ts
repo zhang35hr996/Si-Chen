@@ -115,9 +115,10 @@ export function createGeminiProvider(opts: { model: string; transport: GeminiTra
 function extractGeminiUsage(res: GeminiTransportResult): NormalizedUsage | undefined {
   const u = res.usage;
   if (!u) return undefined;
+  // Raw values (no `?? 0`): a missing required token count → undefined usage.
   return makeUsageFromTotal({
-    totalInputTokens: u.promptTokenCount ?? 0,
-    outputTokens: u.candidatesTokenCount ?? 0,
+    totalInputTokens: u.promptTokenCount,
+    outputTokens: u.candidatesTokenCount,
     ...(u.cachedContentTokenCount !== undefined ? { cacheReadTokens: u.cachedContentTokenCount } : {}),
   });
 }

@@ -64,6 +64,23 @@ describe("openaiProvider", () => {
     }
   });
 
+  it("omits usage when a required token field is missing (no faked zero)", async () => {
+    const transport: OpenAITransport = {
+      send: async () =>
+        ok({
+          message: {
+            finish_reason: "tool_calls",
+            tool_calls: [{ function: { name: "emit_dialogue_line", arguments: JSON.stringify({ text: "好", proposedClaims: [] }) } }],
+            usage: { completion_tokens: 20 }, // prompt_tokens missing → usage not trustworthy
+          },
+        }),
+    };
+    const provider = createOpenAIProvider({ model: "gpt-x", transport });
+    const res = await provider.generate(makeDialogueRequest());
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.usage).toBeUndefined();
+  });
+
   it("maps schema-invalid tool args to protocol/schema_invalid", async () => {
     const provider = createOpenAIProvider({
       model: "gpt-x",
