@@ -21,6 +21,12 @@ import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
 import { mapProviderErrorToGameError } from "./providerError";
 import {
+  toPromptMemory,
+  type DialogueSpeakerStanding,
+  type DialoguePromptContext,
+} from "./promptPayload";
+import {
+  type DialogueAssemblyOptions,
   type DialogueLine,
   type DialogueProvider,
   type DialoguePolicyContext,
@@ -37,8 +43,9 @@ export function assembleDialogueRequest(
   state: GameState,
   speakerId: string,
   locationId: string,
-  scripted?: { text: string; expression?: string },
+  options: DialogueAssemblyOptions = {},
 ): Result<DialogueRequest, GameError> {
+  const targetId = options.targetId ?? "player";
   const character = db.characters[speakerId];
   if (!character) {
     return err(aiError("BAD_SPEAKER", `unknown speaker "${speakerId}"`));
@@ -47,37 +54,54 @@ export function assembleDialogueRequest(
   // 位分角色用 rank.selfRefs；尊长（elder）走「尊长对话路径」：无位分，
   // 自称取 character.selfRefs，并合成占位 standing 使其台词可经统一 orchestrator 渲染。
   let contextStanding: CharacterStanding & { selfRefs: CharacterRank["selfRefs"] };
+  let rankDisplay: DialogueSpeakerStanding;
+  let rank: CharacterRank | undefined;
   if (standing) {
-    const rank = db.ranks[standing.rank];
+    rank = db.ranks[standing.rank];
     if (!rank) {
       return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" holds unknown rank "${standing.rank}"`));
     }
     contextStanding = { ...standing, selfRefs: rank.selfRefs };
+    rankDisplay = { kind: "ranked", id: standing.rank, name: rank.name, grade: rank.grade, selfRefs: rank.selfRefs };
   } else if (character.kind === "elder") {
     contextStanding = {
       rank: ELDER_STANDING_RANK,
       favor: 0,
       selfRefs: character.selfRefs ?? DEFAULT_ELDER_SELF_REFS,
     };
+    rankDisplay = { kind: "unranked", role: character.profile.role, selfRefs: contextStanding.selfRefs };
   } else {
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
   }
+  const memCtx = buildMemoryContext(
+    state,
+    { speakerId },
+    // audienceId, targetId, speakerId all use the resolved targetId — single source.
+    { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
+  );
+  const audience = buildAudienceContext(state, db, { speakerId, targetId });
+  const promptContext: DialoguePromptContext = {
+    speakerDisplayName: resolveDisplayName(character, contextStanding, rank),
+    rankDisplay,
+    audience,
+    relevantMemories: memCtx.activatedMemories.map(toPromptMemory),
+    reactionPlan: undefined,
+    knownEvents: [],
+    allowedClaims: [],
+    forbiddenClaims: [],
+    choiceCandidates: [],
+  };
+  const { scripted, sceneDirective, transcript } = options;
   return ok({
     speakerId,
-    targetId: "player",
+    targetId,
     locationId,
     time: toGameTime(state.calendar),
     speakerContext: {
       profile: character.profile,
       voice: character.voice,
       standing: contextStanding,
-      relevantMemories: buildMemoryContext(
-        state,
-        { speakerId },
-        // audienceId 与 targetId 字段须保持一致（此处 targetId 硬编码为 "player"，audienceId 同步）。
-        // 若将来 assembleDialogueRequest 接收动态 targetId 参数，须同步更新此处。
-        { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId, locationId },
-      ).activatedMemories,
+      relevantMemories: memCtx.activatedMemories,
       stances: character.stances ?? [],
     },
     etiquette: {
@@ -85,8 +109,10 @@ export function assembleDialogueRequest(
       forbiddenTerms: db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
-    transcript: [], // transcripts are excluded from memory v0 (plan §7)
+    sceneDirective,
+    transcript: transcript ?? [],
     ...(scripted !== undefined ? { scripted } : {}),
+    promptContext,
   });
 }
 
@@ -201,14 +227,18 @@ export function buildDialoguePolicyContext(
   state: GameState,
   request: DialogueRequest,
 ): DialoguePolicyContext {
-  const { speakerId, targetId, time: now } = request;
+  void db; // intentionally unused: callers keep passing db; internally not needed
+  const { time: now } = request;
   // knownEvents are intentionally NOT part of offeredContextIds: they are built
   // in memoryContext but never placed on DialogueRequest yet, so the provider
   // never receives them — the gate must not bless a source it wasn't sent.
   const offeredContextIds = new Set<string>(
     request.speakerContext.relevantMemories.map((m) => m.id),
   );
-  const audience = buildAudienceContext(state, db, { speakerId, targetId });
+  // Single-source invariant: audience comes from request.promptContext.audience,
+  // not from an independent buildAudienceContext call. This guarantees the gate
+  // sees exactly the same audience context the LLM was given.
+  const audience = request.promptContext.audience;
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
   return { audience, beliefProjection, offeredContextIds, now };

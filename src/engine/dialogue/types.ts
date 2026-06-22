@@ -12,6 +12,7 @@ import type { ProposedClaim } from "./claims";
 import type { DialogueAudienceContext } from "./audience";
 import type { ReactionPlan } from "./reactionTypes";
 import type { DialogueProviderResult, ProviderResult, ProviderCapabilities } from "./providerContract";
+import type { DialoguePromptContext } from "./promptPayload";
 
 export interface DialogueRequest {
   speakerId: string;
@@ -34,6 +35,20 @@ export interface DialogueRequest {
   sceneDirective?: string;
   transcript: { speaker: string; text: string }[];
   /** Present for scripted nodes: the authored line the mock provider echoes. */
+  scripted?: { text: string; expression?: string };
+  /** LLM-2 prompt compiler boundary: structured context for the LLM. */
+  promptContext: DialoguePromptContext;
+}
+
+/**
+ * Options for assembleDialogueRequest (LLM-2 §1).
+ * Lives in types.ts (not promptPayload.ts) so orchestrator does not depend on
+ * the DTO module for its function signature.
+ */
+export interface DialogueAssemblyOptions {
+  targetId?: string;                           // defaults to "player"
+  sceneDirective?: string;
+  transcript?: { speaker: string; text: string }[];  // defaults to []
   scripted?: { text: string; expression?: string };
 }
 
