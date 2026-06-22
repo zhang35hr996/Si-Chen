@@ -56,7 +56,7 @@ import { randomPetName } from "../engine/characters/heirNames";
 import { PhysicianModal } from "./components/PhysicianModal";
 import { courtPhysician } from "../engine/characters/taiyi";
 import { planPhysicianVisit, buildConsultOptions, physicianVisitedThisMonth, type PhysicianSubject } from "../store/physician";
-import { inPalaceConsorts } from "../engine/characters/presence";
+import { livingConsortIds } from "../store/healthRoster";
 import { heirPortraitSet, heirAge, listHeirsBySex } from "../engine/characters/heirs";
 import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
@@ -553,9 +553,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   const commitBedchamber = (plan: BedchamberPlan) => {
-    setBedchamberRun(null);
     const g = canBedchamber(store.getState()); // re-check with fresh state (state may have changed while scene was open)
-    if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
+    if (!g.ok) { setBedchamberRun(null); setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
+    setBedchamberRun(null);
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -1563,7 +1563,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           <div className="heir-list" onClick={(e) => e.stopPropagation()}>
             <h2>为侍君请脉</h2>
             <ul className="consort-list">
-              {inPalaceConsorts(db, liveState).map((c) => {
+              {livingConsortIds(db, liveState)
+                .map((id) => db.characters[id] ?? liveState.generatedConsorts[id]!)
+                .map((c) => {
                 const visited = physicianVisitedThisMonth(liveState, { kind: "consort", id: c.id });
                 const portrait = registry.portrait(c.portraitSet, "neutral");
                 return (
