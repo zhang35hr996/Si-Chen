@@ -8,10 +8,12 @@ import {
   type EventReturnTarget,
   type NavAction,
   type NavState,
+  type PendingReactionCheckpoint,
   canChain,
   checkpointReturnTarget,
   initialNavState,
   navReducer,
+  pendingReactionReducer,
   resolveReturnNavigation,
 } from "../../src/ui/eventReturn";
 
@@ -180,6 +182,52 @@ describe("checkpointReturnTarget — explicit board-id producer contract", () =>
   });
   it("6. helper does not accept/depend on a separate currentBoard snapshot (arity 2)", () => {
     expect(checkpointReturnTarget.length).toBe(2);
+  });
+});
+
+describe("pending reaction checkpoint lifecycle (deferred-reaction desync fix)", () => {
+  const begin = (rolledOver: boolean, boardId: string | undefined, from: PendingReactionCheckpoint = null) =>
+    pendingReactionReducer(from, { type: "begin", rolledOver, boardId });
+
+  it("1. non-rollover reaction carrying 'jingcheng' produces NO pending checkpoint", () => {
+    expect(begin(false, "jingcheng")).toBeNull();
+  });
+
+  it("2. a later rollover reaction without a board id resolves to a location checkpoint, not 'jingcheng'", () => {
+    const afterNonRollover = begin(false, "jingcheng"); // null — board id discarded
+    const next = begin(true, undefined, afterNonRollover);
+    expect(next).toEqual({ boardId: undefined });
+    // the deferred checkpoint therefore returns to the player location, never the stale 京城 board
+    expect(checkpointReturnTarget(next!.boardId, "zichendian")).toEqual({ kind: "location", locationId: "zichendian" });
+  });
+
+  it("3. rollover exit-palace reaction preserves 'jingcheng'", () => {
+    const p = begin(true, "jingcheng");
+    expect(p).toEqual({ boardId: "jingcheng" });
+    expect(checkpointReturnTarget(p!.boardId, "zichendian")).toEqual({ kind: "map", atRoot: false, boardId: "jingcheng" });
+  });
+
+  it("4. rollover ordinary-location reaction stores boardId: undefined", () => {
+    expect(begin(true, undefined)).toEqual({ boardId: undefined });
+  });
+
+  it("5. consuming the pending context clears it exactly once", () => {
+    const pending = begin(true, "jingcheng");
+    const boardId = pending!.boardId; // captured for the one checkpoint run
+    expect(boardId).toBe("jingcheng");
+    const afterConsume = pendingReactionReducer(pending, { type: "consume" });
+    expect(afterConsume).toBeNull();
+    expect(pendingReactionReducer(afterConsume, { type: "consume" })).toBeNull(); // idempotent; nothing left
+  });
+
+  it("6. starting a new reaction sequence overwrites any previous pending context", () => {
+    const stale = begin(true, "jingcheng");
+    expect(begin(false, undefined, stale)).toBeNull(); // non-rollover overwrite clears
+    expect(begin(true, "jiaowai", stale)).toEqual({ boardId: "jiaowai" }); // rollover overwrite replaces
+  });
+
+  it("7. new game / load / death clearing removes the pending context", () => {
+    expect(pendingReactionReducer(begin(true, "jingcheng"), { type: "clear" })).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ import {
   checkpointReturnTarget,
   initialNavState,
   navReducer,
+  pendingReactionReducer,
   resolveReturnNavigation,
 } from "./eventReturn";
 import rawManifest from "../../assets/manifest.json";
@@ -130,11 +131,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
-  // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
-  const [reactionRollover, setReactionRollover] = useState(false);
-  // 出宫结算若需延后补跑 checkpoint（懿旨过场后换旬），记下「留在哪个地图板」的权威 board ID
-  // （由 onTravelledSettle 传入），使补跑恢复该嵌套板而非按 playerLocation 切回房间。
-  const [reactionStayOnBoardId, setReactionStayOnBoardId] = useState<string | undefined>(undefined);
+  // 过场（对话/反应/初夜提示）若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
+  // 原 reactionRollover + reactionStayOnBoardId 合并为单一原子待处理上下文：null=无；非空={boardId}
+  // 决定补跑落点（出宫携带权威板 ID，普通行动为 undefined）。杜绝两状态错位串台（§ deferred-reaction）。
+  const [pendingReactionCheckpoint, pendingReactionDispatch] = useReducer(pendingReactionReducer, null);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
   const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
@@ -387,6 +387,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       store.loadState(result.value.state);
       resetRollGuards();
       navDispatch({ type: "clear" }); // 读档清空事件返回上下文（场景态从不入档）
+      pendingReactionDispatch({ type: "clear" });
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
       if (store.getState().gameOver) {
         setContinueError("先帝已崩，请开新局。");
@@ -594,19 +595,22 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setReaction(null);
     setReactionQueue([]);
     navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
+    pendingReactionDispatch({ type: "clear" });
     doAutosave();
     setView("title");
   };
 
   /** 串播一组反应节拍（行动自身台词 + 凤后懿旨），空则按需补跑转旬 checkpoint。 */
-  const playReactions = (beats: DecreeReaction[], rolledOver: boolean) => {
+  const playReactions = (beats: DecreeReaction[], rolledOver: boolean, stayOnMapBoardId?: string) => {
     if (beats.length === 0) {
-      if (rolledOver) runCheckpoints(true);
+      pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
+      if (rolledOver) runCheckpoints(true, stayOnMapBoardId);
       return;
     }
+    // 转旬才登记待处理上下文（携带权威 board ID）；非转旬登记 null，覆盖任何旧值（杜绝串台）。
+    pendingReactionDispatch({ type: "begin", rolledOver, boardId: stayOnMapBoardId });
     setReaction(beats[0]!);
     setReactionQueue(beats.slice(1));
-    if (rolledOver) setReactionRollover(true);
   };
 
   const proceedAfterNewGame = () => {
@@ -620,6 +624,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     store.newGame(db);
     resetRollGuards();
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
+    pendingReactionDispatch({ type: "clear" });
     setView("coronation");
   };
 
@@ -651,7 +656,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
     if (firstNight) {
       setFirstNightPromptId(plan.charId);
-      if (spend.value.rolledOver) setReactionRollover(true); // 初夜提示关闭后再补跑
+      if (spend.value.rolledOver) pendingReactionDispatch({ type: "begin", rolledOver: true, boardId: undefined }); // 初夜提示关闭后再补跑
       // 初夜弹窗在上：懿旨入队，待晋升后续反应或「暂且不必」时排空。
       if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     } else {
@@ -784,7 +789,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (plan.actualHealing > 0) lines.push(`调理一番，气色稍复（健康 +${plan.actualHealing}）。`);
     if (lines.length === 0) lines.push("太医诊脉后嘱咐，仍需静养调理。"); // 主体中性（太后/侍君/皇嗣皆可用，不写「陛下」）
     setPhysicianReaction({ portraitSet: physician.portraitSet, speakerName: physician.name, lines });
-    if (settled.value.rolledOver) setReactionRollover(true);
+    if (settled.value.rolledOver) pendingReactionDispatch({ type: "begin", rolledOver: true, boardId: undefined });
   };
 
   // 候选承嗣注释管理（御书房）：同时段只能一位候选；传嗣/流产会自动清除。
@@ -839,7 +844,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     doAutosave();
     setHeirListOpen(false);
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    if (settled.value.rolledOver) setReactionRollover(true);
+    if (settled.value.rolledOver) pendingReactionDispatch({ type: "begin", rolledOver: true, boardId: undefined });
     setChildReaction(plan);
   };
 
@@ -854,7 +859,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    if (settled.value.rolledOver) setReactionRollover(true);
+    if (settled.value.rolledOver) pendingReactionDispatch({ type: "begin", rolledOver: true, boardId: undefined });
     setChildReaction(plan);
   };
 
@@ -882,7 +887,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    if (settled.value.rolledOver) setReactionRollover(true);
+    if (settled.value.rolledOver) pendingReactionDispatch({ type: "begin", rolledOver: true, boardId: undefined });
     const [first, ...rest] = reactions;
     setReactionQueue(rest);
     if (first) setReaction(first);
@@ -1082,7 +1087,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         if (applied.ok) beats = plan.reactions;
       }
     }
-    if (beats.length) { setReactionStayOnBoardId(stayOnMapBoardId); playReactions(beats, rolledOver); }
+    if (beats.length) playReactions(beats, rolledOver, stayOnMapBoardId); // playReactions 自登记待处理上下文
     else runCheckpoints(rolledOver, stayOnMapBoardId);
   };
 
@@ -1514,11 +1519,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
               setManageCharId(id);
-            } else if (reactionRollover) {
-              setReactionRollover(false);
-              const boardId = reactionStayOnBoardId; // 捕获后再清空，落点用捕获值（setState 异步）
-              setReactionStayOnBoardId(undefined);
-              runCheckpoints(true, boardId); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
+            } else if (pendingReactionCheckpoint) {
+              const pending = pendingReactionCheckpoint; // 捕获后清空，落点用捕获的 boardId
+              pendingReactionDispatch({ type: "consume" });
+              runCheckpoints(true, pending.boardId); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
             }
           }}
         />
@@ -1613,13 +1617,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               onClick={() => {
                 setFirstNightPromptId(null);
                 if (reactionQueue.length > 0) {
-                  // 先串播待播的凤后懿旨；其 onDone 会接手转旬补跑（reactionRollover 保留）。
+                  // 先串播待播的凤后懿旨；其 onDone 会接手转旬补跑（pending 上下文保留）。
                   const [next, ...rest] = reactionQueue;
                   setReactionQueue(rest);
                   setReaction(next!);
-                } else if (reactionRollover) {
-                  setReactionRollover(false);
-                  runCheckpoints(true); // 初夜恰逢转旬 → 补跑时间推进 checkpoint
+                } else if (pendingReactionCheckpoint) {
+                  const pending = pendingReactionCheckpoint;
+                  pendingReactionDispatch({ type: "consume" });
+                  runCheckpoints(true, pending.boardId); // 初夜恰逢转旬 → 补跑时间推进 checkpoint
                 }
               }}
             >
@@ -1726,9 +1731,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               setReaction(next!);
               return;
             }
-            if (reactionRollover) {
-              setReactionRollover(false);
-              runCheckpoints(true);
+            if (pendingReactionCheckpoint) {
+              const pending = pendingReactionCheckpoint;
+              pendingReactionDispatch({ type: "consume" });
+              runCheckpoints(true, pending.boardId);
             }
           }}
         />
@@ -1749,9 +1755,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               setReaction(next!);
               return;
             }
-            if (reactionRollover) {
-              setReactionRollover(false);
-              runCheckpoints(true);
+            if (pendingReactionCheckpoint) {
+              const pending = pendingReactionCheckpoint;
+              pendingReactionDispatch({ type: "consume" });
+              runCheckpoints(true, pending.boardId);
             }
           }}
         />
@@ -1851,7 +1858,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); setSettingsOpen(false); enterCurrentLocation(); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />

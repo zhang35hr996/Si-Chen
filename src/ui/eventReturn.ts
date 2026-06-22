@@ -82,6 +82,32 @@ export function canChain(state: NavState): boolean {
 }
 
 /**
+ * 延后补跑 checkpoint 的「待处理上下文」（§ deferred-reaction）。把原先两个可独立变动的状态
+ * （reactionRollover:boolean + reactionStayOnBoardId:string|undefined）合并为单一原子值，杜绝
+ * 「非转旬反应留下旧 board → 之后无关转旬反应误用」的串台。null=无待补跑；非空=反应队列结束后须
+ * 补跑 time_advance，并以 boardId 决定落点（boardId 为键、值可为 undefined，避免 exactOptionalPropertyTypes 报错）。
+ */
+export type PendingReactionCheckpoint = { boardId: string | undefined } | null;
+
+export type PendingReactionAction =
+  | { type: "begin"; rolledOver: boolean; boardId: string | undefined } // 一段反应开始：转旬才登记，非转旬清空
+  | { type: "consume" } // 反应队列结束、补跑后清空
+  | { type: "clear" }; // 新游戏/读档/驾崩清空
+
+export function pendingReactionReducer(
+  _state: PendingReactionCheckpoint,
+  action: PendingReactionAction,
+): PendingReactionCheckpoint {
+  switch (action.type) {
+    case "begin":
+      return action.rolledOver ? { boardId: action.boardId } : null;
+    case "consume":
+    case "clear":
+      return null;
+  }
+}
+
+/**
  * runCheckpoints 自动启动事件时的返回上下文。**board ID 由发起动作（出宫 exitPalace 的目标板）
  * 显式传入**，不读异步镜像的父级 currentBoard——避免子组件先于 onBoardChange 生效就卸载导致捕获
  * 旧板（常为 "palace"）的时序耦合。board ID 在场 → 恢复该嵌套板；缺省 → 回事件所在地点。
