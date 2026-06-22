@@ -211,3 +211,66 @@ describe("graph semantics (synthetic scenes)", () => {
     expect(runner.getSession()).toBeNull(); // backstop discards — no AP, no effects
   });
 });
+
+describe("SceneRunner (scripted-only)", () => {
+  // 1. All line nodes use scripted provider with request.scripted set
+  it("all line nodes use scripted provider with request.scripted set", async () => {
+    // The mockProvider is a scripted provider. We verify it can service a real scene
+    // (ev_shen_neglect has line nodes) by confirming every yielded frame has a line
+    // where meta.generated === false (scripted, not generative).
+    const runner = new SceneRunner(db, mockProvider);
+    const state = fresh();
+
+    const first = unwrap(await runner.start(state, "ev_shen_neglect"));
+    if (first.kind !== "frame") throw new Error("expected frame");
+    expect(first.frame.line.meta.generated).toBe(false);
+    expect(first.frame.line.meta.degraded).toBe(false);
+
+    // Advance through the scene with a valid choice
+    const second = unwrap(await runner.advance("c_comfort"));
+    if (second.kind !== "frame") throw new Error("expected frame");
+    expect(second.frame.line.meta.generated).toBe(false);
+
+    // The scripted provider must have used the authored text from the node
+    // (mockProvider echoes request.scripted.text, which SceneRunner sets from node.text)
+    expect(typeof second.frame.line.text).toBe("string");
+    expect(second.frame.line.text.length).toBeGreaterThan(0);
+  });
+
+  // 2. No reaction records written after scripted scene
+  it("no reaction records written after scripted scene", async () => {
+    const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
+    store.newGame(db);
+    const runner = new SceneRunner(db, mockProvider);
+
+    unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
+    unwrap(await runner.advance("c_comfort"));
+    const end = unwrap(await runner.advance());
+    if (end.kind !== "end") throw new Error("expected end");
+
+    // Commit the scene through the store
+    const commit = store.resolveEvent(db, end.eventId, end.effects);
+    expect(commit.ok).toBe(true);
+
+    // Scripted scenes do NOT write eventReactionLog entries
+    expect(store.getState().eventReactionLog.length).toBe(0);
+  });
+
+  // 3. Abandon has no consequences — no reaction records written
+  it("abort existing contract: abandon has no consequences (no records written)", async () => {
+    const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
+    store.newGame(db);
+    const stateBeforeAp = store.getState().calendar.ap;
+
+    const runner = new SceneRunner(db, mockProvider);
+    unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
+    // Advance partway to accumulate pending effects
+    unwrap(await runner.advance("c_cold"));
+    // Abandon without committing
+    runner.abandon();
+
+    // No state changes: eventReactionLog is empty, AP is unchanged
+    expect(store.getState().eventReactionLog.length).toBe(0);
+    expect(store.getState().calendar.ap).toBe(stateBeforeAp);
+  });
+});

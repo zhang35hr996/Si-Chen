@@ -523,6 +523,12 @@ describe("produceDialogueTurn", () => {
     // Further verification: source-level grep checks happen in CI (grep asserted in task brief)
   });
 
+  it("produceDialogueLine is NOT exported", async () => {
+    const mod = await import("../../src/engine/dialogue/orchestrator");
+    expect("produceDialogueLine" in mod).toBe(false);
+    expect("produceDialogueLineWithPolicy" in mod).toBe(false);
+  });
+
   it("generative + request.scripted set → error invalid_combination", async () => {
     const request = makeScriptedRequest(); // has scripted field set
     const generativeProvider = makeGenerativeProvider();
