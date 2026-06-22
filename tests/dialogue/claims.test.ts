@@ -14,11 +14,9 @@ describe("proposedClaimSchema", () => {
     });
     expect(parsed.success).toBe(true);
   });
-  it("rejects sourceContextIds string array (old format)", () => {
-    const parsed = proposedClaimSchema.safeParse({
-      claim: claim(), sourceContextIds: ["mem_shen_zhibai_000001"], modality: "assert", certainty: 90,
-    });
-    expect(parsed.success).toBe(false);
+  it("rejects when sourceRefs is absent", () => {
+    const input = { claim: claim(), modality: "assert", certainty: 90 }; // no sourceRefs
+    expect(proposedClaimSchema.safeParse(input).success).toBe(false);
   });
   it("rejects sourceRefs: [] (min 1)", () => {
     expect(proposedClaimSchema.safeParse({
