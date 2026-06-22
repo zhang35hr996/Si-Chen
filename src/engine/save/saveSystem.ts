@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 6;
+export const SAVE_FORMAT_VERSION = 7;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -114,8 +114,8 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     }
     return { ...env, formatVersion: 5, state, checksum: checksumOf(state) };
   },
-  // v5 → v6 migration deliberately omitted (no-save-backcompat policy).
-  // A v5 save hits the missing MIGRATIONS[5] check and quarantines.
+  // v5 → v6、v6 → v7 迁移均按 no-save-backcompat 政策省略。
+  // 旧档命中缺失的 MIGRATIONS[v] 即 quarantine（pre-release，不保旧档）。
 };
 
 export interface SaveSystemOptions {
