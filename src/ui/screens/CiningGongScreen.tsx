@@ -8,10 +8,10 @@ import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 export function CiningGongScreen({
-  db, store, registry, onOpenMap, onOpenSettings, onConverse, onOpenResources,
+  db, store, registry, onOpenMap, onOpenSettings, onConverse, onOpenResources, onOpenStorehouse,
 }: {
   db: ContentDB; store: GameStore; registry: AssetRegistry;
-  onOpenMap: () => void; onOpenSettings: () => void; onConverse: () => void; onOpenResources?: () => void;
+  onOpenMap: () => void; onOpenSettings: () => void; onConverse: () => void; onOpenResources?: () => void; onOpenStorehouse?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations["cining_gong"]!;
@@ -27,6 +27,7 @@ export function CiningGongScreen({
       crumbs={breadcrumbFor(db, location.id)}
       onBack={onOpenMap}
       onOpenResources={onOpenResources}
+      onOpenStorehouse={onOpenStorehouse}
       onOpenSettings={onOpenSettings}
     >
       <main className="location-screen">

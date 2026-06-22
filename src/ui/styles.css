@@ -2976,7 +2976,12 @@ button:active:enabled {
 
 /* ── 库房菜单 ─────────────────────────────────────────────────────── */
 .storehouse {
+  /* 与「国情」一致：浮层覆盖任意画面，关闭后回到原处（不再硬切回地图）。 */
+  position: fixed;
+  inset: 0;
+  z-index: 60;
   min-height: 100vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   padding: 0 0 2rem;

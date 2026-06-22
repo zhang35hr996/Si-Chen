@@ -81,7 +81,7 @@ import { ShopScreen } from "./screens/ShopScreen";
 /** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
 const MAX_EVENT_CHAIN = 3;
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "storehouse" | "shop" | "dianxuan";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -137,6 +137,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
+  // 国库与国情一致：浮层，任意画面可开，关闭后回到原处（不切 view）。
+  const [storehouseOpen, setStorehouseOpen] = useState(false);
   const [profileCharId, setProfileCharId] = useState<string | null>(null);
   const [courtyardLocId, setCourtyardLocId] = useState<string | null>(null);
   const [focusConsortId, setFocusConsortId] = useState<string | null>(null);
@@ -1045,6 +1047,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onRestAlone={restAlone}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
           onViewProfile={(id) => setProfileCharId(id)}
           summonedConsortId={summonedConsortId}
           onDismissSummon={() => setSummonedConsortId(null)}
@@ -1078,6 +1081,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenSettings={() => setSettingsOpen(true)}
           onSummon={summonHeir}
           onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
         />
       )}
       {view === "fengxiandian" && (
@@ -1100,6 +1104,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           // ev_taihou_converse 用 checkpoint:"game_start" 故永不自动触发，只由此按钮手动开启；勿改成 location_enter（会变强制弹出）。
           onConverse={() => startEvent("ev_taihou_converse")}
           onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
         />
       )}
       {view === "map" && (
@@ -1118,7 +1123,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onOpenSettings={() => setSettingsOpen(true)}
           onClose={() => { setFocusConsortId(null); setView("location"); }}
           onOpenResources={() => setResourcePanelOpen(true)}
-          onOpenStorehouse={() => setView("storehouse")}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
           onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
           onEnterShop={enterShop}
           onBoardChange={(boardId) => {
@@ -1139,9 +1144,6 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           onPickHall={(consortId) => enterConsortQuarters(courtyardLocId!, consortId)}
           onBack={() => { setCourtyardLocId(null); setMapAtRoot(false); setView("map"); }}
         />
-      )}
-      {view === "storehouse" && (
-        <StorehouseScreen db={db} store={store} onClose={() => setView("map")} />
       )}
       {view === "dianxuan" && dianxuan && (
         <DianxuanScreen
@@ -1505,6 +1507,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       )}
       {resourcePanelOpen && (
         <ResourcePanel state={liveState} onClose={() => setResourcePanelOpen(false)} />
+      )}
+      {storehouseOpen && (
+        <StorehouseScreen db={db} store={store} onClose={() => setStorehouseOpen(false)} />
       )}
       {profileCharId && db.characters[profileCharId] && (
         <CharacterProfileDrawer

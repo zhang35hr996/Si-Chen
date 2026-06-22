@@ -9,11 +9,11 @@ import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 export function YuqingGongScreen({
-  db, store, registry, onOpenMap, onOpenSettings, onSummon, onOpenResources,
+  db, store, registry, onOpenMap, onOpenSettings, onSummon, onOpenResources, onOpenStorehouse,
 }: {
   db: ContentDB; store: GameStore; registry: AssetRegistry;
   onOpenMap: () => void; onOpenSettings: () => void;
-  onSummon: (heirId: string) => void; onOpenResources?: () => void;
+  onSummon: (heirId: string) => void; onOpenResources?: () => void; onOpenStorehouse?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations["yuqing_gong"]!;
@@ -30,6 +30,7 @@ export function YuqingGongScreen({
       crumbs={breadcrumbFor(db, location.id)}
       onBack={onOpenMap}
       onOpenResources={onOpenResources}
+      onOpenStorehouse={onOpenStorehouse}
       onOpenSettings={onOpenSettings}
     >
       <main className="location-screen">

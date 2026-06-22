@@ -32,6 +32,7 @@ export function LocationScreen({
   onRestAlone,
   onConverse,
   onOpenResources,
+  onOpenStorehouse,
   onViewProfile,
   summonedConsortId,
   onDismissSummon,
@@ -59,6 +60,7 @@ export function LocationScreen({
   onRestAlone?: () => void;
   onConverse?: (charId: string) => void;
   onOpenResources?: () => void;
+  onOpenStorehouse?: () => void;
   onViewProfile?: (charId: string) => void;
   summonedConsortId?: string | null;
   onDismissSummon?: () => void;
@@ -109,6 +111,7 @@ export function LocationScreen({
       pregnant={pregnant}
       onBack={onLeavePalace ?? onOpenMap}
       onOpenResources={onOpenResources}
+      onOpenStorehouse={onOpenStorehouse}
       onOpenSettings={onOpenSettings}
       className="location-shell"
     >
