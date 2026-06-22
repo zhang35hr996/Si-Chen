@@ -394,7 +394,7 @@ export type CourtEventType =
   | "conflict"
   | "promise"
   | "secret_discovered";
-// claim_corrected 延后到【首个有错误信念/可证伪 claim 的 PR】，而非承诺 PR5——它需生产者+消费者；
+// claim_corrected 延后到【首个有错误信念/可证伪 claim 的 PR】——它需生产者+消费者；
 // 加入即死类型。
 
 /** 公共/私人记忆共用的衰减档位。 */

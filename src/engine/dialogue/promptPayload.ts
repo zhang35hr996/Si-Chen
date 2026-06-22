@@ -77,7 +77,7 @@ export interface DialoguePromptContext {
   reactionPlan?: ReactionPlan;                    // undefined until LLM-3
   knownEvents: PromptEvent[];                     // [] until LLM-3
   allowedClaims: readonly AuthorizedClaim[];      // [] until T6
-  forbiddenClaims: readonly DialogueClaim[];      // [] until T7
+  forbiddenClaims: readonly DialogueClaim[];
   /** The event id that triggered the speaker's reactionPlan, if any (populated in T6+). */
   reactionSourceEventId?: string;
   choiceCandidates: DialogueChoiceCandidate[];    // [] until LLM-2

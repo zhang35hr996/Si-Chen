@@ -4,7 +4,7 @@
  * These validate provider output TEXT ONLY — forbidden lexicon, self-reference
  * correctness, unauthorized rank/title terms, leaked template tokens. ALL
  * numeric/state validation (delta clamps, illegal fields, resource/rank typing)
- * lives in engine/effects (PR 6) and is tested there. Keeping the dialogue seam
+ * lives in engine/effects and is tested there. Keeping the dialogue seam
  * text-only stops a future model's prose problems and its proposed-effect
  * problems from coupling: they are caught by different, independently testable
  * layers.

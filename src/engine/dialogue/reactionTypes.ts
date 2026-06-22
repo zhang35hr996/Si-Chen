@@ -8,7 +8,7 @@ export type ReactionUndertone =
   | "affection" | "admiration" | "suspicion" | "calculation" | "reluctance";
 
 export interface ClaimNeed {
-  /** 抽象表达需求（不含具体 claim id；PR5 组装真实 claim）。 */
+  /** 抽象表达需求（不含具体 claim id；由 assembleClaims 装配真实 claim）。 */
   about: "subject_event" | "self_feeling" | "relationship";
   subjectId?: string;
 }
