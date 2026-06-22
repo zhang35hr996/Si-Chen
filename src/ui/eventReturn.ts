@@ -10,7 +10,9 @@
  */
 
 export type EventReturnTarget =
-  | { kind: "map" }
+  // map：atRoot 区分「皇城主图根」与「恢复某个嵌套地图板（京城/郊外…）」。缺省 atRoot=true
+  // 保持既有根图调用者行为；atRoot=false 时携带 boardId 以恢复被事件打断时所在的板。
+  | { kind: "map"; atRoot?: boolean; boardId?: string }
   | { kind: "location"; locationId: string }
   | { kind: "zichendian" }
   | { kind: "garden"; subLocationId?: string }
@@ -21,6 +23,9 @@ export interface ReturnNavigation {
   view: "map" | "location" | "zichendian" | "garden" | "xuanzhengdian";
   locationId?: string;
   subLocationId?: string;
+  /** map 专用：true=主图根（保留既有 goHome 行为）；false=恢复 boardId 指定的嵌套板。 */
+  atRoot?: boolean;
+  boardId?: string;
 }
 
 /** 御花园子地点宿主（garden target 不带 locationId，宿主固定为御花园）。 */
@@ -30,7 +35,8 @@ export const GARDEN_HOST_LOCATION_ID = "yuhuayuan";
 export function resolveReturnNavigation(target: EventReturnTarget): ReturnNavigation {
   switch (target.kind) {
     case "map":
-      return { view: "map" };
+      // 归一化 atRoot 默认 true（既有根图调用者行为不变）；boardId 仅在 atRoot=false 时有意义。
+      return { view: "map", atRoot: target.atRoot ?? true, boardId: target.boardId };
     case "location":
       return { view: "location", locationId: target.locationId };
     case "zichendian":
@@ -73,4 +79,19 @@ export function navReducer(state: NavState, action: NavAction): NavState {
 /** 链预算是否仍有余（与既有 chainDepth.current < MAX_EVENT_CHAIN 语义一致）。 */
 export function canChain(state: NavState): boolean {
   return state.chainDepth < MAX_EVENT_CHAIN;
+}
+
+/**
+ * runCheckpoints 自动启动事件时的返回上下文：stayOnMap（出宫等，玩家位置未变、停在嵌套地图板）
+ * → 恢复该板（atRoot=false + boardId）；否则 → 回事件所在地点。与本函数「无事件」时的落点一致，
+ * 修复事件打断后丢失京城/郊外板的回归（§ map-context）。
+ */
+export function checkpointReturnTarget(
+  stayOnMap: boolean,
+  playerLocation: string,
+  currentBoard: string,
+): EventReturnTarget {
+  return stayOnMap
+    ? { kind: "map", atRoot: false, boardId: currentBoard }
+    : { kind: "location", locationId: playerLocation };
 }

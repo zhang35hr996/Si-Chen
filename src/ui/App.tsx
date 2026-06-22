@@ -3,6 +3,7 @@ import {
   type EventReturnTarget,
   MAX_EVENT_CHAIN,
   canChain,
+  checkpointReturnTarget,
   initialNavState,
   navReducer,
   resolveReturnNavigation,
@@ -317,7 +318,16 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     navDispatch({ type: "consume" }); // clear exactly once; a stale target cannot leak to the next event
     if (!target) { goHome(); return; }
     const nav = resolveReturnNavigation(target);
-    if (nav.view === "map" || nav.view === "xuanzhengdian") { goHome(); return; } // 宣政殿专用屏未建（PR4）→ 暂回主图
+    if (nav.view === "map") {
+      // atRoot=true 保留既有 goHome 行为（含 maybeAutumnHunt）；atRoot=false 恢复被打断的嵌套板，
+      // 与 runCheckpoints「无事件 stayOnMap」落点一致（不置根、不掷秋猎）。
+      if (nav.atRoot) { goHome(); return; }
+      setMapAtRoot(false);
+      if (nav.boardId) setCurrentBoard(nav.boardId);
+      setView("map");
+      return;
+    }
+    if (nav.view === "xuanzhengdian") { goHome(); return; } // 宣政殿专用屏未建（PR4）→ 暂回主图
     setLocationView(nav.locationId!); // location / zichendian（PR2）/ garden（PR3）→ 暂用对应 location 场景
   };
 
@@ -400,8 +410,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const pick =
       (rolledOver ? pickAutoStartEvent(db, state, "time_advance", loc) : null) ??
       (stayOnMap ? null : pickAutoStartEvent(db, state, "location_enter", loc));
-    // 返回上下文与本函数无事件时的落点一致：stayOnMap（出宫，位置未变）回主图；否则回当前地点。
-    if (pick) startEvent(pick.id, stayOnMap ? { kind: "map" } : { kind: "location", locationId: state.playerLocation });
+    // 返回上下文与本函数无事件时的落点一致：stayOnMap（出宫，位置未变）恢复当前嵌套板；否则回当前地点。
+    if (pick) startEvent(pick.id, checkpointReturnTarget(stayOnMap, state.playerLocation, currentBoard));
     // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在京城地图板，
     // 不能按 playerLocation 切回房间视图。
     else if (stayOnMap) setView("map");
@@ -602,7 +612,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const proceedAfterNewGame = () => {
     const state = store.getState();
     const pick = pickAutoStartEvent(db, state, "game_start", db.locations[state.playerLocation]);
-    if (pick) startEvent(pick.id, { kind: "map" });
+    if (pick) startEvent(pick.id, { kind: "map", atRoot: true });
     else goHome();
   };
 
@@ -1377,7 +1387,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           store={store}
           registry={registry}
           locationId={freeViewId}
-          onStartEvent={(id) => startEvent(id, { kind: "map" })}
+          onStartEvent={(id) => startEvent(id, { kind: "map", atRoot: true })}
           onClose={() => setView("map")}
           onOfferIncense={() => templeAction("incense")}
           onDrawFortune={() => templeAction("fortune")}
@@ -1865,7 +1875,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onSilent={silentLeave}
         />
       )}
-      <DebugPanel store={store} db={db} logger={logger} onForceEvent={(id) => startEvent(id, { kind: "map" })} />
+      <DebugPanel store={store} db={db} logger={logger} onForceEvent={(id) => startEvent(id, { kind: "map", atRoot: true })} />
     </>
   );
 }

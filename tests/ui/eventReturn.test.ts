@@ -8,6 +8,7 @@ import {
   type NavAction,
   type NavState,
   canChain,
+  checkpointReturnTarget,
   initialNavState,
   navReducer,
   resolveReturnNavigation,
@@ -24,8 +25,8 @@ const restore = (state: NavState) => {
 };
 
 describe("resolveReturnNavigation destinations", () => {
-  it("1. map target → map", () => {
-    expect(resolveReturnNavigation({ kind: "map" })).toEqual({ view: "map" });
+  it("1. map target → map (root semantics by default)", () => {
+    expect(resolveReturnNavigation({ kind: "map" })).toEqual({ view: "map", atRoot: true });
   });
   it("2. ordinary location → exact locationId", () => {
     expect(resolveReturnNavigation({ kind: "location", locationId: "yanhe_gong" })).toEqual({
@@ -92,7 +93,7 @@ describe("target lifecycle", () => {
     s = restore(s).next; // A finishes → target null
     expect(s.target).toBeNull();
     s = run([{ type: "playerStart", target: { kind: "map" } }], s); // B starts
-    expect(restore(s).nav).toEqual({ view: "map" });
+    expect(restore(s).nav).toEqual({ view: "map", atRoot: true });
   });
 
   it("12. every player-start overwrites an existing (stale) target", () => {
@@ -121,5 +122,56 @@ describe("target lifecycle", () => {
     expect(canChain(s)).toBe(false); // depth 3 → budget exhausted
     s = run([{ type: "playerStart", target: loc }], s);
     expect(s.chainDepth).toBe(0); // player-start resets
+  });
+});
+
+describe("map board context across event return (regression)", () => {
+  const jingcheng: EventReturnTarget = { kind: "map", atRoot: false, boardId: "jingcheng" };
+
+  it("1. legacy/root {kind:'map'} resolves with root semantics", () => {
+    const nav = resolveReturnNavigation({ kind: "map" });
+    expect(nav.view).toBe("map");
+    expect(nav.atRoot).toBe(true);
+  });
+
+  it("2. {kind:'map',atRoot:false,boardId:'jingcheng'} retains both fields", () => {
+    expect(resolveReturnNavigation(jingcheng)).toEqual({ view: "map", atRoot: false, boardId: "jingcheng" });
+  });
+
+  it("3. consume still clears a map-context target", () => {
+    const started = run([{ type: "playerStart", target: jingcheng }]);
+    expect(navReducer(started, { type: "consume" }).target).toBeNull();
+  });
+
+  it("4. a stayOnMap chain retains the 京城 board through chainAdvance(s)", () => {
+    const s = run([{ type: "playerStart", target: jingcheng }, { type: "chainAdvance" }, { type: "chainAdvance" }]);
+    expect(s.target).toEqual(jingcheng);
+    expect(resolveReturnNavigation(s.target!)).toMatchObject({ atRoot: false, boardId: "jingcheng" });
+  });
+
+  it("5. final restoration returns the same map context exactly once", () => {
+    let s = run([{ type: "playerStart", target: jingcheng }, { type: "chainAdvance" }]);
+    const r = restore(s);
+    expect(r.nav).toEqual({ view: "map", atRoot: false, boardId: "jingcheng" });
+    s = r.next;
+    expect(s.target).toBeNull();
+    expect(restore(s).nav).toEqual({ view: "map" }); // second restore: no target → safe root fallback
+  });
+
+  it("6. a later root-map player start overwrites the prior 京城 target", () => {
+    const s = run([
+      { type: "playerStart", target: jingcheng },
+      { type: "playerStart", target: { kind: "map", atRoot: true } },
+    ]);
+    expect(s.target).toEqual({ kind: "map", atRoot: true });
+  });
+});
+
+describe("checkpointReturnTarget (runCheckpoints choice)", () => {
+  it("stayOnMap=true → resumable nested-board map target", () => {
+    expect(checkpointReturnTarget(true, "zichendian", "jingcheng")).toEqual({ kind: "map", atRoot: false, boardId: "jingcheng" });
+  });
+  it("stayOnMap=false → location target for the current player location", () => {
+    expect(checkpointReturnTarget(false, "yanhe_gong", "palace")).toEqual({ kind: "location", locationId: "yanhe_gong" });
   });
 });
