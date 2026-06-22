@@ -265,6 +265,10 @@ export function addGeneratedConsort(
         chamber: "main",
         availableFromMonth: monthOrdinal({ year: state.calendar.year, month: 5 }),
         palaceEnteredAt: now, // 入宫时刻（知情资格用）：殿选承恩即此刻入宫
+        health: content.attributes?.health ?? 100,
+        healthStatus: "healthy",
+        ageAtEntry: content.profile.age,
+        enteredAtYear: state.calendar.year,
       },
     },
     memories: {

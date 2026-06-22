@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { healthRoll, healthRollRange } from "../../src/engine/characters/healthRoll";
+import { healthRoll, healthRollRange, healthRollBasisPoints } from "../../src/engine/characters/healthRoll";
 
 describe("healthRoll", () => {
   it("is deterministic for the same seed", () => {
@@ -28,5 +28,16 @@ describe("healthRollRange", () => {
   });
   it("is deterministic", () => {
     expect(healthRollRange("k", 1, 100)).toBe(healthRollRange("k", 1, 100));
+  });
+});
+
+describe("healthRollBasisPoints", () => {
+  it("in [0,9999], deterministic", () => {
+    expect(healthRollBasisPoints("a")).toBe(healthRollBasisPoints("a"));
+    for (const k of ["a", "b", "c", "d"]) {
+      const v = healthRollBasisPoints(k);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(10000);
+    }
   });
 });

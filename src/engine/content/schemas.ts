@@ -241,6 +241,11 @@ export const eventEffectSchema = z.union([
     healthDelta: z.number().int().optional(),
   }),
   z.strictObject({
+    type: z.literal("set_sovereign_health"),
+    healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
+    healthDelta: z.number().int().optional(),
+  }),
+  z.strictObject({
     type: z.literal("set_taihou_health"),
     healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
     healthDelta: z.number().int().optional(),

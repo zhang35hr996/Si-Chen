@@ -6,14 +6,16 @@ import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import { applyEffects } from "../engine/effects/funnel";
 import { resolveEvent, type EventResolution } from "../engine/events/resolve";
-import type { GameError } from "../engine/infra/errors";
+import { stateError, type GameError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
-import type { Result } from "../engine/infra/result";
+import { err, ok, type Result } from "../engine/infra/result";
+import { monthOrdinal, toGameTime } from "../engine/calendar/time";
 import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
 import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState } from "../engine/state/types";
+import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { changeOfficialGrade } from "../engine/officials/changeGrade";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
@@ -25,6 +27,16 @@ export interface EffectReport {
   effects: readonly EventEffect[];
   outcome: "applied" | "rejected";
   errors: GameError[];
+}
+
+/** Result of one atomic time transaction (resolveTimedAction / advanceTime). */
+export interface TimedOutcome {
+  /** The AP spend rolled the action-day (旬) over. */
+  rolledOver: boolean;
+  /** The advance crossed into a new month → the health tick ran once. */
+  monthChanged: boolean;
+  /** The monthly health tick result when monthChanged; null otherwise. */
+  healthOutcome: MonthlyTickResult | null;
 }
 
 export interface GameStoreOptions {
@@ -226,6 +238,104 @@ export class GameStore {
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
     }
     return result;
+  }
+
+  /**
+   * THE single time-advancing entry (Phase 2 §): one atomic transaction that,
+   * on a LOCAL candidate state, (1) applies the player's action effects while the
+   * subject is still alive, (2) advances the calendar (pure reducer), (3) on a
+   * cross-month boundary runs the monthly health tick, and (4) writes gameOver
+   * if the sovereign died — then commits ONCE (`this.state = candidate; emit()`).
+   *
+   * Atomic: if ANY step rejects (or the tick throws on an unresolvable subject),
+   * we `return err(...)` and `this.state` is left byte-identical — no mutation,
+   * no notify. Never routes through `this.dispatch()` (which would commit + emit
+   * a half-advanced state). Action settles before time so the cross-month tick
+   * can never kill a subject we then favor/educate.
+   */
+  resolveTimedAction(
+    db: ContentDB,
+    actionEffects: readonly EventEffect[],
+    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+  ): Result<TimedOutcome, GameError[]> {
+    // 1) action effects on a local candidate (subject still alive)
+    let candidate = this.state;
+    if (actionEffects.length > 0) {
+      const a = applyEffects(db, candidate, actionEffects);
+      if (!a.ok) return err(a.error);
+      candidate = a.value;
+    }
+    return this.advanceCandidate(db, candidate, command);
+  }
+
+  /**
+   * Travel through the SAME atomic time-advancing core as resolveTimedAction.
+   * Applies the MOVE command(s) to a local candidate (instant, no time cost),
+   * then advances time via `advanceCommand` (the SPEND_AP), running the
+   * cross-month health tick + gameOver write in ONE commit. If any step rejects,
+   * `this.state` is untouched. Routes travel's time-spend through the unified
+   * entry so cross-month travel runs the monthly tick (and can end the game).
+   */
+  travelAndAdvance(
+    db: ContentDB,
+    moveCommands: readonly GameCommand[],
+    advanceCommand: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+  ): Result<TimedOutcome, GameError[]> {
+    // 1) MOVE on a local candidate (no time advances yet — subject still where they were)
+    let candidate = this.state;
+    if (moveCommands.length > 0) {
+      const m = applyBatch(candidate, moveCommands);
+      if (!m.ok) return err([m.error]);
+      candidate = m.value.state;
+    }
+    return this.advanceCandidate(db, candidate, advanceCommand);
+  }
+
+  /**
+   * Shared core: advance the calendar on `candidate`, run the cross-month health
+   * tick, write gameOver on sovereign death, then commit ONCE. Atomic: any
+   * failure returns err and leaves `this.state` untouched.
+   */
+  private advanceCandidate(
+    db: ContentDB,
+    candidateIn: GameState,
+    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+  ): Result<TimedOutcome, GameError[]> {
+    let candidate = candidateIn;
+    // 2) advance the calendar (pure reducer) on the candidate
+    const before = monthOrdinal(candidate.calendar);
+    const cmd = applyCommand(candidate, command);
+    if (!cmd.ok) return err([cmd.error]);
+    candidate = cmd.value.state;
+    const monthChanged = monthOrdinal(candidate.calendar) !== before;
+    // 3) cross-month health tick (the tick may throw on an unresolvable subject)
+    let healthOutcome: MonthlyTickResult | null = null;
+    if (monthChanged) {
+      try {
+        healthOutcome = buildMonthlyHealthTick(db, candidate);
+      } catch (e) {
+        return err([stateError("HEALTH_TICK_FAILED", String(e))]);
+      }
+      const h = applyEffects(db, candidate, healthOutcome.effects);
+      if (!h.ok) return err(h.error);
+      candidate = h.value;
+      // 4) emperor death → gameOver in the SAME transaction (App must not write it)
+      if (healthOutcome.sovereignDied) {
+        candidate = { ...candidate, gameOver: { cause: "sovereign_death", at: toGameTime(candidate.calendar) } };
+      }
+    }
+    // single commit + single notify — only after every step succeeded
+    this.state = candidate;
+    this.emit();
+    return ok({ rolledOver: cmd.value.rolledOver, monthChanged, healthOutcome });
+  }
+
+  /** Pure time advance with no action effects (= resolveTimedAction(db, [], command)). */
+  advanceTime(
+    db: ContentDB,
+    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+  ): Result<TimedOutcome, GameError[]> {
+    return this.resolveTimedAction(db, [], command);
   }
 
   private lastEffectReport: EffectReport | null = null;

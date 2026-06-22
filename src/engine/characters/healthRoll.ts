@@ -14,3 +14,8 @@ export function healthRollRange(seedKey: string, lo: number, hi: number): number
   const span = hi - lo + 1;
   return lo + (parseInt(fnv1a64Hex(`health:${seedKey}`).slice(0, 12), 16) % span);
 }
+
+/** 0–9999（亚百分比精度，用于年化→月度 onset 命中）。 */
+export function healthRollBasisPoints(seedKey: string): number {
+  return parseInt(fnv1a64Hex(`health:${seedKey}`).slice(0, 12), 16) % 10000;
+}

@@ -118,6 +118,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   // 宫城图 button opens the map on the current board instead (atRoot=false).
   const [mapAtRoot, setMapAtRoot] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
+  // 轻量系统提示横幅（如太后已薨时进慈宁宫）。非角色台词，独立于视图渲染。
+  const [notice, setNotice] = useState<string | null>(null);
   const [successorOpen, setSuccessorOpen] = useState(false);
   const [successorDismissedMonth, setSuccessorDismissedMonth] = useState<number | null>(null);
   const [centennialDismissedMonth, setCentennialDismissedMonth] = useState<number | null>(null);
@@ -156,6 +158,14 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   // 大选·四月 prompt：进入房间且到节点时声明式弹出（reactiveState 订阅日历驱动重算）。
   const reactiveState = useGameState(store);
+
+  // 死者视图清理：被召见的侍君若在跨月健康 tick 中身故，清除召见态（不在死者宫中停留）。
+  useEffect(() => {
+    if (!summonedConsortId) return;
+    if (reactiveState.standing[summonedConsortId]?.lifecycle === "deceased") {
+      setSummonedConsortId(null);
+    }
+  }, [reactiveState.standing, summonedConsortId]);
   useEffect(() => {
     if (!content.ok) return;
     if (view !== "location" || daxuanPrompt || dianxuan) return;
@@ -198,8 +208,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const before = store.getState();
     const ev = db.events["ev_chaohui"];
     if (!ev || before.calendar.ap < ev.apCost || before.calendar.ap !== before.calendar.apMax) return;
-    const spend = store.dispatch({ type: "SPEND_AP", amount: ev.apCost });
+    // 进殿即扣 apCost；满点扣点不会转旬/跨月，故 healthOutcome 必为 null（统一入口仍走一遍）。
+    const spend = store.advanceTime(db, { type: "SPEND_AP", amount: ev.apCost });
     if (!spend.ok) return;
+    if (spend.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     const cal = store.getState().calendar;
     const queue = pickCourtAffairs(db, `court:${store.getState().rngSeed}:${cal.dayIndex}`);
     doAutosave(); // 行动点已扣，先落盘，再进事务
@@ -222,7 +234,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
-    if (loc === "cining_gong") { setView("cining_gong"); maybeShizhi(); return; }
+    if (loc === "cining_gong") {
+      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
+      setView("cining_gong"); maybeShizhi(); return;
+    }
     setView(loc === "wenzhaodian" ? "wenzhaodian" : loc === "yuqing_gong" ? "yuqing_gong" : loc === "fengxiandian" ? "fengxiandian" : "location");
     if (loc === "wenzhaodian") maybeAutumnHunt();
   };
@@ -266,7 +281,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   const canContinue =
-    storage !== null && listSaves(storage).some((s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok");
+    storage !== null &&
+    listSaves(storage).some(
+      (s) => (s.slot === "auto" || s.slot === "auto.prev") && s.status === "ok" && !s.gameOver,
+    );
 
   /** 重置每行动点的去重 ref：新游戏或读档后必须清空，否则旧局的 key（rngSeed 固定为 1）会压制本局掷骰。 */
   const resetRollGuards = () => {
@@ -279,6 +297,12 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (result.ok) {
       store.loadState(result.value.state);
       resetRollGuards();
+      // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
+      if (store.getState().gameOver) {
+        setContinueError("先帝已崩，请开新局。");
+        setView("title");
+        return;
+      }
       setContinueError(result.value.warnings.map((w) => w.message).join("；") || null);
       goHome();
     } else {
@@ -296,7 +320,10 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     else if (store.getState().playerLocation === "wenzhaodian") setView("wenzhaodian");
     else if (store.getState().playerLocation === "yuqing_gong") setView("yuqing_gong");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
-    else if (store.getState().playerLocation === "cining_gong") { setView("cining_gong"); maybeShizhi(); }
+    else if (store.getState().playerLocation === "cining_gong") {
+      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); }
+      else { setView("cining_gong"); maybeShizhi(); }
+    }
     else setView("location"); // arrived somewhere with no event → show that room
   };
 
@@ -376,7 +403,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         setPrompt(null);
         break;
       case "huntJoin": {
-        store.dispatch({ type: "SPEND_AP", amount: 1 });
+        const spend = store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+        if (!spend.ok) { setPrompt(null); return; }
+        if (spend.value.healthOutcome?.sovereignDied) { setPrompt(null); onSovereignDeath(); return; }
         const furs = store.applyAutumnHunt(`hunt:${store.getState().rngSeed}:${store.getState().calendar.year}`);
         const counts = new Map<string, number>();
         for (const id of furs) counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -427,6 +456,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   /** 进慈宁宫且太后病中：掷侍疾遭遇，命中即应用并串播。返回是否已起反应。 */
   const maybeShizhi = (): boolean => {
+    if (store.getState().taihou.deceased) return false; // 太后已薨：不再侍疾。
     const cal = store.getState().calendar;
     const key = `${cal.year}:${cal.month}:${cal.period}`;
     const plan = buildShizhiEncounter(db, store.getState(), key);
@@ -440,18 +470,39 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     return true;
   };
 
-  /** 集中化行动点消耗：扣点 + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果与台词。 */
+  /**
+   * 集中化行动点消耗：经统一时间入口扣点（含跨月健康 tick / 皇帝死亡同事务写 gameOver）
+   * + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果、台词、皇帝是否崩逝。
+   * 皇帝崩逝时不再掷后续节拍（落在已 gameOver 的局上无意义），交调用方 short-circuit 回 title。
+   */
+  /** 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报 + 大选报告。 */
+  const rollActionBeats = (
+    before: { apMax: number; ap: number; dayIndex: number },
+    amount: number,
+  ): DecreeReaction[] => {
+    let beats = rollDecree(before, amount);
+    beats = [...beats, ...rollRebuke(before, amount)];
+    const tributeShown = rollTribute(before, amount);
+    if (!tributeShown) beats = [...beats, ...rollChengFeng(before, amount)];
+    beats = [...beats, ...rollDaxuanAnnounce()];
+    return beats;
+  };
+
   const spendAp = (amount: number) => {
     const before = store.getState().calendar;
-    const spend = store.dispatch({ type: "SPEND_AP", amount });
-    let decreeBeats = spend.ok ? rollDecree(before, amount) : [];
-    if (spend.ok) decreeBeats = [...decreeBeats, ...rollRebuke(before, amount)];
-    if (spend.ok) {
-      const tributeShown = rollTribute(before, amount);
-      if (!tributeShown) decreeBeats = [...decreeBeats, ...rollChengFeng(before, amount)];
-    }
-    if (spend.ok) decreeBeats = [...decreeBeats, ...rollDaxuanAnnounce()];
-    return { spend, decreeBeats };
+    const spend = store.advanceTime(db, { type: "SPEND_AP", amount });
+    const sovereignDied = spend.ok && spend.value.healthOutcome?.sovereignDied === true;
+    const decreeBeats: DecreeReaction[] =
+      spend.ok && !sovereignDied ? rollActionBeats(before, amount) : [];
+    return { spend, decreeBeats, sovereignDied };
+  };
+
+  /** 皇帝崩逝表现层（最简，Task 6 集中化/加固）：清场回 title。gameOver 已在事务内写入。 */
+  const onSovereignDeath = () => {
+    setReaction(null);
+    setReactionQueue([]);
+    doAutosave();
+    setView("title");
   };
 
   /** 串播一组反应节拍（行动自身台词 + 凤后懿旨），空则按需补跑转旬 checkpoint。 */
@@ -494,8 +545,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     setBedchamberRun(null);
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
-    const { spend, decreeBeats } = spendAp(1);
+    const { spend, decreeBeats, sovereignDied } = spendAp(1);
     if (!spend.ok) return; // AP guard backstop — don't autosave an un-spent encounter
+    if (sovereignDied) { onSovereignDeath(); return; }
     store.recordOvernight(db, plan.charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
@@ -638,8 +690,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       { type: "resource", pillar: "nation", field: "publicSupport", delta: 3 },
     ]);
     if (!applied.ok) return;
-    const { spend, decreeBeats } = spendAp(2);
+    const { spend, decreeBeats, sovereignDied } = spendAp(2);
     if (!spend.ok) return;
+    if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
     const own: DecreeReaction[] = spend.value.rolledOver
       ? []
@@ -650,38 +703,41 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
   const restAlone = () => {
     setSummonedConsortId(null);
-    const spend = store.dispatch({ type: "SKIP_REMAINDER" });
+    const spend = store.advanceTime(db, { type: "SKIP_REMAINDER" });
     if (!spend.ok) return;
+    if (spend.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
     runCheckpoints(true);
   };
 
-  // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。
+  // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。行动先于时间，跨月 tick 不会杀死再宠爱。
   const summonHeir = (heirId: string) => {
     const plan = buildHeirSummon(db, store.getState(), heirId);
     if (!plan) return;
-    const { spend, decreeBeats } = spendAp(1);
-    if (!spend.ok) return;
-    const applied = store.applyEffects(db, plan.effects);
-    if (!applied.ok) return;
+    const before = store.getState().calendar;
+    const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+    const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     setHeirListOpen(false);
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    if (spend.value.rolledOver) setReactionRollover(true);
+    if (settled.value.rolledOver) setReactionRollover(true);
     setChildReaction(plan);
   };
 
-  // 上书房·问功课（耗 1 行动点）：轮换一科 + 宠爱。
+  // 上书房·问功课（耗 1 行动点）：轮换一科 + 宠爱。行动先于时间。
   const heirLesson = (heirId: string) => {
     const plan = buildHeirLesson(db, store.getState(), heirId);
     if (!plan) return;
-    const { spend, decreeBeats } = spendAp(1);
-    if (!spend.ok) return;
-    const applied = store.applyEffects(db, plan.effects);
-    if (!applied.ok) return;
+    const before = store.getState().calendar;
+    const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+    const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    if (spend.value.rolledOver) setReactionRollover(true);
+    if (settled.value.rolledOver) setReactionRollover(true);
     setChildReaction(plan);
   };
 
@@ -689,8 +745,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const tutorReport = (heirId: string) => {
     const lines = buildTutorReport(db, store.getState(), heirId);
     if (!lines) return;
-    const { spend, decreeBeats } = spendAp(1);
+    const { spend, decreeBeats, sovereignDied } = spendAp(1);
     if (!spend.ok) return;
+    if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
     playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver);
   };
@@ -699,12 +756,16 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const heir = store.getState().resources.bloodline.heirs.find((h) => h.id === heirId);
     if (!heir) return;
     const reactions = buildAdoptionReaction(db, store.getState(), heir, fatherId);
-    const spend = store.dispatch({ type: "SPEND_AP", amount: 1 });
-    if (!spend.ok) return;
-    const applied = store.applyEffects(db, [{ type: "heir_adopt", heirId, fatherId }]);
-    if (!applied.ok) return;
+    // 行动先于时间：承养落库后再推进时间（跨月 tick 不会先杀死再承养）。
+    const settled = store.resolveTimedAction(
+      db,
+      [{ type: "heir_adopt", heirId, fatherId }],
+      { type: "SPEND_AP", amount: 1 },
+    );
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    if (spend.value.rolledOver) setReactionRollover(true);
+    if (settled.value.rolledOver) setReactionRollover(true);
     const [first, ...rest] = reactions;
     setReactionQueue(rest);
     if (first) setReaction(first);
@@ -717,20 +778,22 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     const cal = before.calendar;
     const key = `temple:${kind}:${before.rngSeed}:${cal.dayIndex}:${cal.ap}`;
     const plan = kind === "incense" ? buildIncense(db, before, key) : buildFortune(db, before, key);
-    const { spend, decreeBeats } = spendAp(1);
-    if (!spend.ok) return;
-    const applied = store.applyEffects(db, plan.effects);
-    if (!applied.ok) return;
+    // 行动先于时间：上香/求签 effects 落在仍在世的皇帝身上，再推进时间。
+    const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+    const decreeBeats = rollActionBeats(before.calendar, 1);
     doAutosave();
-    playReactions([{ speakerId: "wei_sui", lines: plan.lines }, ...decreeBeats], spend.value.rolledOver);
+    playReactions([{ speakerId: "wei_sui", lines: plan.lines }, ...decreeBeats], settled.value.rolledOver);
   };
 
   // 进店（耗 1 行动点）：先切换到 shop 视图，再串播懿旨/乘风节拍（若有）。
   // 转旬 rollover 不触发 runCheckpoints，避免 checkpoint 视图抢占商铺界面。
   const enterShop = (id: "wanbaolou" | "zuixianlou") => {
     if (store.getState().calendar.ap < 1) return;
-    const { spend, decreeBeats } = spendAp(1);
+    const { spend, decreeBeats, sovereignDied } = spendAp(1);
     if (!spend.ok) return;
+    if (sovereignDied) { onSovereignDeath(); return; }
     setShopId(id);
     setView("shop");
     doAutosave();
@@ -744,8 +807,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const [morningAfterOpen, setMorningAfterOpen] = useState(false);
 
   const enterGreeting = () => {
-    const { spend, decreeBeats } = spendAp(1);
+    const { spend, decreeBeats, sovereignDied } = spendAp(1);
     if (!spend.ok) return;
+    if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
     setCeremonyOpen(true);
     // 懿旨等转旬反应入队，待 ceremony 关闭后随正常流程消化（此处仅记一旬动作）。
@@ -778,8 +842,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   const converse = (charId: string) => {
     const lines = buildConversation(db, store.getState(), charId);
     if (!lines) return;
-    const { spend, decreeBeats } = spendAp(1);
+    const { spend, decreeBeats, sovereignDied } = spendAp(1);
     if (!spend.ok) return;
+    if (sovereignDied) { onSovereignDeath(); return; }
     store.recordOvernight(db, charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
@@ -796,7 +861,8 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   };
 
   /** 旅行结算（MapScreen.onTravelled 与院子 enterConsortQuarters 共用）。 */
-  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean) => {
+  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false) => {
+    if (sovereignDied) { onSovereignDeath(); return; } // 跨月旅行皇帝崩逝：清场回 title。
     doAutosave();
     // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
     if (!spentAp) return;
@@ -822,13 +888,19 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (here) { enterCurrentLocation(); return; }
     const batch = buildTravelBatch(db, store.getState(), palaceId);
     if (!batch.ok) { setView("map"); return; }
-    const spentAp = batch.value.some((c) => c.type === "SPEND_AP");
-    const result = store.dispatchBatch(batch.value);
-    if (!result.ok) { setView("map"); return; } // 兜底：勿滞留在已置空的院子视图（黑屏）
-    if (spentAp) {
-      // 出宫等耗行动点的移动：复用 MapScreen.onTravelled 的结算（懿旨/敲打/转旬 + 进房）。
-      onTravelledSettle(result.value.rolledOver, spentAp);
+    const moveCommands = batch.value.filter((c) => c.type !== "SPEND_AP");
+    const spend = batch.value.find(
+      (c): c is { type: "SPEND_AP"; amount: number } => c.type === "SPEND_AP",
+    );
+    if (spend) {
+      // 出宫等耗行动点的移动：经统一时间入口（移动 + 扣点 + 跨月健康 tick + gameOver）。
+      const result = store.travelAndAdvance(db, moveCommands, spend);
+      if (!result.ok) { setView("map"); return; } // 兜底：勿滞留在已置空的院子视图（黑屏）
+      if (result.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+      onTravelledSettle(result.value.rolledOver, true);
     } else {
+      const result = store.dispatchBatch(moveCommands);
+      if (!result.ok) { setView("map"); return; } // 兜底：勿滞留在已置空的院子视图（黑屏）
       // 宫内免行动点移动：onTravelledSettle 对 !spentAp 仅落盘即返回，不设视图，
       // 故此处显式进入该宫房间（否则 view 滞留 courtyard 而 courtyardLocId 已空 → 黑屏）。
       doAutosave();
@@ -842,8 +914,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
     if (action.type === "daxuanEnter") {
       // 设决定 flag + 扣 1AP，打开殿选。
       store.setFlag(daxuanDianxuanFlagKey(action.year), true);
-      const { spend, decreeBeats } = spendAp(1);
+      const { spend, decreeBeats, sovereignDied } = spendAp(1);
       if (!spend.ok) return;
+      if (sovereignDied) { onSovereignDeath(); return; }
       const cands = generateCandidates(db, store.getState(), action.year);
       setDianxuan({ candidates: cands, year: action.year });
       setView("dianxuan");
@@ -896,6 +969,27 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
 
   return (
     <>
+      {notice && (
+        <div
+          role="status"
+          onClick={() => setNotice(null)}
+          style={{
+            position: "fixed",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            padding: "10px 20px",
+            background: "rgba(20,16,12,0.92)",
+            color: "#f4e8d0",
+            borderRadius: 6,
+            cursor: "pointer",
+            fontSize: 14,
+          }}
+        >
+          {notice}
+        </div>
+      )}
       {view === "title" && (
         <TitleScreen
           registry={registry}

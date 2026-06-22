@@ -1,0 +1,21 @@
+import { describe, expect, it } from "vitest";
+import { addGeneratedConsort } from "../../src/store/grandSelection";
+import { createNewGameState } from "../../src/engine/state/newGame";
+import { loadGameContent } from "../../src/engine/content/viteSource";
+
+const content = loadGameContent();
+if (!content.ok) throw new Error("content failed to load");
+const db = content.value;
+
+describe("addGeneratedConsort seeds health/age", () => {
+  it("writes health, healthStatus, ageAtEntry, enteredAtYear", () => {
+    const s = createNewGameState(db);
+    const content = { ...Object.values(db.characters).find((c) => c.kind === "consort")!, id: "xiunan_y1_1" } as any;
+    const next = addGeneratedConsort(s, content, Object.keys(db.ranks)[0]!, 20);
+    const st = next.standing["xiunan_y1_1"]!;
+    expect(st.health).toBe(content.attributes?.health ?? 100);
+    expect(st.healthStatus).toBe("healthy");
+    expect(st.ageAtEntry).toBe(content.profile.age);
+    expect(st.enteredAtYear).toBe(s.calendar.year);
+  });
+});

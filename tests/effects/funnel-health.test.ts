@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
+import { toGameTime } from "../../src/engine/calendar/time";
 
 function freshState() {
   const loaded = loadGameContent();
@@ -10,6 +11,24 @@ function freshState() {
 }
 
 describe("health funnel effects", () => {
+  it("consort_decease clears carrier gestation (断胎) and is idempotent on re-death", () => {
+    const { db, state } = freshState();
+    const id = Object.keys(state.standing).find((c) => db.characters[c]?.kind === "consort")!;
+    const at = toGameTime(state.calendar);
+    state.resources.bloodline.gestations.push({ carrier: id, conceivedAt: at });
+    const r1 = applyEffects(db, state, [{ type: "consort_decease", char: id, at, cause: "illness" }]);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    expect(r1.value.resources.bloodline.gestations.some((g) => g.carrier === id)).toBe(false);
+    expect(r1.value.standing[id]!.lifecycle).toBe("deceased");
+    // re-death is a no-op (already deceased; deathRecord preserved)
+    const before = JSON.stringify(r1.value.standing[id]!.deathRecord);
+    const r2 = applyEffects(db, r1.value, [{ type: "consort_decease", char: id, at, cause: "scripted" }]);
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+    expect(JSON.stringify(r2.value.standing[id]!.deathRecord)).toBe(before);
+  });
+
   it("set_taihou_health clamps and sets status", () => {
     const { db, state } = freshState();
     const r = applyEffects(db, state, [
