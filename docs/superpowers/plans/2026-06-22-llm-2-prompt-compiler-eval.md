@@ -2,7 +2,7 @@
 
 **日期:** 2026-06-22  
 **PR 目标:** `DialogueRequest → DialoguePromptPayload` 固定前缀 + 动态后缀；prompt caching；共用 online/fixture eval pipeline；20-30 黄金场景；自动指标 + 盲评导出。  
-**基准分支:** main（commit `0dd9dc1`）  
+**基准分支:** main（commit `bc6b12c`）  
 **worktree:** `.worktrees/llm-2`  
 **branch:** `feat/llm-2-prompt-compiler`
 
@@ -12,12 +12,13 @@
 
 - 编译器：`compilePromptPayload(request: DialogueRequest)` — 纯 DTO 变换，不接收 `ContentDB` / `GameState`
 - `DialogueRequest` 扩展 `promptContext: DialoguePromptContext`（orchestrator 用 db/state 填入）
+- `assembleDialogueRequest` 末位参数改为 `options: DialogueAssemblyOptions`（接收 targetId / sceneDirective / transcript）
 - 固定前缀（可缓存）：世界观规则 + etiquette → `cache_control: { type: "ephemeral" }`
 - 动态后缀（不缓存）：角色·记忆·场景 → **只放 `messages[0].content`，不放 system**
-- `currentScene.directive` 接入 `request.sceneDirective`（本轮对话意图）
+- `currentScene.directive` 接入 `request.sceneDirective`
 - Relay schema 支持并透传 `cache_control`
-- Eval 复用同一 compiler/parser/gates；`validateDialogueProviderResult` 失败时仍返回 diagnostics
-- 不实现：batch（独立 LLM-2b）；reactionPlan live planner（LLM-3）；assembleClaims 升级（LLM-3）；修复重试（LLM-4）；streaming
+- Eval 复用同一 compiler/parser/gates；`validateDialogueProviderResult` 始终携带 diagnostics
+- 不实现：batch（LLM-2b）；reactionPlan live planner（LLM-3）；assembleClaims 升级（LLM-3）；修复重试（LLM-4）；streaming
 
 ## 非目标
 
@@ -31,38 +32,75 @@
 
 ## Global Constraints
 
-1. **`compilePromptPayload` 签名只接收 `request: DialogueRequest`。** 不接 `ContentDB`、`GameState`。所有 db/state 访问在 orchestrator 完成，结果写入 `request.promptContext`。
-2. **动态 payload 只出现一次，在 `messages[0].content`。** `system[]` 只放 2 个固定前缀 blocks（带 `cache_control`）。不允许追加"动态 system block"。
-3. **Relay schema 必须支持并透传 `cache_control`。**
-4. **`validateDialogueProviderResult` 无论 gate 通过还是拒绝，都必须携带 diagnostics。** 返回类型是 `DialogueValidationOutcome`（含 `ok: false` 路径也有 diagnostics）。
-5. **`EvalExecutionMode = "fixture" | "online"`。** TypeScript 类型不含 `"batch"`。CLI parser 遇到 `--mode batch` 直接报错退出，不调用 runner。
-6. **Fixture mode 通过注入 fixture provider 实现，不是 mode switch。**
-7. **`EvalResult` 用三态 `CheckStatus = "pass" | "fail" | "not_run"`。**
-8. **`expectations` 必须在 runner 里真正消费**，结果写入 `expectationStatus` 和 `expectationFindings`。`requiredSourceContextIds` 对照 `acceptedClaims.sourceContextIds`，不做 NLP 猜测。
-9. **`EvalResult` 含 `runId: string` 和 `runIndex: number`。** CLI 支持 `--runs N`（默认 1）。盲评按 `scenarioId + runIndex` 配对。
-10. **`DialogueSpeakerPayload.rank` 是对象（含可读中文名、grade、selfRefs），不是裸 ID。** orchestrator 在 assembly 阶段从 `db.ranks` 读入 `rankName / rankGrade` 写进 `promptContext`；compiler 只做组装。
-11. **黄金场景用 fixture builders。** 含记忆的场景通过 builder 注入，不依赖默认 state。
-12. **盲评导出两个文件：** `blind-samples.tsv`（无模型名）+ `blind-key.tsv`（映射）。A/B 用固定 seed 打乱。
-13. **eval:run → JSONL → score/export。** 时间戳用 `Date.now()`，不用 shell `$(date)`。
-14. **`PromptMemory.createdAt`（不叫 `occurredAt`）。** 记忆创建时间语义不等于事件发生时间。
-15. **`PromptEvent.facts: Record<string, PromptFactValue>`。** `PromptFactValue = string | number | boolean | null`，不用 `unknown`。
-16. **Prompt caching 验收：** `capabilities.promptCaching: true` 表示 adapter 支持注解；fixture 测试只验 `cache_control` 透传；`cacheReadTokens === 0` 不自动判定失败（Sonnet 4.6 最小阈值 1024 tokens，低于时不报错只不命中）；不为凑阈值填充无意义文本。
-17. **`rawDialogueResponseSchema`（`types.ts:42-56`）在 T0 删除**（零消费者）。
-18. **Provider 签名不变（`generate(request, options)`）。** Provider 不持有 db/state。
-19. **CI 不调真实 API。** Fixture mode 跑 CI；在线 eval 是手动步骤。
+1. **`assembleDialogueRequest` 末位改为 `options: DialogueAssemblyOptions = {}`。** `targetId`、`sceneDirective`、`transcript`、`scripted` 都从 options 读。`targetId` 同时写入 `request.targetId`、`memoryContext.audienceId`、`buildAudienceContext` 的 targetId — 三处必须同源。
+2. **`compilePromptPayload(request)` 零额外参数。** 所有 db/state 访问在 orchestrator 完成后写入 `promptContext`。
+3. **Elder 的 rank display 是 `{ kind: "unranked" }`，不读 `db.ranks["__elder__"]`。** `DialogueSpeakerStanding` 是判别联合；orchestrator 在 assembly 阶段填入正确分支。
+4. **`buildDialoguePolicyContext` 的 audience 来自 `request.promptContext.audience`。** 不再独立调用 `buildAudienceContext`；gate 和 prompt 使用同一个对象，不会漂移。
+5. **动态 payload 只出现一次，在 `messages[0].content`。** `system[]` 只放 2 个固定 blocks（带 `cache_control`）。
+6. **Relay schema 支持并透传 `cache_control`。**
+7. **`validateDialogueProviderResult` 返回 `DialogueValidationOutcome`，始终携带 diagnostics。** `ok: false` 时 `diagnostics` 也存在。
+8. **Validation 顺序：speaker check → claim gate → text gate。** 这是有意调整（非"行为不变"）。受影响的集成测试必须显式更新，并注释说明调整原因。
+9. **`EvalExecutionMode = "fixture" | "online"`，TypeScript 类型不含 `"batch"`。** CLI parser 遇到 `--provider` 不在白名单时直接报错退出；`--mode` 选项删除，mode 由 `--provider` 推导。
+10. **`evaluationId` 在一次 CLI 执行开始时生成一次，不在每个 scenario 内重新调用 `Date.now()`。** `runId = "${evaluationId}-r${runIndex}"`。
+11. **Expectation 的 prerequisite 规则：** 当 `schemaStatus !== "pass"` 或 `gateStatus === "not_run"` 或 `result.text === undefined` 时，`expectationStatus: "not_run"`（即使场景定义了 expectations）。Prerequisite 通过后才检查各条。
+12. **`EvalResult` 含 `runId`, `runIndex`, `expectationStatus`, `expectationFindings`。**
+13. **`EvalScenario` 含 `sceneDirective?` 和 `requiredSourceContextIds?`（代替 `mentionedMemoryKinds`）。**
+14. **Fixture mode 通过注入 fixture provider 实现；`--provider fixture` 推导 mode=fixture。**
+15. **盲评：`evaluationId` 作为同一轮评测的归组键；按 `scenarioId + runIndex` 配对两个模型。**
+16. **`PromptMemory.createdAt`（非 `occurredAt`）；`PromptEvent.facts: Record<string, PromptFactValue>`（非 `unknown`）。**
+17. **Prompt caching 验收：** `capabilities.promptCaching: true` 只表示 adapter 支持注解；`cacheReadTokens === 0` 不自动判定失败（Sonnet 4.6 阈值 1024 tokens）；不填充无意义文本。
+18. **CI 不调真实 API。** Fixture mode 跑 CI；在线 eval 手动。
+19. **`rawDialogueResponseSchema`（`types.ts:42-56`）在 T0 删除**（零消费者）。
 
 ---
 
 ## 关键接口（任务间约定）
 
-### T0 DTO 类型 + request 扩展
+### T0 DTO 类型 + assembleDialogueRequest 参数扩展 + promptContext
 
+**新增 / 修改文件：** `src/engine/dialogue/promptPayload.ts`（新建 DTO），`src/engine/dialogue/types.ts`（扩展 DialogueRequest），`src/engine/dialogue/orchestrator.ts`（修改 assemble 函数签名 + 填 promptContext + 修改 buildDialoguePolicyContext）
+
+---
+
+**`DialogueAssemblyOptions`（`orchestrator.ts` 或 `types.ts`）：**
 ```ts
-// src/engine/dialogue/promptPayload.ts（新建）
+export interface DialogueAssemblyOptions {
+  targetId?: string;                           // 默认 "player"
+  sceneDirective?: string;
+  transcript?: { speaker: string; text: string }[];  // 默认 []
+  scripted?: { text: string; expression?: string };
+}
+```
 
+`assembleDialogueRequest` 新签名：
+```ts
+export function assembleDialogueRequest(
+  db: ContentDB,
+  state: GameState,
+  speakerId: string,
+  locationId: string,
+  options: DialogueAssemblyOptions = {},
+): Result<DialogueRequest, GameError>
+```
+
+内部：
+```ts
+const targetId = options.targetId ?? "player";
+// targetId 同时用于：request.targetId、memoryContext.audienceId、buildAudienceContext targetId
+```
+
+**所有现有调用方**（游戏主流程传 `scripted`）必须更新为 `options` 对象形式：
+```ts
+// 旧：assembleDialogueRequest(db, state, speakerId, locationId, scripted)
+// 新：assembleDialogueRequest(db, state, speakerId, locationId, { scripted })
+```
+
+---
+
+**DTO 类型（`promptPayload.ts`）：**
+```ts
 export type PromptFactValue = string | number | boolean | null;
 
-/** 记忆 DTO — 只含发给模型的字段，类型层面排除内部运行字段 */
 export interface PromptMemory {
   id: string;
   kind: MemoryKind;
@@ -71,18 +109,17 @@ export interface PromptMemory {
   perspective: MemoryPerspective;
   emotions: Partial<Record<MemoryEmotion, number>>;
   unresolved: boolean;
-  createdAt: GameTime;          // 语义准确：记忆创建时间（≠ 事件发生时间）
+  createdAt: GameTime;       // 语义准确：记忆创建时间（≠ 事件发生时间）
   // 不含：ownerId, strength, retention, triggerTags, sourceEventId
 }
 
-/** 事件 DTO（LLM-3 前只定义类型，knownEvents 传 []） */
 export interface PromptEvent {
   id: string;
   type: CourtEventType;
   occurredAt: GameTime;
   participants: CourtEventParticipant[];
   locationId?: string;
-  facts: Record<string, PromptFactValue>;   // 标量值，非 unknown
+  facts: Record<string, PromptFactValue>;    // 标量，非 unknown
   // 不含：publicity, publicSalience, retention, tags
 }
 
@@ -91,17 +128,30 @@ export interface DialogueChoiceCandidate {
   intent: string;
 }
 
-/** Orchestrator 填入 request 的 sanitized policy 字段 */
+/** 判别联合：位分角色 vs elder（无位分） */
+export type DialogueSpeakerStanding =
+  | {
+      kind: "ranked";
+      id: string;          // rank id，如 "zhaoyi"
+      name: string;        // 可读中文位分名，如 "昭仪"
+      grade: string;       // 如 "正二品"
+      selfRefs: CharacterRank["selfRefs"];
+    }
+  | {
+      kind: "unranked";
+      role: string;        // character.profile.role，如 "皇太后"
+      selfRefs: CharacterRank["selfRefs"];
+    };
+
 export interface DialoguePromptContext {
   speakerDisplayName: string;
-  rankName: string;           // db.ranks[standing.rank].name（可读中文位分名）
-  rankGrade: string;          // db.ranks[standing.rank].grade（如 "正二品"）
+  rankDisplay: DialogueSpeakerStanding;      // 判别联合，不含 db.ranks 假设
   audience: DialogueAudienceContext;
   relevantMemories: PromptMemory[];
-  reactionPlan?: ReactionPlan;          // LLM-3 前 undefined
-  knownEvents: PromptEvent[];           // LLM-3 前 []
-  allowedClaims: DialogueClaim[];       // LLM-3 前 []
-  forbiddenClaims: DialogueClaim[];     // LLM-3 前 []
+  reactionPlan?: ReactionPlan;              // LLM-3 前 undefined
+  knownEvents: PromptEvent[];               // LLM-3 前 []
+  allowedClaims: DialogueClaim[];           // LLM-3 前 []
+  forbiddenClaims: DialogueClaim[];         // LLM-3 前 []
   choiceCandidates: DialogueChoiceCandidate[];  // LLM-2 前 []
 }
 
@@ -110,7 +160,7 @@ export function toPromptMemory(m: MemoryEntry): PromptMemory {
     id: m.id, kind: m.kind, summary: m.summary,
     subjectIds: m.subjectIds, perspective: m.perspective,
     emotions: m.emotions, unresolved: m.unresolved,
-    createdAt: m.createdAt,    // 保留语义：m.createdAt 不叫 occurredAt
+    createdAt: m.createdAt,
   };
 }
 ```
@@ -123,47 +173,58 @@ export interface DialogueRequest {
 }
 ```
 
-**`assembleDialogueRequest` 更新（orchestrator）：**
+**`assembleDialogueRequest` 内部填充 `promptContext`：**
 ```ts
-const memCtx = buildMemoryContext(state, { speakerId }, { ... });
-return ok({
-  // ... 现有字段 ...
-  speakerContext: {
-    // ... 现有字段（relevantMemories 仍是 MemoryEntry[]，供 offeredContextIds 用）...
-  },
-  promptContext: {
-    speakerDisplayName: resolveDisplayName(character, standing, rank),
-    rankName: rank.name,
-    rankGrade: rank.grade,
-    audience: buildAudienceContext(state, db, { speakerId, targetId: "player" }),
-    relevantMemories: memCtx.activatedMemories.map(toPromptMemory),
-    reactionPlan: undefined,
-    knownEvents: [],
-    allowedClaims: [],
-    forbiddenClaims: [],
-    choiceCandidates: [],
-  },
-});
+// Elder 路径（standing 为 undefined / synthetic）
+rankDisplay = { kind: "unranked", role: character.profile.role, selfRefs: contextStanding.selfRefs };
+
+// 位分路径（standing 存在，rank 从 db.ranks 读到）
+rankDisplay = { kind: "ranked", id: standing.rank, name: rank.name, grade: rank.grade, selfRefs: rank.selfRefs };
+
+promptContext = {
+  speakerDisplayName: resolveDisplayName(character, contextStanding, rankDisplay.kind === "ranked" ? rank : undefined),
+  rankDisplay,
+  audience: buildAudienceContext(state, db, { speakerId, targetId }),
+  relevantMemories: memCtx.activatedMemories.map(toPromptMemory),
+  reactionPlan: undefined,
+  knownEvents: [], allowedClaims: [], forbiddenClaims: [], choiceCandidates: [],
+};
 ```
 
-注意：`speakerContext.relevantMemories` 保留 `MemoryEntry[]`（供 offeredContextIds 等既有逻辑）；`promptContext.relevantMemories` 是 `PromptMemory[]` 投影。两者来自同一次 `buildMemoryContext` 调用。
+**`buildDialoguePolicyContext` 修改（`orchestrator.ts`）：**
+```ts
+export function buildDialoguePolicyContext(
+  db: ContentDB,
+  state: GameState,
+  request: DialogueRequest,
+): DialoguePolicyContext {
+  return {
+    audience: request.promptContext.audience,    // 单一来源，与 prompt 完全一致
+    beliefProjection: new GroundTruthBeliefProjection(state),
+    offeredContextIds: new Set(request.speakerContext.relevantMemories.map(m => m.id)),
+    now: request.time,
+  };
+  // 删除对 buildAudienceContext 的独立调用
+}
+```
+
+注：`db` 参数可在此提交中保留签名（避免大面积调用方更新），内部不使用。
+
+---
 
 ### T1 DialoguePromptPayload + compilePromptPayload
 
 ```ts
+// src/engine/dialogue/promptPayload.ts
+
 export interface DialogueSpeakerPayload {
   id: string;
-  name: string;                             // promptContext.speakerDisplayName
-  rank: {
-    id: string;                             // speakerContext.standing.rank
-    name: string;                           // promptContext.rankName
-    grade: string;                          // promptContext.rankGrade
-    selfRefs: CharacterRank["selfRefs"];    // speakerContext.standing.selfRefs
-  };
-  speechStyle: string;                      // speakerContext.profile.speechStyle
-  personalityTraits: string[];              // speakerContext.profile.personalityTraits
-  coreFacts: string[];                      // speakerContext.profile.coreFacts
-  voice: CharacterContent["voice"];         // { register, quirks, tabooTopics }
+  name: string;
+  standing: DialogueSpeakerStanding;        // 判别联合（ranked | unranked）
+  speechStyle: string;
+  personalityTraits: string[];
+  coreFacts: string[];
+  voice: CharacterContent["voice"];
 }
 
 export interface DialoguePromptPayload {
@@ -177,7 +238,7 @@ export interface DialoguePromptPayload {
   choiceCandidates: DialogueChoiceCandidate[];
   currentScene: {
     location: string;
-    directive?: string;                     // request.sceneDirective（本轮对话意图）
+    directive?: string;                      // request.sceneDirective
     topicTags: string[];
     recentLines: { speaker: string; text: string }[];
   };
@@ -189,12 +250,7 @@ export function compilePromptPayload(request: DialogueRequest): DialoguePromptPa
     speaker: {
       id: request.speakerId,
       name: ctx.speakerDisplayName,
-      rank: {
-        id: request.speakerContext.standing.rank,
-        name: ctx.rankName,
-        grade: ctx.rankGrade,
-        selfRefs: request.speakerContext.standing.selfRefs,
-      },
+      standing: ctx.rankDisplay,             // 直接透传判别联合
       speechStyle: request.speakerContext.profile.speechStyle,
       personalityTraits: request.speakerContext.profile.personalityTraits,
       coreFacts: request.speakerContext.profile.coreFacts,
@@ -217,14 +273,16 @@ export function compilePromptPayload(request: DialogueRequest): DialoguePromptPa
 }
 ```
 
+---
+
 ### T2 buildAnthropicToolRequest 升级 + relay schema
 
-**`AnthropicRequestPayload.system` 类型：**
+**`AnthropicRequestPayload.system` 类型扩展：**
 ```ts
 system: { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[];
 ```
 
-**结构（2 个固定 system blocks + user message）：**
+**结构（2 个固定 blocks + user message）：**
 ```ts
 system: [
   { type: "text", text: WORLD_RULES_TEXT, cache_control: { type: "ephemeral" } },
@@ -242,26 +300,25 @@ const systemBlockSchema = z.strictObject({
   text: z.string(),
   cache_control: z.strictObject({ type: z.literal("ephemeral") }).optional(),
 });
-
-// messages.content 支持 string | array
 messages: z.array(z.strictObject({
   role: z.string(),
   content: z.union([z.string(), z.array(z.unknown())]),
 })),
 ```
 
-### T3 共用 validation pipeline
+---
+
+### T3 `validateDialogueProviderResult`（有意调整验证顺序）
+
+**有意行为变更：** 顺序调整为 **speaker check → claim gate → text gate**（原：claim gate → speaker check → text gate）。
+
+**理由：** speaker 错误时 claim 不应归属该 speaker；旧顺序导致"错误 speaker 的 claim 被当成正确 speaker 的 claim 校验"。
+
+**受影响测试（必须显式更新，不能沿用旧期望）：**
+- 同时存在 wrong speaker + wrong claim 的测试：旧期望 `CLAIM_REJECTED`，新期望 `WRONG_SPEAKER`
+- 更新注释说明：`// 行为变更 LLM-2: speaker 检查优先于 claim gate`
 
 ```ts
-// src/engine/dialogue/orchestrator.ts — 提取并导出
-
-export interface DialogueValidationDiagnostics {
-  claimFindings: ClaimFinding[];
-  textFindings: GateFinding[];
-  acceptedClaims: ProposedClaim[];
-}
-
-/** 无论 gate 通过还是拒绝，都携带 diagnostics */
 export type DialogueValidationOutcome =
   | { ok: true;  line: DialogueLine; diagnostics: DialogueValidationDiagnostics }
   | { ok: false; error: GameError;   diagnostics: DialogueValidationDiagnostics };
@@ -272,24 +329,23 @@ export function validateDialogueProviderResult(
   request: DialogueRequest,
   policy: DialoguePolicyContext,
   response: DialogueProviderResult,
-): DialogueValidationOutcome   // 注意：非 Result<>, 直接是 Outcome
+): DialogueValidationOutcome
+// 顺序：1. speaker check  2. claim gate  3. text gate
+// 每步均将已有 findings 写入 diagnostics 再返回 ok:false
 ```
 
 `produceDialogueLineWithPolicy` 包装：
 ```ts
 const outcome = validateDialogueProviderResult(...);
 if (!outcome.ok) return err(outcome.error);
-// 用 outcome.line / outcome.diagnostics 做 mention writeback
 ```
 
-### T4 Eval runner 接口
+---
+
+### T4 Eval runner
 
 ```ts
-// src/engine/dialogue/eval/types.ts
-
-export type EvalExecutionMode = "fixture" | "online";
-// "batch" 不在类型中；CLI parser 遇到 --mode batch 直接报错
-
+export type EvalExecutionMode = "fixture" | "online";  // 无 "batch"
 export type CheckStatus = "pass" | "fail" | "not_run";
 
 export interface EvalExpectationFinding {
@@ -299,8 +355,8 @@ export interface EvalExpectationFinding {
 
 export interface EvalResult {
   scenarioId: string;
-  runId: string;             // 形如 "<model>-<timestamp>-r<index>"
-  runIndex: number;          // 0-based，供盲评配对
+  runId: string;         // "${evaluationId}-r${runIndex}"
+  runIndex: number;
   fixtureId: string;
   model: string;
   mode: EvalExecutionMode;
@@ -323,39 +379,77 @@ export interface EvalScenario {
   speakerId: string;
   targetId?: string;
   locationId: string;
-  sceneDirective?: string;              // 本轮对话意图（接入 request.sceneDirective）
+  sceneDirective?: string;
   transcript?: { speaker: string; text: string }[];
   expectations?: {
     gatePass?: boolean;
     forbiddenTexts?: string[];
-    requiredSourceContextIds?: string[];  // 对照 acceptedClaims.sourceContextIds，非 NLP 猜测
+    requiredSourceContextIds?: string[];
   };
 }
 ```
 
-**Expectation 检查逻辑（在 runEvalScenario 里）：**
+**Expectation prerequisite 规则（必须按此实现）：**
 ```ts
-const findings: EvalExpectationFinding[] = [];
-if (exp.gatePass !== undefined) {
-  const actual = result.gateStatus === "pass";
-  if (actual !== exp.gatePass)
-    findings.push({ code: "unexpected_gate_result", detail: `expected gatePass=${exp.gatePass}` });
+function evaluateExpectations(
+  expectations: EvalScenario["expectations"],
+  result: Pick<EvalResult, "schemaStatus" | "gateStatus" | "text">,
+  diagnostics: DialogueValidationDiagnostics | undefined,
+): { status: CheckStatus; findings: EvalExpectationFinding[] } {
+  if (!expectations) return { status: "not_run", findings: [] };
+
+  // prerequisite：没有有效输出时，expectation 不可判
+  if (
+    result.schemaStatus !== "pass" ||
+    result.gateStatus === "not_run" ||
+    result.text === undefined
+  ) {
+    return { status: "not_run", findings: [] };
+  }
+
+  const findings: EvalExpectationFinding[] = [];
+
+  if (expectations.gatePass !== undefined) {
+    const actual = result.gateStatus === "pass";
+    if (actual !== expectations.gatePass)
+      findings.push({ code: "unexpected_gate_result",
+        detail: `expected gatePass=${expectations.gatePass}, got ${actual}` });
+  }
+  for (const t of expectations.forbiddenTexts ?? []) {
+    if (result.text.includes(t))
+      findings.push({ code: "forbidden_text_present", detail: t });
+  }
+  for (const id of expectations.requiredSourceContextIds ?? []) {
+    const cited = diagnostics?.acceptedClaims.some(c => c.sourceContextIds.includes(id)) ?? false;
+    if (!cited)
+      findings.push({ code: "required_source_not_cited", detail: id });
+  }
+
+  return {
+    status: findings.length === 0 ? "pass" : "fail",
+    findings,
+  };
 }
-for (const forbidden of exp.forbiddenTexts ?? []) {
-  if (result.text?.includes(forbidden))
-    findings.push({ code: "forbidden_text_present", detail: forbidden });
-}
-for (const srcId of exp.requiredSourceContextIds ?? []) {
-  const cited = diagnostics?.acceptedClaims.some(c => c.sourceContextIds.includes(srcId));
-  if (!cited)
-    findings.push({ code: "required_source_not_cited", detail: srcId });
-}
-result.expectationStatus = findings.length === 0 ? "pass" : "fail";
-result.expectationFindings = findings;
-// 无 expectations → expectationStatus: "not_run"
 ```
 
-### T5 Fixture builders + 场景集
+**`runEvalScenario` 步骤：**
+1. `fixtureBuilders[scenario.fixtureId]()` → `{ db, state }`
+2. `assembleDialogueRequest(db, state, scenario.speakerId, scenario.locationId, { targetId: scenario.targetId, sceneDirective: scenario.sceneDirective, transcript: scenario.transcript })`
+3. `buildDialoguePolicyContext(db, state, request)`
+4. `provider.generate(request)` → 记时
+5. Provider err：
+   - `cause === "schema_invalid"` → `schemaStatus: "fail", gateStatus: "not_run"`
+   - 其他 err → `schemaStatus: "not_run", gateStatus: "not_run"`
+6. Provider ok → `validateDialogueProviderResult(...)` → `outcome`
+   - `outcome.ok` → `schemaStatus: "pass", gateStatus: "pass"，text: outcome.line.text`
+   - `!outcome.ok` → `schemaStatus: "pass", gateStatus: "fail"，text: undefined`
+   - 两者均有 `outcome.diagnostics`
+7. `evaluateExpectations(...)` → `expectationStatus/Findings`
+8. 返回完整 `EvalResult`
+
+---
+
+### T5 Fixture builders + 场景集（≥20 条）
 
 ```ts
 // tests/eval/fixtures/builders.ts
@@ -366,14 +460,16 @@ export const fixtureBuilders: Record<string, () => { db: ContentDB; state: GameS
 };
 ```
 
-**场景集（JSONL）覆盖：**
-- ≥4 个不同 speakerId
+场景覆盖：
+- ≥4 个不同 speakerId（先 grep `src/content/*.json` 或 `public/` 确认存在的 id）
 - ≥3 个不同 fixtureId
-- **≥5 条含 `sceneDirective`**（如 `"请安"`、`"回应降位"`、`"试探皇帝态度"`）
-- ≥5 条含 transcript
+- **≥5 条含 `sceneDirective`**（如 `"请安"`、`"回应降位"`、`"试探皇帝是否还记得旧事"`）
+- ≥5 条含 transcript（测试 recentLines 截取）
 - ≥5 条 `expectations.gatePass: true`
 - ≥4 条 `expectations.forbiddenTexts`
-- ≥2 条使用含记忆的 fixtureId
+- ≥2 条含记忆的 fixtureId + `requiredSourceContextIds`（sourceContextId 来自 builder 注入的记忆 id）
+
+---
 
 ### T6 CLI 工具链
 
@@ -383,250 +479,25 @@ export const fixtureBuilders: Record<string, () => { db: ContentDB; state: GameS
 "eval:export": "tsx tools/eval-export.ts"
 ```
 
-**eval-run.ts CLI：**
+**eval-run.ts CLI（删除 `--mode`，由 `--provider` 推导）：**
 ```
 --provider anthropic|fixture
---model <modelId>
---mode online|fixture
---runs N          (默认 1；每场景跑 N 次，runIndex 0..N-1)
+          anthropic → mode=online（需 ANTHROPIC_API_KEY）
+          fixture   → mode=fixture（不调 API）
+--model <modelId>   (anthropic 时必填)
+--runs N            (默认 1)
 --scenarios <path>
---output <path>   (含 Date.now()，不用 shell date)
+--output <path>     (含时间戳)
 ```
 
-`runId` 格式：`"${model}-${Date.now()}-r${runIndex}"`
+`evaluationId` 在 CLI 入口生成一次：
+```ts
+const evaluationId = `${model ?? "fixture"}-${Date.now()}`;
+// 每个 scenario 的每次 run：
+const runId = `${evaluationId}-r${runIndex}`;
+```
 
 **eval-score.ts：**
-```
-Scenarios:      20   (runs × scenarios if runs>1 则标注)
-Schema pass:    19/20 (95%)
-Gate pass:      17/20 (85%)
-Expectation:    15/20 (75%)
-Avg input tok:  450
-Avg out tok:    92
-Cache hits:     13/20 (65%)
-```
-
-**eval-export.ts 盲评：**
-- `--input <pathA> <pathB>` 两个 run JSONL
-- 按 `scenarioId + runIndex` 配对（runIndex 对应相同的 scenario 第 n 次运行）
-- `--seed N`（默认 42）随机交换 A/B 顺序
-
-`blind-samples.tsv` 列（无模型名）：
-```
-sampleId  scenarioId  runIndex  sceneDirective  candidateA  candidateB  naturalness  characterVoice  worldConsistency  overallPreference
-```
-
-`blind-key.tsv` 列：
-```
-sampleId  candidateA_runId  candidateB_runId  scenarioId  runIndex
-```
-
----
-
-## Tasks
-
-### Task 0: DTO 类型 + `DialogueRequest.promptContext` + orchestrator 填充
-
-**文件：**
-- `src/engine/dialogue/promptPayload.ts`（新建：`PromptFactValue`, `PromptMemory`, `PromptEvent`, `DialogueChoiceCandidate`, `DialoguePromptContext`, `toPromptMemory`）
-- `src/engine/dialogue/types.ts`（修改：追加 `promptContext`；删除 `rawDialogueResponseSchema` 第 42-56 行）
-- `src/engine/dialogue/orchestrator.ts`（修改：`assembleDialogueRequest` 填入 `promptContext`，含 `rankName/rankGrade`）
-- `tests/dialogue/promptPayload.test.ts`（新建：DTO 投影测试）
-
-**测试（TDD）：**
-```ts
-describe("toPromptMemory", () => {
-  it("maps id/kind/summary/subjectIds/perspective/emotions/unresolved")
-  it("createdAt = m.createdAt (not occurredAt)")
-  it("result has no ownerId field")
-  it("result has no strength/retention/triggerTags fields")
-})
-describe("assembleDialogueRequest promptContext", () => {
-  it("speakerDisplayName = resolveDisplayName result")
-  it("rankName = db.ranks[standing.rank].name")
-  it("rankGrade = db.ranks[standing.rank].grade")
-  it("audience.targetRole = sovereign when targetId = player")
-  it("relevantMemories is PromptMemory[] (no ownerId)")
-  it("knownEvents = [], allowedClaims = [], forbiddenClaims = []")
-  it("reactionPlan = undefined")
-  it("choiceCandidates = []")
-})
-```
-
-**验收：**
-- `PromptMemory` 类型上不含 `ownerId`（编译期）
-- `rawDialogueResponseSchema` 已删，无 unused import
-- 现有所有测试全绿
-
----
-
-### Task 1: `DialoguePromptPayload` + `compilePromptPayload`
-
-**文件：**
-- `src/engine/dialogue/promptPayload.ts`（续 T0：加 `DialogueSpeakerPayload`, `DialoguePromptPayload`, `compilePromptPayload`）
-- `tests/dialogue/promptPayload.test.ts`（续 T0：加 compiler 测试）
-
-**测试（TDD）：**
-```ts
-describe("compilePromptPayload", () => {
-  it("speaker.id = request.speakerId")
-  it("speaker.name = promptContext.speakerDisplayName")
-  it("speaker.rank.id = speakerContext.standing.rank")
-  it("speaker.rank.name = promptContext.rankName")
-  it("speaker.rank.grade = promptContext.rankGrade")
-  it("speaker.rank.selfRefs = speakerContext.standing.selfRefs")
-  it("speaker.speechStyle = profile.speechStyle (not voice.register)")
-  it("speaker.personalityTraits = profile.personalityTraits")
-  it("speaker.coreFacts = profile.coreFacts")
-  it("currentScene.directive = request.sceneDirective when present")
-  it("currentScene has no directive key when sceneDirective absent")
-  it("currentScene.recentLines = last 6 of transcript")
-  it("result contains no GameState/db reference")
-  it("result contains no ownerId/strength/retention")
-})
-```
-
-**验收：**
-- `compilePromptPayload` 签名 `(request: DialogueRequest)` — 零额外参数
-- 类型保证无 `ownerId/strength/retention`
-
----
-
-### Task 2: 升级 `buildAnthropicToolRequest` + relay `cache_control` schema
-
-**文件：**
-- `src/engine/dialogue/providers/anthropicProvider.ts`（修改）
-- `server/llm/anthropicRelay.ts`（修改）
-- `tests/server/anthropicRelay.test.ts`（修改：加 cache_control 透传测试）
-- `tests/dialogue/anthropicProvider.test.ts`（新/改：加 caching 结构测试）
-
-**provider 变更：**
-1. `AnthropicRequestPayload.system` 加 `cache_control?: { type: "ephemeral" }`
-2. `buildAnthropicToolRequest`：2 个固定 blocks（均有 `cache_control`）+ user message
-3. `WORLD_RULES_TEXT` 模块级常量
-4. `capabilities.promptCaching: true`
-
-**relay 测试新增：**
-```ts
-it("forwards cache_control to transport (not stripped by .strict() schema)")
-it("request without cache_control is still valid")
-```
-
-**provider 测试新增：**
-```ts
-it("system has exactly 2 blocks")
-it("all system blocks have cache_control.type === ephemeral")
-it("system.length stays 2 regardless of request content")
-it("messages[0].content includes currentScene.directive when sceneDirective present")
-it("messages[0].content has no ownerId/strength")
-it("capabilities.promptCaching === true")
-```
-
----
-
-### Task 3: 提取 `validateDialogueProviderResult`（DialogueValidationOutcome）
-
-**文件：**
-- `src/engine/dialogue/orchestrator.ts`（修改）
-- `tests/dialogue/orchestrator.test.ts`（修改：加提取函数直接测试）
-
-**返回类型 `DialogueValidationOutcome`（非 `Result<>`）：**
-- `ok: false` 时也包含 `diagnostics`（含 `claimFindings`, `textFindings`, `acceptedClaims`）
-- `produceDialogueLineWithPolicy` 包装：`if (!outcome.ok) return err(outcome.error)`
-
-**测试：**
-```ts
-describe("validateDialogueProviderResult", () => {
-  it("ok=true: returns line + diagnostics")
-  it("ok=false speaker mismatch: returns error + diagnostics (claimFindings=[], textFindings=[])")
-  it("ok=false text gate rejects: textFindings contains rejection, acceptedClaims still present")
-  it("ok=false claim gate rejects: claimFindings contains violation, diagnostics intact")
-  it("ok=true partial: flagged (non-reject) claims in claimFindings, ok=true")
-})
-```
-
-`produceDialogueLineWithPolicy` 现有集成测试覆盖行为回归（不得改变外部行为）。
-
----
-
-### Task 4: Eval runner（fixture + online，复用 T3 pipeline）
-
-**文件：**
-- `src/engine/dialogue/eval/types.ts`（新建：`EvalExecutionMode`, `CheckStatus`, `EvalExpectationFinding`, `EvalResult`, `EvalScenario`）
-- `src/engine/dialogue/eval/evalRunner.ts`（新建）
-- `tests/dialogue/eval/evalRunner.test.ts`（新建）
-
-**runEvalScenario 步骤：**
-1. `fixtureBuilders[scenario.fixtureId]()` 得 `{ db, state }`
-2. `assembleDialogueRequest`（含 `sceneDirective: scenario.sceneDirective`）
-3. `buildDialoguePolicyContext`
-4. `provider.generate(request)` → 记时
-5. Provider err：`schemaStatus/gateStatus: "not_run"`（`schema_invalid` → `schemaStatus: "fail"`）
-6. 成功：`validateDialogueProviderResult(...)` → 得 `outcome`（含 diagnostics）
-7. `outcome.ok`：`gateStatus: "pass"`；否则：`gateStatus: "fail"`
-8. 检查 `expectations`：对照 `outcome.diagnostics.acceptedClaims`, `forbidden texts`, `gateStatus`
-9. 返回完整 `EvalResult`（含 `runId`, `runIndex`, `expectationStatus/Findings`）
-
-**CLI mode 处理：**
-- TypeScript 类型 `EvalExecutionMode = "fixture" | "online"`
-- CLI parser 层判断：收到 `"batch"` → `console.error("batch mode not supported in LLM-2..."); process.exit(1)`
-- 不在 runner 里处理 `"batch"` 入参
-
-**测试（全 mock provider）：**
-```ts
-describe("runEvalScenario", () => {
-  it("gateStatus=pass, expectationStatus=pass when all pass and expectations met")
-  it("gateStatus=fail when text gate rejects; diagnostics.textFindings present")
-  it("gateStatus=not_run when provider returns transport error")
-  it("schemaStatus=fail when provider returns schema_invalid")
-  it("expectationStatus=fail when gatePass=true but gate actually failed")
-  it("expectationStatus=fail when forbiddenText found in result.text")
-  it("expectationStatus=not_run when no expectations defined")
-  it("runIndex correctly set per call")
-  it("sceneDirective passed to assembleDialogueRequest when set in scenario")
-})
-```
-
----
-
-### Task 5: Fixture builders + 黄金场景集（≥20 条）
-
-**文件：**
-- `tests/eval/fixtures/builders.ts`（新建，≥3 个 builder）
-- `tests/eval/golden/scenarios.jsonl`（新建，≥20 条）
-
-**场景覆盖（调整后）：**
-- ≥4 个不同 speakerId（先 grep content JSON 确认存在的角色 id）
-- ≥3 个不同 fixtureId
-- **≥5 条含 `sceneDirective`**（核心新增：这是让模型知道"说什么"的关键）
-- ≥5 条含 transcript（测试 recentLines ≤6 行截取）
-- ≥5 条 `expectations.gatePass: true`
-- ≥4 条 `expectations.forbiddenTexts`
-- ≥2 条使用含记忆 fixtureId + `requiredSourceContextIds`
-- ≥2 条含 `sceneDirective` + `expectations.gatePass: true`（验证"有意图 + 合规"组合）
-
-**示例场景行：**
-```json
-{"id":"s001","fixtureId":"base_palace","speakerId":"shen_zhibai","locationId":"yan_bo_lou","sceneDirective":"请安","transcript":[],"expectations":{"gatePass":true,"forbiddenTexts":["大人","公子"]}}
-{"id":"s010","fixtureId":"demoted_consort","speakerId":"shen_zhibai","locationId":"yan_bo_lou","sceneDirective":"回应降位后的沉默","transcript":[],"expectations":{"gatePass":true}}
-{"id":"s015","fixtureId":"consort_with_grievance","speakerId":"shen_zhibai","locationId":"yan_bo_lou","sceneDirective":"试探皇帝是否还记得旧事","expectations":{"requiredSourceContextIds":["mem_xxx"]}}
-```
-
----
-
-### Task 6: eval:run + eval:score + 盲评导出
-
-**文件：**
-- `tools/eval-run.ts`（新建）
-- `tools/eval-score.ts`（新建）
-- `tools/eval-export.ts`（新建）
-- `src/engine/dialogue/eval/scoring.ts`（新建：纯函数聚合，供 vitest 测试）
-
-**eval-run.ts：**
-- `--runs N`（默认 1）：每场景跑 N 次；`runIndex` 0..N-1
-- `runId = "${model}-${Date.now()}-r${runIndex}"`
-
-**eval-score.ts 输出：**
 ```
 Scenarios:       20 (runs: 3 → 60 results)
 Schema pass:     58/60 (97%)
@@ -637,37 +508,223 @@ Avg out tok:     92
 Cache hits:      39/60 (65%)
 ```
 
-**eval-export.ts 盲评：**
-- 按 `scenarioId + runIndex` 配对两份 JSONL
-- A/B 位置用 `seed`（默认 42）的 deterministic shuffle
-- `blind-samples.tsv`（含 `sceneDirective` 列，帮助评审者理解期望）
-- `blind-key.tsv`（映射 `sampleId → candidateA_runId / candidateB_runId`）
+**eval-export.ts：**
+- `--input <pathA> <pathB>`（两个 run JSONL，不同模型）
+- 按 `scenarioId + runIndex` 配对
+- `--seed N`（默认 42）确定性打乱 A/B
+- `blind-samples.tsv`（含 `sceneDirective` 列，无模型名）
+- `blind-key.tsv`（映射 `sampleId → candidateA/B_runId + scenarioId + runIndex`）
+
+---
+
+## Tasks
+
+### Task 0: assembleDialogueRequest options + DTO + promptContext + buildDialoguePolicyContext
+
+**文件：**
+- `src/engine/dialogue/promptPayload.ts`（新建：`PromptFactValue`, `PromptMemory`, `PromptEvent`, `DialogueChoiceCandidate`, `DialogueSpeakerStanding`, `DialoguePromptContext`, `toPromptMemory`, `DialogueAssemblyOptions`）
+- `src/engine/dialogue/types.ts`（修改：追加 `promptContext`；删除 `rawDialogueResponseSchema` 第 42-56 行）
+- `src/engine/dialogue/orchestrator.ts`（修改：`assembleDialogueRequest` 签名 + 内部 + 填 `promptContext`；`buildDialoguePolicyContext` 改用 `request.promptContext.audience`）
+- 更新所有现有调用方（将第 5 个位置参数 `scripted?` 改为 `options.scripted`）
+- `tests/dialogue/promptPayload.test.ts`（新建）
+- 更新受影响的 assembleDialogueRequest 测试（targetId 新默认行为）
+
+**测试（TDD）：**
+```ts
+describe("DialogueAssemblyOptions", () => {
+  it("targetId defaults to 'player' when not provided")
+  it("targetId propagates to request.targetId, memoryContext.audienceId, and audience.targetId")
+  it("sceneDirective propagates to request.sceneDirective")
+  it("transcript propagates to request.transcript")
+  it("scripted propagates to request.scripted")
+})
+describe("toPromptMemory", () => {
+  it("maps id/kind/summary/subjectIds/perspective/emotions/unresolved")
+  it("createdAt = m.createdAt (not occurredAt)")
+  it("result has no ownerId field")
+  it("result has no strength/retention/triggerTags fields")
+})
+describe("assembleDialogueRequest promptContext", () => {
+  it("ranked speaker: rankDisplay.kind === 'ranked', has name and grade")
+  it("elder speaker: rankDisplay.kind === 'unranked', has role (not name/grade)")
+  it("speakerDisplayName = resolveDisplayName result")
+  it("audience = buildAudienceContext(state, db, {speakerId, targetId})")
+  it("relevantMemories is PromptMemory[] (no ownerId)")
+  it("knownEvents = [], allowedClaims = [], forbiddenClaims = []")
+  it("reactionPlan = undefined, choiceCandidates = []")
+})
+describe("buildDialoguePolicyContext", () => {
+  it("audience === request.promptContext.audience (same object, not rebuilt)")
+})
+```
+
+**验收：**
+- Elder speaker 不触发 `BAD_SPEAKER`，`rankDisplay.kind === "unranked"`
+- `buildDialoguePolicyContext` 不调 `buildAudienceContext`
+- 所有现有调用方编译通过（options 对象形式）
+- `rawDialogueResponseSchema` 已删，无 unused import
+- 现有测试全绿
+
+---
+
+### Task 1: `DialoguePromptPayload` + `compilePromptPayload`
+
+**文件：**
+- `src/engine/dialogue/promptPayload.ts`（续 T0）
+- `tests/dialogue/promptPayload.test.ts`（续 T0）
+
+**测试（TDD）：**
+```ts
+describe("compilePromptPayload", () => {
+  it("speaker.id = request.speakerId")
+  it("speaker.name = promptContext.speakerDisplayName")
+  it("speaker.standing passes through promptContext.rankDisplay as-is")
+  it("ranked speaker standing has kind=ranked, name, grade, selfRefs")
+  it("elder speaker standing has kind=unranked, role, selfRefs")
+  it("speaker.speechStyle = profile.speechStyle (not voice.register)")
+  it("speaker.personalityTraits = profile.personalityTraits")
+  it("speaker.coreFacts = profile.coreFacts")
+  it("currentScene.directive = request.sceneDirective when present")
+  it("currentScene has no directive key when sceneDirective absent")
+  it("currentScene.recentLines = last 6 of transcript")
+  it("result contains no ownerId/strength/retention")
+})
+```
+
+---
+
+### Task 2: 升级 `buildAnthropicToolRequest` + relay `cache_control` schema
+
+**文件：**
+- `src/engine/dialogue/providers/anthropicProvider.ts`（修改）
+- `server/llm/anthropicRelay.ts`（修改）
+- `tests/server/anthropicRelay.test.ts`（修改）
+
+**测试新增：**
+```ts
+// relay
+it("forwards cache_control blocks to transport without stripping")
+it("request without cache_control is valid")
+
+// provider
+it("system has exactly 2 blocks")
+it("all system blocks have cache_control.type === ephemeral")
+it("system.length stays 2 regardless of request content")
+it("messages[0].content includes currentScene.directive when sceneDirective present")
+it("messages[0].content has no ownerId/strength")
+it("capabilities.promptCaching === true")
+```
+
+---
+
+### Task 3: 提取 `validateDialogueProviderResult`（有意调整验证顺序）
+
+**文件：**
+- `src/engine/dialogue/orchestrator.ts`（修改）
+- `tests/dialogue/orchestrator.test.ts`（修改：更新行为变更处）
+
+**顺序：speaker check → claim gate → text gate**（有意变更，不能声称行为不变）
+
+受影响测试须显式更新（旧：wrong speaker + wrong claim → `CLAIM_REJECTED`；新：`WRONG_SPEAKER`），并加注释：
+```ts
+// LLM-2: speaker check 优先于 claim gate; 见 docs/superpowers/plans/2026-06-22-llm-2-prompt-compiler-eval.md T3
+```
+
+**新增测试：**
+```ts
+describe("validateDialogueProviderResult", () => {
+  it("ok=true: returns line + non-empty diagnostics")
+  it("ok=false speaker mismatch: error=WRONG_SPEAKER, diagnostics present (claimFindings may be empty)")
+  it("ok=false wrong speaker + wrong claim: WRONG_SPEAKER (not CLAIM_REJECTED) — behavior change LLM-2")
+  it("ok=false claim gate rejects: claimFindings in diagnostics, textFindings=[](text gate skipped)")
+  it("ok=false text gate rejects: textFindings in diagnostics")
+  it("diagnostics.acceptedClaims present even on ok=false")
+})
+```
+
+---
+
+### Task 4: Eval runner
+
+**文件：**
+- `src/engine/dialogue/eval/types.ts`（新建）
+- `src/engine/dialogue/eval/evalRunner.ts`（新建，含 `evaluateExpectations` 私有函数）
+- `tests/dialogue/eval/evalRunner.test.ts`（新建）
+
+**CLI mode 设计：**
+- TypeScript 类型 `EvalExecutionMode = "fixture" | "online"`（无 `"batch"`）
+- CLI parser 遇到未知 `--provider` 值 → `console.error(...); process.exit(1)`
+
+**测试（全 mock provider）：**
+```ts
+describe("runEvalScenario", () => {
+  it("pass path: gateStatus=pass, expectationStatus=pass")
+  it("gateStatus=fail when validation rejects; diagnostics.textFindings present")
+  it("gateStatus=not_run when provider returns transport error")
+  it("schemaStatus=fail when provider returns schema_invalid")
+  it("expectationStatus=not_run when provider fails (prerequisite not met)")
+  it("expectationStatus=not_run when gateStatus=not_run (prerequisite not met)")
+  it("expectationStatus=fail when gatePass=true but gate failed")
+  it("expectationStatus=fail when forbiddenText found in text")
+  it("expectationStatus=not_run when no expectations defined")
+  it("sceneDirective passed to assembleDialogueRequest")
+  it("runIndex correctly set")
+})
+describe("evaluateExpectations", () => {
+  it("not_run when schemaStatus !== pass")
+  it("not_run when gateStatus === not_run")
+  it("not_run when text === undefined")
+  it("pass when all expectations met")
+  it("fail on unexpected_gate_result")
+  it("fail on forbidden_text_present")
+  it("fail on required_source_not_cited")
+})
+```
+
+---
+
+### Task 5: Fixture builders + 黄金场景集（≥20 条）
+
+**文件：**
+- `tests/eval/fixtures/builders.ts`（新建）
+- `tests/eval/golden/scenarios.jsonl`（新建）
+
+（先 grep content JSON 确认有效 speakerId / locationId，再写场景。）
+
+---
+
+### Task 6: eval:run + eval:score + 盲评导出
+
+**文件：**
+- `tools/eval-run.ts`（新建）
+- `tools/eval-score.ts`（新建）
+- `tools/eval-export.ts`（新建）
+- `src/engine/dialogue/eval/scoring.ts`（新建，纯函数）
+- `package.json`（加 3 个 scripts）
 
 **scoring.ts vitest 测试：**
 ```ts
 describe("scoreResults", () => {
-  it("schema pass = pass count / (pass+fail), not_run excluded from denominator")
-  it("gate pass 同理")
-  it("expectation pass 同理")
+  it("schema pass = pass / (pass+fail), not_run excluded from denominator")
+  it("gate pass same logic")
+  it("expectation pass same logic")
   it("cache hit = cacheReadTokens > 0 比例")
-  it("avg tokens calculated only from results with usage")
+  it("avg tokens only from results with usage")
   it("empty input returns zeros")
 })
 ```
-
-eval-run/score/export 不进 CI vitest，只测 scoring.ts 纯函数。
 
 ---
 
 ## 执行顺序
 
 ```
-T0 (DTO + request 扩展 + rawDialogueResponseSchema 删除)
-  → T1 (compiler，含 sceneDirective + rank object)
-  → T2 (caching + relay)  ← T2 依赖 T1 的 compilePromptPayload
-    T3 (shared pipeline)  ← T3 不依赖 T2，可与 T2 并行
-      → T4 (eval runner)  ← 依赖 T3 的 validateDialogueProviderResult
-         → T5 (fixtures + scenarios)
+T0 (assembleDialogueRequest options + DTO + promptContext + buildDialoguePolicyContext 单一来源)
+  → T1 (compiler，含 standing 判别联合 + sceneDirective)
+  → T2 (caching + relay)    ← 依赖 T1 的 compilePromptPayload
+    T3 (shared pipeline)    ← 不依赖 T2，可与 T2 并行
+      → T4 (eval runner)    ← 依赖 T3 的 validateDialogueProviderResult
+         → T5 (fixtures)
             → T6 (CLI tools)
 ```
 
@@ -675,23 +732,25 @@ T0 (DTO + request 扩展 + rawDialogueResponseSchema 删除)
 
 ## 验收清单
 
-- [ ] `compilePromptPayload(request)` — 零 db/state 参数
-- [ ] `currentScene.directive` 来自 `request.sceneDirective`（含则有，无则缺省）
-- [ ] `speaker.rank` 是对象（id/name/grade/selfRefs），非裸 ID
-- [ ] `PromptMemory` 有 `createdAt`（不叫 `occurredAt`），无 `ownerId/strength/retention`（编译期）
+- [ ] `assembleDialogueRequest(db, state, speakerId, locationId, options?)` — 末位为 options 对象
+- [ ] `targetId` 同时写入 `request.targetId`、`memoryContext.audienceId`、`buildAudienceContext`
+- [ ] Elder speaker `rankDisplay.kind === "unranked"`（不读 `db.ranks["__elder__"]`）
+- [ ] `buildDialoguePolicyContext` 用 `request.promptContext.audience`（不调 `buildAudienceContext`）
+- [ ] `compilePromptPayload(request)` — 零额外参数；`speaker.standing` 是判别联合
+- [ ] `currentScene.directive` 来自 `request.sceneDirective`（缺省时无 key）
+- [ ] `PromptMemory.createdAt`（非 `occurredAt`），无 `ownerId/strength/retention`（编译期）
 - [ ] `PromptEvent.facts: Record<string, PromptFactValue>`（非 `unknown`）
-- [ ] `system[]` 有 2 个 blocks，全带 `cache_control`；动态内容只在 `messages[0].content`
-- [ ] Relay schema 支持 `cache_control`；relay 测试断言透传（不被 `.strict()` 剥离）
-- [ ] `validateDialogueProviderResult` 返回 `DialogueValidationOutcome`（`ok:false` 也含 diagnostics）
-- [ ] `EvalExecutionMode = "fixture" | "online"`（无 `"batch"` 类型）；CLI parser 遇 batch 报错退出
-- [ ] `EvalResult` 含 `runId`, `runIndex`, `expectationStatus`, `expectationFindings`
-- [ ] `EvalScenario` 含 `sceneDirective?` 和 `requiredSourceContextIds?`（非 `mentionedMemoryKinds`）
-- [ ] Expectation checks 在 runner 里实现（gatePass 对照、forbiddenText 字符串检查、sourceContextIds 对照）
+- [ ] `system[]` 有 2 个 blocks，全带 `cache_control`；`messages[0].content` 含 payload
+- [ ] Relay schema 含 `cache_control? optional`；relay 测试断言透传
+- [ ] `validateDialogueProviderResult` 顺序：speaker → claim → text；`ok:false` 也含 diagnostics
+- [ ] 旧 "wrong speaker + wrong claim → CLAIM_REJECTED" 测试已更新并注释
+- [ ] `EvalExecutionMode = "fixture" | "online"`（无 `"batch"` 类型）；CLI 遇未知 provider 报错退出
+- [ ] `evaluationId` 一次 CLI 运行生成一次；`runId = "${evaluationId}-r${runIndex}"`
+- [ ] `evaluateExpectations` prerequisite：schemaStatus≠pass 或 gateStatus=not_run 或 text=undefined → `not_run`
 - [ ] ≥5 个场景含 `sceneDirective`
-- [ ] `eval:run --runs N` 生成 JSONL；`eval:export` 按 `scenarioId+runIndex` 配对；盲评两文件
-- [ ] `capabilities.promptCaching: true`（不承诺命中阈值）
+- [ ] `blind-samples.tsv` 无模型名；`blind-key.tsv` 有映射；按 `scenarioId+runIndex` 配对
 - [ ] `npm run typecheck` clean（client + server）
-- [ ] `npx vitest run` 全绿（新增约 50+ tests）
+- [ ] `npx vitest run` 全绿（新增约 55+ tests）
 - [ ] `npx vite build` 成功
 - [ ] `rawDialogueResponseSchema` 已删除
 
@@ -701,7 +760,7 @@ T0 (DTO + request 扩展 + rawDialogueResponseSchema 删除)
 
 Branch: feat/llm-2-prompt-compiler  
 Worktree: .worktrees/llm-2  
-Base (branch start): 0dd9dc1
+Base (branch start): bc6b12c
 
 | Task | Status | Commits | Notes |
 |------|--------|---------|-------|
