@@ -77,6 +77,19 @@ describe("AnthropicSdkTransport", () => {
     if (!r.ok) expect(r.error).toMatchObject({ kind: "http", status: 401 });
   });
 
+  it("http 错误：requestId 取 APIError.requestID（@anthropic-ai/sdk 0.105 的 HTTP 请求 id 字段）", async () => {
+    const Anthropic = (await import("@anthropic-ai/sdk")).default as any;
+    const { _mockCreate } = (await import("@anthropic-ai/sdk")) as any;
+    const e = new Anthropic.APIError(500, {}, "Server error", new Headers());
+    (e as { requestID?: string }).requestID = "req_err_99"; // SDK 暴露的 HTTP 请求 id 字段（camelCase）
+    _mockCreate.mockRejectedValueOnce(e);
+    const { createAnthropicSdkTransport } = await import("../../server/llm/anthropicSdkTransport");
+    const transport = createAnthropicSdkTransport("key");
+    const r = await transport.send(minimalPayload);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatchObject({ kind: "http", status: 500, requestId: "req_err_99" });
+  });
+
   it("429: 返回 err({ kind:'http', status:429 })，含 retryAfterMs", async () => {
     const Anthropic = (await import("@anthropic-ai/sdk")).default as any;
     const { _mockCreate } = await import("@anthropic-ai/sdk") as any;
