@@ -3,7 +3,7 @@ import rawManifest from "../../assets/manifest.json";
 import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
 import { loadGameContent } from "../engine/content/viteSource";
-import { pickNextEvent } from "../engine/events/engine";
+import { pickAutoStartEvent } from "../engine/events/router";
 import { assetError, stateError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
@@ -363,9 +363,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // 出宫/在城内地图（stayOnMap）时玩家并未进入紫宸殿等房间，playerLocation 只是
     // 未变的留痕；此时不可触发 location_enter 事件（否则刚点宫门就被司礼祭仪等
     // 房间事件拦下），仅允许跨月 time_advance 事件。
+    const loc = db.locations[state.playerLocation];
     const pick =
-      (rolledOver ? pickNextEvent(db, state, "time_advance") : null) ??
-      (stayOnMap ? null : pickNextEvent(db, state, "location_enter"));
+      (rolledOver ? pickAutoStartEvent(db, state, "time_advance", loc) : null) ??
+      (stayOnMap ? null : pickAutoStartEvent(db, state, "location_enter", loc));
     if (pick) startEvent(pick.id);
     // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在京城地图板，
     // 不能按 playerLocation 切回房间视图。
@@ -564,7 +565,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   const proceedAfterNewGame = () => {
-    const pick = pickNextEvent(db, store.getState(), "game_start");
+    const state = store.getState();
+    const pick = pickAutoStartEvent(db, state, "game_start", db.locations[state.playerLocation]);
     if (pick) startEvent(pick.id);
     else goHome();
   };
@@ -1357,7 +1359,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setActiveEventId(null);
             if (committed) {
               doAutosave(); // scene-commit autosave (plan §9)
-              const pick = pickNextEvent(db, store.getState(), "scene_end");
+              const sceneEndState = store.getState();
+              const pick = pickAutoStartEvent(db, sceneEndState, "scene_end", db.locations[sceneEndState.playerLocation]);
               if (pick) {
                 if (chainDepth.current < MAX_EVENT_CHAIN) {
                   chainDepth.current += 1;
@@ -1374,7 +1377,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               // 若本场景消耗行动点导致转旬/转月，立刻触发 time_advance 事件，
               // 不必等玩家转换地图再 trigger。
               if (rolledOver) {
-                const t = pickNextEvent(db, store.getState(), "time_advance");
+                const taState = store.getState();
+                const t = pickAutoStartEvent(db, taState, "time_advance", db.locations[taState.playerLocation]);
                 if (t && chainDepth.current < MAX_EVENT_CHAIN) {
                   chainDepth.current += 1;
                   setActiveEventId(t.id);
