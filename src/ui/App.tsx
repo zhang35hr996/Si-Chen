@@ -1108,6 +1108,7 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
           store={store}
           registry={registry}
           atRoot={mapAtRoot}
+          resumeBoardId={currentBoard}
           onTravelled={onTravelledSettle}
           onEnterCurrent={enterCurrentLocation}
           onOpenView={(locationId) => {
@@ -1156,7 +1157,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
           onClose={() => {
             setShopId(null);
-            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true); }
+            // 店在京城（free-entry，playerLocation 未变）：转旬补跑亦须留在地图，
+            // 否则会按 playerLocation 落回紫宸殿；无转旬则直接回京城板。
+            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true, true); }
             else { setView("map"); }
           }} />
       )}

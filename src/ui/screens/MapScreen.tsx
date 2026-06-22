@@ -28,6 +28,7 @@ export function MapScreen({
   store,
   registry,
   atRoot,
+  resumeBoardId,
   onTravelled,
   onEnterCurrent,
   onOpenView,
@@ -45,6 +46,10 @@ export function MapScreen({
   /** Open on the 皇城主地图 (root board) — true after 新游戏 / 事件结束 (hub return);
    *  false when opened from a location's 宫城图 button (start on that board). */
   atRoot: boolean;
+  /** 非 root 重开时落在的板（玩家上次所见板）。京城/郊外的店铺、寺庙是
+   *  free-entry，不改 playerLocation，故关店/出阁后须按此板恢复，
+   *  否则会回落到 playerLocation 所在的紫禁城主图（返回直接回皇城的 bug）。 */
+  resumeBoardId?: string;
   /** spentAp=false 表示宫内免行动点移动（不掷懿旨/敲打、不跑转旬）。
    *  sovereignDied=true 表示本次跨月 tick 皇帝崩逝，调用方须 short-circuit 回 title。
    *  stayOnMap=true（出宫）表示玩家位置未变，结算后须留在地图（京城板），
@@ -82,7 +87,12 @@ export function MapScreen({
     return path;
   };
 
-  const startBoard = atRoot ? boards[0]!.id : boardOf(db.locations[state.playerLocation]?.zone ?? boards[0]!.id).id;
+  const resumeValid = resumeBoardId != null && boards.some((b) => b.id === resumeBoardId);
+  const startBoard = atRoot
+    ? boards[0]!.id
+    : resumeValid
+      ? resumeBoardId!
+      : boardOf(db.locations[state.playerLocation]?.zone ?? boards[0]!.id).id;
   // The board we are looking at, plus the breadcrumb stack used by 返回.
   const [board, setBoard] = useState<string>(startBoard);
   const [stack, setStack] = useState<string[]>(() => ancestorsOf(startBoard));
