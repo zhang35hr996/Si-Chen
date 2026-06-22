@@ -457,6 +457,7 @@ export const locationSchema = z
     name: nonEmpty,
     description: nonEmpty,
     backgroundKey: nonEmpty,
+    backgroundPosition: nonEmpty.optional(), // 背景裁切焦点（如 "62% center"）；缺省 center（SceneShell 用）
     ambience: z.array(nonEmpty),
     position: normalizedPosition,
     zone: idSchema.default("palace"),

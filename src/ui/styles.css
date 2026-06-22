@@ -3313,3 +3313,62 @@ button:active:enabled {
 .health-chip[data-status="healthy"] { color: #8fd18f; }
 .health-chip[data-status="sick"] { color: #d6c07a; }
 .health-chip[data-status="critical"] { color: #d98a8a; }
+
+/* ── SceneShell 统一场景外壳（scene-ui-narrative-refactor §4）─────────────── */
+.scene-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.scene-shell__stage {
+  flex: 1;
+  min-height: 42vh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2.4rem;
+  background-color: var(--ink-800);
+  background-size: cover;
+  background-repeat: no-repeat;
+  border-bottom: 1px solid var(--line);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95);
+  animation: fade 0.6s ease both;
+}
+.scene-shell__stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, rgba(10, 8, 6, 0.92), rgba(10, 8, 6, 0.12) 54%, transparent 74%),
+    linear-gradient(105deg, rgba(10, 8, 6, 0.42), transparent 42%);
+  pointer-events: none;
+}
+.scene-shell__stage-content,
+.scene-shell__narrative {
+  position: relative;
+  z-index: 1;
+}
+.scene-shell__narrative {
+  margin-top: 1.1rem;
+  max-width: 46rem;
+  color: var(--cream);
+}
+.scene-shell__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.9rem 1.25rem;
+  padding-bottom: calc(0.9rem + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(15, 11, 9, 0.96), var(--ink-850));
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 480px) {
+  .scene-shell__stage { padding: 1.6rem 1.2rem; }
+  .scene-shell__actions { gap: 0.5rem; padding-left: 0.9rem; padding-right: 0.9rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene-shell__stage { animation: none; }
+}
