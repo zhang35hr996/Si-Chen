@@ -623,8 +623,11 @@ export function applyEffects(
         break;
       }
       case "taihou_decease": {
-        next.taihou.deceased = true;
-        next.taihou.diedAt = effect.at;
+        if (!next.taihou.deceased) {
+          next.taihou.deceased = true;
+          next.taihou.diedAt = effect.at;
+          next.taihou.mourningUntilDayExclusive = effect.at.dayIndex + 3; // 死亡当日计第1日，独占上界
+        }
         break;
       }
       case "enqueue_aftermath": {
