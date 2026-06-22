@@ -78,7 +78,7 @@ function makeResponse(
 }
 
 function makeWrongClaimResponse(): DialogueProviderResult {
-  const firstOfferedId = [...makePolicy().offeredContextIds][0]!;
+  const firstOfferedId = makeRequest().speakerContext.relevantMemories[0]!.id;
   // shen_zhibai is fenghou; claim says "zhaoyi" → contradicts belief
   const wrongRankClaim: ProposedClaim = {
     claim: {
@@ -204,39 +204,25 @@ describe("validateDialogueProviderResult", () => {
   });
 
   it("diagnostics.acceptedClaims present on ok=false text gate path", () => {
+    // Forbidden text "皇上" → GATE_REJECTED. No factual claims (CLOSED mode on fresh state).
+    // Verifies that diagnostics.acceptedClaims is an accessible array even on the text-gate fail path.
     const request = makeRequest();
     const policy = makePolicy();
-    const firstOfferedId = [...policy.offeredContextIds][0]!;
-
-    // A valid claim (should be accepted by claim gate) but forbidden text
-    const validClaim: ProposedClaim = {
-      claim: {
-        id: "c_valid",
-        predicate: "holds_rank",
-        subjectId: SPEAKER,
-        object: "fenghou",
-        modality: "assert",
-      },
-      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
-      modality: "assert",
-      certainty: 90,
-    };
-
     const outcome = validateDialogueProviderResult(
       db,
       PROVIDER,
       request,
       policy,
-      makeResponse({ text: "皇上圣明。", proposedClaims: [validClaim] }),
+      makeResponse({ text: "皇上圣明。", proposedClaims: [] }),
     );
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
 
     expect(outcome.error.code).toBe("GATE_REJECTED");
-    // acceptedClaims should be populated from the claim gate that passed
     expect(outcome.diagnostics.acceptedClaims).toBeDefined();
     expect(Array.isArray(outcome.diagnostics.acceptedClaims)).toBe(true);
+    expect(outcome.diagnostics.acceptedClaims).toEqual([]);
   });
 });
 
@@ -548,35 +534,15 @@ describe("produceDialogueTurn", () => {
     expect(result.value.nextState).toBe(state);
   });
 
-  it("generative provider: full policy pipeline, returns nextState with possible mentionLog update", async () => {
+  it("generative provider: full policy pipeline produces valid generated line", async () => {
+    // Fresh state → allowedClaims=[] (CLOSED). No factual claims proposed; tests the full
+    // generative pipeline produces a valid line without hitting claim gate.
     const request = makeGenerativeRequest();
-    const policy = buildDialoguePolicyContext(db, state, request);
-    const firstOfferedId = [...policy.offeredContextIds][0];
-    // Build a generative provider that proposes a valid claim so writeback runs
-    const validClaimProvider: typeof PROVIDER = {
-      id: "gen-with-claim",
-      kind: "generative",
-      capabilities: { strictTools: true, promptCaching: false, batch: false },
-      generate: async (req) =>
-        ok<DialogueProviderResult>({
-          speaker: req.speakerId,
-          text: TURN_VALID_TEXT,
-          choices: [],
-          proposedClaims: firstOfferedId ? [{
-            claim: { id: "c_t9", predicate: "holds_rank", subjectId: TURN_SPEAKER, object: "fenghou", modality: "assert" },
-            sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
-            modality: "assert",
-            certainty: 90,
-          }] : [],
-        }),
-    };
-    const result = await produceDialogueTurn(db, validClaimProvider, request, state);
+    const result = await produceDialogueTurn(db, makeGenerativeProvider(), request, state);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.line.text).toBe(TURN_VALID_TEXT);
     expect(result.value.line.meta.generated).toBe(true);
-    // nextState is a different object (mentionLog potentially grew)
-    expect(result.value.nextState).not.toBe(state); // new reference (recordMentionedContext always returns new obj)
   });
 
   it("scripted provider: state reference is same (no writeback)", async () => {

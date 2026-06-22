@@ -901,6 +901,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         if (turnResult.ok) {
           const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
           if (committed) {
+            doAutosave();
             const generatedLine = turnResult.value.line;
             playReactions([{ speakerId: charId, lines: [generatedLine.text] }, ...decreeBeats], spend.value.rolledOver);
             return;

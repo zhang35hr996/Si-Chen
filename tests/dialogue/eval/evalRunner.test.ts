@@ -25,7 +25,6 @@ import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
 import {
   assembleDialogueRequest,
-  buildDialoguePolicyContext,
 } from "../../../src/engine/dialogue/orchestrator";
 
 // ── Shared test infrastructure ────────────────────────────────────────────────
@@ -78,12 +77,11 @@ function makeFixtureWithProviderError(error: ProviderError): EvalFixtureDefiniti
   };
 }
 
-/** Build a valid ProposedClaim using the first real offeredContextId. */
+/** Build a valid ProposedClaim using the first real offered memory. */
 function makeValidClaim(): ProposedClaim {
   const request = assembleDialogueRequest(db, state, SPEAKER, LOCATION);
   if (!request.ok) throw new Error(request.error.message);
-  const policy = buildDialoguePolicyContext(db, state, request.value);
-  const firstOfferedId = [...policy.offeredContextIds][0]!;
+  const firstOfferedId = request.value.speakerContext.relevantMemories[0]!.id;
   return {
     claim: {
       id: "c_valid",
@@ -98,12 +96,11 @@ function makeValidClaim(): ProposedClaim {
   };
 }
 
-/** Returns the first real offeredContextId for shen_zhibai. */
+/** Returns the first real memory id for shen_zhibai. */
 function firstOfferedContextId(): string {
   const request = assembleDialogueRequest(db, state, SPEAKER, LOCATION);
   if (!request.ok) throw new Error(request.error.message);
-  const policy = buildDialoguePolicyContext(db, state, request.value);
-  return [...policy.offeredContextIds][0]!;
+  return request.value.speakerContext.relevantMemories[0]!.id;
 }
 
 // ── describe: runEvalScenario ─────────────────────────────────────────────────
@@ -366,23 +363,18 @@ describe("runEvalScenario", () => {
     });
   });
 
-  it("requiredSourceRefs: pass when claim cited in fixture proposedClaims", async () => {
+  it("requiredSourceRefs: pass when claim cited in acceptedClaims (direct evaluateExpectations)", () => {
+    // In CLOSED mode (fresh state, allowedClaims=[]), even valid claims are blocked at the gate.
+    // Test the requiredSourceRefs evaluation logic directly via evaluateExpectations.
     const validClaim = makeValidClaim();
     const offeredId = validClaim.sourceRefs[0]!.id;
-
-    const scenario = makeScenario({
-      expectations: { requiredSourceRefs: [{ kind: "memory" as const, id: offeredId }] },
-    });
-    const result = await runEvalScenario(
-      scenario,
-      makeFixture({ proposedClaims: [validClaim] }),
-      "eval-1",
-      0,
+    const r = evaluateExpectations(
+      { requiredSourceRefs: [{ kind: "memory" as const, id: offeredId }] },
+      { schemaStatus: "pass", gateStatus: "pass", text: VALID_TEXT },
+      { claimFindings: [], textFindings: [], acceptedClaims: [validClaim] },
     );
-
-    expect(result.gateStatus).toBe("pass");
-    expect(result.expectationStatus).toBe("pass");
-    expect(result.expectationFindings).toEqual([]);
+    expect(r.status).toBe("pass");
+    expect(r.findings).toEqual([]);
   });
 });
 

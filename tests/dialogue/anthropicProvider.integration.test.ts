@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
-import { assembleDialogueRequest, buildDialoguePolicyContext, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
+import { assembleDialogueRequest, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
 import { createAnthropicProvider } from "../../src/engine/dialogue/providers/anthropicProvider";
 import { okTransport } from "./fixtures/anthropic";
 import type { ProposedClaim } from "../../src/engine/dialogue/claims";
@@ -16,33 +16,29 @@ const wrongRank = Object.keys(db.ranks).find((r) => r !== correctRank)!;        
 function ctx(text: string, claims: ProposedClaim[]) {
   const req = assembleDialogueRequest(db, state, SPEAKER, "zichendian");
   if (!req.ok) throw new Error(req.error.message);
-  const policy = buildDialoguePolicyContext(db, state, req.value);
   const provider = createAnthropicProvider({ model: "claude-sonnet-4-6", transport: okTransport({ text, proposedClaims: claims }) });
-  return { req: req.value, policy, provider };
+  return { req: req.value, provider };
 }
 const rankClaim = (id: string, object: string, sourceIds: string[]): ProposedClaim =>
   ({ claim: { id, predicate: "holds_rank", subjectId: SPEAKER, object, modality: "assert" }, sourceRefs: sourceIds.map((id) => ({ kind: "memory" as const, id })), modality: "assert", certainty: 90 });
-function firstOffered(ids: ReadonlySet<string>): string {
-  const offered = [...ids][0];
-  expect(offered).toBeDefined();
-  if (!offered) throw new Error("fixture must offer memory context (speaker initial memories changed?)");
-  return offered;
+function firstOfferedMemoryId(req: ReturnType<typeof ctx>["req"]): string {
+  const mem = req.speakerContext.relevantMemories[0];
+  expect(mem).toBeDefined();
+  if (!mem) throw new Error("fixture must offer memory context (speaker initial memories changed?)");
+  return mem.id;
 }
 
 describe("anthropic provider — full PR5 pipeline acceptance", () => {
-  it("(a) valid claim with a real offered source → passes, mentionLog grows", async () => {
-    const { req, policy, provider } = ctx("本宫累了，陛下早些歇息。", []);
-    const offered = firstOffered(policy.offeredContextIds);
-    const { req: r2, provider: pr2 } = ctx("本宫累了。", [rankClaim("c1", correctRank, [offered])]);
-    void req; void provider;
-    const r = await produceDialogueTurn(db, pr2, r2, state);
+  it("(a) no factual claims → passes in CLOSED mode, line produced", async () => {
+    // Fresh state → allowedClaims=[] (CLOSED). Conversational text with no claims passes.
+    const { req, provider } = ctx("本宫累了，陛下早些歇息。", []);
+    const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.nextState.mentionLog.length).toBeGreaterThan(state.mentionLog.length);
   });
 
   it("(b) claim contradicts belief → CLAIM_REJECTED, state.mentionLog unchanged", async () => {
     const before = structuredClone(state.mentionLog);
-    const offered = firstOffered(ctx("本宫累了。", []).policy.offeredContextIds);
+    const offered = firstOfferedMemoryId(ctx("本宫累了。", []).req);
     const { req, provider } = ctx("本宫累了。", [rankClaim("c2", wrongRank, [offered])]);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("CLAIM_REJECTED");
@@ -57,11 +53,10 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
     expect(state.mentionLog).toEqual(before);
   });
 
-  it("(d) claim valid but text has a forbidden term → text reject, state.mentionLog unchanged", async () => {
+  it("(d) forbidden text without claims → GATE_REJECTED, state.mentionLog unchanged", async () => {
+    // Fresh state → CLOSED mode. Text gate fires on the forbidden term "皇上".
     const before = structuredClone(state.mentionLog);
-    const probe = ctx("本宫累了。", []);
-    const offered = firstOffered(probe.policy.offeredContextIds);
-    const { req, provider } = ctx("皇上圣明。", [rankClaim("c4", correctRank, [offered])]);
+    const { req, provider } = ctx("皇上圣明。", []);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("GATE_REJECTED");
     expect(state.mentionLog).toEqual(before);

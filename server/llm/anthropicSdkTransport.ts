@@ -48,7 +48,7 @@ export function createAnthropicSdkTransport(apiKey: string): AnthropicTransport 
           return err({
             kind: "http",
             status: e.status,
-            ...(e.request_id ? { requestId: e.request_id } : {}),
+            ...(e.requestID ? { requestId: e.requestID } : {}),
             ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
           });
         }

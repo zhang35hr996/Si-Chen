@@ -147,7 +147,8 @@ export interface DialoguePolicyContext {
   audience: DialogueAudienceContext;
   reactionPlan?: ReactionPlan;
   beliefProjection: BeliefProjection;
-  offeredContextIds: ReadonlySet<string>;
+  /** Keys produced by `contextRefKey()` for every ref actually sent to the LLM. */
+  offeredRefKeys: ReadonlySet<string>;
   now: GameTime;
   /** Claims the speaker is authorized to make this turn (populated in T6+). */
   allowedClaims: readonly AuthorizedClaim[];
