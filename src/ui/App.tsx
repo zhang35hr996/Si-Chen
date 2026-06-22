@@ -54,6 +54,10 @@ import { HeirNameModal } from "./components/HeirNameModal";
 import { centennialDue } from "../engine/characters/heirs";
 import { randomPetName } from "../engine/characters/heirNames";
 import { PhysicianModal } from "./components/PhysicianModal";
+import { courtPhysician } from "../engine/characters/taiyi";
+import { planPhysicianVisit, buildConsultOptions, physicianVisitedThisMonth, type PhysicianSubject } from "../store/physician";
+import { inPalaceConsorts } from "../engine/characters/presence";
+import { heirPortraitSet, heirAge, listHeirsBySex } from "../engine/characters/heirs";
 import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
@@ -130,6 +134,9 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
   // 操作（或取消）结束后据此重开列表并定位回同一位侍君。非列表入口（紫宸殿卡片/召见）保持 null。
   const [consortListReturnId, setConsortListReturnId] = useState<string | null>(null);
   const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
+  const [physicianReaction, setPhysicianReaction] = useState<{ portraitSet: string; speakerName: string; lines: string[] } | null>(null);
+  const [physicianConsortPickerOpen, setPhysicianConsortPickerOpen] = useState(false);
+  const [physicianHeirPickerOpen, setPhysicianHeirPickerOpen] = useState(false);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string }[]>([]);
@@ -668,6 +675,26 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
       doAutosave();
       setReaction({ speakerId: "wei_sui", lines: ["太医奉旨调理，陛下凤体已无大碍。此事到此为止。"] });
     }
+  };
+
+  // 看诊执行（耗 1 AP，行动先于时间）。
+  const doConsult = (subject: PhysicianSubject) => {
+    const plan = planPhysicianVisit(liveState, subject, { ...liveState.calendar });
+    if (!plan) return; // 目标不可看诊（已故/本月已看），UI 不应发起
+    const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+    setPhysicianOpen(false);
+    setPhysicianConsortPickerOpen(false);
+    setPhysicianHeirPickerOpen(false);
+    doAutosave();
+    const physician = courtPhysician(store.getState().rngSeed);
+    const lines: string[] = [];
+    if (plan.cured) lines.push("太医诊脉施治，药石见效，病气已退。");
+    if (plan.actualHealing > 0) lines.push(`调理一番，气色稍复（健康 +${plan.actualHealing}）。`);
+    if (lines.length === 0) lines.push("太医诊脉后嘱咐，仍需静养调理。"); // 主体中性（太后/侍君/皇嗣皆可用，不写「陛下」）
+    setPhysicianReaction({ portraitSet: physician.portraitSet, speakerName: physician.name, lines });
+    if (settled.value.rolledOver) setReactionRollover(true);
   };
 
   // 候选承嗣注释管理（御书房）：同时段只能一位候选；传嗣/流产会自动清除。
@@ -1427,6 +1454,11 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
         <PhysicianModal
           selfCarrying={selfCarrying}
           consortCarrying={consortCarrying}
+          physicianName={courtPhysician(liveState.rngSeed).name}
+          consults={buildConsultOptions(db, liveState)}
+          onConsult={(k) => doConsult({ kind: k })}
+          onPickConsort={() => { setPhysicianConsortPickerOpen(true); }}
+          onPickHeir={() => { setPhysicianHeirPickerOpen(true); }}
           onAbort={abortPregnancy}
           onClose={() => setPhysicianOpen(false)}
         />
@@ -1492,6 +1524,101 @@ export function App({ store, logger }: { store: GameStore; logger?: RingBufferLo
             }
           }}
         />
+      )}
+      {physicianReaction && (
+        <CharacterReactionScreen
+          db={db}
+          store={store}
+          registry={registry}
+          portraitSet={physicianReaction.portraitSet}
+          speakerName={physicianReaction.speakerName}
+          lines={physicianReaction.lines}
+          onDone={() => {
+            setPhysicianReaction(null);
+            if (reactionQueue.length > 0) {
+              const [next, ...rest] = reactionQueue;
+              setReactionQueue(rest);
+              setReaction(next!);
+              return;
+            }
+            if (reactionRollover) {
+              setReactionRollover(false);
+              runCheckpoints(true);
+            }
+          }}
+        />
+      )}
+      {physicianConsortPickerOpen && (
+        <div className="modal-backdrop" onClick={() => setPhysicianConsortPickerOpen(false)}>
+          <div className="heir-list" onClick={(e) => e.stopPropagation()}>
+            <h2>为侍君请脉</h2>
+            <ul className="consort-list">
+              {inPalaceConsorts(db, liveState).map((c) => {
+                const visited = physicianVisitedThisMonth(liveState, { kind: "consort", id: c.id });
+                const portrait = registry.portrait(c.portraitSet, "neutral");
+                return (
+                  <li key={c.id} className="consort-list__row">
+                    <button
+                      type="button"
+                      className="consort-list__pick"
+                      disabled={visited}
+                      onClick={() => doConsult({ kind: "consort", id: c.id })}
+                    >
+                      <img
+                        className="consort-detail__portrait"
+                        src={portrait.url}
+                        alt={c.profile.name}
+                        data-fallback={portrait.isFallback || undefined}
+                      />
+                      <span className="consort-list__name">{c.profile.name}</span>
+                      {visited && <span className="consort-list__rank">本月已请脉</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <button type="button" onClick={() => setPhysicianConsortPickerOpen(false)}>取消</button>
+          </div>
+        </div>
+      )}
+      {physicianHeirPickerOpen && (
+        <div className="modal-backdrop" onClick={() => setPhysicianHeirPickerOpen(false)}>
+          <div className="heir-list" onClick={(e) => e.stopPropagation()}>
+            <h2>为皇嗣请脉</h2>
+            {(() => {
+              const heirs = liveState.resources.bloodline.heirs.filter((h) => h.lifecycle === "alive");
+              const named = [...listHeirsBySex(heirs, "daughter"), ...listHeirsBySex(heirs, "son")];
+              return (
+                <ul className="consort-list">
+                  {named.map(({ heir, name }) => {
+                    const visited = physicianVisitedThisMonth(liveState, { kind: "heir", id: heir.id });
+                    const portrait = registry.portrait(heirPortraitSet(heir, liveState.calendar), "neutral");
+                    return (
+                      <li key={heir.id} className="consort-list__row">
+                        <button
+                          type="button"
+                          className="consort-list__pick"
+                          disabled={visited}
+                          onClick={() => doConsult({ kind: "heir", id: heir.id })}
+                        >
+                          <img
+                            className="consort-detail__portrait"
+                            src={portrait.url}
+                            alt={name}
+                            data-fallback={portrait.isFallback || undefined}
+                          />
+                          <span className="consort-list__name">{name}　{heirAge(heir, liveState.calendar)}岁</span>
+                          {visited && <span className="consort-list__rank">本月已请脉</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
+            <button type="button" onClick={() => setPhysicianHeirPickerOpen(false)}>取消</button>
+          </div>
+        </div>
       )}
       {resourcePanelOpen && (
         <ResourcePanel state={liveState} onClose={() => setResourcePanelOpen(false)} />
