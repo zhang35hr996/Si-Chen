@@ -16,6 +16,9 @@ export function ReactionScreen({
   speakerId,
   lines,
   backgroundKey,
+  generatedLine,
+  onChoice,
+  choicePending,
   onDone,
 }: {
   db: ContentDB;
@@ -25,13 +28,34 @@ export function ReactionScreen({
   lines: string[];
   /** 覆盖背景（带时段变体）；缺省用玩家当前所在地点背景。 */
   backgroundKey?: string;
+  /**
+   * When provided, this line is rendered directly — no assembleDialogueRequest or mockProvider.
+   * The prop is authoritative: each new value atomically replaces the displayed line without
+   * going through local state, so there is no one-frame window where a stale turn's choices
+   * are visible and clickable.
+   */
+  generatedLine?: DialogueLine;
+  /** Called when the player clicks a choice button (generative path only). Does NOT advance the line. */
+  onChoice?: (choice: { id: string; text: string; tone?: string }) => void;
+  /** True while onChoice is in-flight; disables all choice buttons. */
+  choicePending?: boolean;
   onDone: () => void;
 }) {
   const state = useGameState(store);
   const [index, setIndex] = useState(0);
-  const [line, setLine] = useState<DialogueLine | null>(null);
+  // Scripted-path local state only. Generative path reads generatedLine directly from the prop.
+  const [scriptedLine, setScriptedLine] = useState<DialogueLine | null>(null);
+
+  // generatedLine is authoritative in the generative path — it is not mirrored into local state.
+  // Rendering directly from the prop means a new turn from App replaces the displayed line
+  // atomically in the same React render, with no gap where the previous turn's choices are active.
+  const line = generatedLine ?? scriptedLine;
 
   useEffect(() => {
+    // Generative path: prop is the source of truth; effect has nothing to do.
+    if (generatedLine !== undefined) return;
+
+    // Scripted path: assemble + run through mockProvider for name/pronoun resolution.
     let alive = true;
     const text = lines[index];
     if (text === undefined) return;
@@ -41,13 +65,13 @@ export function ReactionScreen({
       return;
     }
     void produceDialogueTurn(db, mockProvider, req.value, state).then((r) => {
-      if (alive && r.ok) setLine(r.value.line);
+      if (alive && r.ok) setScriptedLine(r.value.line);
       else if (alive) onDone();
     });
     return () => {
       alive = false;
     };
-  }, [index]); // intentional: re-run only when line index changes
+  }, [index, generatedLine]); // re-run when index advances (scripted) or generatedLine appears/disappears
 
   if (!line) return null;
 
@@ -61,10 +85,13 @@ export function ReactionScreen({
     : null;
 
   const next = () => (index + 1 < lines.length ? setIndex(index + 1) : onDone());
+  const hasChoices = generatedLine !== undefined && line.choices.length > 0;
 
   return (
     <main
       className="dialogue-screen"
+      data-generated={line?.meta.generated || undefined}
+      data-degraded={line?.meta.degraded || undefined}
       style={background ? { backgroundImage: `url("${background.url}")` } : undefined}
     >
       <img
@@ -74,13 +101,28 @@ export function ReactionScreen({
         data-fallback={portrait.isFallback || undefined}
       />
 
-      <section className="dialogue-screen__box" onClick={next}>
+      {/* When choices are visible, clicking the box must not advance/close the dialogue. */}
+      <section className="dialogue-screen__box" onClick={hasChoices ? undefined : next}>
         <p className="dialogue-screen__speaker">{line.speakerName}</p>
         <p className="dialogue-screen__line">{line.text}</p>
         <div className="dialogue-screen__choices">
-          <button type="button" onClick={next}>
-            （继续）
-          </button>
+          {hasChoices ? (
+            line.choices.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                data-tone={c.tone}
+                disabled={choicePending}
+                onClick={(event) => { event.stopPropagation(); onChoice?.(c); }}
+              >
+                {c.text}
+              </button>
+            ))
+          ) : (
+            <button type="button" onClick={(event) => { event.stopPropagation(); next(); }}>
+              （继续）
+            </button>
+          )}
         </div>
       </section>
     </main>

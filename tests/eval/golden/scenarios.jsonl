@@ -37,3 +37,4 @@
 {"id":"sc037","fixtureId":"base_palace","speakerId":"shen_zhibai","locationId":"zichendian","transcript":[{"speaker":"player","text":"凤后，今日政务繁多。"},{"speaker":"shen_zhibai","text":"陛下辛劳，臣后忧心，望陛下多加保重。"}],"expectations":{"gatePass":true,"forbiddenTexts":["皇上","太监","嫔妃"]}}
 {"id":"sc038","fixtureId":"base_palace","speakerId":"xu_qinghuan","locationId":"xianfugong","transcript":[{"speaker":"player","text":"今日朕有闲暇。"},{"speaker":"xu_qinghuan","text":"臣侍甚喜，请陛下移步内室。"}],"expectations":{"gatePass":true}}
 {"id":"sc039","fixtureId":"demoted_consort","speakerId":"wenya","locationId":"changmengong","sceneDirective":"释怀","expectations":{"gatePass":true,"forbiddenTexts":["皇上","奴婢","嫔妃"]}}
+{"id":"sc040","fixtureId":"forbidden_claim_test","speakerId":"wenya","locationId":"changmengong","expectations":{"gatePass":false}}

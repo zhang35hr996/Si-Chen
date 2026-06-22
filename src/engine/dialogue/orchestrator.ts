@@ -117,6 +117,7 @@ export function assembleDialogueRequest(
     beliefs: new GroundTruthBeliefProjection(state),
     state,
     audience,
+    forbiddenClaims: db.characters[speakerId]?.dialoguePolicy?.forbiddenClaims,  // NEW
   });
 
   const promptContext: DialoguePromptContext = {
@@ -231,7 +232,7 @@ function finalizeLine(
  * normalized to neutral fallback.
  *
  * Gate boundary (plan §8): these are TEXT-only checks. Numeric/state validation
- * lives in engine/effects (PR 6). A "reject" gate finding fails the line; a
+ * lives in engine/effects. A "reject" gate finding fails the line; a
  * "flag" finding serves it with meta.degraded set. All findings are logged so
  * they surface in the debug panel's diagnostics.
  *

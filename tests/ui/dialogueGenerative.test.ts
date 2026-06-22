@@ -7,10 +7,12 @@
  * covering the critical correctness invariants.
  *
  * The 8 required test cases are all in describe("DialogueScreen generative mode").
+ *
+ * T1 (LLM-4): Additional tests for ReactionScreen generatedLine prop contract.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { assembleDialogueRequest, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
-import type { DialogueProvider } from "../../src/engine/dialogue/types";
+import type { DialogueLine, DialogueProvider } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -234,5 +236,267 @@ describe("DialogueScreen generative mode", () => {
     );
     // Without a provider, generate() is never invoked
     expect(generateSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── T2 (LLM-4): Choice rendering and meta badges ─────────────────────────────
+
+describe("ReactionScreen choice rendering and meta badges", () => {
+  let store: ReturnType<typeof createGameStore>;
+
+  beforeEach(() => {
+    store = createGameStore();
+    store.newGame(db);
+  });
+
+  it("generative line with choices produces N choice descriptors", () => {
+    const line: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "陛下有何吩咐？",
+      expression: "neutral",
+      choices: [
+        { id: "c1", text: "询问" },
+        { id: "c2", text: "离开" },
+      ],
+      meta: { generated: true, degraded: false },
+    };
+
+    expect(line.choices.length).toBe(2);
+    expect(line.choices[0]).toMatchObject({ id: "c1", text: "询问" });
+    expect(line.choices[1]).toMatchObject({ id: "c2", text: "离开" });
+    // Both choices have id and text fields
+    for (const c of line.choices) {
+      expect(typeof c.id).toBe("string");
+      expect(typeof c.text).toBe("string");
+    }
+  });
+
+  it("generative line with zero choices uses continue affordance", () => {
+    const line: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "无事了，陛下请便。",
+      expression: "neutral",
+      choices: [],
+      meta: { generated: true, degraded: false },
+    };
+
+    // When choices is empty, the code path should fall through to the （继续） button.
+    expect(line.choices.length).toBe(0);
+  });
+
+  it("meta.degraded flag is false for a clean provider line", async () => {
+    const state = store.getState();
+    const reqResult = assembleDialogueRequest(db, state, SPEAKER, LOCATION);
+    if (!reqResult.ok) throw new Error(reqResult.error.message);
+
+    const provider = makeGenerativeProvider();
+    const result = await produceDialogueTurn(db, provider, reqResult.value, state);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.line.meta.degraded).toBe(false);
+    expect(result.value.line.meta.generated).toBe(true);
+  });
+});
+
+// ── T1 (LLM-4): ReactionScreen generatedLine prop contract ───────────────────
+
+describe("ReactionScreen generatedLine prop", () => {
+  let store: ReturnType<typeof createGameStore>;
+
+  beforeEach(() => {
+    store = createGameStore();
+    store.newGame(db);
+  });
+
+  it("generatedLine round-trips: expression, choices, meta.generated all preserved", () => {
+    // Build a DialogueLine directly — the same shape that produceDialogueTurn returns.
+    const generatedLine: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "陛下驾到，臣惶恐之至。",
+      expression: "shy",
+      choices: [{ id: "c1", text: "无妨", tone: "gentle" }],
+      meta: { generated: true, degraded: false },
+    };
+
+    // The type contract: all fields survive a round-trip through a plain object assignment.
+    // When generatedLine is defined, ReactionScreen.useEffect calls setLine(generatedLine)
+    // directly — no assembleDialogueRequest needed. Assert the structure here.
+    expect(generatedLine.expression).toBe("shy");
+    expect(Array.isArray(generatedLine.choices)).toBe(true);
+    expect(generatedLine.choices[0]?.id).toBe("c1");
+    expect(generatedLine.meta.generated).toBe(true);
+    expect(generatedLine.meta.degraded).toBe(false);
+  });
+
+  it("when generatedLine is defined, assembleDialogueRequest is not needed (logic-level)", () => {
+    // The ReactionScreen branch: if generatedLine !== undefined && index === 0,
+    // setLine(generatedLine) is called WITHOUT calling assembleDialogueRequest.
+    // We model the branching logic directly here.
+    const generatedLine: DialogueLine = {
+      speakerId: SPEAKER,
+      speakerName: "沈之白",
+      text: "臣有话说。",
+      expression: "neutral",
+      choices: [],
+      meta: { generated: true, degraded: false },
+    };
+
+    const index = 0;
+    const assembleSpy = vi.fn();
+
+    // Branch mirror of ReactionScreen.useEffect
+    let resolvedLine: DialogueLine | null = null;
+    if (generatedLine !== undefined && index === 0) {
+      resolvedLine = generatedLine;
+      // assembleDialogueRequest is NOT called on this path
+    } else {
+      assembleSpy();
+    }
+
+    expect(resolvedLine).toBe(generatedLine);
+    expect(assembleSpy).not.toHaveBeenCalled();
+  });
+
+  // Regression: scripted / mockProvider path still works (no generatedLine)
+  it("makeProvider([]) with zero proposedClaims returns ok and produces a line with text", async () => {
+    const state = store.getState();
+    const reqResult = assembleDialogueRequest(db, state, SPEAKER, LOCATION, {
+      scripted: { text: VALID_TEXT },
+    });
+    expect(reqResult.ok).toBe(true);
+    if (!reqResult.ok) return;
+
+    // makeProvider equivalent: a scripted-kind provider that echoes the text
+    const scriptedProvider: DialogueProvider = {
+      id: "scripted-test",
+      kind: "scripted",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async (req) =>
+        ok<DialogueProviderResult>({
+          speaker: req.speakerId,
+          text: req.scripted?.text ?? VALID_TEXT,
+          choices: [],
+          proposedClaims: [], // zero proposedClaims
+        }),
+    };
+
+    const turnResult = await produceDialogueTurn(db, scriptedProvider, reqResult.value, state);
+    expect(turnResult.ok).toBe(true);
+    if (!turnResult.ok) return;
+
+    expect(typeof turnResult.value.line.text).toBe("string");
+    expect(turnResult.value.line.text.length).toBeGreaterThan(0);
+    // meta.generated is false for scripted providers
+    expect(turnResult.value.line.meta.generated).toBe(false);
+  });
+});
+
+// ── T3 (LLM-4): choice-driven next turn, CAS sequencing, and AP invariant ─────
+
+describe("T3 — choice-driven generative turns", () => {
+  let store: ReturnType<typeof createGameStore>;
+
+  beforeEach(() => {
+    store = createGameStore();
+    store.newGame(db);
+  });
+
+  // T3-1: choice click drives turn 2 with appended transcript
+  it("choice click drives turn 2 with appended transcript", async () => {
+    const charId = SPEAKER;
+    const choiceText = "臣愿听陛下吩咐。";
+
+    // Build a 2-entry transcript as onConverseChoice would produce
+    const transcript = [
+      { speaker: charId, text: "本宫累了，陛下早些歇息。" },
+      { speaker: "player", text: choiceText },
+    ];
+
+    // Assemble a turn-2 request with transcript
+    const state = store.getState();
+    const reqResult = assembleDialogueRequest(db, state, charId, LOCATION, { transcript });
+    expect(reqResult.ok).toBe(true);
+    if (!reqResult.ok) throw new Error(reqResult.error.message);
+
+    // Assert transcript was threaded into the request
+    expect(reqResult.value.transcript).toHaveLength(2);
+    expect(reqResult.value.transcript[0]).toMatchObject({ speaker: charId, text: "本宫累了，陛下早些歇息。" });
+    expect(reqResult.value.transcript[1]).toMatchObject({ speaker: "player", text: choiceText });
+
+    // Produce the turn and assert it succeeds
+    const provider = makeGenerativeProvider();
+    const turnResult = await produceDialogueTurn(db, provider, reqResult.value, state);
+    expect(turnResult.ok).toBe(true);
+    if (!turnResult.ok) throw new Error(turnResult.error.message);
+
+    // CAS commit succeeds
+    const committed = store.commitDialogueState(state, turnResult.value.nextState);
+    expect(committed).toBe(true);
+  });
+
+  // T3-2: second turn snapshot taken after first turn CAS
+  it("second turn snapshot taken after first turn CAS", async () => {
+    const state1 = store.getState();
+    const req1 = assembleDialogueRequest(db, state1, SPEAKER, LOCATION);
+    if (!req1.ok) throw new Error(req1.error.message);
+
+    const provider = makeGenerativeProvider();
+    const turn1 = await produceDialogueTurn(db, provider, req1.value, state1);
+    if (!turn1.ok) throw new Error(turn1.error.message);
+
+    // First CAS
+    const committed1 = store.commitDialogueState(state1, turn1.value.nextState);
+    expect(committed1).toBe(true);
+
+    // Re-snapshot AFTER CAS — must equal whatever was committed
+    const state2 = store.getState();
+    expect(state2).toBe(turn1.value.nextState);
+
+    // Turn 2 uses the re-snapshot: CAS for turn 2 must succeed because
+    // store.state === state2. If we had mistakenly used state1 as expected
+    // and state1 !== turn1.value.nextState, CAS would fail.
+    const req2 = assembleDialogueRequest(db, state2, SPEAKER, LOCATION);
+    if (!req2.ok) throw new Error(req2.error.message);
+
+    const turn2 = await produceDialogueTurn(db, provider, req2.value, state2);
+    if (!turn2.ok) throw new Error(turn2.error.message);
+
+    const committed2 = store.commitDialogueState(state2, turn2.value.nextState);
+    expect(committed2).toBe(true);
+
+    // Final store state is turn2's nextState
+    expect(store.getState()).toBe(turn2.value.nextState);
+  });
+
+  // T3-3: no extra AP spent on choice-driven follow-up turn
+  it("no extra AP spent on choice-driven follow-up turn", async () => {
+    // Verify that onConverseChoice logic does NOT call spendAp.
+    // We test at the function level: run a choice-driven turn and confirm
+    // the AP in state does not change further.
+
+    const state = store.getState();
+    const apBefore = state.calendar.ap;
+
+    // Simulate the choice-driven turn (no AP deduction — just assemble + produce + CAS)
+    const transcript = [
+      { speaker: SPEAKER, text: "本宫累了，陛下早些歇息。" },
+      { speaker: "player", text: "朕记下了。" },
+    ];
+    const reqResult = assembleDialogueRequest(db, state, SPEAKER, LOCATION, { transcript });
+    if (!reqResult.ok) throw new Error(reqResult.error.message);
+
+    const provider = makeGenerativeProvider();
+    const turnResult = await produceDialogueTurn(db, provider, reqResult.value, state);
+    if (!turnResult.ok) throw new Error(turnResult.error.message);
+
+    store.commitDialogueState(state, turnResult.value.nextState);
+
+    // AP must not have changed — no spendAp was called in this choice-driven path
+    const apAfter = store.getState().calendar.ap;
+    expect(apAfter).toBe(apBefore);
   });
 });

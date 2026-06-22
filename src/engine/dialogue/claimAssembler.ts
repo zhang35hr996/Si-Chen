@@ -13,7 +13,7 @@
  *   - 按 authorizedClaimAggKey 聚合（不跨极性合并）
  *   - memory→event 链：仅当 memory.sourceEventId 对应的事件在 offeredEvents 中
  *   - sourceRefs 为空时排除 claim
- *   - forbiddenClaims: [] (T7 填充)
+ *   - forbiddenClaims: pass-through from character's dialoguePolicy
  */
 import type { BeliefProjection } from "../chronicle/belief";
 import type { GameState, CourtEvent, MemoryEntry } from "../state/types";
@@ -261,7 +261,7 @@ export function eventToAuthorizedClaims(
  *     the highest-strength modality wins.
  *   - Claims with empty sourceRefs are excluded from output.
  *
- * forbiddenClaims: empty for now (T7 will populate from belief contradictions).
+ * forbiddenClaims: passed through from character's dialoguePolicy (structured-source only).
  */
 export function assembleClaims(args: {
   speakerId: string;
@@ -271,6 +271,7 @@ export function assembleClaims(args: {
   beliefs: BeliefProjection;
   state: GameState;
   audience: DialogueAudienceContext;
+  forbiddenClaims?: readonly DialogueClaim[];  // NEW — from character's dialoguePolicy
 }): AssembledClaims {
   const { offeredMemories, offeredEvents, state } = args;
 
@@ -353,6 +354,5 @@ export function assembleClaims(args: {
     allowed.push({ claim, sourceRefs: refs });
   }
 
-  // forbiddenClaims: empty — T7 will derive these from belief contradictions
-  return { allowed, forbidden: [] };
+  return { allowed, forbidden: [...(args.forbiddenClaims ?? [])] };
 }

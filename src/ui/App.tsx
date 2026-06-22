@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import rawManifest from "../../assets/manifest.json";
 import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
@@ -16,7 +16,7 @@ import { getCharacterLocation } from "../engine/characters/presence";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue/orchestrator";
-import type { DialogueProvider } from "../engine/dialogue/types";
+import type { DialogueLine, DialogueProvider } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
@@ -113,7 +113,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   const [manageCharId, setManageCharId] = useState<string | null>(null);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
-  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string } | null>(null);
+  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   const [reactionRollover, setReactionRollover] = useState(false);
@@ -146,7 +146,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [physicianHeirPickerOpen, setPhysicianHeirPickerOpen] = useState(false);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
   const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
-  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string }[]>([]);
+  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   // 国库与国情一致：浮层，任意画面可开，关闭后回到原处（不切 view）。
   const [storehouseOpen, setStorehouseOpen] = useState(false);
@@ -164,6 +164,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
+  // Accumulated transcript across choice-driven turns within one converse() session.
+  const converseTranscriptRef = useRef<{ speaker: string; text: string }[]>([]);
+  // Single-flight guard for onConverseChoice — prevents concurrent choice requests.
+  const choiceInFlightRef = useRef(false);
+  const [choicePending, setChoicePending] = useState(false);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   // BGM effect: compute zone defensively (content may not be ok)
@@ -903,7 +908,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           if (committed) {
             doAutosave();
             const generatedLine = turnResult.value.line;
-            playReactions([{ speakerId: charId, lines: [generatedLine.text] }, ...decreeBeats], spend.value.rolledOver);
+            converseTranscriptRef.current = []; // reset transcript for new conversation
+            const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
+            playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver);
             return;
           }
           // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
@@ -915,6 +922,60 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // Fallback path: scripted lines
     playReactions([{ speakerId: charId, lines: fallbackLines }, ...decreeBeats], spend.value.rolledOver);
   };
+
+  // Handles a player choice click during a generative conversation turn.
+  // No extra AP is spent here — AP was already spent in converse().
+  const onConverseChoice = useCallback(async (choice: { id: string; text: string; tone?: string }) => {
+    if (!dialogueProvider || !reaction?.generatedLine) return;
+    // Single-flight guard: prevent concurrent choice requests (double-tap, etc.)
+    if (choiceInFlightRef.current) return;
+    choiceInFlightRef.current = true;
+    setChoicePending(true);
+
+    const currentLine = reaction.generatedLine;
+    const speakerId = reaction.speakerId;
+
+    try {
+      // Append speaker's last line + player's chosen response
+      const transcript = [
+        ...converseTranscriptRef.current,
+        { speaker: speakerId, text: currentLine.text },
+        { speaker: "player", text: choice.text },
+      ];
+      converseTranscriptRef.current = transcript;
+
+      // Re-snapshot state AFTER previous CAS was committed
+      const expectedState = store.getState();
+      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { transcript });
+      if (!reqResult.ok) {
+        // Assembly failed — strip generatedLine so normal onDone drains the queue/rollover
+        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        return;
+      }
+
+      const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+      if (!turnResult.ok) {
+        // Turn failed — same graceful path
+        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        return;
+      }
+
+      const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
+      if (!committed) {
+        // CAS failed (stale state) — same graceful path
+        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        return;
+      }
+
+      doAutosave();
+      const nextLine = turnResult.value.line;
+      // Update reaction state with the new generated line; carry decree beats from the queue
+      setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
+    } finally {
+      choiceInFlightRef.current = false;
+      setChoicePending(false);
+    }
+  }, [dialogueProvider, reaction, store, db, logger]);
 
   const transferTo = (carrierId: string) => {
     setSuccessorOpen(false);
@@ -1338,6 +1399,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           speakerId={reaction.speakerId}
           lines={reaction.lines}
           backgroundKey={reaction.backgroundKey}
+          generatedLine={reaction.generatedLine}
+          onChoice={reaction?.generatedLine && dialogueProvider ? onConverseChoice : undefined}
+          choicePending={choicePending}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {

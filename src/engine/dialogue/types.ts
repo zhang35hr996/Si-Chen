@@ -152,7 +152,7 @@ export interface DialoguePolicyContext {
   now: GameTime;
   /** Claims the speaker is authorized to make this turn (populated in T6+). */
   allowedClaims: readonly AuthorizedClaim[];
-  /** Claims the speaker must not make this turn (populated in T7+). */
+  /** Claims the speaker must not make this turn. */
   forbiddenClaims: readonly DialogueClaim[];
 }
 
