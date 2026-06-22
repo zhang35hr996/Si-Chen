@@ -1,10 +1,13 @@
 /**
  * Eval runner (T4, LLM-2).
  *
- * runEvalScenario drives a single EvalScenario through the full dialogue
- * pipeline using a deterministic fixture provider instead of a real LLM.
- * It calls the shared validation pipeline (validateDialogueProviderResult)
- * and collects structured diagnostics for offline quality analysis.
+ * runEvalScenarioWithProvider is the shared execution core: it assembles a
+ * DialogueRequest, runs the provider, validates the result, and evaluates
+ * expectations — identically for fixture and online modes. The caller
+ * supplies db/state and a makeProvider factory so the only differences
+ * between modes live at the call site, not inside this file.
+ *
+ * runEvalScenario is the fixture-mode convenience wrapper.
  */
 import {
   assembleDialogueRequest,
@@ -15,11 +18,15 @@ import { createEvalFixtureProvider } from "./fixtureProvider";
 import type { EvalFixtureDefinition } from "./fixtureProvider";
 import type {
   CheckStatus,
+  EvalExecutionMode,
   EvalExpectationFinding,
   EvalResult,
   EvalScenario,
 } from "./types";
-import type { DialogueValidationDiagnostics } from "../types";
+import type { DialogueProvider } from "../types";
+import type { ContentDB } from "../../content/loader";
+import type { GameState } from "../../state/types";
+import type { DialogueRequest, DialogueValidationDiagnostics } from "../types";
 
 // ── evaluateExpectations ──────────────────────────────────────────────────────
 
@@ -79,34 +86,44 @@ export function evaluateExpectations(
   return { status: findings.length === 0 ? "pass" : "fail", findings };
 }
 
-// ── runEvalScenario ───────────────────────────────────────────────────────────
+// ── runEvalScenarioWithProvider ───────────────────────────────────────────────
 
-export async function runEvalScenario(
+/**
+ * Shared execution core used by both fixture and online eval paths.
+ *
+ * The caller provides db/state and a makeProvider factory; everything else
+ * (request assembly, policy construction, validation, expectation evaluation)
+ * is identical between modes.
+ *
+ * @param makeProvider - receives the assembled DialogueRequest so fixture mode
+ *   can call fixture.responseFor(scenario, request) before creating the provider.
+ */
+export async function runEvalScenarioWithProvider(
   scenario: EvalScenario,
-  fixture: EvalFixtureDefinition,
+  db: ContentDB,
+  state: GameState,
+  makeProvider: (request: DialogueRequest) => DialogueProvider,
   evaluationId: string,
   runIndex: number,
+  model: string,
+  mode: EvalExecutionMode,
 ): Promise<EvalResult> {
   const runId = `${evaluationId}-r${runIndex}`;
 
-  // Base shape — filled in progressively below
   const base = {
     scenarioId: scenario.id,
     runId,
     runIndex,
     fixtureId: scenario.fixtureId,
-    model: "fixture",
-    mode: "fixture" as const,
+    model,
+    mode,
     sceneDirective: scenario.sceneDirective,
     claimFindings: [] as { code: string; claimId: string }[],
     textFindings: [] as { gate: string; severity: string; matched: string }[],
     expectationFindings: [] as EvalExpectationFinding[],
   };
 
-  // Step 1 — build db + state from fixture
-  const { db, state } = fixture.buildState();
-
-  // Step 2 — assemble request
+  // Step 1 — assemble request
   const requestResult = assembleDialogueRequest(
     db,
     state,
@@ -137,23 +154,18 @@ export async function runEvalScenario(
 
   const request = requestResult.value;
 
-  // Step 3 — build policy context
+  // Step 2 — build policy context
   const policy = buildDialoguePolicyContext(db, state, request);
 
-  // Step 4 — get fixture response
-  const fixtureResponse = fixture.responseFor(scenario, request);
+  // Step 3 — create provider (fixture mode calls responseFor here; online just returns real provider)
+  const provider = makeProvider(request);
 
-  // Step 5 — create fixture provider (or use injected override for tests)
-  const provider = fixture.providerFactory
-    ? fixture.providerFactory(scenario.speakerId)
-    : createEvalFixtureProvider(fixtureResponse, scenario.speakerId);
-
-  // Step 6 — call provider (timing wraps the generate call)
+  // Step 4 — call provider
   const start = Date.now();
   const raw = await provider.generate(request);
   const durationMs = Date.now() - start;
 
-  // Step 7 — provider error
+  // Step 5 — provider error
   if (!raw.ok) {
     const providerError = raw.error;
     const cause = "cause" in providerError ? providerError.cause : undefined;
@@ -182,16 +194,12 @@ export async function runEvalScenario(
     };
   }
 
-  // Step 8 — provider ok: run validation pipeline
+  // Step 6 — validation pipeline
   const generatedText = raw.value.text;
   const usage = raw.value.usage;
   const requestId = raw.value.providerMeta?.requestId;
 
   const outcome = validateDialogueProviderResult(db, provider, request, policy, raw.value);
-
-  let schemaStatus: CheckStatus = "pass";
-  let gateStatus: CheckStatus;
-  let servedText: string | undefined;
 
   const claimFindings = outcome.diagnostics.claimFindings.map((f) => ({
     code: f.code,
@@ -203,25 +211,19 @@ export async function runEvalScenario(
     matched: f.matched,
   }));
 
-  if (outcome.ok) {
-    gateStatus = "pass";
-    servedText = outcome.line.text;
-  } else {
-    gateStatus = "fail";
-    servedText = undefined;
-  }
+  const gateStatus: CheckStatus = outcome.ok ? "pass" : "fail";
+  const servedText = outcome.ok ? outcome.line.text : undefined;
 
-  // Step 9 — evaluate expectations
+  // Step 7 — evaluate expectations (same logic for fixture and online)
   const expResult = evaluateExpectations(
     scenario.expectations,
-    { schemaStatus, gateStatus, text: generatedText },
+    { schemaStatus: "pass", gateStatus, text: generatedText },
     outcome.diagnostics,
   );
 
-  // Step 10 — return complete result
   return {
     ...base,
-    schemaStatus,
+    schemaStatus: "pass",
     gateStatus,
     claimFindings,
     textFindings,
@@ -243,4 +245,30 @@ export async function runEvalScenario(
     expectationFindings: expResult.findings,
     durationMs,
   };
+}
+
+// ── runEvalScenario (fixture-mode convenience wrapper) ────────────────────────
+
+export async function runEvalScenario(
+  scenario: EvalScenario,
+  fixture: EvalFixtureDefinition,
+  evaluationId: string,
+  runIndex: number,
+): Promise<EvalResult> {
+  const { db, state } = fixture.buildState();
+  return runEvalScenarioWithProvider(
+    scenario,
+    db,
+    state,
+    (request) => {
+      const response = fixture.responseFor(scenario, request);
+      return fixture.providerFactory
+        ? fixture.providerFactory(scenario.speakerId)
+        : createEvalFixtureProvider(response, scenario.speakerId);
+    },
+    evaluationId,
+    runIndex,
+    "fixture",
+    "fixture",
+  );
 }

@@ -19,7 +19,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { runEvalScenario } from "../src/engine/dialogue/eval/evalRunner";
+import {
+  runEvalScenario,
+  runEvalScenarioWithProvider,
+} from "../src/engine/dialogue/eval/evalRunner";
 import type { EvalScenario } from "../src/engine/dialogue/eval/types";
 import type { EvalFixtureDefinition } from "../src/engine/dialogue/eval/fixtureProvider";
 
@@ -177,129 +180,29 @@ async function main() {
           }
           result = await runEvalScenario(scenario, fixture, evaluationId, runIndex);
         } else {
-          // Anthropic online mode: build a fixture-shaped wrapper around the real provider
+          // Anthropic online mode: use shared runEvalScenarioWithProvider so
+          // expectations are evaluated identically to fixture mode.
           const realProvider = anthropicProvider!;
-          const { assembleDialogueRequest, buildDialoguePolicyContext } = await import(
-            path.join(PROJECT_ROOT, "src/engine/dialogue/orchestrator.ts")
-          ) as typeof import("../src/engine/dialogue/orchestrator");
           const { createNewGameState } = await import(
             path.join(PROJECT_ROOT, "src/engine/state/newGame.ts")
           ) as typeof import("../src/engine/state/newGame");
           const { loadRealContent } = await import(
             path.join(PROJECT_ROOT, "tests/helpers/contentFixture.ts")
           ) as typeof import("../tests/helpers/contentFixture");
-          const { validateDialogueProviderResult } = await import(
-            path.join(PROJECT_ROOT, "src/engine/dialogue/orchestrator.ts")
-          ) as typeof import("../src/engine/dialogue/orchestrator");
 
           const db = loadRealContent();
           const state = createNewGameState(db);
 
-          const requestResult = assembleDialogueRequest(db, state, scenario.speakerId, scenario.locationId, {
-            targetId: scenario.targetId,
-            sceneDirective: scenario.sceneDirective,
-            transcript: scenario.transcript,
-          });
-
-          if (!requestResult.ok) {
-            console.log(`fail: assembly_failed (${Date.now() - start}ms)`);
-            const partialResult = {
-              scenarioId: scenario.id,
-              runId: `${evaluationId}-r${runIndex}`,
-              runIndex,
-              fixtureId: scenario.fixtureId,
-              model: model!,
-              mode: "online" as const,
-              sceneDirective: scenario.sceneDirective,
-              schemaStatus: "not_run" as const,
-              gateStatus: "not_run" as const,
-              // expectations not evaluated in online mode (LLM-2): requires fixture-controlled responses
-              expectationStatus: "not_run" as const,
-              claimFindings: [],
-              textFindings: [],
-              expectationFindings: [],
-              durationMs: Date.now() - start,
-            };
-            outputStream.write(JSON.stringify(partialResult) + "\n");
-            continue;
-          }
-
-          const request = requestResult.value;
-          const policy = buildDialoguePolicyContext(db, state, request);
-
-          const runStart = Date.now();
-          const raw = await realProvider.generate(request);
-          const durationMs = Date.now() - runStart;
-
-          if (!raw.ok) {
-            console.log(`fail: ${raw.error.kind} (${durationMs}ms)`);
-            const errorResult = {
-              scenarioId: scenario.id,
-              runId: `${evaluationId}-r${runIndex}`,
-              runIndex,
-              fixtureId: scenario.fixtureId,
-              model: model!,
-              mode: "online" as const,
-              sceneDirective: scenario.sceneDirective,
-              schemaStatus: "not_run" as const,
-              gateStatus: "not_run" as const,
-              // expectations not evaluated in online mode (LLM-2): requires fixture-controlled responses
-              expectationStatus: "not_run" as const,
-              claimFindings: [],
-              textFindings: [],
-              expectationFindings: [],
-              providerError: { kind: raw.error.kind },
-              durationMs,
-            };
-            outputStream.write(JSON.stringify(errorResult) + "\n");
-            continue;
-          }
-
-          const outcome = validateDialogueProviderResult(db, realProvider, request, policy, raw.value);
-          const generatedText = raw.value.text;
-          const usage = raw.value.usage;
-          const requestId = raw.value.providerMeta?.requestId;
-
-          const claimFindings = outcome.diagnostics.claimFindings.map((f) => ({
-            code: f.code,
-            claimId: f.claimId,
-          }));
-          const textFindings = outcome.diagnostics.textFindings.map((f) => ({
-            gate: f.gate,
-            severity: f.severity,
-            matched: f.matched,
-          }));
-
-          const gateStatus = outcome.ok ? "pass" as const : "fail" as const;
-          const servedText = outcome.ok ? outcome.line.text : undefined;
-
-          result = {
-            scenarioId: scenario.id,
-            runId: `${evaluationId}-r${runIndex}`,
+          result = await runEvalScenarioWithProvider(
+            scenario,
+            db,
+            state,
+            () => realProvider,
+            evaluationId,
             runIndex,
-            fixtureId: scenario.fixtureId,
-            model: model!,
-            mode: "online" as const,
-            sceneDirective: scenario.sceneDirective,
-            schemaStatus: "pass" as const,
-            gateStatus,
-            claimFindings,
-            textFindings,
-            text: generatedText,
-            ...(servedText !== undefined ? { servedText } : {}),
-            ...(usage !== undefined ? {
-              usage: {
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-              },
-            } : {}),
-            ...(requestId !== undefined ? { requestId } : {}),
-            // expectations not evaluated in online mode (LLM-2): requires fixture-controlled responses
-            expectationStatus: "not_run" as const,
-            expectationFindings: [],
-            durationMs,
-          };
+            model!,
+            "online",
+          );
         }
 
         const elapsed = Date.now() - start;
