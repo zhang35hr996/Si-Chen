@@ -178,7 +178,7 @@ export class SceneRunner {
             this.preState!,
             node.speaker,
             this.scene!.locationId,
-            { text: node.text, ...(node.expression !== undefined ? { expression: node.expression } : {}) },
+            { scripted: { text: node.text, ...(node.expression !== undefined ? { expression: node.expression } : {}) } },
           );
           if (!request.ok) return this.fail(request.error);
           const produced = await produceDialogueLine(this.db, this.provider, request.value, this.logger);

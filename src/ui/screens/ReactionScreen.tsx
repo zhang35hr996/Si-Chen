@@ -35,7 +35,7 @@ export function ReactionScreen({
     let alive = true;
     const text = lines[index];
     if (text === undefined) return;
-    const req = assembleDialogueRequest(db, state, speakerId, state.playerLocation, { text });
+    const req = assembleDialogueRequest(db, state, speakerId, state.playerLocation, { scripted: { text } });
     if (!req.ok) {
       onDone();
       return;

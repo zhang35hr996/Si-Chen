@@ -10,6 +10,7 @@
 import { createHttpAnthropicTransport } from "../src/engine/dialogue/providers/httpAnthropicTransport";
 import { createDialogueProvider } from "../src/engine/dialogue/providers/remoteProvider";
 import type { DialogueRequest } from "../src/engine/dialogue/types";
+import type { DialoguePromptContext } from "../src/engine/dialogue/promptPayload";
 
 async function main() {
   const transport = createHttpAnthropicTransport("http://localhost:3001/api/llm/anthropic");
@@ -57,6 +58,17 @@ async function main() {
       addressRules: [],
     },
     transcript: [],
+    promptContext: {
+      speakerDisplayName: "烟波",
+      rankDisplay: { kind: "ranked", id: "貴人", name: "貴人", grade: "正六品", selfRefs: { toPlayer: ["臣妾"], formal: ["妾"] } },
+      audience: { targetId: "player", targetRole: "sovereign", presentCharacterIds: ["player"], privacy: "semi_private" },
+      relevantMemories: [],
+      reactionPlan: undefined,
+      knownEvents: [],
+      allowedClaims: [],
+      forbiddenClaims: [],
+      choiceCandidates: [],
+    } satisfies DialoguePromptContext,
   };
 
   console.log("[smoke] sending request…");

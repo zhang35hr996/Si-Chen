@@ -2,10 +2,52 @@ import { ok, err, type Result } from "../../infra/result";
 import { dialogueToolOutputSchema, dialogueToolOutputJsonSchema,
          type DialogueProviderResult, type ProviderError, type ProviderResult } from "../providerContract";
 import type { DialogueProvider, DialogueRequest, DialogueGenerationOptions } from "../types";
+import type { CharacterRank } from "../../content/schemas";
+import type { AudienceRole } from "../reactionTypes";
+import { compilePromptPayload } from "../promptPayload";
 
 const TOOL_NAME = "emit_dialogue_line";
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_TOKENS = 800;
+
+// ── WORLD_RULES_TEXT — exactly 12 rules ──────────────────────────────────────
+
+export const WORLD_RULES_TEXT = `
+你是一位宫廷叙事引擎，负责生成单个角色在一轮对话中的中文台词。
+
+1. 只生成 speaker 的本轮台词，严禁替玩家发言或叙述引擎行为。
+2. 严格遵守 currentScene.directive 指定的本轮行为目标，不得自行改变。
+3. 使用 speaker.standing.selfRefs 中适合当前场合的自称（面向皇帝用 toPlayer；正式场合用 formal）。
+4. 对皇帝称"陛下"；不得使用 etiquette 中 forbiddenTerms 所列称谓。
+5. 不得在台词中透出 JSON 字段名、规则说明或内部 ID。
+6. 不得凭空引入 payload 未提供的事实或事件。
+7. proposedClaims 只记录台词中明确表达的事实，不填隐含信息。
+8. 引用 relevantMemories 中记忆的 claim 必须填写对应 memory id 在 sourceContextIds。
+9. 不确定信息不得用断言语气（"确实"、"一定"），应用 "听说"、"好像" 等。
+10. forbiddenClaims 中的事实内容一律不在台词中出现。
+11. allowedClaims 为空不代表禁止问候、情绪表达或主观感受。
+12. 台词长度适中，符合人物身份与场景私密度（audience.privacy）。
+`.trim();
+
+// ── renderEtiquetteBlock ──────────────────────────────────────────────────────
+
+export function renderEtiquetteBlock(
+  etiquette: DialogueRequest["etiquette"],
+  speakerSelfRefs: CharacterRank["selfRefs"],
+  audienceRole: AudienceRole,
+): string {
+  return [
+    `[礼仪约束]`,
+    `允许称谓（allowedTerms）：${etiquette.allowedTerms.join("、") || "（无）"}`,
+    `禁用称谓（forbiddenTerms）：${etiquette.forbiddenTerms.join("、") || "（无）"}`,
+    `称谓规则（addressRules）：`,
+    ...etiquette.addressRules.map(
+      (r) => `  - ${r.rank}：自称 ${r.selfRefs.toPlayer.join("/")}，称对方 ${r.addressedAs}`,
+    ),
+    `speaker 对皇帝自称（selfRefs.toPlayer）：${speakerSelfRefs.toPlayer.join("、")}`,
+    `受众身份（audienceRole）：${audienceRole}`,
+  ].join("\n");
+}
 
 export interface AnthropicToolUseResponse {
   id?: string;
@@ -13,9 +55,16 @@ export interface AnthropicToolUseResponse {
   content: { type: string; name?: string; input?: unknown }[];
   usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
 }
+
+export interface AnthropicSystemBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface AnthropicRequestPayload {
   model: string; max_tokens: number;
-  system: { type: "text"; text: string }[];
+  system: AnthropicSystemBlock[];
   messages: { role: "user"; content: string }[];
   tools: { name: string; description: string; strict: true; input_schema: unknown }[];
   tool_choice: { type: "tool"; name: string; disable_parallel_tool_use: true };
@@ -28,18 +77,22 @@ export interface AnthropicTransportFailure { kind: "http" | "network" | "offline
 export interface AnthropicTransport { send(payload: AnthropicRequestPayload, options?: TransportOptions): Promise<Result<AnthropicTransportResult, AnthropicTransportFailure>>; }
 
 export function buildAnthropicToolRequest(request: DialogueRequest, model: string, options?: DialogueGenerationOptions): AnthropicRequestPayload {
-  // LLM-1 minimal payload. NO scripted text (avoids the model copying fallback prose). LLM-2 adds the full compiler + caching.
-  const system = `你只把既定意图写成符合人物身份的中文台词。proposedClaims 只填台词中真正说出口、且来源在请求中提供的事实。`;
-  const user = JSON.stringify({
-    speakerId: request.speakerId,
-    profile: request.speakerContext.profile,
-    voice: request.speakerContext.voice,
-    relevantMemories: request.speakerContext.relevantMemories,
-  });
+  const payload = compilePromptPayload(request);
   return {
     model, max_tokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
-    system: [{ type: "text", text: system }],
-    messages: [{ role: "user", content: user }],
+    system: [
+      { type: "text", text: WORLD_RULES_TEXT, cache_control: { type: "ephemeral" } },
+      {
+        type: "text",
+        text: renderEtiquetteBlock(
+          request.etiquette,
+          payload.speaker.standing.selfRefs,
+          payload.audience.targetRole,
+        ),
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [{ role: "user", content: JSON.stringify(payload) }],
     tools: [{ name: TOOL_NAME, description: "提交角色台词及其结构化事实。", strict: true, input_schema: dialogueToolOutputJsonSchema }],
     tool_choice: { type: "tool", name: TOOL_NAME, disable_parallel_tool_use: true },
   };
@@ -52,7 +105,7 @@ export function createAnthropicProvider(opts: { model: string; transport: Anthro
   return {
     id: `anthropic:${opts.model}`,
     kind: "generative",
-    capabilities: { strictTools: true, promptCaching: false, batch: false },
+    capabilities: { strictTools: true, promptCaching: true, batch: false },
     async generate(request, options): Promise<ProviderResult<DialogueProviderResult>> {
       if (options?.signal?.aborted) return err<ProviderError>({ kind: "cancelled", retryable: false }); // pre-aborted
       const payload = buildAnthropicToolRequest(request, opts.model, options);

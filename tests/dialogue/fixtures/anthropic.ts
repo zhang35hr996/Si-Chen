@@ -9,7 +9,7 @@ const db = loadRealContent();
 const state = createNewGameState(db);
 
 export function makeRequest(speakerId: string) {
-  const r = assembleDialogueRequest(db, state, speakerId, "zichendian");
+  const r = assembleDialogueRequest(db, state, speakerId, "zichendian", {});
   if (!r.ok) throw new Error(r.error.message);
   return r.value;
 }

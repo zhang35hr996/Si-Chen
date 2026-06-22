@@ -21,10 +21,18 @@ import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
 import { mapProviderErrorToGameError } from "./providerError";
 import {
+  toPromptMemory,
+  type DialogueSpeakerStanding,
+  type DialoguePromptContext,
+} from "./promptPayload";
+import {
+  type DialogueAssemblyOptions,
   type DialogueLine,
   type DialogueProvider,
   type DialoguePolicyContext,
   type DialogueRequest,
+  type DialogueValidationDiagnostics,
+  type DialogueValidationOutcome,
 } from "./types";
 
 /** 尊长（elder）合成 standing 的占位位分 id；故意不入 db.ranks，下游按无位分降级。 */
@@ -37,8 +45,9 @@ export function assembleDialogueRequest(
   state: GameState,
   speakerId: string,
   locationId: string,
-  scripted?: { text: string; expression?: string },
+  options: DialogueAssemblyOptions = {},
 ): Result<DialogueRequest, GameError> {
+  const targetId = options.targetId ?? "player";
   const character = db.characters[speakerId];
   if (!character) {
     return err(aiError("BAD_SPEAKER", `unknown speaker "${speakerId}"`));
@@ -47,37 +56,54 @@ export function assembleDialogueRequest(
   // 位分角色用 rank.selfRefs；尊长（elder）走「尊长对话路径」：无位分，
   // 自称取 character.selfRefs，并合成占位 standing 使其台词可经统一 orchestrator 渲染。
   let contextStanding: CharacterStanding & { selfRefs: CharacterRank["selfRefs"] };
+  let rankDisplay: DialogueSpeakerStanding;
+  let rank: CharacterRank | undefined;
   if (standing) {
-    const rank = db.ranks[standing.rank];
+    rank = db.ranks[standing.rank];
     if (!rank) {
       return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" holds unknown rank "${standing.rank}"`));
     }
     contextStanding = { ...standing, selfRefs: rank.selfRefs };
+    rankDisplay = { kind: "ranked", id: standing.rank, name: rank.name, grade: rank.grade, selfRefs: rank.selfRefs };
   } else if (character.kind === "elder") {
     contextStanding = {
       rank: ELDER_STANDING_RANK,
       favor: 0,
       selfRefs: character.selfRefs ?? DEFAULT_ELDER_SELF_REFS,
     };
+    rankDisplay = { kind: "unranked", role: character.profile.role, selfRefs: contextStanding.selfRefs };
   } else {
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
   }
+  const memCtx = buildMemoryContext(
+    state,
+    { speakerId },
+    // audienceId, targetId, speakerId all use the resolved targetId — single source.
+    { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
+  );
+  const audience = buildAudienceContext(state, db, { speakerId, targetId });
+  const promptContext: DialoguePromptContext = {
+    speakerDisplayName: resolveDisplayName(character, contextStanding, rank),
+    rankDisplay,
+    audience,
+    relevantMemories: memCtx.activatedMemories.map(toPromptMemory),
+    reactionPlan: undefined,
+    knownEvents: [],
+    allowedClaims: [],
+    forbiddenClaims: [],
+    choiceCandidates: [],
+  };
+  const { scripted, sceneDirective, transcript } = options;
   return ok({
     speakerId,
-    targetId: "player",
+    targetId,
     locationId,
     time: toGameTime(state.calendar),
     speakerContext: {
       profile: character.profile,
       voice: character.voice,
       standing: contextStanding,
-      relevantMemories: buildMemoryContext(
-        state,
-        { speakerId },
-        // audienceId 与 targetId 字段须保持一致（此处 targetId 硬编码为 "player"，audienceId 同步）。
-        // 若将来 assembleDialogueRequest 接收动态 targetId 参数，须同步更新此处。
-        { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId, locationId },
-      ).activatedMemories,
+      relevantMemories: memCtx.activatedMemories,
       stances: character.stances ?? [],
     },
     etiquette: {
@@ -85,8 +111,10 @@ export function assembleDialogueRequest(
       forbiddenTerms: db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
-    transcript: [], // transcripts are excluded from memory v0 (plan §7)
+    sceneDirective,
+    transcript: transcript ?? [],
     ...(scripted !== undefined ? { scripted } : {}),
+    promptContext,
   });
 }
 
@@ -201,21 +229,143 @@ export function buildDialoguePolicyContext(
   state: GameState,
   request: DialogueRequest,
 ): DialoguePolicyContext {
-  const { speakerId, targetId, time: now } = request;
+  void db; // intentionally unused: callers keep passing db; internally not needed
+  const { time: now } = request;
   // knownEvents are intentionally NOT part of offeredContextIds: they are built
   // in memoryContext but never placed on DialogueRequest yet, so the provider
   // never receives them — the gate must not bless a source it wasn't sent.
   const offeredContextIds = new Set<string>(
     request.speakerContext.relevantMemories.map((m) => m.id),
   );
-  const audience = buildAudienceContext(state, db, { speakerId, targetId });
+  // Single-source invariant: audience comes from request.promptContext.audience,
+  // not from an independent buildAudienceContext call. This guarantees the gate
+  // sees exactly the same audience context the LLM was given.
+  const audience = request.promptContext.audience;
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
   return { audience, beliefProjection, offeredContextIds, now };
 }
 
 /**
- * Full policy-aware pipeline: provider call → claim gate → finalizeLine → memory write-back.
+ * Shared validation pipeline (T3, LLM-2).
+ *
+ * Validation order (intentional):
+ *   1. Speaker check   → WRONG_SPEAKER  (identity must match before anything else)
+ *   2. Claim gate      → CLAIM_REJECTED (semantic / belief / etiquette)
+ *   3. Text gate       → GATE_REJECTED  (forbidden lexicon, self-ref, template leaks)
+ *
+ * Always returns `diagnostics` — even on ok=false the caller (eval runner, T4)
+ * gets whatever was gathered before the first failure.
+ *
+ * Exported so the T4 eval runner can call it directly without re-invoking a
+ * provider (it receives an already-parsed DialogueProviderResult from fixtures).
+ */
+export function validateDialogueProviderResult(
+  db: ContentDB,
+  provider: DialogueProvider,
+  request: DialogueRequest,
+  policy: DialoguePolicyContext,
+  response: DialogueProviderResult,
+  logger?: RingBufferLogger,
+): DialogueValidationOutcome {
+  const diagnostics: DialogueValidationDiagnostics = {
+    claimFindings: [],
+    textFindings: [],
+    acceptedClaims: [],
+  };
+
+  // ── 1. Speaker check ──────────────────────────────────────────────
+  if (response.speaker !== request.speakerId) {
+    return {
+      ok: false,
+      error: aiError("WRONG_SPEAKER", `asked for "${request.speakerId}", got "${response.speaker}"`),
+      diagnostics,
+    };
+  }
+
+  // ── 2. Claim gate ─────────────────────────────────────────────────
+  const claimResult = validateDialogueClaims({
+    speakerId: request.speakerId,
+    audience: policy.audience,
+    beliefs: policy.beliefProjection,
+    offeredContextIds: policy.offeredContextIds,
+    proposedClaims: response.proposedClaims,
+  });
+  diagnostics.claimFindings = claimResult.findings;
+  diagnostics.acceptedClaims = claimResult.acceptedClaims;
+  for (const f of claimResult.findings) {
+    logger?.logGameError(
+      aiError("CLAIM_VIOLATION", f.message, {
+        severity: "warn",
+        context: { code: f.code, claimId: f.claimId, provider: provider.id },
+      }),
+    );
+  }
+  if (!claimResult.ok) {
+    return {
+      ok: false,
+      error: aiError("CLAIM_REJECTED", `provider "${provider.id}" claim gate failed`, {
+        context: { findings: claimResult.findings.map((f) => ({ code: f.code, claimId: f.claimId })) },
+      }),
+      diagnostics,
+    };
+  }
+
+  // ── 3. Text gate + expression normalize + line build ─────────────
+  const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  const findings: GateFinding[] = [
+    ...scanDialogueText(response.text, gateCtx),
+    ...response.choices.flatMap((c) => scanDialogueText(c.text, gateCtx, { skipIdentityGates: true })),
+  ];
+  diagnostics.textFindings = findings;
+  for (const finding of findings) {
+    logger?.logGameError(
+      aiError(`GATE_${finding.gate.toUpperCase()}`, finding.message, {
+        severity: finding.severity === "reject" ? "error" : "warn",
+        context: { provider: provider.id, speaker: request.speakerId, matched: finding.matched },
+      }),
+    );
+  }
+  const rejects = findings.filter((f) => f.severity === "reject");
+  if (rejects.length > 0) {
+    return {
+      ok: false,
+      error: aiError("GATE_REJECTED", `provider "${provider.id}" output failed ${rejects.length} text gate(s)`, {
+        context: { findings: rejects.map((f) => ({ gate: f.gate, matched: f.matched })) },
+      }),
+      diagnostics,
+    };
+  }
+  const degraded = findings.length > 0;
+
+  const character = db.characters[request.speakerId]!;
+  const expression =
+    response.expression !== undefined && character.expressions.includes(response.expression)
+      ? response.expression
+      : "neutral";
+
+  const line: DialogueLine = {
+    speakerId: request.speakerId,
+    speakerName: resolveDisplayName(
+      character,
+      request.speakerContext.standing,
+      db.ranks[request.speakerContext.standing.rank],
+    ),
+    text: response.text,
+    expression,
+    choices: response.choices.map((choice) => ({
+      id: choice.id,
+      text: choice.text,
+      ...(choice.tone !== undefined ? { tone: choice.tone } : {}),
+    })),
+    meta: { generated: provider.kind === "generative", degraded },
+  };
+
+  return { ok: true, line, diagnostics };
+}
+
+/**
+ * Full policy-aware pipeline: provider call → validateDialogueProviderResult → memory write-back.
  * Returns both the rendered line and the updated GameState (mentionLog updated).
  */
 export async function produceDialogueLineWithPolicy(
@@ -229,43 +379,16 @@ export async function produceDialogueLineWithPolicy(
   const raw = await provider.generate(request);
   if (!raw.ok) return err(mapProviderErrorToGameError(raw.error));
 
-  const response: DialogueProviderResult = raw.value;
-
-  // ── claim gate ────────────────────────────────────────────────────
-  const claimResult = validateDialogueClaims({
-    speakerId: request.speakerId,
-    audience: policy.audience,
-    beliefs: policy.beliefProjection,
-    offeredContextIds: policy.offeredContextIds,
-    proposedClaims: response.proposedClaims,
-  });
-  for (const f of claimResult.findings) {
-    logger?.logGameError(
-      aiError("CLAIM_VIOLATION", f.message, {
-        severity: "warn",
-        context: { code: f.code, claimId: f.claimId, provider: provider.id },
-      }),
-    );
-  }
-  if (!claimResult.ok) {
-    return err(
-      aiError("CLAIM_REJECTED", `provider "${provider.id}" claim gate failed`, {
-        context: { findings: claimResult.findings.map((f) => ({ code: f.code, claimId: f.claimId })) },
-      }),
-    );
-  }
-
-  // ── speaker check + text gates + line build ───────────────────────
-  const lineResult = finalizeLine(db, provider, request, response, logger);
-  if (!lineResult.ok) return lineResult;
+  const outcome = validateDialogueProviderResult(db, provider, request, policy, raw.value, logger);
+  if (!outcome.ok) return err(outcome.error);
 
   // ── memory write-back ─────────────────────────────────────────────
   const nextState = recordMentionedContext(
     state,
-    claimResult.acceptedClaims,
+    outcome.diagnostics.acceptedClaims,
     { speakerId: request.speakerId, audienceId: request.targetId, now: policy.now },
     policy.offeredContextIds,
   );
 
-  return ok({ line: lineResult.value, nextState });
+  return ok({ line: outcome.line, nextState });
 }

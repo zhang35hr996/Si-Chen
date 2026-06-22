@@ -12,7 +12,7 @@ const db = loadRealContent();
 const state = createNewGameState(db);
 
 const requestFor = (speakerId: string, text = "台词。"): DialogueRequest => {
-  const r = assembleDialogueRequest(db, state, speakerId, "zichendian", { text });
+  const r = assembleDialogueRequest(db, state, speakerId, "zichendian", { scripted: { text } });
   if (!r.ok) throw new Error(r.error.message);
   return r.value;
 };

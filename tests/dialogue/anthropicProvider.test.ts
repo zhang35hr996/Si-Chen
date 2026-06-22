@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { createAnthropicProvider } from "../../src/engine/dialogue/providers/anthropicProvider";
+import { createAnthropicProvider, buildAnthropicToolRequest, WORLD_RULES_TEXT, renderEtiquetteBlock } from "../../src/engine/dialogue/providers/anthropicProvider";
 import { okTransport, makeRequest, hangingTransport, msg, msgTransport, failTransport } from "./fixtures/anthropic";
 import type { AnthropicTransport } from "../../src/engine/dialogue/providers/anthropicProvider";
+import { assembleDialogueRequest } from "../../src/engine/dialogue/orchestrator";
+import { loadRealContent } from "../helpers/contentFixture";
+import { createNewGameState } from "../../src/engine/state/newGame";
 
 describe("anthropicProvider — success", () => {
   it("forces a single tool, parses input, derives speaker, fills meta from envelope", async () => {
@@ -15,8 +18,140 @@ describe("anthropicProvider — success", () => {
     expect(r.value.text).toBe("本宫安好。");
     expect(r.value.choices).toEqual([]);
     expect(r.value.providerMeta).toMatchObject({ provider: "anthropic", model: "claude-sonnet-4-6", requestId: "req_x" });
-    expect(provider.capabilities).toEqual({ strictTools: true, promptCaching: false, batch: false });
+    expect(provider.capabilities).toEqual({ strictTools: true, promptCaching: true, batch: false });
     expect(toolChoice).toEqual({ type: "tool", name: "emit_dialogue_line", disable_parallel_tool_use: true });
+  });
+});
+
+// ── WORLD_RULES_TEXT snapshot ─────────────────────────────────────────────────
+
+describe("WORLD_RULES_TEXT", () => {
+  it("contains all 12 rule markers", () => {
+    for (let i = 1; i <= 12; i++) {
+      expect(WORLD_RULES_TEXT).toContain(`${i}.`);
+    }
+  });
+
+  it("does not contain rule 13", () => {
+    expect(WORLD_RULES_TEXT).not.toContain("13.");
+  });
+
+  it("contains key phrase 严禁替玩家发言", () => {
+    expect(WORLD_RULES_TEXT).toContain("严禁替玩家发言");
+  });
+
+  it("contains key phrase 不得凭空引入", () => {
+    expect(WORLD_RULES_TEXT).toContain("不得凭空引入");
+  });
+
+  it("contains sourceContextIds", () => {
+    expect(WORLD_RULES_TEXT).toContain("sourceContextIds");
+  });
+
+  it("contains forbiddenClaims", () => {
+    expect(WORLD_RULES_TEXT).toContain("forbiddenClaims");
+  });
+
+  it("contains audience.privacy (not currentScene.audience.privacy)", () => {
+    expect(WORLD_RULES_TEXT).toContain("audience.privacy");
+    expect(WORLD_RULES_TEXT).not.toContain("currentScene.audience.privacy");
+  });
+});
+
+// ── renderEtiquetteBlock ──────────────────────────────────────────────────────
+
+describe("renderEtiquetteBlock", () => {
+  const etiquette: import("../../src/engine/dialogue/types").DialogueRequest["etiquette"] = {
+    allowedTerms: ["陛下", "圣上"],
+    forbiddenTerms: ["皇上", "老爷"],
+    addressRules: [
+      { rank: "fenghou", selfRefs: { toPlayer: ["本宫"], formal: ["臣妾"] }, addressedAs: "陛下" },
+    ],
+  };
+  const speakerSelfRefs: import("../../src/engine/content/schemas").CharacterRank["selfRefs"] = {
+    toPlayer: ["本宫"],
+    formal: ["臣妾"],
+  };
+  const audienceRole: import("../../src/engine/dialogue/reactionTypes").AudienceRole = "sovereign";
+
+  it("includes allowedTerms", () => {
+    const block = renderEtiquetteBlock(etiquette, speakerSelfRefs, audienceRole);
+    expect(block).toContain("陛下");
+    expect(block).toContain("圣上");
+  });
+
+  it("includes forbiddenTerms", () => {
+    const block = renderEtiquetteBlock(etiquette, speakerSelfRefs, audienceRole);
+    expect(block).toContain("皇上");
+    expect(block).toContain("老爷");
+  });
+
+  it("includes addressRules content", () => {
+    const block = renderEtiquetteBlock(etiquette, speakerSelfRefs, audienceRole);
+    expect(block).toContain("fenghou");
+  });
+
+  it("includes speaker selfRefs.toPlayer", () => {
+    const block = renderEtiquetteBlock(etiquette, speakerSelfRefs, audienceRole);
+    expect(block).toContain("本宫");
+  });
+
+  it("includes audienceRole", () => {
+    const block = renderEtiquetteBlock(etiquette, speakerSelfRefs, audienceRole);
+    expect(block).toContain("sovereign");
+  });
+});
+
+// ── buildAnthropicToolRequest — caching structure ─────────────────────────────
+
+describe("buildAnthropicToolRequest — caching structure", () => {
+  const req = makeRequest("shen_zhibai");
+
+  it("system has exactly 2 blocks", () => {
+    const payload = buildAnthropicToolRequest(req, "claude-sonnet-4-6");
+    expect(payload.system).toHaveLength(2);
+  });
+
+  it("all system blocks have cache_control.type === ephemeral", () => {
+    const payload = buildAnthropicToolRequest(req, "claude-sonnet-4-6");
+    for (const block of payload.system) {
+      expect(block.cache_control).toEqual({ type: "ephemeral" });
+    }
+  });
+
+  it("system.length stays 2 regardless of request content", () => {
+    const reqWithDirective = makeRequest("shen_zhibai");
+    // Inject sceneDirective to test it doesn't add a 3rd block
+    (reqWithDirective as unknown as Record<string, unknown>).sceneDirective = "今日风雪。";
+    const payload = buildAnthropicToolRequest(reqWithDirective, "claude-sonnet-4-6");
+    expect(payload.system).toHaveLength(2);
+  });
+
+  it("messages[0].content includes speaker.standing.kind", () => {
+    const payload = buildAnthropicToolRequest(req, "claude-sonnet-4-6");
+    const content = payload.messages[0]!.content;
+    expect(content).toContain("kind");
+  });
+
+  it("messages[0].content includes currentScene.directive when sceneDirective set", () => {
+    const db2 = loadRealContent();
+    const state2 = createNewGameState(db2);
+    const r2 = assembleDialogueRequest(db2, state2, "shen_zhibai", "zichendian", { sceneDirective: "今日风雪，气氛压抑。" });
+    if (!r2.ok) return;
+    const payload = buildAnthropicToolRequest(r2.value, "claude-sonnet-4-6");
+    const content = payload.messages[0]!.content;
+    expect(content).toContain("今日风雪，气氛压抑。");
+  });
+
+  it("messages[0].content has no ownerId", () => {
+    const payload = buildAnthropicToolRequest(req, "claude-sonnet-4-6");
+    const content = payload.messages[0]!.content;
+    expect(content).not.toContain("ownerId");
+  });
+
+  it("capabilities.promptCaching === true", () => {
+    const provider = createAnthropicProvider({ model: "claude-sonnet-4-6", transport: { send: async () => ({ ok: false, error: { kind: "offline" } } as never) } });
+    expect(provider.capabilities.promptCaching).toBe(true);
   });
 });
 
