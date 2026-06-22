@@ -7,18 +7,19 @@ import type { GameTime } from "../calendar/time";
 import type { GameState } from "../state/types";
 import { appendMention } from "./mention";
 import type { ProposedClaim } from "./claims";
+import { contextRefKey } from "./types";
 
 export function recordMentionedContext(
   state: GameState,
   acceptedClaims: readonly ProposedClaim[],
   mention: { speakerId: string; audienceId: string; now: GameTime },
-  offeredContextIds: ReadonlySet<string>,
+  offeredRefKeys: ReadonlySet<string>,
 ): GameState {
   const ids = new Set<string>();
   for (const pc of acceptedClaims) {
     for (const ref of pc.sourceRefs) {
       // Only memory-kind refs are written back to the mentionLog
-      if (ref.kind === "memory" && offeredContextIds.has(ref.id)) {
+      if (ref.kind === "memory" && offeredRefKeys.has(contextRefKey(ref))) {
         ids.add(ref.id);
       }
     }

@@ -53,14 +53,14 @@ function makeProvider(proposedClaims: ProposedClaim[], text = VALID_TEXT): Dialo
 }
 
 describe("buildDialoguePolicyContext", () => {
-  it("builds audience, beliefProjection, offeredContextIds, now from the request", () => {
+  it("builds audience, beliefProjection, offeredRefKeys, now from the request", () => {
     const policy = buildDialoguePolicyContext(db, state, makeRequest());
     expect(policy.audience.targetId).toBe("player");
     expect(policy.audience.targetRole).toBe("sovereign");
     expect(policy.now).toMatchObject({ year: 1, month: 1, period: "early", dayIndex: 0 });
     expect(typeof policy.beliefProjection.getFact).toBe("function");
-    // shen_zhibai has memories → offeredContextIds is non-empty
-    expect(policy.offeredContextIds.size).toBeGreaterThan(0);
+    // shen_zhibai has memories → offeredRefKeys is non-empty
+    expect(policy.offeredRefKeys.size).toBeGreaterThan(0);
   });
 
   it("rejects an unknown speaker at request assembly (validated once, upstream)", () => {
@@ -69,12 +69,10 @@ describe("buildDialoguePolicyContext", () => {
     if (!result.ok) expect(result.error.code).toBe("BAD_SPEAKER");
   });
 
-  it("offeredContextIds is derived from the request actually sent (single source, no re-compute)", () => {
-    // Single-source contract: offeredContextIds MUST be derived from the exact
-    // relevantMemories carried by the DialogueRequest handed to the provider,
-    // never from an independent buildMemoryContext call (which can drift once
-    // targetId becomes dynamic). Tampering the request's memories must show up
-    // verbatim in offeredContextIds.
+  it("offeredRefKeys is derived from the request actually sent (single source, no re-compute)", () => {
+    // Single-source contract: offeredRefKeys MUST be derived from the exact
+    // relevantMemories carried by the DialogueRequest handed to the provider.
+    // Tampering the request's memories must be reflected verbatim in offeredRefKeys.
     const request = makeRequest();
     const original = request.speakerContext.relevantMemories[0];
     expect(original).toBeDefined();
@@ -85,10 +83,12 @@ describe("buildDialoguePolicyContext", () => {
         ...request.speakerContext,
         relevantMemories: [{ ...original!, id: sentinelId }],
       },
+      promptContext: { ...request.promptContext, knownEvents: [] },
     };
     const policy = buildDialoguePolicyContext(db, state, tampered);
-    expect(policy.offeredContextIds).toBeInstanceOf(Set);
-    expect([...policy.offeredContextIds]).toEqual([sentinelId]);
+    expect(policy.offeredRefKeys).toBeInstanceOf(Set);
+    expect(policy.offeredRefKeys.has(`memory:${sentinelId}`)).toBe(true);
+    expect(policy.offeredRefKeys.size).toBe(1);
   });
 });
 
@@ -105,33 +105,37 @@ describe("produceDialogueTurn — chain (c): no declarations", () => {
   });
 });
 
-describe("produceDialogueTurn — chain (a): happy path with valid claim", () => {
-  it("accepts a claim whose sourceContextId is in offeredContextIds; mentionLog grows", async () => {
+describe("produceDialogueTurn — chain (a): CLOSED mode — no factual claims allowed", () => {
+  it("passes with empty proposedClaims in CLOSED mode (no chronicle events → allowedClaims=[])", async () => {
+    // Fresh state has no chronicle events → assembleDialogueRequest produces allowedClaims=[].
+    // Empty proposedClaims should still pass (no claims to gate).
     const request = makeRequest();
-    const policy = makePolicy();
-
-    // Use the first real offered context id (from shen_zhibai's actual memories)
-    const firstOfferedId = [...policy.offeredContextIds][0]!;
-
-    const validClaim: ProposedClaim = {
-      claim: {
-        id: "c1",
-        predicate: "holds_rank",
-        subjectId: SPEAKER,
-        object: "fenghou",
-        modality: "assert",
-      },
-      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
-      modality: "assert",
-      certainty: 90,
-    };
-
-    const result = await produceDialogueTurn(db, makeProvider([validClaim]), request, state);
+    expect(request.promptContext.allowedClaims).toHaveLength(0); // CLOSED
+    const result = await produceDialogueTurn(db, makeProvider([]), request, state);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.line.text).toBe(VALID_TEXT);
-    // mentionLog should have grown because the claim was accepted and written back
-    expect(result.value.nextState.mentionLog.length).toBeGreaterThan(state.mentionLog.length);
+    expect(result.value.nextState.mentionLog.length).toBe(state.mentionLog.length);
+  });
+
+  it("rejects factual claim with claim_not_allowed when allowedClaims=[] (CLOSED E2E — P0.1)", async () => {
+    // Verifies P0.1 fix: empty allowedClaims must pass to gate as CLOSED, not silently drop to OPEN.
+    // Before fix: allowedClaims=[] was converted to undefined → OPEN mode → claim passed.
+    // After fix: allowedClaims=[] is passed directly → CLOSED → claim_not_allowed.
+    const request = makeRequest();
+    expect(request.promptContext.allowedClaims).toHaveLength(0);
+    const firstMemoryId = request.speakerContext.relevantMemories[0]!.id;
+    const factualClaim: ProposedClaim = {
+      claim: { id: "c_closed", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: firstMemoryId }],
+      modality: "assert",
+      certainty: 80,
+    };
+    const result = await produceDialogueTurn(db, makeProvider([factualClaim]), request, state);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("CLAIM_REJECTED");
+    }
   });
 });
 
@@ -139,7 +143,7 @@ describe("produceDialogueTurn — chain (b): claim contradicts belief", () => {
   it("rejects a claim that contradicts what shen_zhibai should believe about their rank", async () => {
     const request = makeRequest();
 
-    const firstOfferedId = [...makePolicy().offeredContextIds][0]!;
+    const firstOfferedId = request.speakerContext.relevantMemories[0]!.id;
 
     // shen_zhibai is fenghou; claim says "zhaoyi" → contradicts belief
     const wrongRankClaim: ProposedClaim = {
@@ -164,7 +168,7 @@ describe("produceDialogueTurn — chain (b): claim contradicts belief", () => {
 });
 
 describe("produceDialogueTurn — chain (d): unknown source context", () => {
-  it("rejects a claim with a sourceContextId not in offeredContextIds", async () => {
+  it("rejects a claim with a sourceRef not in offered memories", async () => {
     const request = makeRequest();
 
     const unknownSrcClaim: ProposedClaim = {

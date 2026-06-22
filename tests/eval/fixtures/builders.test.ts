@@ -29,6 +29,7 @@ import { GroundTruthBeliefProjection } from "../../../src/engine/chronicle/belie
 import { buildAudienceContext } from "../../../src/engine/dialogue/audience";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+import { contextRefKey } from "../../../src/engine/dialogue/types";
 
 // ── Load scenarios from JSONL ─────────────────────────────────────────────────
 
@@ -295,7 +296,7 @@ describe("consort_with_grievance (T11)", () => {
 describe("claim_explicitly_forbidden (T11)", () => {
   it("source-independent forbidden claim fires regardless of sourceRef", () => {
     // claim_explicitly_forbidden is checked before source intersection (§3 step 2).
-    // Even with a valid sourceRef in offeredContextIds, the claim is blocked.
+    // Even with a valid sourceRef in offeredRefKeys, the claim is blocked.
     const db = loadRealContent();
     const state = createNewGameState(db);
     const SPEAKER = "lu_huaijin";
@@ -320,7 +321,7 @@ describe("claim_explicitly_forbidden (T11)", () => {
       speakerId: SPEAKER,
       audience,
       beliefs,
-      offeredContextIds: new Set([RANK_EVENT_ID]),
+      offeredRefKeys: new Set([contextRefKey({ kind: "event", id: RANK_EVENT_ID })]),
       proposedClaims: [ranClaim],
       forbiddenClaims: [ranClaim.claim], // source-independent: only fact+polarity checked
     });
@@ -361,7 +362,7 @@ describe("coresidence_conflict (T11)", () => {
       speakerId: SPEAKER,
       audience,
       beliefs,
-      offeredContextIds: new Set([RANK_EVENT_ID]),
+      offeredRefKeys: new Set([contextRefKey({ kind: "event", id: RANK_EVENT_ID })]),
       proposedClaims: [residesClaim],
       allowedClaims: [], // CLOSED: no authorized claims
     });

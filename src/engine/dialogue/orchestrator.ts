@@ -252,7 +252,7 @@ async function produceDialogueLine(
 /**
  * Build a DialoguePolicyContext from the ALREADY-ASSEMBLED DialogueRequest.
  *
- * Single-source invariant (plan §gate boundary): `offeredContextIds` is derived
+ * Single-source invariant (plan §gate boundary): `offeredRefKeys` is derived
  * directly from `request.speakerContext.relevantMemories` — the exact memories
  * handed to the provider — never from an independent buildMemoryContext call.
  * Re-computing would let the gate's notion of "what was offered" drift from what
@@ -273,26 +273,21 @@ export function buildDialoguePolicyContext(
   const { time: now } = request;
   const { allowedClaims, forbiddenClaims } = request.promptContext;
 
-  // offeredContextIds: union of all source refs that were actually sent to the LLM.
-  // Includes memory refs (from relevantMemories) + event refs (from knownEvents) +
-  // any additional refs from allowedClaims.sourceRefs that point to offered context.
-  // Single-source invariant: derived from what was actually placed on the request.
-  const offeredContextIds = new Set<string>([
-    // Memory refs: memory ids of the relevantMemories handed to the provider
-    ...request.speakerContext.relevantMemories.map((m) => m.id),
-    // Event refs: event ids in the knownEvents prompt window
-    ...request.promptContext.knownEvents.map((e) => e.id),
-    // AllowedClaims sourceRefs: all ref keys from the authorized claim set
-    ...allowedClaims.flatMap((ac) => ac.sourceRefs.map(contextRefKey)),
+  // offeredRefKeys: contextRefKey-format keys for every context item actually sent to the LLM.
+  // Only memories and events in the prompt window are considered "offered" — allowedClaims.sourceRefs
+  // are NOT added here (they are authorization constraints, not offered content).
+  // Single-source invariant: derived solely from what was placed on the request.
+  const offeredRefKeys = new Set<string>([
+    ...request.speakerContext.relevantMemories.map((m) => contextRefKey({ kind: "memory", id: m.id })),
+    ...request.promptContext.knownEvents.map((e) => contextRefKey({ kind: "event", id: e.id })),
   ]);
 
   // Single-source invariant: audience comes from request.promptContext.audience,
-  // not from an independent buildAudienceContext call. This guarantees the gate
-  // sees exactly the same audience context the LLM was given.
+  // not from an independent buildAudienceContext call.
   const audience = request.promptContext.audience;
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
-  return { audience, beliefProjection, offeredContextIds, now, allowedClaims, forbiddenClaims };
+  return { audience, beliefProjection, offeredRefKeys, now, allowedClaims, forbiddenClaims };
 }
 
 /**
@@ -333,20 +328,15 @@ export function validateDialogueProviderResult(
   }
 
   // ── 2. Claim gate ─────────────────────────────────────────────────
-  // Pass allowedClaims/forbiddenClaims from the policy so the gate enforces
-  // CLOSED mode when the speaker has event-authorized claims from T6 assembleClaims.
-  // When allowedClaims is [] (no events produced authorized claims), the gate runs
-  // in backward-compat open mode (allowedClaims: undefined). This preserves compatibility
-  // for scenarios with no chronicle events while enabling CLOSED mode for event-rich turns.
+  // Always pass allowedClaims — even [] means CLOSED (no factual claims permitted).
+  // Only a missing/undefined allowedClaims falls back to open mode (legacy callers).
   const claimResult = validateDialogueClaims({
     speakerId: request.speakerId,
     audience: policy.audience,
     beliefs: policy.beliefProjection,
-    offeredContextIds: policy.offeredContextIds,
+    offeredRefKeys: policy.offeredRefKeys,
     proposedClaims: response.proposedClaims,
-    ...(policy.allowedClaims.length > 0
-      ? { allowedClaims: policy.allowedClaims }
-      : {}),
+    allowedClaims: policy.allowedClaims,
     ...(policy.forbiddenClaims.length > 0
       ? { forbiddenClaims: policy.forbiddenClaims }
       : {}),
@@ -449,7 +439,7 @@ async function produceDialogueLineWithPolicy(
     state,
     outcome.diagnostics.acceptedClaims,
     { speakerId: request.speakerId, audienceId: request.targetId, now: policy.now },
-    policy.offeredContextIds,
+    policy.offeredRefKeys,
   );
 
   // ── event reaction write-back (T10) ───────────────────────────────

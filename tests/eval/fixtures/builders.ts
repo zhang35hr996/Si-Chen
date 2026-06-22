@@ -160,7 +160,7 @@ const consort_with_known_event: EvalFixtureDefinition = {
     return { db, state: injectRankEvent(state) };
   },
   responseFor() {
-    // Propose holds_rank claim citing the event — event is in offeredContextIds
+    // Propose holds_rank claim citing the event — event is in offeredRefKeys
     return {
       text: "侍身已蒙陛下擢升，承徽之位铭记于心。",
       proposedClaims: [
@@ -471,7 +471,7 @@ const source_mismatch_test: EvalFixtureDefinition = {
   buildState() {
     const { db, state } = loadBase();
     const stateWithEvent = injectRankEvent(state);
-    // Also inject the grievance memory so GRIEVANCE_MEMORY_ID is in offeredContextIds
+    // Also inject the grievance memory so GRIEVANCE_MEMORY_ID is in offeredRefKeys
     const existingStore = stateWithEvent.memories["lu_huaijin"]!;
     const grievanceMemory: MemoryEntry = {
       id: GRIEVANCE_MEMORY_ID,

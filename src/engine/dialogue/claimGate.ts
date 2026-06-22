@@ -20,7 +20,7 @@ import { claimToFactKey, type ProposedClaim } from "./claims";
 import type { DialogueClaim } from "./claims";
 import type { DialogueAudienceContext } from "./audience";
 import type { AuthorizedClaim } from "./types";
-import { claimPolarity, claimFactKey } from "./types";
+import { claimPolarity, claimFactKey, contextRefKey, MODALITY_STRENGTH } from "./types";
 
 export type ClaimViolationCode =
   | "contradicts_speaker_belief" | "reveals_unknown_fact" | "claims_excessive_certainty"
@@ -33,7 +33,8 @@ export interface ClaimGateContext {
   speakerId: string;
   audience: DialogueAudienceContext;
   beliefs: BeliefProjection;
-  offeredContextIds: ReadonlySet<string>;
+  /** Keys produced by `contextRefKey()` for every ref actually sent to the LLM. */
+  offeredRefKeys: ReadonlySet<string>;
   proposedClaims: readonly ProposedClaim[];
   /** If defined (even as []), claims must match at least one authorized claim. Undefined = backward-compat open mode. */
   allowedClaims?: readonly AuthorizedClaim[];
@@ -73,13 +74,14 @@ export function isContradictedByBelief(claim: DialogueClaim, believed: string | 
  * Returns true when `proposed` is covered by `authorized`:
  *   - same fact key (predicate + subjectId + object)
  *   - same polarity (claimPolarity(modality))
- *   - modality strength ≤ authorized.claim.certaintyCeiling (if set)
- *   - at least one proposed sourceRef.id is in both authorized.sourceRefs AND offeredRefs
+ *   - proposed modality strength ≤ authorized modality strength
+ *   - proposed.certainty ≤ authorized.claim.certaintyCeiling (0–100, if set)
+ *   - ALL proposed sourceRefs are in both authorized.sourceRefs AND offeredRefKeys
  */
 export function isCoveredByAllowedClaim(
   proposed: ProposedClaim,
   authorized: AuthorizedClaim,
-  offeredRefs: ReadonlySet<string>,
+  offeredRefKeys: ReadonlySet<string>,
 ): boolean {
   const p = proposed.claim;
   const a = authorized.claim;
@@ -87,23 +89,33 @@ export function isCoveredByAllowedClaim(
   // Fact key match: predicate + subjectId + object
   if (p.predicate !== a.predicate) return false;
   if (p.subjectId !== a.subjectId) return false;
-  // object: treat undefined as "no object" — must match exactly
   if (p.object !== a.object) return false;
 
   // Polarity match
   if (claimPolarity(p.modality) !== claimPolarity(a.modality)) return false;
 
-  // Modality strength ceiling check (if authorized has a certaintyCeiling)
-  if (a.certaintyCeiling !== undefined) {
-    // Map modality to ordinal: rumor=0, suspect=1, assert=2
-    const STRENGTH: Record<string, number> = { rumor: 0, suspect: 1, assert: 2 };
-    const proposedStrength = STRENGTH[p.modality] ?? -1;
-    if (proposedStrength > a.certaintyCeiling) return false;
+  // Modality strength: proposed must not exceed authorized modality
+  const proposedStrength = MODALITY_STRENGTH[p.modality];
+  const authorizedStrength = MODALITY_STRENGTH[a.modality];
+  if (
+    proposedStrength !== undefined &&
+    authorizedStrength !== undefined &&
+    proposedStrength > authorizedStrength
+  ) {
+    return false;
   }
 
-  // Source intersection: at least one proposed sourceRef id must be in authorized.sourceRefs ∩ offeredRefs
-  const authorizedRefIds = new Set(authorized.sourceRefs.map((r) => r.id));
-  return proposed.sourceRefs.some((r) => authorizedRefIds.has(r.id) && offeredRefs.has(r.id));
+  // Certainty ceiling: proposed.certainty (0–100) must not exceed authorized ceiling
+  if (a.certaintyCeiling !== undefined && proposed.certainty > a.certaintyCeiling) {
+    return false;
+  }
+
+  // Source intersection: ALL proposed sourceRefs must be in authorized.sourceRefs ∩ offeredRefKeys
+  const authorizedKeys = new Set(authorized.sourceRefs.map(contextRefKey));
+  return proposed.sourceRefs.every((ref) => {
+    const key = contextRefKey(ref);
+    return authorizedKeys.has(key) && offeredRefKeys.has(key);
+  });
 }
 
 /**
@@ -165,10 +177,6 @@ function findingsFor(pc: ProposedClaim, ctx: ClaimGateContext): ClaimGateFinding
   const allowedClaims = ctx.allowedClaims;
 
   if (allowedClaims !== undefined) {
-    // Build offeredRefs set: for source intersection check, we use offeredContextIds
-    // which are the memory/context ids offered to the LLM
-    const offeredRefs: ReadonlySet<string> = ctx.offeredContextIds;
-
     // Phase 1 (§3a/3b): Is there ANY allowed claim for this fact+polarity?
     const factPolarityMatch = allowedClaims.find((auth) => matchesFactAndPolarity(pc, auth));
 
@@ -178,9 +186,9 @@ function findingsFor(pc: ProposedClaim, ctx: ClaimGateContext): ClaimGateFinding
       return out;
     }
 
-    // Phase 2 (§3c/3d): Full check — modality ceiling + source intersection
-    if (!isCoveredByAllowedClaim(pc, factPolarityMatch, offeredRefs)) {
-      // 3c: fact+polarity matched but source or modality ceiling fails → source_not_authorized
+    // Phase 2 (§3c/3d): Full check — modality strength + certainty ceiling + source intersection
+    if (!isCoveredByAllowedClaim(pc, factPolarityMatch, ctx.offeredRefKeys)) {
+      // 3c: fact+polarity matched but modality/certainty/source fails → source_not_authorized
       out.push({ code: "source_not_authorized", claimId: id, message: "claim 来源不在授权来源交集中" });
       return out;
     }
@@ -192,7 +200,7 @@ function findingsFor(pc: ProposedClaim, ctx: ClaimGateContext): ClaimGateFinding
   // ── §3 Step 4/5: belief gate ──────────────────────────────────────────────────
   if (!eventAuthorized) {
     // Legacy source check (backward-compat when allowedClaims is undefined)
-    if (pc.sourceRefs.some((ref) => !ctx.offeredContextIds.has(ref.id))) {
+    if (pc.sourceRefs.some((ref) => !ctx.offeredRefKeys.has(contextRefKey(ref)))) {
       out.push({ code: "unknown_source_context", claimId: id, message: "claim 引用了本次未提供的来源" });
     }
   }
