@@ -12,7 +12,7 @@ import { GroundTruthBeliefProjection } from "../chronicle/belief";
 import { aiError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
-import type { CharacterStanding, GameState } from "../state/types";
+import type { CharacterStanding, EventReactionRecord, GameState } from "../state/types";
 import { buildAudienceContext } from "./audience";
 import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
@@ -434,12 +434,40 @@ async function produceDialogueLineWithPolicy(
   if (!outcome.ok) return err(outcome.error);
 
   // ── memory write-back ─────────────────────────────────────────────
-  const nextState = recordMentionedContext(
+  let nextState = recordMentionedContext(
     state,
     outcome.diagnostics.acceptedClaims,
     { speakerId: request.speakerId, audienceId: request.targetId, now: policy.now },
     policy.offeredContextIds,
   );
+
+  // ── event reaction write-back (T10) ───────────────────────────────
+  // Atomic with mention writeback: both apply to the same nextState accumulation.
+  // Guards: generative provider only; reactionSourceEventId must be present;
+  // idempotent — skip if (speakerId, audienceId, eventId) triple already present.
+  const reactionEventId = request.promptContext.reactionSourceEventId;
+  if (reactionEventId !== undefined) {
+    const speakerId = request.speakerId;
+    const audienceId = request.targetId;
+    const alreadyReacted = nextState.eventReactionLog.some(
+      (r) =>
+        r.speakerId === speakerId &&
+        r.audienceId === audienceId &&
+        r.eventId === reactionEventId,
+    );
+    if (!alreadyReacted) {
+      const reactionRecord: EventReactionRecord = {
+        speakerId,
+        audienceId,
+        eventId: reactionEventId,
+        reactedAt: toGameTime(state.calendar),
+      };
+      nextState = {
+        ...nextState,
+        eventReactionLog: [...nextState.eventReactionLog, reactionRecord],
+      };
+    }
+  }
 
   return ok({ line: outcome.line, nextState });
 }
@@ -452,8 +480,8 @@ async function produceDialogueLineWithPolicy(
  * Routes by provider kind:
  *   - `scripted`: text gate only (no claim gate, no mention/reaction writeback).
  *     Returns `{ line, nextState: state }` (state unchanged).
- *   - `generative`: full policy pipeline (claim gate + mention writeback).
- *     Returns `{ line, nextState }` with mentionLog updated.
+ *   - `generative`: full policy pipeline (claim gate + mention writeback + reaction writeback).
+ *     Returns `{ line, nextState }` with mentionLog and eventReactionLog updated atomically.
  *
  * Error cases:
  *   - `generative` provider + `request.scripted` set → `invalid_combination`.
