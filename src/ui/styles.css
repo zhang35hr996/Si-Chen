@@ -3372,3 +3372,34 @@ button:active:enabled {
 @media (prefers-reduced-motion: reduce) {
   .scene-shell__stage { animation: none; }
 }
+
+/* ── 候见提示（非阻塞，置于 SceneShell narrative 槽；无 backdrop）─────────── */
+.audience-prompt {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  max-width: 44rem;
+  padding: 1rem 1.2rem;
+  background: linear-gradient(180deg, rgba(26, 20, 15, 0.86), rgba(16, 12, 10, 0.9));
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--gold-dim);
+  border-radius: 7px;
+  box-shadow: var(--shadow-card);
+  animation: fade 0.4s ease both;
+}
+.audience-prompt__portrait {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid var(--line-gold);
+  flex: 0 0 auto;
+}
+.audience-prompt__body { flex: 1; min-width: 0; }
+.audience-prompt__visitor { margin: 0 0 0.25rem; display: flex; gap: 0.6rem; align-items: baseline; }
+.audience-prompt__name { color: var(--gold-bright); font-family: var(--font-display); font-size: 1.05rem; }
+.audience-prompt__title { color: var(--muted); font-size: 0.82rem; }
+.audience-prompt__message { margin: 0 0 0.7rem; color: var(--cream); line-height: 1.6; }
+.audience-prompt__actions { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.audience-prompt__reason { color: var(--cinnabar-soft); font-size: 0.8rem; }
+@media (prefers-reduced-motion: reduce) { .audience-prompt { animation: none; } }
