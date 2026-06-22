@@ -152,4 +152,29 @@ describe("audienceReconciliationEffects", () => {
     const state = baseState({ flags: { "audience:pending:ev_a": true, "audience:remindAt:ev_a": 999 } });
     expect(audienceReconciliationEffects(db, state, "zichendian")).toEqual([]);
   });
+
+  it("clears pending for a condition-lapsed event of this host", () => {
+    // host is zichendian but condition currently can't hold here → no longer eligible
+    const db = dbWith(mkEvent({ condition: { atLocation: "yanhe_gong" } }));
+    const state = baseState({ flags: { "audience:pending:ev_a": true } });
+    expect(audienceReconciliationEffects(db, state, "zichendian")).toEqual(
+      expect.arrayContaining([{ type: "flag", key: "audience:pending:ev_a", value: false }]),
+    );
+  });
+
+  it("clears pending for a missing (deleted) event", () => {
+    const db = dbWith(mkEvent({})); // db has ev_a only; flag points at a ghost id
+    const state = baseState({ flags: { "audience:pending:ev_ghost": true } });
+    expect(audienceReconciliationEffects(db, state, "zichendian")).toEqual(
+      expect.arrayContaining([{ type: "flag", key: "audience:pending:ev_ghost", value: false }]),
+    );
+  });
+
+  it("clears pending for an event that is no longer request_audience", () => {
+    const db = dbWith(mkEvent({ presentation: { mode: "auto_on_enter" } }));
+    const state = baseState({ flags: { "audience:pending:ev_a": true } });
+    expect(audienceReconciliationEffects(db, state, "zichendian")).toEqual(
+      expect.arrayContaining([{ type: "flag", key: "audience:pending:ev_a", value: false }]),
+    );
+  });
 });

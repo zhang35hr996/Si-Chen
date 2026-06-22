@@ -66,4 +66,16 @@ describe("pickAutoStartEvent", () => {
     const broke = { ...at("zichendian"), calendar: { ...at("zichendian").calendar, ap: 0 } };
     expect(pickAutoStartEvent(withEvents(auto), broke, "location_enter", zichen)).toBeNull();
   });
+
+  it("legacy event WITHOUT presentation at an ordinary location still auto-starts (derived auto_on_enter)", () => {
+    const yanhe = db.locations.yanhe_gong;
+    const legacy = mkEvent({ id: "ev_legacy", condition: { atLocation: "yanhe_gong" } }); // no presentation
+    const picked = pickAutoStartEvent(withEvents(legacy), at("yanhe_gong"), "location_enter", yanhe);
+    expect(picked?.id).toBe("ev_legacy");
+  });
+
+  it("implicit request_audience at zichendian (no presentation) is never auto-started", () => {
+    const implicit = mkEvent({ id: "ev_implicit" }); // no presentation → derives request_audience at zichendian
+    expect(pickAutoStartEvent(withEvents(implicit), at("zichendian"), "location_enter", zichen)).toBeNull();
+  });
 });

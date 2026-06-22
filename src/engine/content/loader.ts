@@ -373,19 +373,48 @@ function checkEventRefs(
   }
 }
 
-/** Collect every atLocation literal in a condition tree (best-effort host discovery). */
-function collectAtLocations(condition: TriggerCondition, acc: Set<string>): void {
-  if ("all" in condition) for (const c of condition.all) collectAtLocations(c, acc);
-  else if ("any" in condition) for (const c of condition.any) collectAtLocations(c, acc);
-  else if ("not" in condition) collectAtLocations(condition.not, acc);
-  else if ("atLocation" in condition) acc.add(condition.atLocation);
+/**
+ * Locations GUARANTEED to hold whenever the condition is satisfied (positive
+ * inference only — never over-claims). Used to decide whether a presentation-less
+ * event is *guaranteed* to run at a request_audience/exploration host.
+ *  - atLocation:x guarantees {x};
+ *  - not(_) guarantees ∅ (a negation pins no positive location);
+ *  - all[...] guarantees the union of its children's guarantees (all must hold);
+ *  - any[...] guarantees only locations every branch guarantees (intersection);
+ *  - other leaves (flagSet/eventFired/…) guarantee ∅.
+ */
+function guaranteedLocations(condition: TriggerCondition): Set<string> {
+  if ("atLocation" in condition) return new Set<string>([condition.atLocation]);
+  if ("all" in condition) {
+    const acc = new Set<string>();
+    for (const c of condition.all) for (const l of guaranteedLocations(c)) acc.add(l);
+    return acc;
+  }
+  if ("any" in condition) {
+    const branches = condition.any.map((c) => guaranteedLocations(c));
+    if (branches.length === 0) return new Set<string>();
+    let acc = branches[0]!;
+    for (let i = 1; i < branches.length; i++) {
+      const g = branches[i]!;
+      const next = new Set<string>();
+      acc.forEach((l) => {
+        if (g.has(l)) next.add(l);
+      });
+      acc = next;
+    }
+    return acc;
+  }
+  return new Set<string>(); // not / flagSet / eventFired / …
 }
 
 /**
  * Validate event `presentation` (scene-ui-narrative-refactor §3.5):
- *  - declared presentation: refs (audienceCharacterId/hostLocationId/subLocationId) must resolve;
- *  - missing presentation on a location_enter event whose atLocation derives to
- *    request_audience/exploration is an error (UI needs candidate/sub-location metadata).
+ *  - checkpoint compatibility: request_audience/exploration ⇒ location_enter;
+ *    scheduled ⇒ court; a court event with presentation ⇒ scheduled (so it can never
+ *    be silently unreachable by the router/queue);
+ *  - declared refs (audienceCharacterId/hostLocationId/subLocationId) must resolve;
+ *  - missing presentation on an event GUARANTEED to run at a request_audience/exploration
+ *    host is an error (UI needs candidate/sub-location metadata).
  *  manual has no derivation path → not detectable, intentionally not checked.
  */
 function checkPresentationRefs(
@@ -394,8 +423,25 @@ function checkPresentationRefs(
   locations: Record<string, LocationContent>,
   errors: GameError[],
 ): void {
+  const compat = (source: string, msg: string): void => {
+    errors.push(contentError("PRESENTATION", `${source}: ${msg}`));
+  };
   for (const { value: event, source } of events.items) {
     const p = event.presentation;
+    // ── presentation ↔ checkpoint compatibility ──
+    if (p) {
+      const ck = event.checkpoint;
+      if ((p.mode === "request_audience" || p.mode === "exploration") && ck !== "location_enter") {
+        compat(source, `presentation mode "${p.mode}" requires checkpoint "location_enter" (got "${ck}")`);
+      }
+      if (p.mode === "scheduled" && ck !== "court") {
+        compat(source, `presentation mode "scheduled" requires checkpoint "court" (got "${ck}")`);
+      }
+      if (ck === "court" && p.mode !== "scheduled") {
+        compat(source, `court event presentation must be "scheduled" (got "${p.mode}")`);
+      }
+    }
+    // ── reference validation + missing-presentation inference ──
     if (p?.mode === "request_audience") {
       if (!characters[p.audienceCharacterId]) errors.push(missingRef(source, "character", p.audienceCharacterId));
       if (!locations[p.hostLocationId]) errors.push(missingRef(source, "location", p.hostLocationId));
@@ -413,15 +459,13 @@ function checkPresentationRefs(
         );
       }
     } else if (!p && event.checkpoint === "location_enter") {
-      const hosts = new Set<string>();
-      collectAtLocations(event.condition, hosts);
-      for (const locId of hosts) {
+      for (const locId of guaranteedLocations(event.condition)) {
         const mode = resolveEntryMode(event, locations[locId]);
         if (mode === "request_audience" || mode === "exploration") {
           errors.push(
             contentError(
               "PRESENTATION",
-              `${source}: location_enter event at "${locId}" derives to ${mode} but declares no presentation`,
+              `${source}: location_enter event guaranteed at "${locId}" derives to ${mode} but declares no presentation`,
               { context: { file: source, id: event.id } },
             ),
           );

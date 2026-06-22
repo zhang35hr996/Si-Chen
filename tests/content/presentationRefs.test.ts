@@ -126,3 +126,61 @@ describe("presentation cross-reference validation", () => {
     expect(loadErrors(raw).some((e) => e.code === "PRESENTATION")).toBe(false);
   });
 });
+
+const noPresentationError = (raw: RawContent) =>
+  expect(loadErrors(raw).some((e) => e.code === "PRESENTATION")).toBe(false);
+
+describe("guaranteed-location inference (no over-claiming)", () => {
+  it("all:[atLocation:zichendian, not:eventFired] without presentation → error (guaranteed host)", () => {
+    const raw = makeRaw();
+    delete eventData(raw).presentation;
+    eventData(raw).condition = { all: [{ atLocation: "zichendian" }, { not: { eventFired: "ev_a" } }] };
+    expectError(raw, "PRESENTATION", "no presentation");
+  });
+
+  it("not:atLocation:zichendian without presentation → no error (negation pins nothing)", () => {
+    const raw = makeRaw();
+    delete eventData(raw).presentation;
+    eventData(raw).condition = { not: { atLocation: "zichendian" } };
+    noPresentationError(raw);
+  });
+
+  it("any:[atLocation:zichendian, flagSet] without presentation → no error (not guaranteed)", () => {
+    const raw = makeRaw();
+    delete eventData(raw).presentation;
+    eventData(raw).condition = { any: [{ atLocation: "zichendian" }, { flagSet: "some_flag" }] };
+    noPresentationError(raw);
+  });
+
+  it("any whose every branch guarantees zichendian without presentation → error", () => {
+    const raw = makeRaw();
+    delete eventData(raw).presentation;
+    eventData(raw).condition = {
+      any: [{ atLocation: "zichendian" }, { all: [{ atLocation: "zichendian" }, { not: { eventFired: "ev_a" } }] }],
+    };
+    expectError(raw, "PRESENTATION", "no presentation");
+  });
+});
+
+describe("presentation ↔ checkpoint compatibility", () => {
+  it("request_audience on a non-location_enter checkpoint fails validation", () => {
+    const raw = makeRaw();
+    eventData(raw).checkpoint = "time_advance"; // presentation stays request_audience
+    expectError(raw, "PRESENTATION", 'requires checkpoint "location_enter"');
+  });
+
+  it("scheduled requires court checkpoint", () => {
+    const raw = makeRaw();
+    eventData(raw).presentation = { mode: "scheduled" };
+    eventData(raw).checkpoint = "location_enter";
+    expectError(raw, "PRESENTATION", 'requires checkpoint "court"');
+  });
+
+  it("a court event with non-scheduled presentation fails validation", () => {
+    const raw = makeRaw();
+    eventData(raw).checkpoint = "court";
+    eventData(raw).condition = { flagSet: "x" }; // court events don't gate on location
+    eventData(raw).presentation = { mode: "auto_on_enter" };
+    expectError(raw, "PRESENTATION", 'must be "scheduled"');
+  });
+});
