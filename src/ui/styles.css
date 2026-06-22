@@ -3487,13 +3487,19 @@ button:active:enabled {
   .pending-drawer { animation: none; }
 }
 
-/* 乘风传令谕令菜单（§6.5）：居中前景面板，五道谕令 + 作罢。 */
-.chengfeng-dispatch {
+/* 乘风传令谕令菜单（§6.5）：全屏模态层 + 居中前景面板，五道谕令 + 作罢。 */
+.chengfeng-dispatch-layer {
   position: fixed;
+  inset: 0;
   z-index: 60;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(8, 6, 4, 0.62); /* 压暗背景场景 */
+  /* fixed + inset:0 拦截面板外的指针输入；不在背景点击时关闭。 */
+}
+.chengfeng-dispatch {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -3526,14 +3532,12 @@ button:active:enabled {
 .chengfeng-dispatch__menu { display: flex; flex-direction: column; gap: 0.6rem; }
 .chengfeng-dispatch__menu .action-btn { min-height: 44px; }
 .chengfeng-dispatch__reason { margin: 0; color: var(--cinnabar-soft); font-size: 0.82rem; }
-@keyframes fade-scale-in { from { transform: translate(-50%, -50%) scale(0.97); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes fade-scale-in { from { transform: scale(0.97); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (max-width: 560px) {
+  /* 窄屏：底部 sheet */
+  .chengfeng-dispatch-layer { align-items: flex-end; padding: 0; }
   .chengfeng-dispatch {
-    top: auto;
-    bottom: 0;
-    left: 0;
-    transform: none;
-    width: auto;
+    width: 100%;
     max-height: 82dvh;
     border-radius: 12px 12px 0 0;
     animation: slide-in-up 0.28s ease both;

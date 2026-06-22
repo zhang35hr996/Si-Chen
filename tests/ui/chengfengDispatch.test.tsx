@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ChengfengDispatch } from "../../src/ui/components/ChengfengDispatch";
@@ -24,6 +24,16 @@ describe("ChengfengDispatch", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleName("传乘风");
     expect(dialog).toHaveTextContent("乘风");
+    expect(dialog).toHaveTextContent("臣在"); // 乘风 入殿应答（approved design）
+  });
+
+  it("renders exactly one full-screen modal layer wrapping a single dialog (no nested dialog)", () => {
+    const { container } = render(<ChengfengDispatch interruptible {...handlers} />);
+    const layers = container.querySelectorAll(".chengfeng-dispatch-layer");
+    expect(layers).toHaveLength(1);
+    expect(layers[0]).not.toHaveAttribute("role", "dialog"); // the layer itself is not a landmark
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(within(screen.getByRole("dialog")).queryByRole("dialog")).toBeNull(); // no nested dialog
   });
 
   it("exposes all five decree actions plus close, each by a distinct accessible name", () => {
@@ -205,7 +215,7 @@ describe("ChengfengDispatch", () => {
     expect(onSummonConsort).toHaveBeenCalledTimes(1); // no further dispatch
   });
 
-  it("unmount restores focus to the element that opened the menu", () => {
+  it("cancel path: external dismissal without selecting a decree restores focus to the opener", () => {
     render(<button data-testid="opener">opener</button>);
     const opener = screen.getByTestId("opener");
     opener.focus();
@@ -214,6 +224,55 @@ describe("ChengfengDispatch", () => {
     expect(opener).not.toHaveFocus(); // menu took focus
     unmount();
     expect(opener).toHaveFocus(); // restored
+  });
+
+  it("cancel path: 作罢 then unmount restores focus to the opener", async () => {
+    const user = userEvent.setup();
+    render(<button data-testid="opener">opener</button>);
+    const opener = screen.getByTestId("opener");
+    opener.focus();
+    const { unmount } = render(<ChengfengDispatch interruptible {...handlers} />);
+    await user.click(screen.getByRole("button", { name: "作罢" }));
+    unmount();
+    expect(opener).toHaveFocus();
+  });
+
+  it("cancel path: Escape then unmount restores focus to the opener", async () => {
+    const user = userEvent.setup();
+    render(<button data-testid="opener">opener</button>);
+    const opener = screen.getByTestId("opener");
+    opener.focus();
+    const { unmount } = render(<ChengfengDispatch interruptible {...handlers} />);
+    await user.keyboard("{Escape}");
+    unmount();
+    expect(opener).toHaveFocus();
+  });
+
+  it("handoff path: decree selection then unmount does NOT pull focus back to the opener", async () => {
+    const user = userEvent.setup();
+    render(<button data-testid="opener">opener</button>);
+    const opener = screen.getByTestId("opener");
+    opener.focus();
+    const { unmount } = render(<ChengfengDispatch interruptible {...handlers} />);
+    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    unmount();
+    expect(opener).not.toHaveFocus(); // business surface owns focus now
+  });
+
+  it("handoff path: the next business surface keeps focus without Chengfeng stealing it back on unmount", async () => {
+    const user = userEvent.setup();
+    render(<button data-testid="opener">opener</button>);
+    screen.getByTestId("opener").focus();
+    const { unmount } = render(<ChengfengDispatch interruptible {...handlers} />);
+    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    // simulate the next existing business surface (册封/搬迁/赏赐…) taking focus
+    render(<button data-testid="next-surface">next</button>);
+    const next = screen.getByTestId("next-surface");
+    next.focus();
+    expect(next).toHaveFocus();
+    unmount();
+    expect(next).toHaveFocus(); // not stolen back
+    expect(screen.getByTestId("opener")).not.toHaveFocus();
   });
 
   it("the claim is established synchronously before the callback runs (re-entrant dispatch is blocked while still mounted)", async () => {
