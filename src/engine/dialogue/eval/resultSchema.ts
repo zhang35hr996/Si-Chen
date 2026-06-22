@@ -9,13 +9,21 @@ import { z } from "zod";
 
 const checkStatus = z.enum(["pass", "fail", "not_run"]);
 
-const normalizedUsageSchema = z.object({
-  uncachedInputTokens: z.number(),
-  totalInputTokens: z.number(),
-  outputTokens: z.number(),
-  cacheReadTokens: z.number().optional(),
-  cacheCreationTokens: z.number().optional(),
-});
+/** Token counts must be non-negative, finite integers. */
+const count = z.number().int().nonnegative();
+
+export const normalizedUsageSchema = z
+  .object({
+    uncachedInputTokens: count,
+    totalInputTokens: count,
+    outputTokens: count,
+    cacheReadTokens: count.optional(),
+    cacheCreationTokens: count.optional(),
+  })
+  .refine(
+    (u) => u.totalInputTokens === u.uncachedInputTokens + (u.cacheReadTokens ?? 0) + (u.cacheCreationTokens ?? 0),
+    { message: "totalInputTokens must equal uncachedInputTokens + cacheReadTokens + cacheCreationTokens", path: ["totalInputTokens"] },
+  );
 
 export const evalResultSchema = z.object({
   scenarioId: z.string(),

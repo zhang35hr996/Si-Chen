@@ -14,40 +14,8 @@
  *   Cache hits:      12/22 (55%)
  */
 
-import * as fs from "node:fs";
-import * as readline from "node:readline";
-import * as path from "node:path";
 import { scoreResults } from "../src/engine/dialogue/eval/scoring";
-import type { EvalResult } from "../src/engine/dialogue/eval/types";
-
-async function loadResults(filePath: string): Promise<EvalResult[]> {
-  const resolved = path.resolve(filePath);
-  if (!fs.existsSync(resolved)) {
-    console.error(`Error: file not found: ${resolved}`);
-    process.exit(1);
-  }
-
-  const rl = readline.createInterface({
-    input: fs.createReadStream(resolved),
-    crlfDelay: Infinity,
-  });
-
-  const results: EvalResult[] = [];
-  let lineNum = 0;
-  for await (const line of rl) {
-    lineNum++;
-    const trimmed = line.trim();
-    if (trimmed.length === 0) continue;
-    try {
-      results.push(JSON.parse(trimmed) as EvalResult);
-    } catch {
-      console.error(`Error: invalid JSON on line ${lineNum}: ${trimmed.slice(0, 80)}`);
-      process.exit(1);
-    }
-  }
-
-  return results;
-}
+import { loadEvalResults } from "./lib/loadEvalResults";
 
 function pct(rate: number): string {
   return `${Math.round(rate * 100)}%`;
@@ -64,7 +32,7 @@ async function main() {
     process.exit(1);
   }
 
-  const results = await loadResults(inputPath);
+  const results = loadEvalResults(inputPath);
   const r = scoreResults(results);
 
   if (results.length === 0) {

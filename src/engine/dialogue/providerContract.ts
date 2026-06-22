@@ -39,36 +39,59 @@ export interface NormalizedUsage {
   cacheCreationTokens?: number;
 }
 
-/** Build NormalizedUsage when the provider reports UNCACHED input (Anthropic). */
+/** A token count must be a non-negative, finite integer (Number.isInteger rejects NaN/Infinity). */
+const isCount = (n: number): boolean => Number.isInteger(n) && n >= 0;
+
+/**
+ * Build NormalizedUsage when the provider reports UNCACHED input (Anthropic).
+ * Returns undefined when a REQUIRED field is missing or any field is not a
+ * non-negative integer — a partial/garbled usage object must NOT be treated as a
+ * priced zero-cost run. The invariant holds by construction.
+ */
 export function makeUsage(parts: {
-  uncachedInputTokens: number;
-  outputTokens: number;
+  uncachedInputTokens?: number;
+  outputTokens?: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
-}): NormalizedUsage {
-  const cacheRead = parts.cacheReadTokens ?? 0;
-  const cacheCreation = parts.cacheCreationTokens ?? 0;
+}): NormalizedUsage | undefined {
+  const { uncachedInputTokens, outputTokens, cacheReadTokens, cacheCreationTokens } = parts;
+  if (uncachedInputTokens === undefined || outputTokens === undefined) return undefined;
+  if (!isCount(uncachedInputTokens) || !isCount(outputTokens)) return undefined;
+  if (cacheReadTokens !== undefined && !isCount(cacheReadTokens)) return undefined;
+  if (cacheCreationTokens !== undefined && !isCount(cacheCreationTokens)) return undefined;
+  const cr = cacheReadTokens ?? 0;
+  const cc = cacheCreationTokens ?? 0;
   return {
-    uncachedInputTokens: parts.uncachedInputTokens,
-    totalInputTokens: parts.uncachedInputTokens + cacheRead + cacheCreation,
-    outputTokens: parts.outputTokens,
-    ...(parts.cacheReadTokens !== undefined ? { cacheReadTokens: parts.cacheReadTokens } : {}),
-    ...(parts.cacheCreationTokens !== undefined ? { cacheCreationTokens: parts.cacheCreationTokens } : {}),
+    uncachedInputTokens,
+    totalInputTokens: uncachedInputTokens + cr + cc,
+    outputTokens,
+    ...(cacheReadTokens !== undefined ? { cacheReadTokens } : {}),
+    ...(cacheCreationTokens !== undefined ? { cacheCreationTokens } : {}),
   };
 }
 
-/** Build NormalizedUsage when the provider reports TOTAL input incl. cache (OpenAI, Gemini). */
+/**
+ * Build NormalizedUsage when the provider reports TOTAL input incl. cache
+ * (OpenAI, Gemini). Returns undefined on a missing required field, a non-integer
+ * count, or contradictory data (cacheRead > total). Never clamps a contradiction
+ * into an invariant-violating object.
+ */
 export function makeUsageFromTotal(parts: {
-  totalInputTokens: number;
-  outputTokens: number;
+  totalInputTokens?: number;
+  outputTokens?: number;
   cacheReadTokens?: number;
-}): NormalizedUsage {
-  const cacheRead = parts.cacheReadTokens ?? 0;
+}): NormalizedUsage | undefined {
+  const { totalInputTokens, outputTokens, cacheReadTokens } = parts;
+  if (totalInputTokens === undefined || outputTokens === undefined) return undefined;
+  if (!isCount(totalInputTokens) || !isCount(outputTokens)) return undefined;
+  if (cacheReadTokens !== undefined && !isCount(cacheReadTokens)) return undefined;
+  const cr = cacheReadTokens ?? 0;
+  if (cr > totalInputTokens) return undefined; // cached input cannot exceed the total prompt
   return {
-    uncachedInputTokens: Math.max(0, parts.totalInputTokens - cacheRead),
-    totalInputTokens: parts.totalInputTokens,
-    outputTokens: parts.outputTokens,
-    ...(parts.cacheReadTokens !== undefined ? { cacheReadTokens: parts.cacheReadTokens } : {}),
+    uncachedInputTokens: totalInputTokens - cr,
+    totalInputTokens,
+    outputTokens,
+    ...(cacheReadTokens !== undefined ? { cacheReadTokens } : {}),
   };
 }
 
