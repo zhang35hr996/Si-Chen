@@ -117,6 +117,7 @@ export function assembleDialogueRequest(
     beliefs: new GroundTruthBeliefProjection(state),
     state,
     audience,
+    forbiddenClaims: db.characters[speakerId]?.dialoguePolicy?.forbiddenClaims,  // NEW
   });
 
   const promptContext: DialoguePromptContext = {

@@ -10,6 +10,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import type { CourtEvent, GameState, MemoryEntry } from "../../src/engine/state/types";
 import type { ContextRef } from "../../src/engine/dialogue/types";
+import type { DialogueClaim } from "../../src/engine/dialogue/claims";
 import type { BuiltReaction } from "../../src/engine/dialogue/reactionAssembler";
 import { makeGameTime, type MonthPeriod } from "../../src/engine/calendar/time";
 
@@ -511,10 +512,29 @@ describe("assembleClaims", () => {
   it("forbiddenClaims are DialogueClaim[] (no source binding)", () => {
     const state = createNewGameState(content.value);
     const out = assembleClaims(makeBaseArgs(state));
-    // T6: forbidden is always empty; T7 will populate it
     expect(out.forbidden).toEqual([]);
     for (const fc of out.forbidden) {
       expect("sourceRefs" in fc).toBe(false);
     }
+  });
+
+  it("assembleClaims returns forbidden claims from forbiddenClaims param", () => {
+    const state = createNewGameState(content.value);
+    const forbiddenClaim: DialogueClaim = {
+      id: "forbid_test",
+      predicate: "holds_rank",
+      subjectId: "x",
+      object: "fenghou",
+      modality: "assert",
+    };
+    const out = assembleClaims({ ...makeBaseArgs(state), forbiddenClaims: [forbiddenClaim] });
+    expect(out.forbidden.length).toBe(1);
+    expect(out.forbidden[0]!.id).toBe("forbid_test");
+  });
+
+  it("assembleClaims returns empty forbidden when forbiddenClaims is undefined", () => {
+    const state = createNewGameState(content.value);
+    const out = assembleClaims(makeBaseArgs(state));
+    expect(out.forbidden.length).toBe(0);
   });
 });

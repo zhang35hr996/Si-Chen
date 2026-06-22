@@ -24,7 +24,7 @@ import type { DialogueProviderResult } from "../../src/engine/dialogue/providerC
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
-import type { ProposedClaim } from "../../src/engine/dialogue/claims";
+import type { DialogueClaim, ProposedClaim } from "../../src/engine/dialogue/claims";
 
 const db = loadRealContent();
 const state = createNewGameState(db);
@@ -221,6 +221,58 @@ describe("validateDialogueClaims — chain (d): authorized fact, unauthorized so
 
     expect(result.ok).toBe(false);
     expect(result.findings.some((f) => f.code === "source_not_authorized")).toBe(true);
+  });
+});
+
+describe("validateDialogueClaims — claim_explicitly_forbidden: source-independence", () => {
+  it("claim_explicitly_forbidden rejected regardless of sourceRef (source-independence)", () => {
+    // Proves forbidden gate fires before source check: a different valid sourceRef
+    // cannot bypass the forbidden claim gate.
+    const request = makeRequest();
+    const realMemoryId = request.promptContext.relevantMemories[0]!.id;
+    const differentSourceId = "different_source_not_matching_forbidden_check_xyz";
+    const offeredRefKeys = new Set([
+      contextRefKey({ kind: "memory", id: realMemoryId }),
+      contextRefKey({ kind: "memory", id: differentSourceId }),
+    ]);
+    const audience = buildAudienceContext(state, db, { speakerId: SPEAKER, targetId: "player" });
+    const beliefs = new GroundTruthBeliefProjection(state);
+
+    // Authorize the fact so it passes the CLOSED gate
+    const authorized: AuthorizedClaim = {
+      claim: { id: "auth_src_indep", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: differentSourceId }],
+    };
+
+    // forbiddenClaims blocks this claim by fact+polarity
+    const forbidden: DialogueClaim = {
+      id: "forbid_src_indep",
+      predicate: "holds_rank",
+      subjectId: SPEAKER,
+      object: "fenghou",
+      modality: "assert",
+    };
+
+    // Proposed claim cites a DIFFERENT valid sourceRef
+    const proposedClaim: ProposedClaim = {
+      claim: { id: "c_src_indep", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      sourceRefs: [{ kind: "memory" as const, id: differentSourceId }],
+      modality: "assert",
+      certainty: 80,
+    };
+
+    const result = validateDialogueClaims({
+      speakerId: SPEAKER,
+      audience,
+      beliefs,
+      offeredRefKeys,
+      proposedClaims: [proposedClaim],
+      allowedClaims: [authorized],
+      forbiddenClaims: [forbidden],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((f) => f.code === "claim_explicitly_forbidden")).toBe(true);
   });
 });
 
