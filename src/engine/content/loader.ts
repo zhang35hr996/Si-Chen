@@ -6,6 +6,7 @@
  */
 import { contentError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
+import { resolveEntryMode } from "../events/entryMode";
 import {
   characterSchema,
   gameEventSchema,
@@ -110,6 +111,7 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
   checkCharacterRefs(characters, ranks, locations.byId, officialPosts, errors);
   checkLocationGraph(locations, errors);
   checkEventRefs(events, scenes.byId, errors);
+  checkPresentationRefs(events, characters.byId, locations.byId, errors);
   for (const { value, source } of scenes.items) {
     checkSceneGraph(value, source, errors);
     checkSceneRefs(value, source, characters.byId, locations.byId, errors);
@@ -367,6 +369,65 @@ function checkEventRefs(
   for (const { value: event, source } of events.items) {
     if (!scenes[event.sceneId]) {
       errors.push(missingRef(source, "scene", event.sceneId));
+    }
+  }
+}
+
+/** Collect every atLocation literal in a condition tree (best-effort host discovery). */
+function collectAtLocations(condition: TriggerCondition, acc: Set<string>): void {
+  if ("all" in condition) for (const c of condition.all) collectAtLocations(c, acc);
+  else if ("any" in condition) for (const c of condition.any) collectAtLocations(c, acc);
+  else if ("not" in condition) collectAtLocations(condition.not, acc);
+  else if ("atLocation" in condition) acc.add(condition.atLocation);
+}
+
+/**
+ * Validate event `presentation` (scene-ui-narrative-refactor §3.5):
+ *  - declared presentation: refs (audienceCharacterId/hostLocationId/subLocationId) must resolve;
+ *  - missing presentation on a location_enter event whose atLocation derives to
+ *    request_audience/exploration is an error (UI needs candidate/sub-location metadata).
+ *  manual has no derivation path → not detectable, intentionally not checked.
+ */
+function checkPresentationRefs(
+  events: Parsed<GameEventContent>,
+  characters: Record<string, CharacterContent>,
+  locations: Record<string, LocationContent>,
+  errors: GameError[],
+): void {
+  for (const { value: event, source } of events.items) {
+    const p = event.presentation;
+    if (p?.mode === "request_audience") {
+      if (!characters[p.audienceCharacterId]) errors.push(missingRef(source, "character", p.audienceCharacterId));
+      if (!locations[p.hostLocationId]) errors.push(missingRef(source, "location", p.hostLocationId));
+    } else if (p?.mode === "exploration") {
+      const host = locations[p.hostLocationId];
+      if (!host) {
+        errors.push(missingRef(source, "location", p.hostLocationId));
+      } else if (!(host.subLocations ?? []).some((s) => s.id === p.subLocationId)) {
+        errors.push(
+          contentError(
+            "PRESENTATION",
+            `${source}: exploration presentation references unknown subLocation "${p.subLocationId}" in location "${p.hostLocationId}"`,
+            { context: { file: source, ref: p.subLocationId } },
+          ),
+        );
+      }
+    } else if (!p && event.checkpoint === "location_enter") {
+      const hosts = new Set<string>();
+      collectAtLocations(event.condition, hosts);
+      for (const locId of hosts) {
+        const mode = resolveEntryMode(event, locations[locId]);
+        if (mode === "request_audience" || mode === "exploration") {
+          errors.push(
+            contentError(
+              "PRESENTATION",
+              `${source}: location_enter event at "${locId}" derives to ${mode} but declares no presentation`,
+              { context: { file: source, id: event.id } },
+            ),
+          );
+          break;
+        }
+      }
     }
   }
 }

@@ -8,5 +8,11 @@
   },
   "priority": 50,
   "once": true,
-  "apCost": 1
+  "apCost": 1,
+  "presentation": {
+    "mode": "request_audience",
+    "hostLocationId": "zichendian",
+    "audienceCharacterId": "wei_sui",
+    "audiencePrompt": "礼官卫绥在殿外候见，为传月祭仪向陛下请示。"
+  }
 }

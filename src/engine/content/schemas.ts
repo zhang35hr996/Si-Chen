@@ -465,6 +465,19 @@ export const locationSchema = z
     travelCost: z.strictObject({ ap: z.number().int().min(0) }).optional(), // 0 = 宫内移动免行动力
     actionEventId: idSchema.optional(),
     actionFirstSlotOnly: z.boolean().optional(),
+    // 子地点（御花园探索）。每子地点带自己的静态环境描述与背景；人物/事件线索只在事件
+    // 存在时由 event.presentation.eventHint 提供（不在此静态暗示）。详见设计规格 §8.1。
+    subLocations: z
+      .array(
+        z.strictObject({
+          id: idSchema,
+          name: nonEmpty,
+          backgroundKey: nonEmpty,
+          backgroundPosition: nonEmpty.optional(), // 每子地点独立裁切焦点
+          description: nonEmpty, // 静态环境（永久成立，无人物/事件暗示）
+        }),
+      )
+      .optional(),
   })
   .refine((loc) => loc.entry === "free" || (loc.connections !== undefined && loc.travelCost !== undefined), {
     message: 'travel locations require "connections" and "travelCost"',

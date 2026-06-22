@@ -8,5 +8,6 @@
   },
   "priority": 50,
   "once": true,
-  "apCost": 1
+  "apCost": 1,
+  "presentation": { "mode": "auto_on_enter" }
 }
