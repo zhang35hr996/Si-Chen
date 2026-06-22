@@ -20,7 +20,6 @@ describe("sanitizeJsonSchemaForGemini", () => {
           items: { type: "object", additionalProperties: false },
         },
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any;
     expect(out.additionalProperties).toBeUndefined();
     expect(out.$schema).toBeUndefined();

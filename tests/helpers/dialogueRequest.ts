@@ -23,8 +23,7 @@ export function makeDialogueRequest(): DialogueRequest {
         goals: ["保全自身"],
         speechStyle: "俏皮活泼",
         speechPattern: "轻描淡写却藏机锋",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any, // profile fields beyond schema minimum for test/smoke
+      } as unknown as DialogueRequest["speakerContext"]["profile"], // extra fields beyond schema minimum for test/smoke
       voice: {
         register: "casual",
         quirks: [],
