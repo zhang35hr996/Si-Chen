@@ -59,6 +59,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     chronicle: [],
     emotionalConditions: [],
     mentionLog: [],
+    eventReactionLog: [],
     sceneHistory: [],
     pendingAftermath: [],
     rngSeed: overrides.rngSeed ?? 1,

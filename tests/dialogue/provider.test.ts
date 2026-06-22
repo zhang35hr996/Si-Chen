@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assembleDialogueRequest, produceDialogueLine } from "../../src/engine/dialogue/orchestrator";
+import { assembleDialogueRequest, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 import type { DialogueProvider, DialogueRequest } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
@@ -11,11 +11,23 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 const state = createNewGameState(db);
 
+// Scripted request — for use with scripted (mockProvider-kind) providers
 const requestFor = (speakerId: string, text = "台词。"): DialogueRequest => {
   const r = assembleDialogueRequest(db, state, speakerId, "zichendian", { scripted: { text } });
   if (!r.ok) throw new Error(r.error.message);
   return r.value;
 };
+
+// Generative request (no scripted field) — for use with generative providers
+const requestForGen = (speakerId: string): DialogueRequest => {
+  const r = assembleDialogueRequest(db, state, speakerId, "zichendian");
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
+};
+
+// Helper: produces a line via the unified entry point
+const produceLine = (provider: typeof mockProvider | DialogueProvider, request: DialogueRequest) =>
+  produceDialogueTurn(db, provider, request, state);
 
 describe("assembleDialogueRequest carries the full future-AI context", () => {
   it("profile, voice, standing+selfRefs, memories(激活), stances, etiquette, GameTime", () => {
@@ -35,14 +47,14 @@ describe("assembleDialogueRequest carries the full future-AI context", () => {
   });
 });
 
-describe("produceDialogueLine validation gates (v0 subset)", () => {
+describe("produceDialogueTurn validation gates (v0 subset)", () => {
   it("mock provider echoes authored text; meta.generated false", async () => {
-    const result = await produceDialogueLine(db, mockProvider, requestFor("wei_sui", "依典制行事。"));
+    const result = await produceLine(mockProvider, requestFor("wei_sui", "依典制行事。"));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.text).toBe("依典制行事。");
-    expect(result.value.speakerName).toBe("卫绥");
-    expect(result.value.meta).toEqual({ generated: false, degraded: false });
+    expect(result.value.line.text).toBe("依典制行事。");
+    expect(result.value.line.speakerName).toBe("卫绥");
+    expect(result.value.line.meta).toEqual({ generated: false, degraded: false });
   });
 
   it("mock provider refuses non-scripted requests → ProviderError surfaces as mapped GameError", async () => {
@@ -56,8 +68,8 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
       expect(e.kind).toBe("config");
       if (e.kind === "config") expect(e.cause).toBe("not_configured");
     }
-    // Through orchestrator: ProviderError maps to GameError
-    const lineResult = await produceDialogueLine(db, mockProvider, request);
+    // Through orchestrator: scripted provider without scripted text → PROVIDER_CONFIG
+    const lineResult = await produceLine(mockProvider, request);
     expect(lineResult.ok).toBe(false);
     if (!lineResult.ok) expect(lineResult.error.code).toBe("PROVIDER_CONFIG");
   });
@@ -69,7 +81,7 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
       capabilities: { strictTools: false, promptCaching: false, batch: false },
       generate: () => Promise.resolve(ok<DialogueProviderResult>({ speaker: "chu_he", text: "我是谁？", choices: [], proposedClaims: [] })),
     };
-    const rejected = await produceDialogueLine(db, wrongSpeaker, requestFor("shen_zhibai"));
+    const rejected = await produceLine(wrongSpeaker, requestForGen("shen_zhibai"));
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error.code).toBe("WRONG_SPEAKER");
 
@@ -80,11 +92,11 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
       generate: (req) =>
         Promise.resolve(ok<DialogueProviderResult>({ speaker: req.speakerId, text: "……", expression: "ecstatic", choices: [], proposedClaims: [] })),
     };
-    const normalized = await produceDialogueLine(db, weirdFace, requestFor("shen_zhibai"));
+    const normalized = await produceLine(weirdFace, requestForGen("shen_zhibai"));
     expect(normalized.ok).toBe(true);
     if (normalized.ok) {
-      expect(normalized.value.expression).toBe("neutral");
-      expect(normalized.value.meta.generated).toBe(true); // generative provider flagged
+      expect(normalized.value.line.expression).toBe("neutral");
+      expect(normalized.value.line.meta.generated).toBe(true); // generative provider flagged
     }
   });
 
@@ -96,7 +108,7 @@ describe("produceDialogueLine validation gates (v0 subset)", () => {
   });
 });
 
-describe("produceDialogueLine text gates (PR 11)", () => {
+describe("produceDialogueTurn text gates (PR 11)", () => {
   const speaking = (text: string, choices: { id: string; text: string }[] = []): DialogueProvider => ({
     id: "fake",
     kind: "generative",
@@ -105,14 +117,14 @@ describe("produceDialogueLine text gates (PR 11)", () => {
   });
 
   it("rejects output containing a forbidden lexicon term", async () => {
-    const result = await produceDialogueLine(db, speaking("皇上圣明。"), requestFor("shen_zhibai"));
+    const result = await produceLine(speaking("皇上圣明。"), requestForGen("shen_zhibai"));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
   });
 
   it("rejects a speaker borrowing another rank's selfRef", async () => {
     // 承徽 borrowing 凤后's 臣后 (本宫 is now a shared to-lower ref, no longer foreign).
-    const result = await produceDialogueLine(db, speaking("臣后自有主张。"), requestFor("lu_huaijin"));
+    const result = await produceLine(speaking("臣后自有主张。"), requestForGen("lu_huaijin"));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("GATE_REJECTED");
@@ -121,16 +133,15 @@ describe("produceDialogueLine text gates (PR 11)", () => {
   });
 
   it("rejects leaked template tokens", async () => {
-    const result = await produceDialogueLine(db, speaking("{{speakerName}}启奏。"), requestFor("shen_zhibai"));
+    const result = await produceLine(speaking("{{speakerName}}启奏。"), requestForGen("shen_zhibai"));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
   });
 
   it("rejects forbidden terms in a player choice (content gates apply to choices)", async () => {
-    const result = await produceDialogueLine(
-      db,
+    const result = await produceLine(
       speaking("本宫有一事启奏。", [{ id: "c", text: "传旨给那嫔妃。" }]),
-      requestFor("shen_zhibai"),
+      requestForGen("shen_zhibai"),
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
@@ -138,20 +149,20 @@ describe("produceDialogueLine text gates (PR 11)", () => {
 
   it("logs gate findings so they surface in debug diagnostics", async () => {
     const logger = new RingBufferLogger();
-    await produceDialogueLine(db, speaking("圣上万安。"), requestFor("shen_zhibai"), logger);
+    await produceDialogueTurn(db, speaking("圣上万安。"), requestForGen("shen_zhibai"), state, logger);
     const entries = logger.entries();
     expect(entries.some((e) => e.message.includes("AiError:GATE_RANK_TITLE"))).toBe(true);
   });
 
   it("clean generated output passes every gate", async () => {
-    const result = await produceDialogueLine(db, speaking("本宫累了，陛下早些歇息。"), requestFor("shen_zhibai"));
+    const result = await produceLine(speaking("本宫累了，陛下早些歇息。"), requestForGen("shen_zhibai"));
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.meta).toEqual({ generated: true, degraded: false });
+    if (result.ok) expect(result.value.line.meta).toEqual({ generated: true, degraded: false });
   });
 
   it("speakerName recomposes from surname + 位分", async () => {
-    const result = await produceDialogueLine(db, speaking("……侍身知罪。"), requestFor("lu_huaijin"));
+    const result = await produceLine(speaking("……侍身知罪。"), requestForGen("lu_huaijin"));
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.speakerName).toBe("陆承徽");
+    if (result.ok) expect(result.value.line.speakerName).toBe("陆承徽");
   });
 });

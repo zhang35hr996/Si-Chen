@@ -311,6 +311,19 @@ export interface MemoryMentionRecord {
   mentionedAt: GameTime;
 }
 
+// ── 事件反应日志（T2：去重 + 冷却） ──────────────────────────────────────
+/** 已发生过的「说者→听者 对同一事件的反应」去重记录。 */
+export interface EventReactionRecord {
+  /** 发言角色 charId。 */
+  speakerId: string;
+  /** 倾听角色 charId（通常为皇帝）。 */
+  audienceId: string;
+  /** 对应 CourtEvent.id。 */
+  eventId: string;
+  /** 反应发生时刻。 */
+  reactedAt: GameTime;
+}
+
 export type BedchamberMode = "passion" | "pleasure" | "companionship";
 
 export interface BedchamberEncounter {
@@ -440,6 +453,8 @@ export interface GameState {
   emotionalConditions: EmotionalCondition[];
   /** 记忆提及日志（PR4：冷却惩罚）。 */
   mentionLog: MemoryMentionRecord[];
+  /** 事件反应日志（T2：去重 + 冷却；同一 speakerId/audienceId/eventId 三元组只反应一次）。 */
+  eventReactionLog: EventReactionRecord[];
   sceneHistory: string[];
   /** 本晨被免请安的侍君（按 dayIndex 自然失效）。 */
   excusedFromGreeting?: { dayIndex: number; charIds: string[] };

@@ -1,5 +1,5 @@
 /**
- * PR5 integration: proves the 4 claim-gate chains through produceDialogueLineWithPolicy.
+ * PR5 integration: proves the 4 claim-gate chains through produceDialogueTurn (generative path).
  *
  * (a) HAPPY PATH   — valid claim with real offeredContextId → line passes, mentionLog grows
  * (b) CLAIM REJECT — claim contradicts belief (wrong rank value) → CLAIM_REJECTED error
@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   assembleDialogueRequest,
   buildDialoguePolicyContext,
-  produceDialogueLineWithPolicy,
+  produceDialogueTurn,
 } from "../../src/engine/dialogue/orchestrator";
 import type { DialogueProvider } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
@@ -92,11 +92,10 @@ describe("buildDialoguePolicyContext", () => {
   });
 });
 
-describe("produceDialogueLineWithPolicy — chain (c): no declarations", () => {
+describe("produceDialogueTurn — chain (c): no declarations", () => {
   it("passes with empty proposedClaims; mentionLog stays the same", async () => {
     const request = makeRequest();
-    const policy = makePolicy();
-    const result = await produceDialogueLineWithPolicy(db, makeProvider([]), request, policy, state);
+    const result = await produceDialogueTurn(db, makeProvider([]), request, state);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.line.text).toBe(VALID_TEXT);
@@ -106,7 +105,7 @@ describe("produceDialogueLineWithPolicy — chain (c): no declarations", () => {
   });
 });
 
-describe("produceDialogueLineWithPolicy — chain (a): happy path with valid claim", () => {
+describe("produceDialogueTurn — chain (a): happy path with valid claim", () => {
   it("accepts a claim whose sourceContextId is in offeredContextIds; mentionLog grows", async () => {
     const request = makeRequest();
     const policy = makePolicy();
@@ -122,18 +121,12 @@ describe("produceDialogueLineWithPolicy — chain (a): happy path with valid cla
         object: "fenghou",
         modality: "assert",
       },
-      sourceContextIds: [firstOfferedId],
+      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
       modality: "assert",
       certainty: 90,
     };
 
-    const result = await produceDialogueLineWithPolicy(
-      db,
-      makeProvider([validClaim]),
-      request,
-      policy,
-      state,
-    );
+    const result = await produceDialogueTurn(db, makeProvider([validClaim]), request, state);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.line.text).toBe(VALID_TEXT);
@@ -142,12 +135,11 @@ describe("produceDialogueLineWithPolicy — chain (a): happy path with valid cla
   });
 });
 
-describe("produceDialogueLineWithPolicy — chain (b): claim contradicts belief", () => {
+describe("produceDialogueTurn — chain (b): claim contradicts belief", () => {
   it("rejects a claim that contradicts what shen_zhibai should believe about their rank", async () => {
     const request = makeRequest();
-    const policy = makePolicy();
 
-    const firstOfferedId = [...policy.offeredContextIds][0]!;
+    const firstOfferedId = [...makePolicy().offeredContextIds][0]!;
 
     // shen_zhibai is fenghou; claim says "zhaoyi" → contradicts belief
     const wrongRankClaim: ProposedClaim = {
@@ -158,18 +150,12 @@ describe("produceDialogueLineWithPolicy — chain (b): claim contradicts belief"
         object: "zhaoyi",
         modality: "assert",
       },
-      sourceContextIds: [firstOfferedId],
+      sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
       modality: "assert",
       certainty: 90,
     };
 
-    const result = await produceDialogueLineWithPolicy(
-      db,
-      makeProvider([wrongRankClaim]),
-      request,
-      policy,
-      state,
-    );
+    const result = await produceDialogueTurn(db, makeProvider([wrongRankClaim]), request, state);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("CLAIM_REJECTED");
@@ -177,10 +163,9 @@ describe("produceDialogueLineWithPolicy — chain (b): claim contradicts belief"
   });
 });
 
-describe("produceDialogueLineWithPolicy — chain (d): unknown source context", () => {
+describe("produceDialogueTurn — chain (d): unknown source context", () => {
   it("rejects a claim with a sourceContextId not in offeredContextIds", async () => {
     const request = makeRequest();
-    const policy = makePolicy();
 
     const unknownSrcClaim: ProposedClaim = {
       claim: {
@@ -190,18 +175,12 @@ describe("produceDialogueLineWithPolicy — chain (d): unknown source context", 
         object: "fenghou",
         modality: "assert",
       },
-      sourceContextIds: ["fake_memory_id_not_offered_xyz"],
+      sourceRefs: [{ kind: "memory" as const, id: "fake_memory_id_not_offered_xyz" }],
       modality: "assert",
       certainty: 90,
     };
 
-    const result = await produceDialogueLineWithPolicy(
-      db,
-      makeProvider([unknownSrcClaim]),
-      request,
-      policy,
-      state,
-    );
+    const result = await produceDialogueTurn(db, makeProvider([unknownSrcClaim]), request, state);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("CLAIM_REJECTED");
@@ -209,22 +188,20 @@ describe("produceDialogueLineWithPolicy — chain (d): unknown source context", 
   });
 });
 
-describe("produceDialogueLineWithPolicy — gate ordering", () => {
+describe("produceDialogueTurn — gate ordering", () => {
   it("text gate failure still fails the line even with valid claims", async () => {
     const request = makeRequest();
-    const policy = makePolicy();
 
     // forbidden text: 皇上 is a forbidden term
     const provider = makeProvider([], "皇上圣明。");
 
-    const result = await produceDialogueLineWithPolicy(db, provider, request, policy, state);
+    const result = await produceDialogueTurn(db, provider, request, state);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
   });
 
   it("wrong speaker is rejected at finalizeLine level", async () => {
     const request = makeRequest();
-    const policy = makePolicy();
 
     const wrongSpeakerProvider: DialogueProvider = {
       id: "wrong",
@@ -242,13 +219,7 @@ describe("produceDialogueLineWithPolicy — gate ordering", () => {
       },
     };
 
-    const result = await produceDialogueLineWithPolicy(
-      db,
-      wrongSpeakerProvider,
-      request,
-      policy,
-      state,
-    );
+    const result = await produceDialogueTurn(db, wrongSpeakerProvider, request, state);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("WRONG_SPEAKER");
   });

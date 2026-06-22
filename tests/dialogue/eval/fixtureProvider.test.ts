@@ -25,7 +25,7 @@ const SAMPLE_CLAIM: ProposedClaim = {
     object: "fenghou",
     modality: "assert",
   },
-  sourceContextIds: ["mem_001"],
+  sourceRefs: [{ kind: "memory" as const, id: "mem_001" }],
   modality: "assert",
   certainty: 90,
 };

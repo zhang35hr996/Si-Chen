@@ -338,6 +338,24 @@ export class GameStore {
     return this.resolveTimedAction(db, [], command);
   }
 
+  /**
+   * CAS (compare-and-swap) for dialogue state updates.
+   *
+   * Returns `true` and updates `this.state` to `next` (then emits) only when
+   * `this.state === expected` (reference equality). Returns `false` and leaves
+   * state untouched when `this.state !== expected` (another update raced).
+   *
+   * Used by the generative dialogue flow to prevent applying a stale LLM response
+   * after a concurrent state change (e.g. health tick, AP spend) invalidated the
+   * expectedState snapshot taken before the async `produceDialogueTurn` call.
+   */
+  commitDialogueState(expected: GameState, next: GameState): boolean {
+    if (this.state !== expected) return false;
+    this.state = next;
+    this.emit();
+    return true;
+  }
+
   private lastEffectReport: EffectReport | null = null;
 
   private commit(result: CommandResult): CommandResult {

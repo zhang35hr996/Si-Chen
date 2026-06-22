@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { formatAp, formatGameTime } from "../../src/engine/calendar/time";
 import { createInitialState } from "../../src/engine/state/initialState";
+import { createNewGameState } from "../../src/engine/state/newGame";
+import { loadRealContent } from "../helpers/contentFixture";
 
 describe("createInitialState", () => {
   it("starts at 元年一月上旬 with 行动点：6/6 (skeleton-plan §13 #2)", () => {
@@ -43,5 +45,18 @@ describe("createInitialState", () => {
     expect(state.calendar.ap).toBe(4);
     expect(state.playerLocation).toBe("zichendian");
     expect(state.rngSeed).toBe(42);
+  });
+
+  it("eventReactionLog defaults to []", () => {
+    const state = createInitialState();
+    expect(state.eventReactionLog).toEqual([]);
+  });
+});
+
+describe("createNewGameState", () => {
+  it("eventReactionLog defaults to []", () => {
+    const db = loadRealContent();
+    const state = createNewGameState(db);
+    expect(state.eventReactionLog).toEqual([]);
   });
 });

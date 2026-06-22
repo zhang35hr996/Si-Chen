@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
-import { assembleDialogueRequest, produceDialogueLine } from "../../engine/dialogue/orchestrator";
+import { assembleDialogueRequest, produceDialogueTurn } from "../../engine/dialogue/orchestrator";
 import { mockProvider } from "../../engine/dialogue/providers/mockProvider";
 import type { DialogueLine } from "../../engine/dialogue/types";
 import type { GameStore } from "../../store/gameStore";
@@ -45,8 +45,8 @@ export function BedchamberScene({
       finish();
       return;
     }
-    void produceDialogueLine(db, mockProvider, req.value).then((r) => {
-      if (alive && r.ok) setLine(r.value);
+    void produceDialogueTurn(db, mockProvider, req.value, state).then((r) => {
+      if (alive && r.ok) setLine(r.value.line);
       else if (alive) finish();
     });
     return () => {

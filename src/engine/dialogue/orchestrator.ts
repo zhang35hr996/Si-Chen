@@ -12,20 +12,24 @@ import { GroundTruthBeliefProjection } from "../chronicle/belief";
 import { aiError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
-import type { CharacterStanding, GameState } from "../state/types";
+import type { CharacterStanding, EventReactionRecord, GameState } from "../state/types";
 import { buildAudienceContext } from "./audience";
+import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
-import { buildMemoryContext } from "./memoryContext";
+import { buildMemoryContext, selectPromptEvents } from "./memoryContext";
 import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
 import { mapProviderErrorToGameError } from "./providerError";
 import {
+  toPromptEvent,
   toPromptMemory,
   type DialogueSpeakerStanding,
   type DialoguePromptContext,
 } from "./promptPayload";
+import { buildReactionPlan } from "./reactionAssembler";
 import {
+  contextRefKey,
   type DialogueAssemblyOptions,
   type DialogueLine,
   type DialogueProvider,
@@ -75,22 +79,56 @@ export function assembleDialogueRequest(
   } else {
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
   }
+  const now = toGameTime(state.calendar);
   const memCtx = buildMemoryContext(
     state,
-    { speakerId },
+    { speakerId, subjectIds: [speakerId] },
     // audienceId, targetId, speakerId all use the resolved targetId — single source.
-    { now: toGameTime(state.calendar), topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
+    { now, topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
   );
   const audience = buildAudienceContext(state, db, { speakerId, targetId });
+
+  // §5 assembly order: reaction → promptEvents → claims → promptContext
+
+  // 1. Build reaction plan (suppressed by sceneDirective inside buildReactionPlan)
+  const builtReaction = buildReactionPlan({
+    speakerId,
+    audienceId: targetId,
+    knownEventsAll: memCtx.knownEventsAll,
+    chronicle: state.chronicle,
+    state,
+    currentDayIndex: now.dayIndex,
+    sceneDirective: options.sceneDirective,
+  });
+
+  // 2. Select prompt events BEFORE assembleClaims (pinned event always first)
+  const promptEvents = selectPromptEvents({
+    events: Array.from(memCtx.knownEventsAll),
+    pinnedEventId: builtReaction?.sourceEventId,
+    limit: 3,
+  });
+
+  // 3. assembleClaims receives offeredEvents = promptEvents (NOT knownEventsAll)
+  const assembled = assembleClaims({
+    speakerId,
+    builtReaction,
+    offeredMemories: memCtx.activatedMemories,
+    offeredEvents: promptEvents,
+    beliefs: new GroundTruthBeliefProjection(state),
+    state,
+    audience,
+  });
+
   const promptContext: DialoguePromptContext = {
     speakerDisplayName: resolveDisplayName(character, contextStanding, rank),
     rankDisplay,
     audience,
     relevantMemories: memCtx.activatedMemories.map(toPromptMemory),
-    reactionPlan: undefined,
-    knownEvents: [],
-    allowedClaims: [],
-    forbiddenClaims: [],
+    reactionPlan: builtReaction?.plan,
+    reactionSourceEventId: builtReaction?.sourceEventId,
+    knownEvents: promptEvents.map((e) => toPromptEvent(e, db, state)),
+    allowedClaims: assembled.allowed,
+    forbiddenClaims: assembled.forbidden,
     choiceCandidates: [],
   };
   const { scripted, sceneDirective, transcript } = options;
@@ -196,8 +234,10 @@ function finalizeLine(
  * lives in engine/effects (PR 6). A "reject" gate finding fails the line; a
  * "flag" finding serves it with meta.degraded set. All findings are logged so
  * they surface in the debug panel's diagnostics.
+ *
+ * @internal Use `produceDialogueTurn` instead.
  */
-export async function produceDialogueLine(
+async function produceDialogueLine(
   db: ContentDB,
   provider: DialogueProvider,
   request: DialogueRequest,
@@ -231,19 +271,28 @@ export function buildDialoguePolicyContext(
 ): DialoguePolicyContext {
   void db; // intentionally unused: callers keep passing db; internally not needed
   const { time: now } = request;
-  // knownEvents are intentionally NOT part of offeredContextIds: they are built
-  // in memoryContext but never placed on DialogueRequest yet, so the provider
-  // never receives them — the gate must not bless a source it wasn't sent.
-  const offeredContextIds = new Set<string>(
-    request.speakerContext.relevantMemories.map((m) => m.id),
-  );
+  const { allowedClaims, forbiddenClaims } = request.promptContext;
+
+  // offeredContextIds: union of all source refs that were actually sent to the LLM.
+  // Includes memory refs (from relevantMemories) + event refs (from knownEvents) +
+  // any additional refs from allowedClaims.sourceRefs that point to offered context.
+  // Single-source invariant: derived from what was actually placed on the request.
+  const offeredContextIds = new Set<string>([
+    // Memory refs: memory ids of the relevantMemories handed to the provider
+    ...request.speakerContext.relevantMemories.map((m) => m.id),
+    // Event refs: event ids in the knownEvents prompt window
+    ...request.promptContext.knownEvents.map((e) => e.id),
+    // AllowedClaims sourceRefs: all ref keys from the authorized claim set
+    ...allowedClaims.flatMap((ac) => ac.sourceRefs.map(contextRefKey)),
+  ]);
+
   // Single-source invariant: audience comes from request.promptContext.audience,
   // not from an independent buildAudienceContext call. This guarantees the gate
   // sees exactly the same audience context the LLM was given.
   const audience = request.promptContext.audience;
   const beliefProjection = new GroundTruthBeliefProjection(state);
 
-  return { audience, beliefProjection, offeredContextIds, now };
+  return { audience, beliefProjection, offeredContextIds, now, allowedClaims, forbiddenClaims };
 }
 
 /**
@@ -284,12 +333,23 @@ export function validateDialogueProviderResult(
   }
 
   // ── 2. Claim gate ─────────────────────────────────────────────────
+  // Pass allowedClaims/forbiddenClaims from the policy so the gate enforces
+  // CLOSED mode when the speaker has event-authorized claims from T6 assembleClaims.
+  // When allowedClaims is [] (no events produced authorized claims), the gate runs
+  // in backward-compat open mode (allowedClaims: undefined). This preserves compatibility
+  // for scenarios with no chronicle events while enabling CLOSED mode for event-rich turns.
   const claimResult = validateDialogueClaims({
     speakerId: request.speakerId,
     audience: policy.audience,
     beliefs: policy.beliefProjection,
     offeredContextIds: policy.offeredContextIds,
     proposedClaims: response.proposedClaims,
+    ...(policy.allowedClaims.length > 0
+      ? { allowedClaims: policy.allowedClaims }
+      : {}),
+    ...(policy.forbiddenClaims.length > 0
+      ? { forbiddenClaims: policy.forbiddenClaims }
+      : {}),
   });
   diagnostics.claimFindings = claimResult.findings;
   diagnostics.acceptedClaims = claimResult.acceptedClaims;
@@ -367,8 +427,10 @@ export function validateDialogueProviderResult(
 /**
  * Full policy-aware pipeline: provider call → validateDialogueProviderResult → memory write-back.
  * Returns both the rendered line and the updated GameState (mentionLog updated).
+ *
+ * @internal Use `produceDialogueTurn` instead.
  */
-export async function produceDialogueLineWithPolicy(
+async function produceDialogueLineWithPolicy(
   db: ContentDB,
   provider: DialogueProvider,
   request: DialogueRequest,
@@ -383,12 +445,82 @@ export async function produceDialogueLineWithPolicy(
   if (!outcome.ok) return err(outcome.error);
 
   // ── memory write-back ─────────────────────────────────────────────
-  const nextState = recordMentionedContext(
+  let nextState = recordMentionedContext(
     state,
     outcome.diagnostics.acceptedClaims,
     { speakerId: request.speakerId, audienceId: request.targetId, now: policy.now },
     policy.offeredContextIds,
   );
 
+  // ── event reaction write-back (T10) ───────────────────────────────
+  // Atomic with mention writeback: both apply to the same nextState accumulation.
+  // Guards: generative provider only; reactionSourceEventId must be present;
+  // idempotent — skip if (speakerId, audienceId, eventId) triple already present.
+  const reactionEventId = request.promptContext.reactionSourceEventId;
+  if (reactionEventId !== undefined) {
+    const speakerId = request.speakerId;
+    const audienceId = request.targetId;
+    const alreadyReacted = nextState.eventReactionLog.some(
+      (r) =>
+        r.speakerId === speakerId &&
+        r.audienceId === audienceId &&
+        r.eventId === reactionEventId,
+    );
+    if (!alreadyReacted) {
+      const reactionRecord: EventReactionRecord = {
+        speakerId,
+        audienceId,
+        eventId: reactionEventId,
+        reactedAt: toGameTime(state.calendar),
+      };
+      nextState = {
+        ...nextState,
+        eventReactionLog: [...nextState.eventReactionLog, reactionRecord],
+      };
+    }
+  }
+
   return ok({ line: outcome.line, nextState });
+}
+
+// ── T9: produceDialogueTurn — THE public entry point ─────────────────────────
+
+/**
+ * The ONLY exported dialogue entry point.
+ *
+ * Routes by provider kind:
+ *   - `scripted`: text gate only (no claim gate, no mention/reaction writeback).
+ *     Returns `{ line, nextState: state }` (state unchanged).
+ *   - `generative`: full policy pipeline (claim gate + mention writeback + reaction writeback).
+ *     Returns `{ line, nextState }` with mentionLog and eventReactionLog updated atomically.
+ *
+ * Error cases:
+ *   - `generative` provider + `request.scripted` set → `invalid_combination`.
+ */
+export async function produceDialogueTurn(
+  db: ContentDB,
+  provider: DialogueProvider,
+  request: DialogueRequest,
+  state: GameState,
+  logger?: RingBufferLogger,
+): Promise<Result<{ line: DialogueLine; nextState: GameState }, GameError>> {
+  // Guard: generative provider must not receive a scripted request
+  if (provider.kind === "generative" && request.scripted !== undefined) {
+    return err(
+      aiError("INVALID_COMBINATION", "generative provider cannot process a scripted request", {
+        context: { providerId: provider.id, speakerId: request.speakerId },
+      }),
+    );
+  }
+
+  if (provider.kind === "scripted") {
+    // Scripted path: text gates only, no claim gate, no state mutation
+    const lineResult = await produceDialogueLine(db, provider, request, logger);
+    if (!lineResult.ok) return err(lineResult.error);
+    return ok({ line: lineResult.value, nextState: state });
+  }
+
+  // Generative path: full policy pipeline
+  const policy = buildDialoguePolicyContext(db, state, request);
+  return produceDialogueLineWithPolicy(db, provider, request, policy, state, logger);
 }

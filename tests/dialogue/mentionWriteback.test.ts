@@ -2,26 +2,29 @@ import { describe, it, expect } from "vitest";
 import { recordMentionedContext } from "../../src/engine/dialogue/mentionWriteback";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { recentMentionPenalty } from "../../src/engine/dialogue/mention";
-import type { ProposedClaim } from "../../src/engine/dialogue/claims";
+import type { ProposedClaim, ContextRef } from "../../src/engine/dialogue/claims";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const now = { year: 1, month: 1, period: "early" as const, dayIndex: 0 };
 
-const accepted = (sourceContextIds: string[]): ProposedClaim => ({
+const memRef = (id: string): ContextRef => ({ kind: "memory", id });
+const evtRef = (id: string): ContextRef => ({ kind: "event", id });
+
+const accepted = (sourceRefs: ContextRef[]): ProposedClaim => ({
   claim: { id: "c", predicate: "resides_at", subjectId: "x", object: "y", modality: "assert" },
-  sourceContextIds,
+  sourceRefs,
   modality: "assert",
   certainty: 90,
 });
 
 describe("recordMentionedContext", () => {
-  it("writes a mention for each offered sourceContextId and raises that memory's penalty", () => {
+  it("writes a mention for each offered memory sourceRef and raises that memory's penalty", () => {
     const s0 = createNewGameState(db);
     const offered = new Set(["mem_1"]);
     const s1 = recordMentionedContext(
       s0,
-      [accepted(["mem_1"])],
+      [accepted([memRef("mem_1")])],
       { speakerId: "shen_zhibai", audienceId: "player", now },
       offered,
     );
@@ -35,11 +38,38 @@ describe("recordMentionedContext", () => {
     expect(p).toBeGreaterThan(0);
   });
 
+  it("writes MemoryMentionRecord for kind='memory' only", () => {
+    const s0 = createNewGameState(db);
+    const offered = new Set(["mem_1", "evt_001"]);
+    // One memory ref + one event ref — only memory should be written
+    const s1 = recordMentionedContext(
+      s0,
+      [accepted([memRef("mem_1"), evtRef("evt_001")])],
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      offered,
+    );
+    // Only mem_1 is a memory → only 1 mention written
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length + 1);
+  });
+
+  it("ignores kind='event' sourceRef (no mention written)", () => {
+    const s0 = createNewGameState(db);
+    const offered = new Set(["evt_001"]);
+    const s1 = recordMentionedContext(
+      s0,
+      [accepted([evtRef("evt_001")])],
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      offered,
+    );
+    // event ref → not written to mentionLog
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length);
+  });
+
   it("never writes a source id that was not offered (defense in depth)", () => {
     const s0 = createNewGameState(db);
     const s1 = recordMentionedContext(
       s0,
-      [accepted(["mem_X"])],
+      [accepted([memRef("mem_X")])],
       { speakerId: "shen_zhibai", audienceId: "player", now },
       new Set(["mem_1"]),
     );
@@ -51,7 +81,7 @@ describe("recordMentionedContext", () => {
     const offered = new Set(["mem_1"]);
     const s1 = recordMentionedContext(
       s0,
-      [accepted(["mem_1"]), accepted(["mem_1"])],
+      [accepted([memRef("mem_1")]), accepted([memRef("mem_1")])],
       { speakerId: "shen_zhibai", audienceId: "player", now },
       offered,
     );
@@ -73,19 +103,19 @@ describe("recordMentionedContext", () => {
     const s0 = createNewGameState(db);
     const s1 = recordMentionedContext(
       s0,
-      [accepted(["mem_1"])],
+      [accepted([memRef("mem_1")])],
       { speakerId: "shen_zhibai", audienceId: "player", now },
       new Set(),
     );
     expect(s1.mentionLog.length).toBe(s0.mentionLog.length);
   });
 
-  it("writes mentions for multiple distinct offered source ids", () => {
+  it("writes mentions for multiple distinct offered memory source ids", () => {
     const s0 = createNewGameState(db);
     const offered = new Set(["mem_1", "mem_2"]);
     const s1 = recordMentionedContext(
       s0,
-      [accepted(["mem_1", "mem_2"])],
+      [accepted([memRef("mem_1"), memRef("mem_2")])],
       { speakerId: "shen_zhibai", audienceId: "player", now },
       offered,
     );
@@ -95,10 +125,10 @@ describe("recordMentionedContext", () => {
   it("filters out ids not in offered even when mixed with valid ids", () => {
     const s0 = createNewGameState(db);
     const offered = new Set(["mem_1"]);
-    // sourceContextIds has both offered and non-offered
+    // sourceRefs has memory refs both offered and non-offered
     const s1 = recordMentionedContext(
       s0,
-      [accepted(["mem_1", "mem_X", "mem_Y"])],
+      [accepted([memRef("mem_1"), memRef("mem_X"), memRef("mem_Y")])],
       { speakerId: "shen_zhibai", audienceId: "player", now },
       offered,
     );
@@ -111,7 +141,7 @@ describe("recordMentionedContext", () => {
     const original = s0.mentionLog.length;
     recordMentionedContext(
       s0,
-      [accepted(["mem_1"])],
+      [accepted([memRef("mem_1")])],
       { speakerId: "shen_zhibai", audienceId: "player", now },
       new Set(["mem_1"]),
     );

@@ -22,7 +22,7 @@ export const WORLD_RULES_TEXT = `
 5. 不得在台词中透出 JSON 字段名、规则说明或内部 ID。
 6. 不得凭空引入 payload 未提供的事实或事件。
 7. proposedClaims 只记录台词中明确表达的事实，不填隐含信息。
-8. 引用 relevantMemories 中记忆的 claim 必须填写对应 memory id 在 sourceContextIds。
+8. 引用 relevantMemories 中记忆的 claim 必须填写对应 memory id 在 sourceRefs（如 { kind: "memory", id: "..." }）。
 9. 不确定信息不得用断言语气（"确实"、"一定"），应用 "听说"、"好像" 等。
 10. forbiddenClaims 中的事实内容一律不在台词中出现。
 11. allowedClaims 为空不代表禁止问候、情绪表达或主观感受。

@@ -21,10 +21,24 @@ export interface DialogueClaim {
   certaintyCeiling?: number;
 }
 
+/**
+ * Typed reference to a context item the LLM used as evidence for a claim.
+ * Matches ContextRef in types.ts — duplicated here to keep claims.ts self-contained.
+ */
+export interface ContextRef {
+  kind: "memory" | "event" | "fact";
+  id: string;
+}
+
+export const contextRefSchema = z.object({
+  kind: z.enum(["memory", "event", "fact"]),
+  id: z.string().min(1),
+});
+
 export interface ProposedClaim {
   claim: DialogueClaim;
-  /** 本条 claim 依据本次请求中的哪些记忆/编年史/事实 id（写回与来源合法性的唯一依据）。 */
-  sourceContextIds: string[];
+  /** Non-empty: each ref is a context item offered to the LLM that justifies this claim. */
+  sourceRefs: ContextRef[];
   modality: ClaimModality;
   certainty: number; // 0–100
 }
@@ -45,9 +59,18 @@ export const dialogueClaimSchema: z.ZodType<DialogueClaim> = z.strictObject({
 
 export const proposedClaimSchema: z.ZodType<ProposedClaim> = z.strictObject({
   claim: dialogueClaimSchema,
-  sourceContextIds: z.array(z.string().min(1)),
+  sourceRefs: z.array(contextRefSchema).min(1),
   modality: claimModalitySchema,
   certainty: z.number().min(0).max(100),
+}).superRefine((data, ctx) => {
+  // Modality consistency: proposed modality must match claim.modality
+  if (data.modality !== data.claim.modality) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["modality"],
+      message: `proposed modality "${data.modality}" must match claim.modality "${data.claim.modality}"`,
+    });
+  }
 });
 
 /** 仅可投影谓词桥接到 BeliefProjection；派生/关系/因果类谓词无单一 fact → undefined。 */

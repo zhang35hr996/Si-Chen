@@ -43,10 +43,11 @@ import type { DialogueRequest, DialogueValidationDiagnostics } from "../types";
  */
 export function evaluateExpectations(
   expectations: EvalScenario["expectations"],
-  result: Pick<EvalResult, "schemaStatus" | "gateStatus" | "text">,
+  result: Pick<EvalResult, "schemaStatus" | "gateStatus" | "text" | "knownEventIds">,
   diagnostics: DialogueValidationDiagnostics | undefined,
+  mustKnowEventIds?: string[],
 ): { status: CheckStatus; findings: EvalExpectationFinding[] } {
-  if (!expectations) return { status: "not_run", findings: [] };
+  if (!expectations && !mustKnowEventIds?.length) return { status: "not_run", findings: [] };
 
   // prerequisite: not_run when schema failed, gate never ran, or no text
   if (
@@ -58,6 +59,18 @@ export function evaluateExpectations(
   }
 
   const findings: EvalExpectationFinding[] = [];
+
+  // ── mustKnowEventIds check ────────────────────────────────────────────────────
+  const knownEventIdsSet = new Set(result.knownEventIds ?? []);
+  for (const eventId of mustKnowEventIds ?? []) {
+    if (!knownEventIdsSet.has(eventId)) {
+      findings.push({ code: "required_event_not_in_prompt", detail: eventId });
+    }
+  }
+
+  if (!expectations) {
+    return { status: findings.length === 0 ? "pass" : "fail", findings };
+  }
 
   if (expectations.gatePass !== undefined) {
     const actual = result.gateStatus === "pass";
@@ -75,11 +88,13 @@ export function evaluateExpectations(
     }
   }
 
-  for (const id of expectations.requiredSourceContextIds ?? []) {
+  for (const ref of expectations.requiredSourceRefs ?? []) {
     const cited =
-      diagnostics?.acceptedClaims.some((c) => c.sourceContextIds.includes(id)) ?? false;
+      diagnostics?.acceptedClaims.some((c) =>
+        c.sourceRefs.some((r) => r.kind === ref.kind && r.id === ref.id),
+      ) ?? false;
     if (!cited) {
-      findings.push({ code: "required_source_not_cited", detail: id });
+      findings.push({ code: "required_source_not_cited", detail: ref.id });
     }
   }
 
@@ -139,8 +154,9 @@ export async function runEvalScenarioWithProvider(
   if (!requestResult.ok) {
     const expResult = evaluateExpectations(
       scenario.expectations,
-      { schemaStatus: "not_run", gateStatus: "not_run", text: undefined },
+      { schemaStatus: "not_run", gateStatus: "not_run", text: undefined, knownEventIds: undefined },
       undefined,
+      scenario.mustKnowEventIds,
     );
     return {
       ...base,
@@ -176,8 +192,9 @@ export async function runEvalScenarioWithProvider(
 
     const expResult = evaluateExpectations(
       scenario.expectations,
-      { schemaStatus, gateStatus, text: undefined },
+      { schemaStatus, gateStatus, text: undefined, knownEventIds: undefined },
       undefined,
+      scenario.mustKnowEventIds,
     );
 
     return {
@@ -199,6 +216,9 @@ export async function runEvalScenarioWithProvider(
   const usage = raw.value.usage;
   const requestId = raw.value.providerMeta?.requestId;
 
+  // Populate knownEventIds from the assembled request's promptContext.knownEvents
+  const knownEventIds = request.promptContext.knownEvents.map((e) => e.id);
+
   const outcome = validateDialogueProviderResult(db, provider, request, policy, raw.value);
 
   const claimFindings = outcome.diagnostics.claimFindings.map((f) => ({
@@ -217,8 +237,9 @@ export async function runEvalScenarioWithProvider(
   // Step 7 — evaluate expectations (same logic for fixture and online)
   const expResult = evaluateExpectations(
     scenario.expectations,
-    { schemaStatus: "pass", gateStatus, text: generatedText },
+    { schemaStatus: "pass", gateStatus, text: generatedText, knownEventIds },
     outcome.diagnostics,
+    scenario.mustKnowEventIds,
   );
 
   return {
@@ -228,6 +249,7 @@ export async function runEvalScenarioWithProvider(
     claimFindings,
     textFindings,
     text: generatedText,
+    knownEventIds,
     ...(servedText !== undefined ? { servedText } : {}),
     ...(usage !== undefined
       ? {

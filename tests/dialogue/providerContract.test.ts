@@ -16,7 +16,7 @@ describe("dialogueToolOutputSchema", () => {
   it("caps proposedClaims at 8", () => {
     const many = Array.from({ length: 9 }, (_, i) => ({
       claim: { id: `c${i}`, predicate: "holds_rank", subjectId: "s", modality: "assert" },
-      sourceContextIds: ["m1"], modality: "assert", certainty: 50,
+      sourceRefs: [{ kind: "memory", id: "m1" }], modality: "assert", certainty: 50,
     }));
     expect(dialogueToolOutputSchema.safeParse({ text: "嗯。", proposedClaims: many }).success).toBe(false);
   });

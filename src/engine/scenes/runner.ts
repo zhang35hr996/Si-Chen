@@ -16,7 +16,7 @@
 import type { ContentDB } from "../content/loader";
 import { MAX_NODE_STEPS } from "../content/loader";
 import type { EventEffect, SceneContent, SceneNode } from "../content/schemas";
-import { assembleDialogueRequest, produceDialogueLine } from "../dialogue/orchestrator";
+import { assembleDialogueRequest, produceDialogueTurn } from "../dialogue/orchestrator";
 import type { DialogueLine, DialogueProvider } from "../dialogue/types";
 import { evaluateCondition, hasEventFired } from "../events/conditions";
 import { stateError, type GameError } from "../infra/errors";
@@ -181,10 +181,10 @@ export class SceneRunner {
             { scripted: { text: node.text, ...(node.expression !== undefined ? { expression: node.expression } : {}) } },
           );
           if (!request.ok) return this.fail(request.error);
-          const produced = await produceDialogueLine(this.db, this.provider, request.value, this.logger);
+          const produced = await produceDialogueTurn(this.db, this.provider, request.value, this.preState!, this.logger);
           if (!produced.ok) return this.fail(produced.error);
 
-          let line = produced.value;
+          let line = produced.value.line;
           const nextNode = node.next ? this.nodes.get(node.next) : undefined;
           if (nextNode?.type === "choice") {
             const attached = this.attachChoices(line, nextNode);
