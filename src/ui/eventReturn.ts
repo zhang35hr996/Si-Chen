@@ -82,16 +82,15 @@ export function canChain(state: NavState): boolean {
 }
 
 /**
- * runCheckpoints 自动启动事件时的返回上下文：stayOnMap（出宫等，玩家位置未变、停在嵌套地图板）
- * → 恢复该板（atRoot=false + boardId）；否则 → 回事件所在地点。与本函数「无事件」时的落点一致，
- * 修复事件打断后丢失京城/郊外板的回归（§ map-context）。
+ * runCheckpoints 自动启动事件时的返回上下文。**board ID 由发起动作（出宫 exitPalace 的目标板）
+ * 显式传入**，不读异步镜像的父级 currentBoard——避免子组件先于 onBoardChange 生效就卸载导致捕获
+ * 旧板（常为 "palace"）的时序耦合。board ID 在场 → 恢复该嵌套板；缺省 → 回事件所在地点。
  */
 export function checkpointReturnTarget(
-  stayOnMap: boolean,
+  stayOnMapBoardId: string | undefined,
   playerLocation: string,
-  currentBoard: string,
 ): EventReturnTarget {
-  return stayOnMap
-    ? { kind: "map", atRoot: false, boardId: currentBoard }
+  return stayOnMapBoardId
+    ? { kind: "map", atRoot: false, boardId: stayOnMapBoardId }
     : { kind: "location", locationId: playerLocation };
 }

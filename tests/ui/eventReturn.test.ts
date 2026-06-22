@@ -2,6 +2,7 @@
  * EventReturnTarget 生命周期（Commit B）。测试 App 实际使用的纯模块（resolveReturnNavigation
  * + navReducer），不复制 target 字面量、不渲染 App。
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   type EventReturnTarget,
@@ -167,11 +168,38 @@ describe("map board context across event return (regression)", () => {
   });
 });
 
-describe("checkpointReturnTarget (runCheckpoints choice)", () => {
-  it("stayOnMap=true → resumable nested-board map target", () => {
-    expect(checkpointReturnTarget(true, "zichendian", "jingcheng")).toEqual({ kind: "map", atRoot: false, boardId: "jingcheng" });
+describe("checkpointReturnTarget — explicit board-id producer contract", () => {
+  it("1. explicit 'jingcheng' board id → resumable map target", () => {
+    expect(checkpointReturnTarget("jingcheng", "zichendian")).toEqual({ kind: "map", atRoot: false, boardId: "jingcheng" });
   });
-  it("stayOnMap=false → location target for the current player location", () => {
-    expect(checkpointReturnTarget(false, "yanhe_gong", "palace")).toEqual({ kind: "location", locationId: "yanhe_gong" });
+  it("2. explicit 'jiaowai' board id preserved exactly", () => {
+    expect(checkpointReturnTarget("jiaowai", "zichendian")).toEqual({ kind: "map", atRoot: false, boardId: "jiaowai" });
+  });
+  it("3. absent board id → location target for the current player location", () => {
+    expect(checkpointReturnTarget(undefined, "yanhe_gong")).toEqual({ kind: "location", locationId: "yanhe_gong" });
+  });
+  it("6. helper does not accept/depend on a separate currentBoard snapshot (arity 2)", () => {
+    expect(checkpointReturnTarget.length).toBe(2);
+  });
+});
+
+describe("producer source contract (no jsdom)", () => {
+  const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
+
+  it("MapScreen.exitPalace passes the literal destination board `to` through onTravelled", () => {
+    const src = read("../../src/ui/screens/MapScreen.tsx");
+    const start = src.indexOf("const exitPalace");
+    const exitBody = src.slice(start, src.indexOf("};", start) + 2);
+    // authoritative board id is the literal `to` (last arg), not a boolean or a mirrored parent snapshot
+    expect(exitBody).toContain("onTravelled(");
+    expect(exitBody).toMatch(/,\s*to\s*\)\s*;/);
+    expect(exitBody).not.toMatch(/,\s*true\s*\)\s*;/); // old 4th-arg `true` is gone
+  });
+
+  it("App.runCheckpoints applies the explicit board id on BOTH the event and no-event paths", () => {
+    const src = read("../../src/ui/App.tsx");
+    const body = src.slice(src.indexOf("const runCheckpoints"), src.indexOf("const runCheckpoints") + 900);
+    expect(body).toMatch(/checkpointReturnTarget\(stayOnMapBoardId, state\.playerLocation\)/); // event path
+    expect(body).toMatch(/else if \(stayOnMapBoardId\) \{[^}]*setCurrentBoard\(stayOnMapBoardId\)/s); // no-event path
   });
 });

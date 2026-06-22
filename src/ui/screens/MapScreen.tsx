@@ -52,9 +52,9 @@ export function MapScreen({
   resumeBoardId?: string;
   /** spentAp=false 表示宫内免行动点移动（不掷懿旨/敲打、不跑转旬）。
    *  sovereignDied=true 表示本次跨月 tick 皇帝崩逝，调用方须 short-circuit 回 title。
-   *  stayOnMap=true（出宫）表示玩家位置未变，结算后须留在地图（京城板），
-   *  不可按 playerLocation 把视图切回房间（否则点宫门会错落到紫宸殿）。 */
-  onTravelled: (rolledOver: boolean, spentAp: boolean, sovereignDied?: boolean, stayOnMap?: boolean) => void;
+   *  stayOnMapBoardId（出宫）表示玩家位置未变、结算后须留在该嵌套地图板（如 "jingcheng"），
+   *  不可按 playerLocation 把视图切回房间。**由发起动作显式传入权威板 ID，不依赖异步 onBoardChange。** */
+  onTravelled: (rolledOver: boolean, spentAp: boolean, sovereignDied?: boolean, stayOnMapBoardId?: string) => void;
   onEnterCurrent: () => void;
   onOpenView: (locationId: string) => void;
   onOpenSettings: () => void;
@@ -156,7 +156,8 @@ export function MapScreen({
     const result = store.travelAndAdvance(db, [], { type: "SPEND_AP", amount: 1 });
     if (!result.ok) return;
     enterBoard(to);
-    onTravelled(result.value.rolledOver, true, result.value.healthOutcome?.sovereignDied === true, true);
+    // 权威板 ID 直接传 `to`——不依赖 onBoardChange effect 是否已上报（子组件可能在事件启动时先卸载）。
+    onTravelled(result.value.rolledOver, true, result.value.healthOutcome?.sovereignDied === true, to);
   };
 
   // 点击节点直接执行动作（无信息栏中转）。

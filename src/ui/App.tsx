@@ -132,9 +132,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   const [reactionRollover, setReactionRollover] = useState(false);
-  // 出宫结算若需延后补跑 checkpoint（懿旨过场后换旬），记下「留在地图」意图，
-  // 使补跑不按 playerLocation 把视图切回房间（玩家在京城板，位置未变）。
-  const [reactionStayOnMap, setReactionStayOnMap] = useState(false);
+  // 出宫结算若需延后补跑 checkpoint（懿旨过场后换旬），记下「留在哪个地图板」的权威 board ID
+  // （由 onTravelledSettle 传入），使补跑恢复该嵌套板而非按 playerLocation 切回房间。
+  const [reactionStayOnBoardId, setReactionStayOnBoardId] = useState<string | undefined>(undefined);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
   const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
@@ -401,7 +401,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   /** Checkpoint wiring: time_advance (after a rollover) wins over location_enter. */
-  const runCheckpoints = (rolledOver: boolean, stayOnMap = false) => {
+  const runCheckpoints = (rolledOver: boolean, stayOnMapBoardId?: string) => {
     const state = store.getState();
     // 出宫/在城内地图（stayOnMap）时玩家并未进入紫宸殿等房间，playerLocation 只是
     // 未变的留痕；此时不可触发 location_enter 事件（否则刚点宫门就被司礼祭仪等
@@ -409,12 +409,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const loc = db.locations[state.playerLocation];
     const pick =
       (rolledOver ? pickAutoStartEvent(db, state, "time_advance", loc) : null) ??
-      (stayOnMap ? null : pickAutoStartEvent(db, state, "location_enter", loc));
-    // 返回上下文与本函数无事件时的落点一致：stayOnMap（出宫，位置未变）恢复当前嵌套板；否则回当前地点。
-    if (pick) startEvent(pick.id, checkpointReturnTarget(stayOnMap, state.playerLocation, currentBoard));
-    // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在京城地图板，
+      (stayOnMapBoardId ? null : pickAutoStartEvent(db, state, "location_enter", loc));
+    // 返回上下文与本函数无事件时的落点一致：stayOnMapBoardId（出宫，位置未变）恢复该嵌套板；否则回当前地点。
+    if (pick) startEvent(pick.id, checkpointReturnTarget(stayOnMapBoardId, state.playerLocation));
+    // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在被打断的地图板（权威 board ID 由调用方传入），
     // 不能按 playerLocation 切回房间视图。
-    else if (stayOnMap) setView("map");
+    else if (stayOnMapBoardId) { setMapAtRoot(false); setCurrentBoard(stayOnMapBoardId); setView("map"); }
     else if (store.getState().playerLocation === "wenzhaodian") setView("wenzhaodian");
     else if (store.getState().playerLocation === "yuqing_gong") setView("yuqing_gong");
     else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
@@ -1066,7 +1066,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   /** 旅行结算（MapScreen.onTravelled 与院子 enterConsortQuarters 共用）。 */
-  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false, stayOnMap = false) => {
+  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false, stayOnMapBoardId?: string) => {
     if (sovereignDied) { onSovereignDeath(); return; } // 跨月旅行皇帝崩逝：清场回 title。
     doAutosave();
     // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
@@ -1082,8 +1082,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         if (applied.ok) beats = plan.reactions;
       }
     }
-    if (beats.length) { setReactionStayOnMap(stayOnMap); playReactions(beats, rolledOver); }
-    else runCheckpoints(rolledOver, stayOnMap);
+    if (beats.length) { setReactionStayOnBoardId(stayOnMapBoardId); playReactions(beats, rolledOver); }
+    else runCheckpoints(rolledOver, stayOnMapBoardId);
   };
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
@@ -1375,9 +1375,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
           onClose={() => {
             setShopId(null);
-            // 店在京城（free-entry，playerLocation 未变）：转旬补跑亦须留在地图，
-            // 否则会按 playerLocation 落回紫宸殿；无转旬则直接回京城板。
-            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true, true); }
+            // 店在京城（free-entry，playerLocation 未变）：转旬补跑亦须留在地图。currentBoard 此刻已稳定
+            // （进店前 onBoardChange 早已生效，无卸载时序问题），作为显式权威板传入；无转旬则直接回该板。
+            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true, currentBoard); }
             else { setView("map"); }
           }} />
       )}
@@ -1516,8 +1516,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               setManageCharId(id);
             } else if (reactionRollover) {
               setReactionRollover(false);
-              setReactionStayOnMap(false);
-              runCheckpoints(true, reactionStayOnMap); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
+              const boardId = reactionStayOnBoardId; // 捕获后再清空，落点用捕获值（setState 异步）
+              setReactionStayOnBoardId(undefined);
+              runCheckpoints(true, boardId); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
             }
           }}
         />
