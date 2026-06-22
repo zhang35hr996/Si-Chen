@@ -58,21 +58,30 @@ describe("funnel: birth", () => {
     expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBe(20);
   });
 
-  it("bearer_dies → heir survives, carrier deceased (no recovery)", () => {
+  it("bearer_dies → heir survives, gestation cleared; maternal death NOT set by birth effect alone", () => {
+    // Under the unified death pipeline, the birth effect only handles survivor lifecycle.
+    // bearer_dies/both: maternal death (deceased + deathRecord) comes from a subsequent
+    // consort_decease effect emitted by planHealthChange(forceDeath:true). The birth effect
+    // itself leaves the carrier lifecycle as-is (still "carrying" until consort_decease fires).
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "bearer_dies" }]);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(1);
     expect(r.value.resources.bloodline.heirs[0]!.bearer).toBe("lu_huaijin");
-    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("deceased");
-    expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBeUndefined();
+    // Gestation cleared by birth effect; maternal death comes from subsequent consort_decease.
+    expect(r.value.resources.bloodline.gestations).toEqual([]);
+    expect(r.value.standing.lu_huaijin!.lifecycle).not.toBe("deceased"); // not dead yet without consort_decease
+    expect(r.value.standing.lu_huaijin!.deathRecord).toBeUndefined();
   });
 
-  it("both → no heir, carrier deceased", () => {
+  it("both → no heir, gestation cleared; maternal death NOT set by birth effect alone", () => {
+    // Same as bearer_dies: birth effect clears the gestation and records the heir (none here),
+    // but leaves lifecycle/deathRecord to the subsequent consort_decease effect.
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "both" }]);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(0);
-    expect(r.value.standing.lu_huaijin!.lifecycle).toBe("deceased");
-    expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBeUndefined();
+    expect(r.value.resources.bloodline.gestations).toEqual([]);
+    expect(r.value.standing.lu_huaijin!.lifecycle).not.toBe("deceased"); // not dead yet without consort_decease
+    expect(r.value.standing.lu_huaijin!.deathRecord).toBeUndefined();
   });
 
   it("self-pregnancy birth (bearer sovereign) appends heir, no standing change", () => {

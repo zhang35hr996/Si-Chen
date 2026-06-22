@@ -484,7 +484,6 @@ export function applyEffects(
       case "birth": {
         const bl = next.resources.bloodline;
         const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";
-        const bearerSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "child_dies";
         if (childSurvives) {
           bl.heirs.push({
             id: nextHeirId(bl.heirs.length),
@@ -509,17 +508,17 @@ export function applyEffects(
           });
         }
         if (effect.bearer !== "sovereign") {
-          const st = next.standing[effect.bearer]!;
-          if (!bearerSurvives) {
-            st.lifecycle = "deceased";
-            delete st.recoverUntilMonth;
-          } else if (effect.bearerOutcome === "safe") {
-            st.lifecycle = "delivered";
-            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
-          } else {
-            // child_dies, bearer survives → 不晋升，回 normal，难产三月休养
-            st.lifecycle = "normal";
-            if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+          const st = next.standing[effect.bearer];
+          if (st) {
+            if (effect.bearerOutcome === "safe") {
+              st.lifecycle = "delivered";
+              if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+            } else if (effect.bearerOutcome === "child_dies") {
+              st.lifecycle = "normal";
+              if (effect.recoverUntilMonth !== undefined) st.recoverUntilMonth = effect.recoverUntilMonth;
+            }
+            // bearer_dies / both: 母方死亡由后续 consort_decease 统一处理
+            //（写 deathRecord.cause="childbirth" + 断胎 + enqueue_aftermath）；此处不置死。
           }
         }
         // 仅移除生产对应的那条胎息；帝王可能另有自孕，故只在自孕生产时才清 pregnancy。
