@@ -1,7 +1,7 @@
 # 场景 UI · 人物交互 · 事件流程重构 — 设计规格
 
 **日期：** 2026-06-22
-**状态：** 评审 r2 修订完成，待复审批准（AudienceItem 自足 / 全部自动 checkpoint 改走 router / hostLocationId 静态归属 / 候见对账清理 / 提醒间隔修正 / presentation 强制校验）
+**状态：** 评审 r3 修订完成，待复审批准（对账按 eligibility 清理且不误删他 host / 候见数与待宣数分离 / 修正 manual 不可检测的校验承诺 / 文字一致性）
 **相关文档：**
 [`engineering/10-current-implementation.md`](../../engineering/10-current-implementation.md)（引擎契约）·
 [`2026-06-18-yushufang-redesign-design.md`](./2026-06-18-yushufang-redesign-design.md)·
@@ -130,9 +130,9 @@ export function resolveEntryMode(event, location): EventEntryMode {
 }
 ```
 
-**呈现模式声明规则（评审 r2 #2）**：`auto_on_enter` 可由旧 content 推导（无 `presentation` 也能展示，因为不需要候见者/子地点元数据）；但 **`request_audience`/`exploration`/`manual` 必须显式声明 `presentation`**——否则会出现「`resolveEntryMode` 推导为 request_audience，但 `presentation===undefined`，候见 UI 无人物/文案可读」的合法但不可展示事件。该约束由 `validate-content` 跨引用校验保证（见 §3.5），不靠运行时兜底。
+**呈现模式声明规则（评审 r2 #2 / r3 #3）**：`auto_on_enter` 可由旧 content 推导（无 `presentation` 也能展示）。`request_audience`/`exploration` 在其宿主地点（紫宸殿/御花园）由推导识别为「需 presentation」，缺失时 `validate-content` 报错（见 §3.5）。`manual` **无推导路径**——数据上与 `auto_on_enter` 不可分，validator 无法检测「本想 manual 却漏声明」；只有显式 `presentation.mode:"manual"` 才算 manual。
 
-旧 content 无 `presentation` 且推导为 `auto_on_enter` → 正常；推导为 request_audience/exploration 而缺 presentation → **`validate-content` 报错**（强制补齐），而非静默失败。旧档不受影响（字段可选）。
+旧 content 无 `presentation` 且推导为 `auto_on_enter` → 正常；可推导为 request_audience/exploration 而缺 presentation → **`validate-content` 报错**。旧档不受影响（字段可选）。
 
 ### 3.2 中央呈现路由（P0-1：entryMode 真正接入调度器）
 
@@ -191,18 +191,24 @@ export function audienceStatus(state, eventId): AudienceStatus;     // 读 pendi
 export function shouldRemind(state, eventId): boolean;             // 读 remindAt（dayIndex 已到）
 export function defer(eventId, dayIndex): EventEffect[];           // pending=true, promptShownAt=dayIndex, remindAt=dayIndex+AFTER_PERIODS
 export function clearAudience(eventId): EventEffect[];             // 三个 flag 归零
-/** 权威队列：校验 resolveEntryMode===request_audience、presentation.hostLocationId===locationId、当前 eligibility、once/cooldown。 */
+/** 权威队列（全部三态）：校验 resolveEntryMode===request_audience、presentation.hostLocationId===locationId、当前 eligibility、once/cooldown。 */
 export function getAudienceQueue(db, state, locationId): AudienceItem[];
-export function pendingAudienceCount(db, state, locationId): number;  // = getAudienceQueue 长度（非裸数 flag，P0-3#5）
-/** 对账：扫描现存 audience:pending:* flag，对已不该 pending 者产出 clearAudience effects（纯函数，无副作用）。 */
+export function audienceCount(db, state, locationId): number;            // 全部候见（含 available）→「候见之人」
+export function getDeferredAudienceQueue(db, state, locationId): AudienceItem[]; // 仅 pending+suppressed → Drawer
+export function deferredAudienceCount(db, state, locationId): number;    // →「待宣 · N」
+/** 对账：清除「属于本 host 但已不合法」的 pending（纯函数，无副作用）。 */
 export function audienceReconciliationEffects(db, state, locationId): EventEffect[];
 ```
 
 - **`AudienceItem` 自足（评审 r2 #1）**：携带收窄后的 `presentation` + `affordable` + `deferredAtDayIndex` + `remindAtDayIndex`。`AudiencePrompt`/`PendingAudienceDrawer` 只消费 `AudienceItem`，不再读 flags、不重算 ap、不自行收窄 `event.presentation`。
+- **候见数 ≠ 待宣数（评审 r3 #2）**：「候见之人」= `audienceCount`（含首次出现的 `available`）；「待宣 · N」= `deferredAudienceCount`（仅 `pending`+`suppressed`）。`PendingAudienceDrawer` 直接消费 `getDeferredAudienceQueue`，**UI 不自行过滤**——避免「候见 · 1 → 点开却『当前无待宣事务』」（那 1 是 available，不是已延期）。
 - **宿主地点用 `presentation.hostLocationId`（评审 r2 #3）**：`getAudienceQueue` 以 `hostLocationId===locationId` 判定归属，**不依赖 `condition.atLocation`**（后者是游戏资格条件、可嵌套 all/any/not、可缺省，不适合做呈现宿主）。`condition.atLocation` 仍决定「当前是否 eligible」，`hostLocationId` 决定「属于哪个场景」，两者职责分离。
 - **三态语义**：`available`（未延期、当前 eligible）→ 主动弹；`pending`（已延期、`shouldRemind` 真）→ 再次主动弹；`suppressed`（已延期、未到提醒点）→ 仅在待宣列表。提示可见 = available||pending；待宣列表 = pending||suppressed。
 - **`defer` 真正设 `remindAt`** = dayIndex + `AUDIENCE_REMIND_AFTER_PERIODS`（提醒确会发生）；deadline/升级由事件 effects 覆盖为更早。
-- **`clearAudience` 接线 + 对账（评审 r2 #5）**：宣入但**中途退出** → 保留 pending；**成功提交** → `clearAudience`。此外，selector **不产副作用**；过期清理由独立纯函数 `audienceReconciliationEffects` 完成——它扫描现存 `audience:pending:*`，对「事件不存在 / 不再是 request_audience / hostLocation 不匹配 / once 已发 / 按规则已过期」者产出 `clearAudience` effects。在**进入紫宸殿、读档后首次进入、事件提交后**统一 `store.applyEffects(db, audienceReconciliationEffects(...))`，杜绝「条件暂失效→从队列消失→flag 残留→日后以旧 pending 复活」。
+- **`clearAudience` 接线 + 对账（评审 r2 #5 / r3 #1）**：宣入但**中途退出** → 保留 pending；**成功提交** → `clearAudience`。过期清理由独立纯函数 `audienceReconciliationEffects` 完成（selector 不产副作用），规则：
+  - eligibility（condition / cooldown / once）**一律走 `getEligibleEvents` 权威判断**，不复制逻辑——先取「本 host 当前合法候见集 `validIds`」。
+  - 遍历现存 `audience:pending:*`：事件**不存在 / 非 request_audience** → 清；`hostLocationId !== 当前 host` → **跳过（不清，避免误删其它 host 的待宣）**；属本 host 但 `!validIds.has(id)`（条件失效/cooldown/once 已发）→ 清。
+  - 时机：**进入该候见宿主时**（含读档后首次进入该 host）按 `locationId` 跑，**绝不在任意地图态全局清理**；事件提交后再跑一次。杜绝「条件暂失效→从队列消失→flag 残留→日后以旧 pending 复活」。
 
 ### 3.4 事件返回上下文（P0-2）
 
@@ -225,13 +231,11 @@ type EventReturnTarget =
 
 `tools/validate-content.ts` 增加跨引用校验（构建期失败，不留运行时兜底）：
 
-- `request_audience`/`exploration`/`manual` 事件**必须**有 `presentation`（缺失即报错）。
-- `presentation.audienceCharacterId` ∈ `db.characters`。
-- `presentation.hostLocationId` ∈ `db.locations`。
-- `exploration.hostLocationId` 对应 location 须有 `subLocations`，且 `presentation.subLocationId` ∈ 该 location 的 `subLocations[].id`。
-- `request_audience` 须同时有 `audiencePrompt` 与 `audienceCharacterId`（schema 已强制，校验再确认非空语义）。
+- **可检测的缺失（靠地点推导）**：`location_enter` 事件，若其 `condition` 引用的 `atLocation` 推导为 `request_audience`（紫宸殿）或 `exploration`（御花园）而**缺 `presentation`** → 报错（深层嵌套 `atLocation` 为 best-effort）。
+- **引用校验**（对已声明的 `presentation`）：`audienceCharacterId` ∈ `db.characters`；`hostLocationId` ∈ `db.locations`；`exploration.hostLocationId` 对应 location 须有 `subLocations` 且 `subLocationId` ∈ 其 `subLocations[].id`；`request_audience` 的 `audiencePrompt`/`audienceCharacterId` 非空（schema 已强制，校验再确认语义）。
+- **`manual` 不可检测意图（评审 r3 #3）**：`manual` 无推导路径——无 `presentation` 的非 court 事件在数据上等同 `auto_on_enter`，没有 `manual:true` 之类标记。故 validator **只校验显式 `presentation.mode:"manual"` 的结构**，**无法**检测「本想 manual 却漏声明」。本期**不**强制所有事件声明 `presentation`（不扩大迁移范围）。
 
-这同时满足「UI 不猜事实」与类型安全：UI 读到的 `presentation` 字段保证存在且指向真实实体。
+这对可推导的 request_audience/exploration 满足「UI 不猜事实」与类型安全；manual 依赖作者显式声明。
 
 ---
 
@@ -269,8 +273,9 @@ type EventReturnTarget =
 
 ```
 今日事务
-候见之人：{getAudienceQueue(db,state,"zichendian").length}    // 真实候见数
-可批阅奏折                                                    // 行动可用性（非数量）
+候见之人：{audienceCount(db,state,"zichendian")}    // 全部候见（含首次出现）
+可批阅奏折                                          // 行动可用性（非数量）
+[待宣 · {deferredAudienceCount(...)}]               // 仅已延期，开 PendingAudienceDrawer
 ```
 
 **不**显示「待批奏折：3」「待办谕令：2」——无队列模型前不编造数量。主操作栏：奏折 / 召见 / 传乘风 / 休息 / 离开。「查看侍君/查看子嗣」移入导航层「更多」。
@@ -289,7 +294,7 @@ type EventReturnTarget =
 - `status==="suppressed"` 不主动弹；再次进殿不重弹（P0-3）。
 
 ### 6.3 待宣列表（P0-3#3：真实可重开）
-新增 `PendingAudienceDrawer`：列 `getAudienceQueue` 中 pending/suppressed 项（候见者名 + `audiencePrompt` + 候见于 X 日）。点某项 → 立绘入场宣入（同 6.2 宣进来流程）。过期项（once 已发/条件失效）由 `clearAudience` 清理、不出现。
+新增 `PendingAudienceDrawer`：直接消费 `getDeferredAudienceQueue`（仅 pending/suppressed；候见者名 + `audiencePrompt` + 候见于 `deferredAtDayIndex` 日）。点某项 → 立绘入场宣入（同 6.2 宣进来流程）。过期项（once 已发/条件失效/cooldown）由 `audienceReconciliationEffects` 清理、不出现。**「待宣 · N」徽标 = `deferredAudienceCount`，非全部候见数（评审 r3 #2）。**
 
 ### 6.4 召见侍君（无卡片）
 点召见 → `BedchamberPicker` 升级为响应式对象抽屉（姓名/位分/状态/可否召+原因，无全属性/全管理）→ 选定 → `setSummonedConsortId(id)` → 立绘入场 → 直接进对话/互动 → 告退 → `setSummonedConsortId(null)` → 恢复默认态。**全程不渲染 `CharacterCard`。**

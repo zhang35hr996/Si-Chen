@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript · React · Vite · Vitest · Zod · 现有 Effect 漏斗 · localStorage 存档
 
-**配套设计规格：** [`../specs/2026-06-22-scene-ui-narrative-refactor-design.md`](../specs/2026-06-22-scene-ui-narrative-refactor-design.md)（评审 r1）
+**配套设计规格：** [`../specs/2026-06-22-scene-ui-narrative-refactor-design.md`](../specs/2026-06-22-scene-ui-narrative-refactor-design.md)（评审 r3）
 
 ## Global Constraints
 
@@ -18,7 +18,7 @@
 - **flag 键用冒号分段**：`audience:pending:<id>` / `audience:promptShownAt:<id>` / `audience:remindAt:<id>`（与项目约定一致；不混用点号）。
 - **不改 `DialogueScreen.onDone` 契约**（仍 `(committed, rolledOver)`；朝议结算用快照 diff）。
 - **命名约定**：content id `^[a-z][a-z0-9_]*$`；TS camelCase。content 严格 JSON（`z.strictObject`）。
-- **响应式**：360/768/1280/超宽；主点击区 ≥44–48px；不依赖 hover；移动固定栏含 `env(safe-area-inset-bottom)`，stage 用 `100dvh`。
+- **响应式**：360/768/1280/超宽；主点击区 ≥44–48px；不依赖 hover；移动固定栏含 `env(safe-area-inset-bottom)`。**布局高度由 `GameShell` flex 列承担**（`GameShell min-height:100dvh` + `SceneShell flex:1;min-height:0`），stage **不**用裸 `100dvh`（避免与顶部栏叠加溢出，见 Task 2.1）。
 - **美术方向**：深棕黑/暗金/朱红/半透明暗板/细边框；背景铺满；支持可选 `backgroundPosition` 控制裁切焦点。
 - **每 PR 验证**：`npm run typecheck && npm test && npm run lint && npm run build`（content/资产改动追加 `validate-content`/`validate-manifest`）。
 - **提交信息**：`<type>: <desc>`，无 Co-Authored 署名（项目全局禁用）。
@@ -76,7 +76,7 @@ presentation: z.discriminatedUnion("mode", [
 ]).optional(),
 ```
 
-> **规则（评审 r2 #2）**：`auto_on_enter` 可由旧 content 推导；`request_audience`/`exploration`/`manual` **必须显式声明 `presentation`**。由 Task 1.1b 的 `validate-content` 跨引用校验强制，不靠运行时兜底。
+> **规则（评审 r2 #2 / r3 #3）**：`auto_on_enter` 可推导；`request_audience`/`exploration` 在宿主地点（紫宸殿/御花园）由推导识别为「需 presentation」，缺失即 validator 报错。`manual` 无推导路径、与 `auto_on_enter` 数据不可分——validator 只校验显式 `mode:"manual"` 结构，不检测漏声明意图。详见 Task 1.1b。
 
 - [ ] **Step 4: 实现 entryMode.ts**
 
@@ -106,10 +106,11 @@ export function resolveEntryMode(event: GameEventContent, location: LocationCont
 **Interfaces:** 构建期校验，违例使 `npm run validate-content` 退出非零。
 
 - [ ] **Step 1: 写失败测试** — 构造违例 content 各一例，断言校验报错：
-  - `request_audience`/`exploration`/`manual` 事件缺 `presentation`；
+  - `location_enter` 事件其 `atLocation` 推导为 `request_audience`（紫宸殿）/`exploration`（御花园）而缺 `presentation`；
   - `presentation.audienceCharacterId` 不在 `db.characters`；
   - `presentation.hostLocationId` 不在 `db.locations`；
   - `exploration` 的 `hostLocationId` location 无 `subLocations`，或 `subLocationId` 不在其 `subLocations[].id`。
+  - （**不**测「manual 缺 presentation」——无推导路径不可检测，评审 r3 #3；可加一例：显式 `mode:"manual"` 结构合法则通过。）
 - [ ] **Step 2: 运行确认失败。**
 - [ ] **Step 3: 实现校验**（在现有 content 加载后追加跨引用遍历，聚合错误信息）。
 - [ ] **Step 4: 运行通过 + `npm run validate-content`（现有 content 全过）。**
@@ -180,8 +181,10 @@ export function pickAutoStartEvent(db: ContentDB, state: GameState, checkpoint: 
   - `export function clearAudience(eventId: string): EventEffect[];`
   - `export function shouldRemind(state, eventId): boolean;`
   - `export function audienceStatus(state, eventId): AudienceStatus;`
-  - `export function getAudienceQueue(db, state, locationId): AudienceItem[];`
-  - `export function pendingAudienceCount(db, state, locationId): number;`
+  - `export function getAudienceQueue(db, state, locationId): AudienceItem[];`（全部三态）
+  - `export function audienceCount(db, state, locationId): number;`（全部候见；「候见之人」）
+  - `export function getDeferredAudienceQueue(db, state, locationId): AudienceItem[];`（仅 pending+suppressed；Drawer 消费）
+  - `export function deferredAudienceCount(db, state, locationId): number;`（「待宣 · N」）
   - `export function audienceReconciliationEffects(db, state, locationId): EventEffect[];`
   - const `AUDIENCE_REMIND_AFTER_PERIODS = 1;`（1 dayIndex = 1 旬；评审 r2 #6，**非 3**）
 - flag 键：`audience:pending:<id>` / `audience:promptShownAt:<id>` / `audience:remindAt:<id>`。
@@ -190,7 +193,7 @@ export function pickAutoStartEvent(db: ContentDB, state: GameState, checkpoint: 
 
 ```ts
 // tests/events/audience.test.ts
-import { defer, clearAudience, shouldRemind, audienceStatus, getAudienceQueue, pendingAudienceCount, audienceReconciliationEffects, AUDIENCE_REMIND_AFTER_PERIODS } from "../../src/engine/events/audience";
+import { defer, clearAudience, shouldRemind, audienceStatus, getAudienceQueue, audienceCount, getDeferredAudienceQueue, deferredAudienceCount, audienceReconciliationEffects, AUDIENCE_REMIND_AFTER_PERIODS } from "../../src/engine/events/audience";
 
 test("AUDIENCE_REMIND_AFTER_PERIODS is 1 (next 旬, not next month)", () => {
   expect(AUDIENCE_REMIND_AFTER_PERIODS).toBe(1);
@@ -228,11 +231,24 @@ test("queue scoped by presentation.hostLocationId, not condition.atLocation", ()
 });
 test("getAudienceQueue excludes once-fired ghosts (no phantom count)", () => {
   expect(getAudienceQueue(db, stateWithFiredGhost, "zichendian").map(i=>i.event.id)).not.toContain("ev_a");
-  expect(pendingAudienceCount(db, stateWithFiredGhost, "zichendian")).toBe(0);
+  expect(audienceCount(db, stateWithFiredGhost, "zichendian")).toBe(0);
 });
-test("reconciliation clears pending flag for once-fired event", () => {
-  expect(audienceReconciliationEffects(db, stateWithFiredGhost, "zichendian"))
+test("audienceCount counts all; deferredAudienceCount counts only pending+suppressed (评审 r3 #2)", () => {
+  // 一个 available（首次出现，未延期）+ 一个 suppressed（已延期未到点）
+  expect(audienceCount(db, stateOneAvailOneDeferred, "zichendian")).toBe(2);
+  expect(deferredAudienceCount(db, stateOneAvailOneDeferred, "zichendian")).toBe(1);
+  expect(getDeferredAudienceQueue(db, stateOneAvailOneDeferred, "zichendian").map(i=>i.status))
+    .toEqual(["suppressed"]);
+});
+test("reconciliation clears pending for once-fired / condition-lapsed event of THIS host (评审 r3 #1)", () => {
+  // ev_a: pending flag set, but now ineligible (condition lapsed) → cleared
+  expect(audienceReconciliationEffects(db, stateLapsedPending, "zichendian"))
     .toEqual(expect.arrayContaining([{ type:"flag", key:"audience:pending:ev_a", value:false }]));
+});
+test("reconciliation does NOT clear pending belonging to another host (评审 r3 #1)", () => {
+  // ev_other: hostLocationId="some_other_gong", pending — entering zichendian must not clear it
+  expect(audienceReconciliationEffects(db, stateOtherHostPending, "zichendian"))
+    .not.toEqual(expect.arrayContaining([{ type:"flag", key:"audience:pending:ev_other", value:false }]));
 });
 ```
 
@@ -311,23 +327,39 @@ export function getAudienceQueue(db:ContentDB, state:GameState, locationId:strin
     })
     .sort((a,b)=> b.event.priority - a.event.priority || a.event.id.localeCompare(b.event.id));
 }
-export function pendingAudienceCount(db:ContentDB, state:GameState, locationId:string): number {
+/** 全部候见（available+pending+suppressed）数；紫宸殿「候见之人」用。 */
+export function audienceCount(db:ContentDB, state:GameState, locationId:string): number {
   return getAudienceQueue(db, state, locationId).length;
 }
-/** 扫描现存 pending flag，对已不该 pending 者产出 clearAudience（纯函数，无副作用；评审 r2 #5）。 */
+/** 仅已延期（pending+suppressed）；PendingAudienceDrawer 直接消费，UI 不再自行过滤（评审 r3 #2）。 */
+export function getDeferredAudienceQueue(db:ContentDB, state:GameState, locationId:string): AudienceItem[] {
+  return getAudienceQueue(db, state, locationId).filter((i)=> i.status === "pending" || i.status === "suppressed");
+}
+export function deferredAudienceCount(db:ContentDB, state:GameState, locationId:string): number {
+  return getDeferredAudienceQueue(db, state, locationId).length;
+}
+/**
+ * 对账：清除「属于本 host 但已不合法」的 pending（纯函数，无副作用；评审 r2#5 / r3#1）。
+ * eligibility 一律走 getEligibleEvents 权威规则（含 condition / cooldown / once），不复制判断。
+ * host 不匹配 → 跳过（不清，避免误删其它 host 的待宣）；presentation 损坏/缺失/非候见 → 清。
+ */
 export function audienceReconciliationEffects(db:ContentDB, state:GameState, locationId:string): EventEffect[] {
+  const validIds = new Set(
+    getEligibleEvents(db, state, "location_enter")
+      .filter(({ event }) => {
+        const p = event.presentation;
+        return p?.mode === "request_audience" && p.hostLocationId === locationId;
+      })
+      .map(({ event }) => event.id),
+  );
   const out: EventEffect[] = [];
   for (const key of Object.keys(state.flags)) {
     if (!key.startsWith("audience:pending:") || state.flags[key] !== true) continue;
     const id = key.slice("audience:pending:".length);
-    const ev = db.events[id];
-    const p = ev?.presentation;
-    const stale =
-      !ev ||
-      p?.mode !== "request_audience" ||
-      p.hostLocationId !== locationId ||
-      (ev.once && hasEventFired(state, id));
-    if (stale) out.push(...clearAudience(id));
+    const p = db.events[id]?.presentation;
+    if (!db.events[id] || p?.mode !== "request_audience") { out.push(...clearAudience(id)); continue; } // 损坏/非候见 → 清
+    if (p.hostLocationId !== locationId) continue;                                                      // 属于其它 host → 跳过
+    if (!validIds.has(id)) out.push(...clearAudience(id));                                              // 属本 host 但已不 eligible → 清
   }
   return out;
 }
@@ -387,7 +419,7 @@ export function audienceReconciliationEffects(db:ContentDB, state:GameState, loc
 
 **Files:** Create `src/ui/components/PendingAudienceDrawer.tsx`；Test `tests/ui/pendingAudience.test.tsx`
 
-**Interfaces:** `export function PendingAudienceDrawer(props: { items: AudienceItem[]; characterNameOf:(id:string)=>string; onAdmit:(eventId:string)=>void; onClose:()=>void }): JSX.Element`
+**Interfaces:** `export function PendingAudienceDrawer(props: { items: AudienceItem[]; onAdmit:(eventId:string)=>void; onClose:()=>void }): JSX.Element` — `items` 由 `getDeferredAudienceQueue` 提供（已是 pending+suppressed，**组件不再过滤**）；每项的候见者名/文案取 `item.presentation.audienceCharacterId`/`audiencePrompt`，候见时间取 `item.deferredAtDayIndex`。
 
 - [ ] **Step 1: 写失败测试** — 列出 pending/suppressed 项（候见者名 + prompt）；点某项 → `onAdmit(eventId)`；空列表显「当前无待宣事务」。
 - [ ] **Step 2–5:** 失败 → 实现（底部 Sheet/右抽屉，焦点管理 + Escape 关闭）→ 通过 → 提交 `feat(ui): 待宣列表 PendingAudienceDrawer`。
@@ -397,7 +429,7 @@ export function audienceReconciliationEffects(db:ContentDB, state:GameState, loc
 **Files:** Create `src/ui/screens/ZichendianScreen.tsx`；Modify `src/ui/App.tsx`（`view==="zichendian"`、`enterCurrentLocation` 路由）、`src/ui/components/BedchamberPicker.tsx`（响应式对象抽屉）；Test `tests/ui/zichendianAudience.test.tsx`、`tests/ui/summonNoCard.test.tsx`
 
 **Interfaces:**
-- Consumes: `getAudienceQueue`/`pendingAudienceCount`/`defer`/`clearAudience`、`startEvent(id,{kind:"zichendian"})`、`canSummon`。
+- Consumes: `getAudienceQueue`/`audienceCount`/`getDeferredAudienceQueue`/`deferredAudienceCount`/`defer`/`clearAudience`、`startEvent(id,{kind:"zichendian"})`、`canSummon`。
 - 默认态：摘要只显真实项（候见数 + 可批阅奏折，**不显虚构「待批奏折:3」**）；操作栏：奏折/召见/传乘风/休息/离开。
 
 - [ ] **Step 1: 写失败测试（关键回归）**
@@ -410,6 +442,7 @@ test("宣进来 → startEvent(id, {kind:'zichendian'})", /* … */);
 test("记入待宣 → applyEffects(defer) 调用，提示关闭", /* … */);
 test("re-enter while suppressed → prompt NOT shown", /* … */);
 test("remindAt reached (pending) → prompt shown again", /* … */);
+test("候见之人 counts available, but 待宣 badge=0 and drawer empty for a brand-new available event (评审 r3 #2)", /* 断言 候见之人=1、待宣·0、点开 drawer 显『当前无待宣事务』 */);
 test("待宣列表点项 → 宣入开始", /* … */);
 // summonNoCard.test.tsx
 test("召见侍君 → 立绘入场，无 CharacterCard；结束恢复默认态", /* … */);
@@ -417,7 +450,7 @@ test("召见侍君 → 立绘入场，无 CharacterCard；结束恢复默认态"
 
 - [ ] **Step 2: 运行确认失败。**
 
-- [ ] **Step 3: 实现 ZichendianScreen** — `SceneShell`：stage=背景+事务摘要（`候见 · {pendingAudienceCount}`）；narrative=`getAudienceQueue` 中首个 `status∈{available,pending}` 项渲染 `AudiencePrompt`（文案/立绘取 `event.presentation`）；actions=奏折/召见/传乘风/休息/离开 + 「候见 · N」开 `PendingAudienceDrawer`。
+- [ ] **Step 3: 实现 ZichendianScreen** — `SceneShell`：stage=背景+事务摘要（`候见之人 {audienceCount}`）；narrative=`getAudienceQueue` 中首个 `status∈{available,pending}` 项渲染 `AudiencePrompt`（取 `item.presentation`/`item.affordable`）；actions=奏折/召见/传乘风/休息/离开 + 「待宣 · {deferredAudienceCount}」开 `PendingAudienceDrawer`（传 `getDeferredAudienceQueue`）。
 
 - [ ] **Step 4: App 接线** — `enterCurrentLocation`：`loc==="zichendian"` → **先** `store.applyEffects(db, audienceReconciliationEffects(db, store.getState(), "zichendian"))` 对账清理过期 pending（评审 r2 #5；读档后首次进入同样跑）→ `setView("zichendian")`；加 `view==="zichendian"` 渲染块；`onDefer={(id)=>{store.applyEffects(db, defer(id, store.getState().calendar.dayIndex)); doAutosave();}}`；`onAdmit={(id)=>startEvent(id,{kind:"zichendian"})}`；事件**成功提交**后在 onDone 内 `store.applyEffects(db, clearAudience(id))` + 再跑一次对账。召见走升级版 `BedchamberPicker` → `setSummonedConsortId(id)` → 立绘入场（复用 `CharacterScene`/`ReactionScreen`），**不渲染 CharacterCard**。
 
