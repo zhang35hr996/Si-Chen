@@ -12,6 +12,7 @@ import {
   type PendingReactionCheckpoint,
   canChain,
   checkpointReturnTarget,
+  eventSceneCompletionPlan,
   initialNavState,
   navReducer,
   pendingReactionReducer,
@@ -316,5 +317,73 @@ describe("producer source contract (no jsdom)", () => {
     const rankClears = src.match(/setRankAdmin\(null\)/g) ?? [];
     // applyRankOp + modal close + 4 lifecycle sites
     expect(rankClears.length).toBeGreaterThanOrEqual(navClears.length);
+  });
+});
+
+describe("eventSceneCompletionPlan (chained settlement + abandon)", () => {
+  const plan = eventSceneCompletionPlan;
+
+  it("1. abandoned event + no pending settlement → restore only", () => {
+    expect(plan({ committed: false, rolledOver: false, hasSceneEndEvent: false, canChain: false, hasPendingSettlement: false }))
+      .toEqual({ startSceneEnd: false, beginSettlement: false, restore: true });
+  });
+  it("2. abandoned chained event + existing pending settlement → no restore, no new settlement", () => {
+    expect(plan({ committed: false, rolledOver: false, hasSceneEndEvent: false, canChain: false, hasPendingSettlement: true }))
+      .toEqual({ startSceneEnd: false, beginSettlement: false, restore: false });
+  });
+  it("2b. abandoned event never creates a settlement even if (defensively) flagged rolledOver", () => {
+    expect(plan({ committed: false, rolledOver: true, hasSceneEndEvent: true, canChain: true, hasPendingSettlement: false }).beginSettlement).toBe(false);
+  });
+  it("3. committed rollover + chainable scene_end → start scene_end, begin settlement, no restore", () => {
+    expect(plan({ committed: true, rolledOver: true, hasSceneEndEvent: true, canChain: true, hasPendingSettlement: false }))
+      .toEqual({ startSceneEnd: true, beginSettlement: true, restore: false });
+  });
+  it("4. committed non-rollover + existing pending + chainable scene_end → retain settlement, start scene_end, no restore", () => {
+    expect(plan({ committed: true, rolledOver: false, hasSceneEndEvent: true, canChain: true, hasPendingSettlement: true }))
+      .toEqual({ startSceneEnd: true, beginSettlement: true, restore: false });
+  });
+  it("5. committed terminal event + existing pending → no scene_end, retain settlement, no restore", () => {
+    expect(plan({ committed: true, rolledOver: false, hasSceneEndEvent: false, canChain: true, hasPendingSettlement: true }))
+      .toEqual({ startSceneEnd: false, beginSettlement: true, restore: false });
+  });
+  it("6. committed terminal event + no rollover/pending → restore immediately", () => {
+    expect(plan({ committed: true, rolledOver: false, hasSceneEndEvent: false, canChain: true, hasPendingSettlement: false }))
+      .toEqual({ startSceneEnd: false, beginSettlement: false, restore: true });
+  });
+  it("7. chain cap + existing pending → no scene_end, no restore before settlement", () => {
+    expect(plan({ committed: true, rolledOver: false, hasSceneEndEvent: true, canChain: false, hasPendingSettlement: true }))
+      .toEqual({ startSceneEnd: false, beginSettlement: true, restore: false });
+  });
+});
+
+describe("abandon-after-rollover preserves the settlement target (consumed exactly once)", () => {
+  // Simulate: A starts (playerStart), A commits+rolls over (chainAdvance to B + settlement registered),
+  // B abandoned (plan says no restore → target NOT consumed), settlement completes (consume once).
+  const sequence = (target: EventReturnTarget) => {
+    let nav: NavState = navReducer(initialNavState, { type: "playerStart", target });
+    // A commits + rolledOver + scene_end B eligible:
+    const aPlan = eventSceneCompletionPlan({ committed: true, rolledOver: true, hasSceneEndEvent: true, canChain: canChain(nav), hasPendingSettlement: false });
+    expect(aPlan).toMatchObject({ startSceneEnd: true, beginSettlement: true });
+    nav = navReducer(nav, { type: "chainAdvance" }); // B starts; target retained
+    // B abandoned, settlement already pending:
+    const bPlan = eventSceneCompletionPlan({ committed: false, rolledOver: false, hasSceneEndEvent: false, canChain: false, hasPendingSettlement: true });
+    expect(bPlan.restore).toBe(false); // do NOT consume here
+    expect(nav.target).toEqual(target); // target still intact through abandon
+    // settlement completes with no time event → restoreReturn consumes once:
+    const before = nav.target;
+    nav = navReducer(nav, { type: "consume" });
+    expect(nav.target).toBeNull();
+    return { before, after: nav.target };
+  };
+
+  it("ordinary palace target survives abandon and is consumed once at settlement", () => {
+    const r = sequence({ kind: "location", locationId: "yanhe_gong" });
+    expect(r.before).toEqual({ kind: "location", locationId: "yanhe_gong" });
+    expect(r.after).toBeNull();
+  });
+  it("nested 京城/郊外 board target survives abandon and is consumed once at settlement", () => {
+    const r = sequence({ kind: "map", atRoot: false, boardId: "jingcheng" });
+    expect(r.before).toEqual({ kind: "map", atRoot: false, boardId: "jingcheng" });
+    expect(r.after).toBeNull();
   });
 });

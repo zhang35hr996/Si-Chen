@@ -1563,7 +1563,19 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           logger={logger}
           onDone={(committed, rolledOver) => {
             setActiveEventId(null);
-            if (!committed) { restoreReturn(); return; } // 弃场：恢复一次，不进结算
+            if (!committed) {
+              // 弃场：若链内前序事件已留下待结算（pendingTimeSettlement），不得消费/恢复导航上下文——
+              // activeEventId 已清，交由既有结算 effect 排空并最终恢复一次；否则立即恢复。
+              const abandonPlan = eventSceneCompletionPlan({
+                committed: false,
+                rolledOver: false,
+                hasSceneEndEvent: false,
+                canChain: false,
+                hasPendingSettlement: pendingTimeSettlement !== null,
+              });
+              if (abandonPlan.restore) restoreReturn();
+              return;
+            }
             doAutosave(); // scene-commit autosave (plan §9)
             const sceneEndState = store.getState();
             const pick = pickAutoStartEvent(db, sceneEndState, "scene_end", db.locations[sceneEndState.playerLocation]);

@@ -148,7 +148,9 @@ export function eventSceneCompletionPlan(input: {
   canChain: boolean;
   hasPendingSettlement: boolean;
 }): { startSceneEnd: boolean; beginSettlement: boolean; restore: boolean } {
-  if (!input.committed) return { startSceneEnd: false, beginSettlement: false, restore: true }; // 弃场：仅恢复
+  // 弃场：停止本事件，但绝不新建结算、也不在已有 pending 结算时消费/恢复导航上下文
+  // （否则前序已提交事件 A 的转旬结算会在导航被提前消费后排空 → 落根/二次恢复）。
+  if (!input.committed) return { startSceneEnd: false, beginSettlement: false, restore: !input.hasPendingSettlement };
   const startSceneEnd = input.hasSceneEndEvent && input.canChain;
   const beginSettlement = input.rolledOver || input.hasPendingSettlement; // 保留任何（本/链内先前）转旬
   const restore = !startSceneEnd && !beginSettlement; // 无续接且无待结算才立即恢复
