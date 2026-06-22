@@ -28,7 +28,8 @@
     "smoke:gemini": "tsx tools/smoke-gemini.ts",
     "eval:run": "tsx tools/eval-run.ts",
     "eval:score": "tsx tools/eval-score.ts",
-    "eval:export": "tsx tools/eval-export.ts"
+    "eval:export": "tsx tools/eval-export.ts",
+    "eval:report": "tsx tools/eval-report.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

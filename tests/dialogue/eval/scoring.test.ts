@@ -166,3 +166,49 @@ describe("scoreResults", () => {
     expect(report.expectationPassRate).toBe(0);
   });
 });
+
+describe("scoreResults — metrics extension", () => {
+  it("aggregates latency, tokens, lore violations, byType, and cost", () => {
+    const results = [
+      makeResult({
+        provider: "openai",
+        model: "m",
+        durationMs: 100,
+        usage: { inputTokens: 10, outputTokens: 5 },
+        textFindings: [{ gate: "forbidden_lexicon", severity: "reject", matched: "皇上" }],
+      }),
+      makeResult({
+        provider: "openai",
+        model: "m",
+        durationMs: 300,
+        usage: { inputTokens: 20, outputTokens: 7 },
+        textFindings: [{ gate: "rank_title", severity: "flag", matched: "x" }],
+      }),
+    ];
+    const rep = scoreResults(results, { priceTable: { "openai:m": { inputPerMTok: 1, outputPerMTok: 1 } } });
+    expect(rep.avgLatencyMs).toBe(200);
+    expect(rep.p95LatencyMs).toBe(300);
+    expect(rep.totalInputTokens).toBe(30);
+    expect(rep.totalOutputTokens).toBe(12);
+    expect(rep.loreViolationRate).toBeCloseTo(0.5); // one of two has forbidden_lexicon
+    expect(rep.gateViolationsByType).toMatchObject({ forbidden_lexicon: 1, rank_title: 1 });
+    expect(rep.estCostUsd).toBeGreaterThan(0);
+  });
+
+  it("estCostUsd is undefined when no result is priced", () => {
+    const rep = scoreResults([makeResult({ provider: "openai", model: "unpriced", usage: { inputTokens: 1, outputTokens: 1 } })], {
+      priceTable: {},
+    });
+    expect(rep.estCostUsd).toBeUndefined();
+  });
+
+  it("empty input returns zeroed metrics, not NaN", () => {
+    const rep = scoreResults([]);
+    expect(rep.avgLatencyMs).toBe(0);
+    expect(rep.p95LatencyMs).toBe(0);
+    expect(rep.totalInputTokens).toBe(0);
+    expect(rep.loreViolationRate).toBe(0);
+    expect(rep.gateViolationsByType).toEqual({});
+    expect(rep.estCostUsd).toBeUndefined();
+  });
+});
