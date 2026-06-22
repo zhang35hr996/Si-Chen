@@ -23,7 +23,7 @@ const plan = (over: Partial<ReactionPlan> = {}): ReactionPlan => ({
   ...over,
 });
 
-const emptyCtx: DialogueMemoryContext = { activatedMemories: [], knownEvents: [] };
+const emptyCtx: DialogueMemoryContext = { activatedMemories: [], knownEvents: [], knownEventsAll: [] };
 
 const defaultAudience = {
   targetId: "player",
@@ -55,7 +55,7 @@ describe("assembleClaims", () => {
       unresolved: false,
       createdAt: makeGameTime(1, 1, "early"),
     };
-    const ctx: DialogueMemoryContext = { activatedMemories: [mem], knownEvents: [] };
+    const ctx: DialogueMemoryContext = { activatedMemories: [mem], knownEvents: [], knownEventsAll: [] };
     const beliefs = new GroundTruthBeliefProjection(state);
     const out = assembleClaims({
       speakerId: speaker,
@@ -132,7 +132,7 @@ describe("assembleClaims", () => {
       unresolved: false,
       createdAt: makeGameTime(1, 1, "early"),
     };
-    const ctx: DialogueMemoryContext = { activatedMemories: [mem], knownEvents: [] };
+    const ctx: DialogueMemoryContext = { activatedMemories: [mem], knownEvents: [], knownEventsAll: [] };
     const beliefs = new GroundTruthBeliefProjection(state);
     const out = assembleClaims({
       speakerId: speaker,

@@ -1,3 +1,4 @@
+import { canKnowEvent } from "../chronicle/awareness";
 import { recallCandidates, type RecallQuery } from "./recall";
 import { rankCandidates } from "./rerank";
 import type { ActivationContext } from "./retrievalScore";
@@ -6,16 +7,110 @@ import type { CourtEvent, GameState, MemoryEntry } from "../state/types";
 export interface DialogueMemoryContext {
   activatedMemories: MemoryEntry[];
   knownEvents: CourtEvent[];
+  /** All events the speaker can know, without any salience quota. */
+  knownEventsAll: readonly CourtEvent[];
+}
+
+// ── recallKnownEvents ─────────────────────────────────────────────────────────
+
+/**
+ * Returns ALL CourtEvent instances from `state.chronicle` that the speaker is
+ * entitled to know (canKnowEvent). No salience quota — returns everything.
+ */
+export function recallKnownEvents(
+  state: GameState,
+  speakerId: string,
+): CourtEvent[] {
+  return state.chronicle.filter((e) => canKnowEvent(state, speakerId, e));
+}
+
+// ── selectPromptEvents ────────────────────────────────────────────────────────
+
+export interface SelectPromptEventsOpts {
+  events: CourtEvent[];
+  /** If set, this event must appear first in the result. Must exist in `events`. */
+  pinnedEventId?: string;
+  limit: number;
+}
+
+/**
+ * Selects up to `limit` events for use in a dialogue prompt.
+ *
+ * - Throws if `limit < 1`.
+ * - Throws if `pinnedEventId` is provided but not found in `events`.
+ * - When pinned event is present, it always appears first.
+ * - Remaining slots are filled by: publicSalience desc → occurredAt.dayIndex desc → id asc.
+ * - Result length ≤ limit.
+ */
+export function selectPromptEvents(opts: SelectPromptEventsOpts): CourtEvent[] {
+  const { events, pinnedEventId, limit } = opts;
+
+  if (limit < 1) {
+    throw new RangeError(`selectPromptEvents: limit must be ≥ 1, got ${limit}`);
+  }
+
+  let pinned: CourtEvent | undefined;
+  if (pinnedEventId !== undefined) {
+    pinned = events.find((e) => e.id === pinnedEventId);
+    if (!pinned) {
+      throw new Error(
+        `selectPromptEvents: pinnedEventId "${pinnedEventId}" not found in events array`,
+      );
+    }
+  }
+
+  // Sort candidates (excluding the pinned event, which always goes first)
+  const candidates = events
+    .filter((e) => e.id !== pinnedEventId)
+    .sort(
+      (a, b) =>
+        // 1. publicSalience descending
+        b.publicSalience - a.publicSalience ||
+        // 2. occurredAt descending (dayIndex)
+        b.occurredAt.dayIndex - a.occurredAt.dayIndex ||
+        // 3. id ascending (deterministic tiebreak)
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+
+  const result: CourtEvent[] = [];
+  if (pinned) result.push(pinned);
+
+  for (const e of candidates) {
+    if (result.length >= limit) break;
+    result.push(e);
+  }
+
+  return result;
+}
+
+// ── buildMemoryContext ────────────────────────────────────────────────────────
+
+export interface BuildMemoryContextOpts {
+  /** How many events to select for the prompt (default 3). */
+  topEvents?: number;
 }
 
 export function buildMemoryContext(
-  state: GameState, query: RecallQuery, ctx: ActivationContext, topN = 5,
+  state: GameState,
+  query: RecallQuery,
+  ctx: ActivationContext,
+  topN = 5,
+  opts?: BuildMemoryContextOpts,
 ): DialogueMemoryContext {
+  const topEvents = opts?.topEvents ?? 3;
+
   const recalled = recallCandidates(state, query);
   const ranked = rankCandidates(state, ctx, recalled, topN);
+
+  // All known events, no quota
+  const knownEventsAll = recallKnownEvents(state, query.speakerId);
+
+  // Quota'd events for prompt
+  const knownEvents = selectPromptEvents({ events: knownEventsAll, limit: topEvents });
+
   return {
     activatedMemories: ranked.flatMap((c) => (c.kind === "memory" ? [c.memory] : [])),
-    // knownEvents 已生成，但 DialogueRequest 尚无对应字段（PR5 接入）
-    knownEvents: ranked.flatMap((c) => (c.kind === "event" ? [c.event] : [])),
+    knownEvents,
+    knownEventsAll,
   };
 }
