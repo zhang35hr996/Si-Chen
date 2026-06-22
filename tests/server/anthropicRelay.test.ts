@@ -28,6 +28,18 @@ const minimalPayload = {
   tool_choice: { type: "tool", name: "emit_dialogue_line", disable_parallel_tool_use: true },
 };
 
+const cachedPayload = {
+  model: "claude-sonnet-4-6",
+  max_tokens: 100,
+  system: [
+    { type: "text", text: "rules", cache_control: { type: "ephemeral" } },
+    { type: "text", text: "etiquette", cache_control: { type: "ephemeral" } },
+  ],
+  messages: [{ role: "user", content: "hello" }],
+  tools: [],
+  tool_choice: { type: "tool", name: "emit_dialogue_line", disable_parallel_tool_use: true },
+};
+
 describe("createRelayServer", () => {
   it("成功：返回 200 + { message, requestId }", async () => {
     const fakeResult = { message: { stop_reason: "tool_use", content: [] }, requestId: "req_01" };
@@ -152,6 +164,41 @@ describe("createRelayServer", () => {
         body: JSON.stringify(minimalPayload),
       });
       expect(raw.status).toBe(404);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("forwards cache_control blocks to transport without stripping", async () => {
+    let receivedPayload: unknown;
+    const fakeTransport: AnthropicTransport = {
+      send: vi.fn().mockImplementation((p) => {
+        receivedPayload = p;
+        return Promise.resolve({ ok: true, value: { message: { stop_reason: "tool_use", content: [] }, requestId: "req_cache" } });
+      }),
+    };
+    const server = createRelayServer(fakeTransport);
+    await listenRandom(server);
+    try {
+      const { status } = await postToRelay(server, cachedPayload);
+      expect(status).toBe(200);
+      const system = (receivedPayload as typeof cachedPayload).system;
+      expect(system[0]!.cache_control).toEqual({ type: "ephemeral" });
+      expect(system[1]!.cache_control).toEqual({ type: "ephemeral" });
+    } finally {
+      server.close();
+    }
+  });
+
+  it("request without cache_control is valid", async () => {
+    const fakeTransport: AnthropicTransport = {
+      send: vi.fn().mockResolvedValue({ ok: true, value: { message: { stop_reason: "tool_use", content: [] }, requestId: "req_no_cache" } }),
+    };
+    const server = createRelayServer(fakeTransport);
+    await listenRandom(server);
+    try {
+      const { status } = await postToRelay(server, minimalPayload);
+      expect(status).toBe(200);
     } finally {
       server.close();
     }

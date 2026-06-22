@@ -9,10 +9,16 @@ import type {
 
 const MAX_BODY_BYTES = 256 * 1024;
 
+const systemBlockSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+  cache_control: z.object({ type: z.literal("ephemeral") }).optional(),
+});
+
 const anthropicRequestPayloadSchema = z.object({
   model: z.string(),
   max_tokens: z.number().int().min(1).max(2000),
-  system: z.array(z.object({ type: z.literal("text"), text: z.string() })),
+  system: z.array(systemBlockSchema),
   messages: z.array(z.object({ role: z.string(), content: z.string() })),
   tools: z.array(z.unknown()),
   tool_choice: z.unknown(),
