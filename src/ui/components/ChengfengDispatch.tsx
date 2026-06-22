@@ -43,7 +43,10 @@ export function ChengfengDispatch({
   const dialogRef = useRef<HTMLDivElement>(null);
   const prevFocusRef = useRef<Element | null>(null);
   const titleId = useId();
-  const locked = dispatched || !interruptible;
+  // 五道谕令：不可中断 或 已派发 即禁用；「作罢」仅在已派发（终结动作已用）后禁用——
+  // 不可中断时仍是唯一可用控件。一次会话至多一个终结动作。
+  const decreesDisabled = dispatched || !interruptible;
+  const closeDisabled = dispatched;
 
   /** 认领唯一终结派发权（同步，先于回调）。已派发返回 false。throw 也不解锁。 */
   const claim = (): boolean => {
@@ -111,7 +114,7 @@ export function ChengfengDispatch({
     >
       <header className="chengfeng-dispatch__header">
         <h2 id={titleId} className="chengfeng-dispatch__title">传乘风</h2>
-        <button ref={closeBtnRef} type="button" className="action-btn" onClick={close}>
+        <button ref={closeBtnRef} type="button" className="action-btn" onClick={close} disabled={closeDisabled}>
           作罢
         </button>
       </header>
@@ -127,7 +130,7 @@ export function ChengfengDispatch({
             type="button"
             className="action-btn action-btn--key"
             onClick={() => runDecree(decree.run)}
-            disabled={locked}
+            disabled={decreesDisabled}
             title={!interruptible ? disabledReason : undefined}
           >
             {decree.label}

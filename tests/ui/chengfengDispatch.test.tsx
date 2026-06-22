@@ -164,6 +164,33 @@ describe("ChengfengDispatch", () => {
     expect(onSummonConsort).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("dialog")).toHaveFocus(); // not stranded on the now-disabled button
     for (const b of decreeButtons()) expect(b).toBeDisabled();
+    expect(screen.getByRole("button", { name: "作罢" })).toBeDisabled(); // terminal: no second exit path
+  });
+
+  it("blocks close after a decree has already claimed the session", async () => {
+    const user = userEvent.setup();
+    const onSummonConsort = vi.fn();
+    const onClose = vi.fn();
+    render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} onClose={onClose} />);
+    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    const closeBtn = screen.getByRole("button", { name: "作罢" });
+    expect(closeBtn).toBeDisabled();
+    await user.click(closeBtn);
+    expect(onSummonConsort).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled(); // single terminal action per session
+  });
+
+  it("blocks decree dispatch after close has claimed the session (re-entrant, still mounted)", async () => {
+    const user = userEvent.setup();
+    const onManageRank = vi.fn();
+    // onClose 内（菜单尚未卸载时）再尝试派发谕令：close 已先于回调同步 claim，应被挡下。
+    const onClose = vi.fn(() => {
+      screen.getByRole("button", { name: "调整位分" }).click();
+    });
+    render(<ChengfengDispatch interruptible {...handlers} onManageRank={onManageRank} onClose={onClose} />);
+    await user.click(screen.getByRole("button", { name: "作罢" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onManageRank).not.toHaveBeenCalled();
   });
 
   it("a claim survives an interruptible toggle (terminal state is not reset by interruptibility)", async () => {
