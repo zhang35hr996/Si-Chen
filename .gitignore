@@ -9,3 +9,4 @@ playwright/.cache/
 
 # agent worktree scratch
 .claude/worktrees/
+.worktrees/
