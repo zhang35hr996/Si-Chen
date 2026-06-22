@@ -1,7 +1,7 @@
 /**
  * Dialogue provider factory — final-shape facade (Task 3).
- * `createDialogueProvider` is the public API; it returns config/not_configured
- * for all providers until a real adapter is wired in a later task.
+ * `createDialogueProvider` is the public API; Anthropic provider is wired via
+ * HttpAnthropicTransport. Other providers return not_configured until wired.
  *
  * Old `ProviderAdapter`/`RemoteProviderConfig`/`createRemoteProvider` are
  * intentionally deleted here; they were a skeleton that is superseded by

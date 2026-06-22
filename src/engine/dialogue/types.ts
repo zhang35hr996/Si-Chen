@@ -4,12 +4,11 @@
  * memories, etiquette); MockProvider ignores most of it and echoes authored
  * lines — but the seam is exercised on every single line from day one.
  */
-import { z } from "zod";
 import type { GameTime } from "../calendar/time";
 import type { CharacterContent, CharacterRank } from "../content/schemas";
 import type { BeliefProjection } from "../chronicle/belief";
 import type { CharacterStanding, MemoryEntry } from "../state/types";
-import { proposedClaimSchema, type ProposedClaim } from "./claims";
+import type { ProposedClaim } from "./claims";
 import type { DialogueAudienceContext } from "./audience";
 import type { ReactionPlan } from "./reactionTypes";
 import type { DialogueProviderResult, ProviderResult, ProviderCapabilities } from "./providerContract";
@@ -37,23 +36,6 @@ export interface DialogueRequest {
   /** Present for scripted nodes: the authored line the mock provider echoes. */
   scripted?: { text: string; expression?: string };
 }
-
-/** Provider-shaped output; the orchestrator validates before anything renders. */
-export const rawDialogueResponseSchema = z.strictObject({
-  speaker: z.string().min(1),
-  text: z.string().min(1).max(600),
-  expression: z.string().min(1).optional(),
-  choices: z
-    .array(
-      z.strictObject({
-        id: z.string().min(1),
-        text: z.string().min(1).max(120),
-        tone: z.enum(["friendly", "neutral", "guarded", "hostile", "flirty"]).optional(),
-      }),
-    )
-    .max(4),
-  proposedClaims: z.array(proposedClaimSchema).default([]),
-});
 
 export interface DialogueGenerationOptions {
   timeoutMs?: number;
