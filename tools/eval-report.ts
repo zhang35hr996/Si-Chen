@@ -21,6 +21,8 @@ import {
 } from "../src/engine/dialogue/eval/report";
 import { DEFAULT_PRICE_TABLE } from "../src/engine/dialogue/eval/pricing";
 import { evalResultSchema } from "../src/engine/dialogue/eval/resultSchema";
+import { buildSpeakerProfiles } from "../src/engine/dialogue/eval/speakerProfile";
+import { loadRealContent } from "./lib/loadRealContent";
 import type { EvalResult } from "../src/engine/dialogue/eval/types";
 
 function parseArgs(argv: string[]): { input: string[]; outputDir: string } {
@@ -99,7 +101,10 @@ async function main() {
     groups.push({ provider: first.provider, model: first.model, results });
   }
 
-  const rows = buildScorecard(groups, { priceTable: DEFAULT_PRICE_TABLE });
+  // Profiles power the deterministic character/style proxy columns. Speakers
+  // without a profile are ignored; if none match, those columns stay n/a.
+  const profiles = buildSpeakerProfiles(loadRealContent());
+  const rows = buildScorecard(groups, { priceTable: DEFAULT_PRICE_TABLE, profiles });
 
   fs.mkdirSync(path.resolve(outputDir), { recursive: true });
   const jsonPath = path.join(outputDir, "scorecard.json");

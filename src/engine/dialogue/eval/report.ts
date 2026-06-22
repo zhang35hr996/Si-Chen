@@ -3,13 +3,14 @@
  * that model's EvalResult[] via scoreResults. JSON (ScorecardRow[]) is canonical;
  * Markdown and TSV are DERIVED from the same rows and are never the source of truth.
  *
- * characterProxyScore / styleProxyScore are null in PR2; PR3 wires the proxy
- * scorers and populates them. Numeric ScoreReport fields that may be undefined
- * (estCostUsd) are normalised to null here so JSON/Markdown/TSV render cleanly.
+ * characterProxyScore / styleProxyScore are populated when speaker profiles are
+ * supplied (else null). Numeric ScoreReport fields that may be undefined
+ * (knownCostUsd) are normalised to null here so JSON/Markdown/TSV render cleanly.
  */
 import { scoreResults } from "./scoring";
 import type { PriceTable } from "./pricing";
 import type { EvalResult } from "./types";
+import { characterProxyScore, styleProxyScore, type SpeakerProfile } from "./consistencyProxy";
 
 export interface ScorecardRow {
   provider: string;
@@ -58,9 +59,47 @@ export function firstHeterogeneousRecord(
   return null;
 }
 
-export function buildScorecard(groups: ModelResultGroup[], opts?: { priceTable?: PriceTable }): ScorecardRow[] {
+const mean = (xs: number[]): number | null => (xs.length === 0 ? null : xs.reduce((s, x) => s + x, 0) / xs.length);
+
+/**
+ * Per-model proxy scores: score only records that actually produced text, then
+ * group by speakerId, score each speaker that HAS a profile over its own lines,
+ * and macro-average across those speakers. Records with no `text` (provider
+ * failures etc.) are excluded BEFORE scoring — a model that emitted no dialogue
+ * must not earn proxy credit for the absence of mistakes. A speaker with no
+ * scorable text is ignored; if no speaker has scorable text + a profile — or no
+ * `profiles` map is supplied — the columns stay null.
+ */
+function proxyScoresFor(
+  results: EvalResult[],
+  profiles?: Record<string, SpeakerProfile>,
+): { character: number | null; style: number | null } {
+  if (!profiles) return { character: null, style: null };
+  const bySpeaker = new Map<string, EvalResult[]>();
+  for (const r of results) {
+    if (r.text === undefined) continue; // no generated text → not scorable
+    const arr = bySpeaker.get(r.speakerId) ?? [];
+    arr.push(r);
+    bySpeaker.set(r.speakerId, arr);
+  }
+  const charScores: number[] = [];
+  const styleScores: number[] = [];
+  for (const [speakerId, speakerResults] of bySpeaker) {
+    const profile = profiles[speakerId];
+    if (!profile) continue; // no profile → ignored, not scored
+    charScores.push(characterProxyScore(speakerResults, profile).score);
+    styleScores.push(styleProxyScore(speakerResults, profile).score);
+  }
+  return { character: mean(charScores), style: mean(styleScores) };
+}
+
+export function buildScorecard(
+  groups: ModelResultGroup[],
+  opts?: { priceTable?: PriceTable; profiles?: Record<string, SpeakerProfile> },
+): ScorecardRow[] {
   return groups.map((g) => {
     const r = scoreResults(g.results, { priceTable: opts?.priceTable });
+    const proxy = proxyScoresFor(g.results, opts?.profiles);
     return {
       provider: g.provider,
       model: g.model,
@@ -70,8 +109,8 @@ export function buildScorecard(groups: ModelResultGroup[], opts?: { priceTable?:
       expectationPassRate: r.expectationPassRate,
       forbiddenLexiconRate: r.forbiddenLexiconRate,
       gateViolationsByType: r.gateViolationsByType,
-      characterProxyScore: null,
-      styleProxyScore: null,
+      characterProxyScore: proxy.character,
+      styleProxyScore: proxy.style,
       avgLatencyMs: r.avgLatencyMs,
       p95LatencyMs: r.p95LatencyMs,
       totalInputTokens: r.totalInputTokens,
