@@ -82,6 +82,7 @@ export const gameStateSchema = z.strictObject({
     sovereign: z.strictObject({
       health: percent,
       healthStatus: z.enum(["healthy", "sick", "critical"]),
+      lastPhysicianVisitMonthKey: z.string().optional(),
       diligence: percent,
       prestige: percent,
       martial: percent,
@@ -155,6 +156,7 @@ export const gameStateSchema = z.strictObject({
           lifecycle: z.enum(["alive", "deceased"]),
           deceasedAt: gameTimeSchema.optional(),
           healthStatus: z.enum(["healthy", "sick", "critical"]).optional(),
+          lastPhysicianVisitMonthKey: z.string().optional(),
         }).superRefine((h, ctx) => {
           if (h.lifecycle === "alive" && h.deceasedAt !== undefined) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "alive heir must not have deceasedAt", path: ["deceasedAt"] });
@@ -188,6 +190,7 @@ export const gameStateSchema = z.strictObject({
   taihou: z.strictObject({
     health: percent,
     healthStatus: z.enum(["healthy", "sick", "critical"]),
+    lastPhysicianVisitMonthKey: z.string().optional(),
     deceased: z.boolean().optional(),
     diedAt: gameTimeSchema.optional(),
     posthumousName: z.string().min(1).max(2).optional(),

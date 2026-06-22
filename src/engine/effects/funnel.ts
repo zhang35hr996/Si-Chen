@@ -259,6 +259,31 @@ export function validateEffects(
         }
         break;
       }
+      case "record_physician_visit": {
+        const sub = e.subject;
+        const expectedKey = `${state.calendar.year}:${state.calendar.month}`;
+        if (e.monthKey !== expectedKey) {
+          bad(index, "BAD_EFFECT_TARGET", `physician visit monthKey "${e.monthKey}" != current "${expectedKey}"`, {});
+          break;
+        }
+        let alive = false;
+        let lastKey: string | undefined;
+        if (sub.kind === "sovereign") { alive = true; lastKey = state.resources.sovereign.lastPhysicianVisitMonthKey; }
+        else if (sub.kind === "taihou") { alive = state.taihou.deceased !== true; lastKey = state.taihou.lastPhysicianVisitMonthKey; }
+        else if (sub.kind === "consort") {
+          const st = state.standing[sub.id];
+          const c = db.characters[sub.id] ?? state.generatedConsorts[sub.id];
+          alive = !!st && st.lifecycle !== "deceased" && !!c && c.kind === "consort";
+          lastKey = st?.lastPhysicianVisitMonthKey;
+        } else {
+          const h = state.resources.bloodline.heirs.find((x) => x.id === sub.id);
+          alive = !!h && h.lifecycle === "alive";
+          lastKey = h?.lastPhysicianVisitMonthKey;
+        }
+        if (!alive) bad(index, "BAD_EFFECT_TARGET", `physician visit on missing/deceased subject`, {});
+        else if (lastKey === expectedKey) bad(index, "BAD_EFFECT_TARGET", `physician already visited subject this month`, {});
+        break;
+      }
       case "relocate": {
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
@@ -560,6 +585,14 @@ export function applyEffects(
           if (effect.healthDelta !== undefined) h.health = clampPct(h.health + effect.healthDelta);
           if (effect.healthStatus !== undefined) h.healthStatus = effect.healthStatus;
         }
+        break;
+      }
+      case "record_physician_visit": {
+        const sub = effect.subject;
+        if (sub.kind === "sovereign") next.resources.sovereign.lastPhysicianVisitMonthKey = effect.monthKey;
+        else if (sub.kind === "taihou") next.taihou.lastPhysicianVisitMonthKey = effect.monthKey;
+        else if (sub.kind === "consort") { const st = next.standing[sub.id]; if (st) st.lastPhysicianVisitMonthKey = effect.monthKey; }
+        else { const h = next.resources.bloodline.heirs.find((x) => x.id === sub.id); if (h) h.lastPhysicianVisitMonthKey = effect.monthKey; }
         break;
       }
       case "set_consort_posthumous": {
