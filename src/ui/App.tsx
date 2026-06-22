@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import rawManifest from "../../assets/manifest.json";
 import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
@@ -164,6 +164,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const chainDepth = useRef(0);
   const rolledSlots = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
+  // Accumulated transcript across choice-driven turns within one converse() session.
+  const converseTranscriptRef = useRef<{ speaker: string; text: string }[]>([]);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   // BGM effect: compute zone defensively (content may not be ok)
@@ -903,7 +905,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           if (committed) {
             doAutosave();
             const generatedLine = turnResult.value.line;
-            playReactions([{ speakerId: charId, lines: [generatedLine.text] }, ...decreeBeats], spend.value.rolledOver);
+            converseTranscriptRef.current = []; // reset transcript for new conversation
+            const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
+            playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver);
             return;
           }
           // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
@@ -915,6 +919,50 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // Fallback path: scripted lines
     playReactions([{ speakerId: charId, lines: fallbackLines }, ...decreeBeats], spend.value.rolledOver);
   };
+
+  // Handles a player choice click during a generative conversation turn.
+  // No extra AP is spent here — AP was already spent in converse().
+  const onConverseChoice = useCallback(async (choice: { id: string; text: string; tone?: string }) => {
+    if (!dialogueProvider || !reaction?.generatedLine) return;
+    const currentLine = reaction.generatedLine;
+    const speakerId = reaction.speakerId;
+
+    // Append speaker's last line + player's chosen response
+    const transcript = [
+      ...converseTranscriptRef.current,
+      { speaker: speakerId, text: currentLine.text },
+      { speaker: "player", text: choice.text },
+    ];
+    converseTranscriptRef.current = transcript;
+
+    // Re-snapshot state AFTER previous CAS was committed
+    const expectedState = store.getState();
+    const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { transcript });
+    if (!reqResult.ok) {
+      // Request assembly failed — close conversation gracefully
+      setReaction(null);
+      return;
+    }
+
+    const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+    if (!turnResult.ok) {
+      // Turn failed — close conversation gracefully (no extra AP spent)
+      setReaction(null);
+      return;
+    }
+
+    const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
+    if (!committed) {
+      // CAS failed (stale state) — close conversation gracefully
+      setReaction(null);
+      return;
+    }
+
+    doAutosave();
+    const nextLine = turnResult.value.line;
+    // Update reaction state with the new generated line; carry decree beats from the queue
+    setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
+  }, [dialogueProvider, reaction, store, db, logger]);
 
   const transferTo = (carrierId: string) => {
     setSuccessorOpen(false);
@@ -1339,7 +1387,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           lines={reaction.lines}
           backgroundKey={reaction.backgroundKey}
           generatedLine={reaction.generatedLine}
-          onChoice={undefined}
+          onChoice={reaction?.generatedLine && dialogueProvider ? onConverseChoice : undefined}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {

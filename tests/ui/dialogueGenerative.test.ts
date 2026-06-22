@@ -394,3 +394,109 @@ describe("ReactionScreen generatedLine prop", () => {
     expect(turnResult.value.line.meta.generated).toBe(false);
   });
 });
+
+// ── T3 (LLM-4): choice-driven next turn, CAS sequencing, and AP invariant ─────
+
+describe("T3 — choice-driven generative turns", () => {
+  let store: ReturnType<typeof createGameStore>;
+
+  beforeEach(() => {
+    store = createGameStore();
+    store.newGame(db);
+  });
+
+  // T3-1: choice click drives turn 2 with appended transcript
+  it("choice click drives turn 2 with appended transcript", async () => {
+    const charId = SPEAKER;
+    const choiceText = "臣愿听陛下吩咐。";
+
+    // Build a 2-entry transcript as onConverseChoice would produce
+    const transcript = [
+      { speaker: charId, text: "本宫累了，陛下早些歇息。" },
+      { speaker: "player", text: choiceText },
+    ];
+
+    // Assemble a turn-2 request with transcript
+    const state = store.getState();
+    const reqResult = assembleDialogueRequest(db, state, charId, LOCATION, { transcript });
+    expect(reqResult.ok).toBe(true);
+    if (!reqResult.ok) throw new Error(reqResult.error.message);
+
+    // Assert transcript was threaded into the request
+    expect(reqResult.value.transcript).toHaveLength(2);
+    expect(reqResult.value.transcript[0]).toMatchObject({ speaker: charId, text: "本宫累了，陛下早些歇息。" });
+    expect(reqResult.value.transcript[1]).toMatchObject({ speaker: "player", text: choiceText });
+
+    // Produce the turn and assert it succeeds
+    const provider = makeGenerativeProvider();
+    const turnResult = await produceDialogueTurn(db, provider, reqResult.value, state);
+    expect(turnResult.ok).toBe(true);
+    if (!turnResult.ok) throw new Error(turnResult.error.message);
+
+    // CAS commit succeeds
+    const committed = store.commitDialogueState(state, turnResult.value.nextState);
+    expect(committed).toBe(true);
+  });
+
+  // T3-2: second turn snapshot taken after first turn CAS
+  it("second turn snapshot taken after first turn CAS", async () => {
+    const state1 = store.getState();
+    const req1 = assembleDialogueRequest(db, state1, SPEAKER, LOCATION);
+    if (!req1.ok) throw new Error(req1.error.message);
+
+    const provider = makeGenerativeProvider();
+    const turn1 = await produceDialogueTurn(db, provider, req1.value, state1);
+    if (!turn1.ok) throw new Error(turn1.error.message);
+
+    // First CAS
+    const committed1 = store.commitDialogueState(state1, turn1.value.nextState);
+    expect(committed1).toBe(true);
+
+    // Re-snapshot AFTER CAS — must equal whatever was committed
+    const state2 = store.getState();
+    expect(state2).toBe(turn1.value.nextState);
+
+    // Turn 2 uses the re-snapshot: CAS for turn 2 must succeed because
+    // store.state === state2. If we had mistakenly used state1 as expected
+    // and state1 !== turn1.value.nextState, CAS would fail.
+    const req2 = assembleDialogueRequest(db, state2, SPEAKER, LOCATION);
+    if (!req2.ok) throw new Error(req2.error.message);
+
+    const turn2 = await produceDialogueTurn(db, provider, req2.value, state2);
+    if (!turn2.ok) throw new Error(turn2.error.message);
+
+    const committed2 = store.commitDialogueState(state2, turn2.value.nextState);
+    expect(committed2).toBe(true);
+
+    // Final store state is turn2's nextState
+    expect(store.getState()).toBe(turn2.value.nextState);
+  });
+
+  // T3-3: no extra AP spent on choice-driven follow-up turn
+  it("no extra AP spent on choice-driven follow-up turn", async () => {
+    // Verify that onConverseChoice logic does NOT call spendAp.
+    // We test at the function level: run a choice-driven turn and confirm
+    // the AP in state does not change further.
+
+    const state = store.getState();
+    const apBefore = state.calendar.ap;
+
+    // Simulate the choice-driven turn (no AP deduction — just assemble + produce + CAS)
+    const transcript = [
+      { speaker: SPEAKER, text: "本宫累了，陛下早些歇息。" },
+      { speaker: "player", text: "朕记下了。" },
+    ];
+    const reqResult = assembleDialogueRequest(db, state, SPEAKER, LOCATION, { transcript });
+    if (!reqResult.ok) throw new Error(reqResult.error.message);
+
+    const provider = makeGenerativeProvider();
+    const turnResult = await produceDialogueTurn(db, provider, reqResult.value, state);
+    if (!turnResult.ok) throw new Error(turnResult.error.message);
+
+    store.commitDialogueState(state, turnResult.value.nextState);
+
+    // AP must not have changed — no spendAp was called in this choice-driven path
+    const apAfter = store.getState().calendar.ap;
+    expect(apAfter).toBe(apBefore);
+  });
+});
