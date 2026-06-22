@@ -10,6 +10,7 @@
  */
 import { z } from "zod";
 import type { CharacterStanding } from "../state/types";
+import { dialogueClaimSchema } from "../dialogue/claims";
 
 // ── shared primitives ─────────────────────────────────────────────────
 export const idSchema = z
@@ -352,6 +353,9 @@ export const characterSchema = z
     initialMemories: z.array(initialMemoryDraftSchema),
     secrets: z.array(z.never()).max(0), // schema present, empty in the skeleton (plan §4)
     stances: z.array(z.strictObject({ charId: idSchema, attitude: nonEmpty })).optional(),
+    dialoguePolicy: z.strictObject({
+      forbiddenClaims: z.array(dialogueClaimSchema).max(16),
+    }).optional(),
     maternalClan: z
       .strictObject({
         postId: idSchema,
