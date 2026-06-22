@@ -9,7 +9,9 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:relay\"",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck:client": "tsc --noEmit",
+    "typecheck:server": "tsc -p server/tsconfig.json --noEmit",
+    "typecheck": "npm run typecheck:client && npm run typecheck:server",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -24,7 +26,7 @@
     "smoke:anthropic": "tsx tools/smoke-anthropic.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.105.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zod": "^4.4.3"

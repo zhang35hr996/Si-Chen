@@ -9,6 +9,7 @@
  */
 import { createHttpAnthropicTransport } from "../src/engine/dialogue/providers/httpAnthropicTransport";
 import { createDialogueProvider } from "../src/engine/dialogue/providers/remoteProvider";
+import type { DialogueRequest } from "../src/engine/dialogue/types";
 
 async function main() {
   const transport = createHttpAnthropicTransport("http://localhost:3001/api/llm/anthropic");
@@ -17,15 +18,46 @@ async function main() {
     transport,
   });
 
-  const request = {
+  const request: DialogueRequest = {
     speakerId: "smoke_test",
+    targetId: "player",
+    locationId: "hall_of_supreme_harmony",
+    time: { year: 1, month: 1, period: "early", dayIndex: 0 },
     speakerContext: {
-      profile: "测试角色，用于 smoke 验证。",
-      voice: "平静",
+      profile: {
+        name: "烟波",
+        age: 20,
+        role: "烟波楼头牌",
+        appearance: "风姿绰约",
+        personalityTraits: ["聪慧", "不羁"],
+        coreFacts: ["初入宫廷"],
+        goals: ["保全自身"],
+        speechStyle: "俏皮活泼",
+        speechPattern: "轻描淡写却藏机锋",
+      } as any, // profile fields beyond schema minimum for smoke
+      voice: {
+        register: "casual",
+        quirks: [],
+        tabooTopics: [],
+      },
+      standing: {
+        rank: "貴人",
+        favor: 50,
+        selfRefs: {
+          toPlayer: ["臣妾"],
+          formal: ["妾"],
+        },
+      },
       relevantMemories: [],
+      stances: [],
     },
-    policy: { offeredContextIds: [], gates: [] },
-  } as unknown as Parameters<typeof provider.generate>[0];
+    etiquette: {
+      allowedTerms: ["陛下"],
+      forbiddenTerms: [],
+      addressRules: [],
+    },
+    transcript: [],
+  };
 
   console.log("[smoke] sending request…");
   const result = await provider.generate(request, { timeoutMs: 15000 });

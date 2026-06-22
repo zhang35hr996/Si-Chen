@@ -68,11 +68,21 @@ describe("HttpAnthropicTransport", () => {
     if (!r.ok) { expect(r.error.kind).toBe("network"); }
   });
 
-  it("fetch TypeError (offline) → err({ kind:'offline' })", async () => {
+  it("fetch TypeError + navigator.onLine=false (offline) → err({ kind:'offline' })", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    vi.stubGlobal("navigator", { onLine: false });
     const { createHttpAnthropicTransport } = await import("../../src/engine/dialogue/providers/httpAnthropicTransport");
     const r = await createHttpAnthropicTransport().send(minimalPayload);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("offline");
+  });
+
+  it("fetch TypeError + navigator.onLine=true → err({ kind:'network' })", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    vi.stubGlobal("navigator", { onLine: true });
+    const { createHttpAnthropicTransport } = await import("../../src/engine/dialogue/providers/httpAnthropicTransport");
+    const r = await createHttpAnthropicTransport().send(minimalPayload);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe("network");
   });
 });
