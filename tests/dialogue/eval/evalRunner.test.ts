@@ -14,9 +14,13 @@ import type {
   EvalFixtureDefinition,
   EvalFixtureResponse,
 } from "../../../src/engine/dialogue/eval/fixtureProvider";
+import {
+  createFailingEvalFixtureProvider,
+} from "../../../src/engine/dialogue/eval/fixtureProvider";
 import type { EvalScenario } from "../../../src/engine/dialogue/eval/types";
 import type { DialogueRequest } from "../../../src/engine/dialogue/types";
 import type { ProposedClaim } from "../../../src/engine/dialogue/claims";
+import type { ProviderError } from "../../../src/engine/dialogue/providerContract";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
 import {
@@ -54,6 +58,22 @@ function makeFixture(
     },
     responseFor(_scenario: EvalScenario, _request: DialogueRequest): EvalFixtureResponse {
       return { text: VALID_TEXT, ...responseOverrides };
+    },
+  };
+}
+
+/**
+ * Returns an EvalFixtureDefinition whose provider always resolves with the
+ * given ProviderError. Used to test the provider-error branches of runEvalScenario.
+ */
+function makeFixtureWithProviderError(error: ProviderError): EvalFixtureDefinition {
+  return {
+    buildState() { return { db, state }; },
+    responseFor(_scenario: EvalScenario, _request: DialogueRequest): EvalFixtureResponse {
+      return { text: VALID_TEXT };
+    },
+    providerFactory(_speakerId: string) {
+      return createFailingEvalFixtureProvider(error);
     },
   };
 }
@@ -149,13 +169,9 @@ describe("runEvalScenario", () => {
     expect(result.textFindings.length).toBeGreaterThan(0);
   });
 
-  it("gateStatus=not_run when provider returns transport error", async () => {
-    // The fixture provider always returns ok, so simulate a transport error by
-    // using an invalid speakerId → assembleDialogueRequest fails → schemaStatus and gateStatus both not_run
-    // (This is the closest approximation without mocking internals — see next test for schema_invalid)
-    // For transport error specifically, we need a fixture that fails at provider level.
-    // Since EvalFixtureProvider cannot return errors, we test via invalid speaker path
-    // which returns early with gateStatus=not_run.
+  it("gateStatus=not_run when assembleDialogueRequest fails (invalid speakerId)", async () => {
+    // The assembly step itself fails when the speakerId is unknown — this returns
+    // schemaStatus=not_run and gateStatus=not_run without ever calling the provider.
     const scenario = makeScenario({ speakerId: "char_ghost_nonexistent" });
     const result = await runEvalScenario(scenario, makeFixture(), "eval-1", 0);
 
@@ -164,22 +180,61 @@ describe("runEvalScenario", () => {
     expect(result.expectationStatus).toBe("not_run");
   });
 
-  it("schemaStatus=fail when provider returns schema_invalid", async () => {
-    // We can't easily make createEvalFixtureProvider return a schema_invalid error
-    // because it always returns ok. This test verifies the code path by directly
-    // testing the provider error handling logic via an invalid assembly path.
-    // The schema_invalid path is covered by integration: assembleDialogueRequest failure
-    // returns schemaStatus="not_run". The schema_invalid code path (kind=protocol,
-    // cause=schema_invalid) is available but requires a provider that errors.
-    // Test that schemaStatus=not_run for bad speaker (assembly failure path):
+  it("schemaStatus=not_run when assembleDialogueRequest fails", async () => {
+    // Assembly failure path: bad speakerId → assembleDialogueRequest returns err →
+    // runner returns early with schemaStatus=not_run, gateStatus=not_run, durationMs=0.
     const scenario = makeScenario({ speakerId: "no_such_speaker" });
     const result = await runEvalScenario(scenario, makeFixture(), "eval-2", 1);
 
-    // Assembly failure path: both statuses are not_run
     expect(result.schemaStatus).toBe("not_run");
     expect(result.gateStatus).toBe("not_run");
     expect(result.durationMs).toBe(0);
     expect(result.runId).toBe("eval-2-r1");
+  });
+
+  it("schemaStatus=fail when provider returns schema_invalid error", async () => {
+    // Provider resolves err({kind:"protocol", cause:"schema_invalid"}) →
+    // runner maps to schemaStatus="fail", gateStatus="not_run".
+    const schemaInvalidError: ProviderError = {
+      kind: "protocol",
+      retryable: false,
+      cause: "schema_invalid",
+    };
+    const scenario = makeScenario();
+    const result = await runEvalScenario(
+      scenario,
+      makeFixtureWithProviderError(schemaInvalidError),
+      "eval-3",
+      0,
+    );
+
+    expect(result.schemaStatus).toBe("fail");
+    expect(result.gateStatus).toBe("not_run");
+    expect(result.expectationStatus).toBe("not_run");
+    expect(result.providerError).toEqual({ kind: "protocol", cause: "schema_invalid" });
+  });
+
+  it("schemaStatus=not_run when provider returns transport/network error", async () => {
+    // Provider resolves err({kind:"transport", cause:"network"}) →
+    // runner maps to schemaStatus="not_run" (no "cause" on transport errors in runner logic),
+    // gateStatus="not_run".
+    const transportError: ProviderError = {
+      kind: "transport",
+      retryable: true,
+      cause: "network",
+    };
+    const scenario = makeScenario();
+    const result = await runEvalScenario(
+      scenario,
+      makeFixtureWithProviderError(transportError),
+      "eval-4",
+      0,
+    );
+
+    expect(result.schemaStatus).toBe("not_run");
+    expect(result.gateStatus).toBe("not_run");
+    expect(result.expectationStatus).toBe("not_run");
+    expect(result.providerError).toEqual({ kind: "transport", cause: "network" });
   });
 
   it("expectationStatus=not_run when schemaStatus !== pass", async () => {

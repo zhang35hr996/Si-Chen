@@ -142,8 +142,10 @@ export async function runEvalScenario(
   // Step 4 — get fixture response
   const fixtureResponse = fixture.responseFor(scenario, request);
 
-  // Step 5 — create fixture provider
-  const provider = createEvalFixtureProvider(fixtureResponse, scenario.speakerId);
+  // Step 5 — create fixture provider (or use injected override for tests)
+  const provider = fixture.providerFactory
+    ? fixture.providerFactory(scenario.speakerId)
+    : createEvalFixtureProvider(fixtureResponse, scenario.speakerId);
 
   // Step 6 — call provider (timing wraps the generate call)
   const start = Date.now();

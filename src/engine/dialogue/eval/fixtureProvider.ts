@@ -6,12 +6,12 @@
  * runEvalScenario to drive the shared validation pipeline with deterministic
  * output so the eval runner can assert on gate results and diagnostics.
  */
-import { ok } from "../../infra/result";
+import { ok, err } from "../../infra/result";
 import type { ContentDB } from "../../content/loader";
 import type { GameState } from "../../state/types";
 import type { DialogueProvider } from "../types";
 import type { DialogueRequest } from "../types";
-import type { DialogueProviderResult } from "../providerContract";
+import type { DialogueProviderResult, ProviderError } from "../providerContract";
 import type { ProposedClaim } from "../claims";
 import type { EvalScenario } from "./types";
 
@@ -25,6 +25,11 @@ export interface EvalFixtureResponse {
 export interface EvalFixtureDefinition {
   buildState(): { db: ContentDB; state: GameState };
   responseFor(scenario: EvalScenario, request: DialogueRequest): EvalFixtureResponse;
+  /**
+   * Optional override: if present, runEvalScenario uses this provider directly
+   * instead of createEvalFixtureProvider. Used in tests to inject failing providers.
+   */
+  providerFactory?: (speakerId: string) => DialogueProvider;
 }
 
 /**
@@ -50,6 +55,22 @@ export function createEvalFixtureProvider(
     capabilities: { strictTools: true, promptCaching: false, batch: false },
     generate(_request: DialogueRequest) {
       return Promise.resolve(ok(result));
+    },
+  };
+}
+
+/**
+ * Returns a DialogueProvider whose generate() immediately resolves with the
+ * given ProviderError (err path). Used in tests to exercise the provider-error
+ * branches of runEvalScenario (schemaStatus=fail, transport error, etc.).
+ */
+export function createFailingEvalFixtureProvider(error: ProviderError): DialogueProvider {
+  return {
+    id: "eval-fixture-failing",
+    kind: "generative",
+    capabilities: { strictTools: true, promptCaching: false, batch: false },
+    generate(_request: DialogueRequest) {
+      return Promise.resolve(err(error));
     },
   };
 }
