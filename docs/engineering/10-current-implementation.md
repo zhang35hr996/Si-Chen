@@ -13,13 +13,13 @@ Last updated: 2026-06-19. Save format version: **4**.
 | Area | Implemented | Designed later | Not supported |
 |---|---|---|---|
 | **Scene nodes** | `line`, `choice`, `branch`, `effect` | `generate` (LLM node) | arbitrary scripts |
-| **Conditions** | `all`, `any`, `not`, `flagSet`, `eventFired`, `relationshipAtLeast`, `favorAtLeast`, `rankAtLeast`, `hasMemoryTag`, `periodIs`, `monthAtLeast`, `atLocation` | richer memory queries (count/recency) | `secretRevealed`, resource/bloodline predicates (scaffold guard) |
-| **Effects** | `relationship`, `favor`, `resource` (court/harem/bloodline), `set_bloodline_status`, `flag`, `memory` (unprotected), `set_rank`, `set_title`, `remove_title`, `heir_name`, `heir_summon`, `heir_educate`, `heir_adopt`, `set_taihou_illness` | — | direct calendar/location mutation from scenes |
+| **Conditions** | `all`, `any`, `not`, `flagSet`, `eventFired`, `favorAtLeast`, `rankAtLeast`, `hasMemoryTag`, `periodIs`, `monthAtLeast`, `atLocation` | richer memory queries (count/recency) | `secretRevealed`, resource/bloodline predicates (scaffold guard) |
+| **Effects** | `favor`, `resource` (court/harem/bloodline), `set_bloodline_status`, `flag`, `memory`, `relocate`, `set_rank`, `set_title`, `remove_title`, the `heir_*`/`pregnancy*` lifecycle set, and the `set_*_health`/`*_decease` domain effects (representative — see `src/engine/content/schemas.ts` for the full set) | — | direct calendar/location mutation from scenes |
 | **Characters** | `consort`, `official`, `elder` (太后: no 位分, no attributes, no standing) | wider roles | nested schedules, secrets gameplay (`secrets` must be empty) |
 | **Map** | data-driven `mapBoards` + `mapPortals`; `travel` nodes (cost AP, relocate) and `free` nodes (view only, optional one AP action) | per-area sub-graphs, time-gated portals | adjacency-restricted travel (it's fast-travel) |
 | **Calendar** | year / month / 上中下旬 period; `apMax` (6) action points; 时辰 time-of-day buckets driving background variants | seasonal events | sub-旬 scheduling |
-| **Memory** | append-only entries with tags; seeded from `initialMemories`; written by scene `memory` effects; queried via `hasMemoryTag` | retrieval / salience scoring / consolidation | LLM-driven memory retrieval |
-| **AI dialogue** | provider seam + stub remote provider | real provider, eval harness | unrestricted state mutation by the model |
+| **Memory** | append-only `MemoryEntry` (strength/retention/triggerTags/subjectIds/emotions, no `salience`/`protected`); objective `chronicle` + awareness; emotional conditions with decay; recall → decay → activation → rerank retrieval; `hasMemoryTag` (queries `triggerTags`) | consolidation / indexing / interaction-memory writeback | EventAwareness / rumor / incorrect beliefs |
+| **AI dialogue** | real providers (Anthropic/OpenAI/Gemini) + mock + eval harness; structured-claim gates; reaction planner; mention cooldown (incl. `mentionedContextRefs`) | richer reaction coverage; free-chat `topicTags` | unrestricted state mutation by the model |
 | **Save** | checksum, content-hash warning, missing-ref quarantine, autosave on scene-commit & travel; versioned format (v4) with laddered `MIGRATIONS[]` | — | automatic ID aliasing |
 | **Resources** | court (authority/publicSupport/factionPressure), harem (harmony/jealousy), bloodline (legitimacy/menstrualStatus) — written by effects; read-only 国情面板 UI | faction simulation | resource-based event conditions (deliberately none) |
 | **Heirs** | full lifecycle: gestation → birth → 小名 → 百日宴正名 → 开蒙 → 文昭殿教育 → 奉先殿择养父; `Heir` state with petName/givenName/education/adoptiveFatherId; 4 heir effects (see below) | grown-up / succession events | LLM-driven heir dialogue |
@@ -47,8 +47,9 @@ placeholder. Keep it that way until those systems are real.
 ## Recent additions
 
 - **`hasMemoryTag` condition** — `{ "hasMemoryTag": { "char": "<id>", "tag": "<tag>" } }`.
-  True when that character holds ≥1 memory entry carrying the tag. See
-  [`../systems/40-relationship-memory.md`](../systems/40-relationship-memory.md).
+  True when that character holds ≥1 memory entry whose `triggerTags` include the tag. See
+  [`../systems/40-relationship-memory.md`](../systems/40-relationship-memory.md) for the full
+  retrieval/decay/activation pipeline, structured-claim gating, and mention cooldown.
 - **Data-driven map boards** — `world.json` declares `mapBoards` (主图/子图 backdrops)
   and `mapPortals` (出宫 / 后宫 / 郊外 buttons). A location's `zone` names its board.
 - **Map is the home screen (皇城主地图).** 新游戏 and every committed event land on
