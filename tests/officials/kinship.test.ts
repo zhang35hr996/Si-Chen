@@ -14,9 +14,9 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 const state = createNewGameState(db, 1);
 
-// 沈氏 = fam_0002（侍君按 id 排序后第二位 shen_zhibai）。
-const SHEN_FAMILY = "fam_0002";
-const SHEN_HEAD = "official_fam_0002";
+// 沈氏母族：显式 familyId（content 声明 fam_shen_main）。
+const SHEN_FAMILY = "fam_shen_main";
+const SHEN_HEAD = "official_fam_shen_main";
 
 describe("kinship queries — consort ⇄ official", () => {
   it("从侍君查到母族", () => {

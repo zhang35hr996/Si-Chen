@@ -10,6 +10,7 @@
  * never serialized.
  */
 import type { ContentDB } from "../content/loader";
+import { validateOfficialWorld } from "../officials/validation";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
@@ -300,7 +301,8 @@ function validateSave(
     ...Object.keys(state.standing),
     ...Object.keys(state.memories),
   ]) {
-    if (!db.characters[charId]) missing.push(`character:${charId}`);
+    // 动态侍君（殿选落库）存于 generatedConsorts，不在 db.characters——两处都查方为缺失。
+    if (!db.characters[charId] && !state.generatedConsorts[charId]) missing.push(`character:${charId}`);
   }
   for (const entry of state.eventLog) {
     if (!db.events[entry.eventId]) missing.push(`event:${entry.eventId}`);
@@ -315,6 +317,19 @@ function validateSave(
     return err({
       error: saveError("MISSING_REF", `存档引用了当前内容不存在的对象（${refs.join("、")}），已隔离`, {
         context: { missing: refs },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // Official-world cross-collection invariants (官员/家族/亲缘)。Zod 只校验形状；跨集合不变量
+  // 由 world validator 负责。任一 error 级诊断 → 拒绝并 quarantine（绝不静默载入损坏官员图）。
+  const worldErrors = validateOfficialWorld(state, db);
+  if (worldErrors.length > 0) {
+    const first = worldErrors[0]!;
+    return err({
+      error: saveError("OFFICIAL_INTEGRITY", `存档官员数据完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: worldErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });

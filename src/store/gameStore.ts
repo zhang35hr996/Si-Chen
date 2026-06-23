@@ -16,7 +16,7 @@ import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState, PendingDaxuan } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
-import { changeOfficialGrade } from "../engine/officials/changeGrade";
+import { assignOfficialPost } from "../engine/officials/assign";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
@@ -99,10 +99,16 @@ export class GameStore {
     this.emit();
   }
 
-  /** 改某官员官职（→品级→权势派生跟随）。v1 无 UI 调用方，仅留接口。 */
-  changeOfficialGrade(officialId: string, newPostId: string): void {
-    this.state = changeOfficialGrade(this.state, officialId, newPostId);
+  /**
+   * 安全任免官职（→品级→权势派生跟随）。经 assignOfficialPost 校验席位/存在/状态，
+   * 仅在 ok 时落库；返回 Result 供调用方处理错误（v1 无 UI 调用方，仅留接口）。
+   */
+  assignOfficialPost(db: ContentDB, officialId: string, newPostId: string | null): Result<void, GameError> {
+    const result = assignOfficialPost(this.state, db, officialId, newPostId);
+    if (!result.ok) return result;
+    this.state = result.value;
     this.emit();
+    return ok(undefined);
   }
 
   /** 赏赐：扣库存并提升目标恩宠/好感（不耗行动点）。 */
@@ -240,7 +246,7 @@ export class GameStore {
   /** 殿选留牌子：按所选位分落库一位秀男（恩宠随位分缩放）。 */
   commitDaxuanConsort(db: ContentDB, candidate: Candidate, rank: string): void {
     const favor = initialFavorForRank(db.ranks[rank]?.order ?? 50);
-    this.state = addGeneratedConsort(this.state, candidate.content, rank, favor);
+    this.state = addGeneratedConsort(this.state, candidate.content, rank, favor, candidate.motherOfficialId);
     this.emit();
   }
 
@@ -249,7 +255,7 @@ export class GameStore {
     let next = this.state;
     for (const k of kept) {
       const favor = initialFavorForRank(db.ranks[k.rank]?.order ?? 50);
-      next = addGeneratedConsort(next, k.candidate.content, k.rank, favor);
+      next = addGeneratedConsort(next, k.candidate.content, k.rank, favor, k.candidate.motherOfficialId);
     }
     this.state = next;
     this.emit();

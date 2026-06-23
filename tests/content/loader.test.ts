@@ -213,6 +213,7 @@ describe("cross-reference checks", () => {
       surname: "林",
     };
     (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_test",
       postId: "post_ghost",
       legitimate: true,
       birthOrder: 1,
@@ -220,34 +221,89 @@ describe("cross-reference checks", () => {
     expectErrors(raw, "MISSING_REF", "post_ghost");
   });
 
-  it("two same-surname consorts with conflicting maternalClan.postId is reported", () => {
+  it("same familyId with conflicting postId is reported", () => {
     const raw = makeRaw();
-    // Add a second officialPost to the world fixture so both postIds are "valid" individually
     (raw.world.data as Record<string, unknown>)["officialPosts"] = [
       { id: "commoner", name: "平民", grade: "无", gradeOrder: 0 },
       { id: "post_b", name: "侍郎", grade: "正四品", gradeOrder: 4 },
     ];
-    // Give char_a surname + maternalClan pointing to "commoner"
     (charData(raw) as Record<string, unknown>)["profile"] = {
       ...(charData(raw)["profile"] as Record<string, unknown>),
       surname: "林",
     };
     (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin",
       postId: "commoner",
       legitimate: true,
       birthOrder: 1,
     };
-    // Push a second character with the same surname but a different postId
+    // 第二位侍君同 familyId，但官职不同 → 冲突。
     const char2 = structuredClone(raw.characters[0]!);
     (char2.data as Record<string, unknown>)["id"] = "char_b";
     (char2.data as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin",
       postId: "post_b",
       legitimate: false,
       birthOrder: 2,
     };
     char2.source = "characters/char_b.json";
     raw.characters.push(char2);
-    expectErrors(raw, "BAD_REF", "林");
+    expectErrors(raw, "BAD_REF", "fam_lin");
+  });
+
+  it("same familyId with conflicting surname is reported", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin",
+      postId: "commoner",
+      legitimate: true,
+      birthOrder: 1,
+    };
+    const char2 = structuredClone(raw.characters[0]!);
+    (char2.data as Record<string, unknown>)["id"] = "char_b";
+    (char2.data as Record<string, unknown>)["profile"] = {
+      ...(char2.data as { profile: Record<string, unknown> }).profile,
+      surname: "陈",
+    };
+    (char2.data as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin",
+      postId: "commoner",
+      legitimate: false,
+      birthOrder: 2,
+    };
+    char2.source = "characters/char_b.json";
+    raw.characters.push(char2);
+    expectErrors(raw, "BAD_REF", "fam_lin");
+  });
+
+  it("different familyId may share a surname (no error)", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin_a",
+      postId: "commoner",
+      legitimate: true,
+      birthOrder: 1,
+    };
+    const char2 = structuredClone(raw.characters[0]!);
+    (char2.data as Record<string, unknown>)["id"] = "char_b";
+    (char2.data as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin_b",
+      postId: "commoner",
+      legitimate: false,
+      birthOrder: 2,
+    };
+    char2.source = "characters/char_b.json";
+    raw.characters.push(char2);
+    const result = loadContent(raw);
+    expect(result.ok).toBe(true);
   });
 });
 

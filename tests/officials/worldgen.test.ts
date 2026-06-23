@@ -40,7 +40,7 @@ describe("generateOfficialWorld — determinism", () => {
     const state = createNewGameState(db, 3);
     const before = structuredClone(state.officials);
     for (let i = 0; i < 50; i++) {
-      getPalaceRelativesOfOfficial(state, "official_fam_0001");
+      getPalaceRelativesOfOfficial(state, "official_fam_shen_main");
       getOfficialRelativesOfConsort(state, "shen_zhibai");
     }
     expect(state.officials).toEqual(before);

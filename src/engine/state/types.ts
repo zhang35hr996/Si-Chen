@@ -267,15 +267,16 @@ export interface FamilyMember {
 
 /**
  * 官员家族（长期政治/亲缘实体）。influence=门第影响、imperialFavor=皇帝整体态度，
- * 二者与官员个人 loyalty、与官职品级均分离。memberIds 收录该族所有人物 id
- * （官员 id + 宫中侍君 charId + FamilyMember id）。
+ * 二者与官员个人 loyalty、与官职品级均分离。
+ *
+ * 成员归属唯一真相：各人物自身的 familyId（Official/FamilyMember）与 standing.birthFamilyId
+ * （侍君）。家族不另存 memberIds——成员列表一律经 selector 派生，杜绝重复存储与漂移。
  */
 export interface OfficialFamily {
   id: string;
   surname: string;
   influence: number; // 0–100 家族权势/门第影响（非官职品级）
   imperialFavor: number; // 0–100 皇帝当前对该族整体态度
-  memberIds: string[]; // 全族人物 id（官员/侍君/家族成员）
 }
 
 /** 亲缘关系类型。语义：`type` 描述「to 相对于 from」的身份（如 mother=「to 是 from 的母亲」）。 */

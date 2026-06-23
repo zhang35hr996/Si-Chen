@@ -82,7 +82,6 @@ const officialFamilySchema = z.strictObject({
   surname: z.string().min(1),
   influence: percent,
   imperialFavor: percent,
-  memberIds: z.array(z.string().min(1)),
 });
 
 const familyMemberSchema = z.strictObject({

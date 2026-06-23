@@ -67,6 +67,17 @@ export function getOfficialsByFamilyId(state: GameState, familyId: string): Offi
   return Object.values(state.officials).filter((o) => o.familyId === familyId);
 }
 
+/**
+ * 当前「在任且有有效官职」的官员（status=active、postId 非空且官职存在）。
+ * 依赖在任官员的系统（殿选世家候选来源、大臣进献）必须经此 selector 取人，
+ * 以免后续引入 retired/dead/exiled 后仍从已故/告老者中抽取。
+ */
+export function getActiveSeatedOfficials(state: GameState, db: ContentDB): Official[] {
+  return Object.values(state.officials).filter(
+    (o) => o.status === "active" && o.postId !== null && db.officialPosts[o.postId] !== undefined,
+  );
+}
+
 /** 某家族出身、当前在宫的侍君 charId（按 standing.birthFamilyId）。 */
 export function getConsortsByFamilyId(state: GameState, familyId: string): string[] {
   return Object.entries(state.standing)

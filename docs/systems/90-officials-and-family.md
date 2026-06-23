@@ -9,7 +9,7 @@
 |------|------|------|----------|
 | 官职 `OfficialPost` | content（world.json） | 朝廷稳定席位：名称/品级 `gradeOrder`/部门 `department`/席位数 `seatCount` | 永久存在，人去职后席位空缺、官职仍在 |
 | 官员 `Official` | `state.officials` | 占据官职的具体女性人物：`postId\|null`、`age`、`familyId`、`loyalty`、`status`、`appointedAt?` | 运行态，可空缺 `postId` |
-| 家族 `OfficialFamily` | `state.officialFamilies` | 母系政治/亲缘实体：`surname`、`influence` 门第、`imperialFavor` 圣眷、`memberIds` | 长期存在 |
+| 家族 `OfficialFamily` | `state.officialFamilies` | 母系政治/亲缘实体：`surname`、`influence` 门第、`imperialFavor` 圣眷（**不存 memberIds**，成员一律派生） | 长期存在 |
 | 家族成员 `FamilyMember` | `state.familyMembers` | 非官员、非在宫侍君的近亲（母亲/内卿/女儿/男郎/姐妹） | 运行态 |
 | 亲缘边 `KinshipRelation` | `state.kinship` | 正式有向关系边（含对称反向边） | 随档持久 |
 
@@ -25,21 +25,27 @@
 
 ## 三、人物 id 命名空间（全局唯一、与显示名解耦、读档不重生成）
 
-- 官员：`official_fam_NNNN`（family 头官）
-- 家族：`fam_NNNN`
-- 家族成员：`person_NNNN_{mat|nei|dauK|sonK|sis}`
+- 家族：**显式稳定 familyId**。authored 家族由 `maternalClan.familyId` 声明（如 `fam_shen_main`），
+  worldtime 直接复用；无关联随机家族用 `fam_gen_NNNN`（与 authored id 去碰撞）。
+- 官员：`official_<familyId>`（family 头官，如 `official_fam_shen_main`）
+- 家族成员：`person_<familyId 去 fam_ 前缀>_{mat|nei|dauK|sonK|sis}`
 - 侍君：复用角色 charId（content / generatedConsorts）
+
+> 家族身份**绝不按 surname 推断**：不同 `familyId` 可同姓；同一 `familyId` 内 surname 与初始
+> 头官 postId 必须一致，冲突由 ContentLoader 报 `BAD_REF`。
 
 ## 四、开局生成顺序（`engine/officials/worldgen.ts`，纯函数）
 
-1. 收集 authored 侍君母族（`maternalClan` + `surname`，按 charId 稳定排序，按姓分组）。
-2. 每组建家族：头官（取 `maternalClan.postId`）→ 核心成员（母亲/内卿/女儿/男郎/姐妹）→
-   侍君连为官员之子（`birthFamilyId` + 亲缘边）。
-3. 再生成 `UNLINKED_FAMILY_COUNT` 个无关联家族填充朝堂，席位按 `seatCount` 分配不超额。
+1. 收集 authored 侍君母族，**按 `maternalClan.familyId` 分组**（按 charId 稳定排序后按 familyId 聚合）。
+2. 每组建家族（runtime id = 该 familyId）：头官（取 `maternalClan.postId`）→ 核心成员
+   （母亲/内卿/女儿/男郎/姐妹）→ 侍君连为官员之子（`birthFamilyId` + 亲缘边）。
+3. 再生成 `UNLINKED_FAMILY_COUNT` 个无关联家族（`fam_gen_*`）填充朝堂，席位按 `seatCount` 不超额。
 4. 建亲缘索引（母↔子女/子、配偶、同胞，对称关系两向落库）。
 5. `newGame` 写入 state；`standing.birthFamilyId` 落于对应侍君。
 
-年龄/身份约束集中于 `engine/officials/constraints.ts`（入仕年龄、母女年龄差、配偶年龄差）。
+年龄/身份约束集中于 `engine/officials/constraints.ts`。生成时官员年龄取自合法窗口：
+满足品级最低年龄，且对所有 linked 侍君母子年龄差 ∈ `[MIN_GAP, MAX_GAP]` 且 ≤ `OFFICIAL_MAX_AGE`；
+子女年龄取 `[headAge-MAX_GAP, headAge-MIN_GAP]`；窗口为空即抛出生成约束错误（绝不静默回退非法年龄）。
 
 ## 五、确定性随机
 
@@ -56,17 +62,35 @@
 
 ## 七、校验（`engine/officials/validation.ts`，收集式诊断）
 
-覆盖官职/家族引用存在、席位不超额、男性/成员不占职、家族成员引用有效、亲缘两端存在、
-无重复边、无矛盾生母、母女年龄合理、侍君 `birthFamilyId` 有效、官员↔宫中亲属反向一致、
-死亡官员不在任、无重复 id。
+成员归属唯一真相 = 各人物 `familyId`/`birthFamilyId`（无 memberIds）。校验覆盖：record key 与对象
+`id` 一致、全局人物 id 唯一（authored characters / generatedConsorts / officials / familyMembers
+四命名空间）、官职/家族引用存在、席位不超额、`isValidOfficialAge`、家族成员引用有效、sex↔role 一致、
+亲缘两端存在、无重复边、无矛盾生母、mother↔daughter/son 反向边、sibling/spouse 对称边、母女年龄
+（`isValidParentChildAge`）、配偶年龄（`isValidSpouseAge`）、侍君 `birthFamilyId` 有效、官员↔宫中亲属
+反向一致、死亡官员不在任。
+
+**接入加载链路**：`validateSave`（`readSlot` 内）在 Zod 形状校验通过后调用 `validateOfficialWorld`，
+任一 error 级诊断 → 拒绝并 quarantine（`OFFICIAL_INTEGRITY`，context 含全部诊断）。Zod 只管形状，
+跨集合不变量归 world validator。新建游戏由测试保证生成结果通过 validator（不在生产路径重复扫描）。
 
 ## 八、存档与迁移
 
 - `gameStateSchema` 纳入 `officials`（扩展形状）/`officialFamilies`/`familyMembers`/`kinship`
-  及 `standing.birthFamilyId`。
+  及 `standing.birthFamilyId`；`OfficialFamily` 无 `memberIds`。
+- 内容侧 `maternalClan` 增 `familyId`。
+- save content-id cross-check 解析动态侍君用 `db.characters[id] ?? state.generatedConsorts[id]`，
+  避免殿选侍君存档被误判 missing。
 - `SAVE_FORMAT_VERSION` 8 → 9。按 **no-save-backcompat** 政策（pre-release）**不写 v8→v9 迁移**：
   旧档命中缺失的 `MIGRATIONS[8]` 即隔离（quarantine），绝不在加载旧档时重随机一套官员世界。
   新档以 v9 round-trip，重复读写稳定。
+
+## 八之二、安全任免与在任官员 selector
+
+- 任免官职唯一入口 `assignOfficialPost(state, db, officialId, postId|null): Result`，校验官员/官职
+  存在、`seatCount` 未满、死者不可任职、同职幂等、null 去职；`GameStore.assignOfficialPost` 经其
+  Result 落库，绝不裸写 postId。
+- `getActiveSeatedOfficials(state, db)`（status=active 且 postId 有效）为依赖在任官员的系统统一取人：
+  殿选世家候选来源、大臣进献。
 
 ## 九、UI（只读开发者入口）
 
@@ -76,8 +100,8 @@ promotion 到正式界面只需更换挂载点。
 
 ## 十、后续阶段可复用的接口
 
-- 任命/升迁/告老：`Official.postId` 置换 + 席位占用不变量（`seatCount`）+ `changeOfficialGrade`。
+- 任命/升迁/告老：`assignOfficialPost`（已强制席位不变量）+ `getActiveSeatedOfficials`。
 - 株连/抄家/流放：`Official.status` 枚举 + 校验「死亡官员不在任」。
 - 赐婚/赘入：`FamilyMember`(`consort_in`) + `KinshipRelation('spouse')`，已不阻碍男子赘入女方家。
 - 侍君晋封影响家族：改 `OfficialFamily.influence/imperialFavor`，不动官职品级。
-- 传代：家族 `memberIds` + 亲缘边 + 上一代 `matriarch`。
+- 传代：派生成员（selector）+ 亲缘边 + 上一代 `matriarch`。

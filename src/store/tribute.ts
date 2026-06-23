@@ -1,6 +1,7 @@
 /** 属地进贡 / 大臣进献：动态概率 + 物品池 + 乘风报告（声明式选择）。 */
 import { gestationRoll } from "../engine/characters/gestation";
 import type { ContentDB } from "../engine/content/loader";
+import { getActiveSeatedOfficials } from "../engine/officials/selectors";
 import type { GameState } from "../engine/state/types";
 import type { ChengFengPrompt } from "./prompt";
 
@@ -57,7 +58,7 @@ export function buildProvinceTribute(db: ContentDB, state: GameState, seedKey: s
 
 export function buildMinisterTribute(db: ContentDB, state: GameState, seedKey: string): ChengFengPrompt | null {
   if (gestationRoll(`min:gate:${seedKey}`) % 100 >= ministerTributeChance(state)) return null;
-  const officials = Object.values(state.officials);
+  const officials = getActiveSeatedOfficials(state, db);
   if (officials.length === 0) return null;
   const pool = itemsInCategories(db, MINISTER_CATEGORIES);
   const itemId = pick(pool, `min:item:${seedKey}`);

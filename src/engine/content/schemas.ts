@@ -384,6 +384,8 @@ export const characterSchema = z
     }).optional(),
     maternalClan: z
       .strictObject({
+        /** 显式稳定家族键（如 fam_shen_main）。绝不由姓名推断；worldgen 按此分组。 */
+        familyId: idSchema,
         postId: idSchema,
         legitimate: z.boolean(),
         birthOrder: z.number().int().min(1),

@@ -9,7 +9,7 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 const state = createNewGameState(db, 1);
 
-const SHEN_HEAD = "official_fam_0002";
+const SHEN_HEAD = "official_fam_shen_main";
 const headName = (id: string) => `${state.officials[id]!.surname}${state.officials[id]!.givenName}`;
 
 describe("OfficialRoster", () => {
@@ -45,8 +45,8 @@ describe("OfficialDetail", () => {
   });
 
   it("shows an empty-kin state for an official whose family has no palace consorts", () => {
-    // 无关联填充家族（fam_0005+）必无宫中侍君。
-    render(<OfficialDetail db={db} state={state} officialId="official_fam_0005" onBack={() => {}} />);
+    // 无关联填充家族（fam_gen_*）必无宫中侍君。
+    render(<OfficialDetail db={db} state={state} officialId="official_fam_gen_0001" onBack={() => {}} />);
     expect(screen.getByText(/族中无人入宫为侍/)).toBeInTheDocument();
   });
 
