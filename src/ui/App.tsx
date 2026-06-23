@@ -1291,15 +1291,28 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         if (applied.ok) beats = plan.reactions;
       }
     }
-    // 移动结算：转旬=travel_rollover（time_advance 优先，无则 location_enter）；非转旬=arrival（仅 location_enter）。
     const travelTarget = checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation);
-    // 转旬=travel_rollover（time_advance 优先，无则 location_enter）；未转旬=arrival（仅 location_enter）。
+    // 出宫/城内地图（stayOnMapBoardId）：玩家未进房间，playerLocation 只是未变留痕，绝不触发 location_enter
+    // （否则刚点宫门就被司礼传月祭仪等房间事件拦下；承自 main 447b4c7）；仅转旬时跑 time_advance（stationary 语义）。
+    // 真正抵达房间：转旬=travel_rollover（time_advance 优先，无则 location_enter）；未转旬=arrival（仅 location_enter）。
     // 两者都开新链；arrival 也须在反应队列结束后跑 location_enter（不可丢，见 Blocker 1）。
-    const request: AutoCheckpointRequest = rolledOver
-      ? { source: "travel_rollover", returnTarget: travelTarget, dispatch: "new_chain" }
-      : { source: "arrival", returnTarget: travelTarget, dispatch: "new_chain" };
-    if (beats.length) playReactions(beats, request);
-    else completeDeferredAutoCheckpoint(request);
+    const request: AutoCheckpointRequest | null = stayOnMapBoardId
+      ? rolledOver
+        ? { source: "stationary_rollover", returnTarget: travelTarget, dispatch: "new_chain" }
+        : null
+      : rolledOver
+        ? { source: "travel_rollover", returnTarget: travelTarget, dispatch: "new_chain" }
+        : { source: "arrival", returnTarget: travelTarget, dispatch: "new_chain" };
+    if (request) {
+      if (beats.length) playReactions(beats, request);
+      else completeDeferredAutoCheckpoint(request);
+    } else {
+      // 出宫未转旬：无 checkpoint，先播完节拍，再落到目标地图板（不按 playerLocation 切回房间）。
+      if (beats.length) playReactions(beats, null);
+      setMapAtRoot(false);
+      setCurrentBoard(stayOnMapBoardId!);
+      setView("map");
+    }
   };
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
