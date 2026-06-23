@@ -42,8 +42,10 @@ export interface ZichendianScreenProps {
   pendingAudienceItems: readonly PendingAudienceViewItem[];
 
   summonedConsort?: ZichendianSummonedView;
-  /** 被召见侍君的「叙话」入口（普通互动路径，可选；不可叙话时父层省略以隐藏按钮）。 */
+  /** 被召见侍君的「叙话」入口（普通互动路径，可选）。 */
   onConverseSummonedConsort?: () => void;
+  /** 叙话不可用原因（如行动力不足）；提供时叙话按钮禁用并显原因，杜绝「可点却静默无效」。 */
+  summonedConverseDisabledReason?: string;
   /** 被召见侍君的「告退」结束入口（可选；提供时渲染告退按钮，由父层清 summoned 态）。 */
   onDismissSummonedConsort?: () => void;
 
@@ -84,6 +86,7 @@ export function ZichendianScreen({
   pendingAudienceItems,
   summonedConsort,
   onConverseSummonedConsort,
+  summonedConverseDisabledReason,
   onDismissSummonedConsort,
   interruptible,
   interruptDisabledReason,
@@ -103,16 +106,21 @@ export function ZichendianScreen({
   const [foreground, setForeground] = useState<ZichendianForeground>({ kind: "none" });
   const reasonId = useId();
 
-  // busy = 外部业务面板（册封/搬迁/赏赐/请医/召见/批阅/事件/原子操作）已接管前景。屏内不得再持有任何前景对话：
-  // 立即用 !busy 渲染门控（见下），并在 busy 起始时重置陈旧的本地前景，避免「旧内部对话 + 新外部模态」同帧并存。
-  const internalSurfacesAllowed = !busy;
-  useEffect(() => {
-    if (busy) setForeground({ kind: "none" });
-  }, [busy]);
+  // 召见侍君临场也是一次独占会话：侍君在前，候见提示/抽屉/乘风及六个常规动作一律让位，仅留叙话/告退收场。
+  const summonedSessionActive = summonedConsort !== undefined;
 
-  // 任一内部前景打开即视为本屏正进行一次交互会话——背景场景动作（含离开）一律禁用，由前景独占；busy 同理。
+  // busy（外部业务面板）或召见会话进行中：屏内不得再持有任何前景对话。立即用渲染门控（见下），
+  // 并在二者任一接管时重置陈旧的本地前景，避免「旧内部对话 + 新外部模态/召见临场」同帧并存。
+  const internalSurfacesAllowed = !busy && !summonedSessionActive;
+  useEffect(() => {
+    if (busy || summonedSessionActive) setForeground({ kind: "none" });
+  }, [busy, summonedSessionActive]);
+
+  // 六个常规场景动作：busy / 内部前景 / 召见会话 任一进行中即禁用，由当前会话独占。
   const internalForegroundOpen = foreground.kind !== "none";
-  const screenActionsLocked = busy || internalForegroundOpen;
+  const sceneActionsLocked = busy || internalForegroundOpen || summonedSessionActive;
+  // 叙话/告退：不含 summonedSessionActive——它们正是结束召见会话的唯一控件，不可被召见态自锁。
+  const summonedActionsLocked = busy || internalForegroundOpen;
 
   // 前景切换：开启 surface 仅可从 none 出发（守住单一前景不变量）；关闭一律回 none。
   const openPending = () => setForeground((f) => (f.kind === "none" ? { kind: "pending-audience" } : f));
@@ -139,6 +147,7 @@ export function ZichendianScreen({
           {summonedConsort.portraitSrc && (
             <img className="zichendian-summoned__portrait" src={summonedConsort.portraitSrc} alt={summonedConsort.name} />
           )}
+          <div className="zichendian-summoned__caption">
           <p className="zichendian-summoned__who">
             <span className="zichendian-summoned__name">{summonedConsort.name}</span>
             {summonedConsort.role && <span className="zichendian-summoned__role">{summonedConsort.role}</span>}
@@ -146,17 +155,27 @@ export function ZichendianScreen({
           {(onConverseSummonedConsort || onDismissSummonedConsort) && (
             <div className="zichendian-summoned__actions">
               {onConverseSummonedConsort && (
-                <button type="button" className="action-btn" onClick={onConverseSummonedConsort} disabled={screenActionsLocked}>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={onConverseSummonedConsort}
+                  disabled={summonedActionsLocked || Boolean(summonedConverseDisabledReason)}
+                  title={summonedConverseDisabledReason}
+                >
                   叙话
                 </button>
               )}
               {onDismissSummonedConsort && (
-                <button type="button" className="action-btn" onClick={onDismissSummonedConsort} disabled={screenActionsLocked}>
+                <button type="button" className="action-btn" onClick={onDismissSummonedConsort} disabled={summonedActionsLocked}>
                   告退
                 </button>
               )}
+              {summonedConverseDisabledReason && (
+                <span className="zichendian-summoned__reason" role="note">{summonedConverseDisabledReason}</span>
+              )}
             </div>
           )}
+          </div>
         </div>
       )}
       <p className="zichendian-summary__line">候见之人 {audienceCount}</p>
@@ -184,28 +203,28 @@ export function ZichendianScreen({
 
   const actions = (
     <>
-      <button type="button" className="action-btn action-btn--key" onClick={onReviewMemorials} disabled={screenActionsLocked}>
+      <button type="button" className="action-btn action-btn--key" onClick={onReviewMemorials} disabled={sceneActionsLocked}>
         批阅奏折
       </button>
-      <button type="button" className="action-btn" onClick={onSummonConsort} disabled={screenActionsLocked}>
+      <button type="button" className="action-btn" onClick={onSummonConsort} disabled={sceneActionsLocked}>
         召见侍君
       </button>
       <button
         type="button"
         className="action-btn"
         onClick={openChengfeng}
-        disabled={screenActionsLocked || !interruptible}
+        disabled={sceneActionsLocked || !interruptible}
         aria-describedby={showInterruptReason ? reasonId : undefined}
       >
         传乘风
       </button>
-      <button type="button" className="action-btn" onClick={onRest} disabled={screenActionsLocked}>
+      <button type="button" className="action-btn" onClick={onRest} disabled={sceneActionsLocked}>
         休息
       </button>
-      <button type="button" className="action-btn" onClick={onLeave} disabled={screenActionsLocked}>
+      <button type="button" className="action-btn" onClick={onLeave} disabled={sceneActionsLocked}>
         离开
       </button>
-      <button type="button" className="action-btn" onClick={openPending} disabled={screenActionsLocked}>
+      <button type="button" className="action-btn" onClick={openPending} disabled={sceneActionsLocked}>
         待宣 · {deferredAudienceCount}
       </button>
       {showInterruptReason && (

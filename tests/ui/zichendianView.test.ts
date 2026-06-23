@@ -166,17 +166,22 @@ describe("shouldClearAudienceOnCommit", () => {
 
 describe("zichendianExternalBusy", () => {
   const allFalse: ZichendianBusyInputs = {
-    atomicFlowInProgress: false, relocateOpen: false, consortPickerOpen: false, consortListOpen: false,
+    atomicFlowInProgress: false, settlementPending: false, relocateOpen: false, consortPickerOpen: false, consortListOpen: false,
     physicianOpen: false, physicianPickerOpen: false, heirListOpen: false, resourcePanelOpen: false,
     storehouseOpen: false, profileOpen: false, settingsOpen: false, choicePending: false, globalInterruptActive: false,
   };
-  it("is false when nothing external is open", () => {
+  it("is false when nothing external is open (settlement included)", () => {
     expect(zichendianExternalBusy(allFalse)).toBe(false);
   });
   it("is true if any single external owner is active", () => {
     for (const key of Object.keys(allFalse) as (keyof ZichendianBusyInputs)[]) {
       expect(zichendianExternalBusy({ ...allFalse, [key]: true })).toBe(true);
     }
+  });
+  it("settlementPending alone makes it busy", () => {
+    // settlementPending 刻意独立于 atomicFlowInProgress：结算 effect 在 atomicFlow===false 时才排空，
+    // 若把待结算并入 atomicFlow 会自锁死结算；故只在紫宸殿 busy 这一侧计入，防止结算窗口内候见提示回插。
+    expect(zichendianExternalBusy({ ...allFalse, settlementPending: true })).toBe(true);
   });
 });
 

@@ -120,6 +120,12 @@ export function shouldClearAudienceOnCommit(
  */
 export interface ZichendianBusyInputs {
   atomicFlowInProgress: boolean;
+  /**
+   * 转旬后待结算（pendingTimeSettlement!==null）。**刻意独立于 atomicFlowInProgress**：结算 effect 正是
+   * 在 atomicFlowInProgress===false 时才排空，把它并入 atomicFlow 会自锁死结算。故只在紫宸殿 busy 这一侧计入，
+   * 防止「转旬→结算→全局中断→time_advance→最终恢复」之间候见提示/动作坞回插。
+   */
+  settlementPending: boolean;
   relocateOpen: boolean;
   consortPickerOpen: boolean;
   consortListOpen: boolean;
@@ -137,6 +143,7 @@ export interface ZichendianBusyInputs {
 export function zichendianExternalBusy(i: ZichendianBusyInputs): boolean {
   return (
     i.atomicFlowInProgress ||
+    i.settlementPending ||
     i.relocateOpen ||
     i.consortPickerOpen ||
     i.consortListOpen ||

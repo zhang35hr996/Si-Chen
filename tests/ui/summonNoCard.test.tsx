@@ -68,8 +68,11 @@ describe("summoned consort presentation", () => {
     expect(onConverseSummonedConsort).toHaveBeenCalledTimes(1);
   });
 
-  it("告退 clears the summoned state and the default Zichendian scene returns", async () => {
+  it("a summoned consort suppresses a co-supplied audience prompt and locks scene actions; 告退 restores both", async () => {
     const user = userEvent.setup();
+    const activeAudience = {
+      eventId: "ev_a", visitorName: "卫绥", visitorTitle: "礼官", message: "礼官候见。", affordable: true,
+    };
 
     function SummonHarness() {
       const [summonedId, setSummonedId] = useState<string | null>(consortId);
@@ -77,6 +80,7 @@ describe("summoned consort presentation", () => {
         <ZichendianScreen
           {...baseProps}
           audienceCount={2}
+          activeAudience={activeAudience} // supplied throughout — only the summoned session hides it
           summonedConsort={summonedId ? summonedConsortToView(db, state, registry, summonedId) : undefined}
           onConverseSummonedConsort={summonedId ? vi.fn() : undefined}
           onDismissSummonedConsort={summonedId ? () => setSummonedId(null) : undefined}
@@ -85,13 +89,19 @@ describe("summoned consort presentation", () => {
     }
 
     const { container } = render(<SummonHarness />);
+    // during the summoned session: presence shown, audience prompt suppressed, scene actions locked
     expect(container.querySelector(".zichendian-summoned")).not.toBeNull();
+    expect(screen.queryAllByRole("dialog")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "批阅奏折" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "告退" }));
 
-    expect(container.querySelector(".zichendian-summoned")).toBeNull(); // presence cleared
+    // after 告退: presence cleared, AudiencePrompt returns (still supplied), scene actions enabled again
+    expect(container.querySelector(".zichendian-summoned")).toBeNull();
     expect(screen.queryByRole("button", { name: "告退" })).toBeNull();
-    expect(screen.getByText("候见之人 2")).toBeInTheDocument(); // default factual summary returns
+    expect(screen.getByRole("dialog")).toHaveTextContent("卫绥"); // audience prompt restored
+    expect(screen.getByRole("button", { name: "批阅奏折" })).toBeEnabled();
+    expect(screen.getByText("候见之人 2")).toBeInTheDocument();
   });
 
   it("omitting both summoned callbacks renders no interaction buttons", () => {

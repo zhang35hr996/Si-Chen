@@ -411,3 +411,75 @@ describe("ZichendianScreen — realistic external-modal handoff", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("卫绥");
   });
 });
+
+describe("ZichendianScreen — summoned consort owns the scene session", () => {
+  const summoned = { characterId: "c1", name: "苏蘅", role: "婕妤", portraitSrc: "/p/suheng.png" };
+  const summonedProps = (over: Partial<ZichendianScreenProps> = {}) =>
+    makeProps({ summonedConsort: summoned, onConverseSummonedConsort: vi.fn(), onDismissSummonedConsort: vi.fn(), ...over });
+
+  it("1 & 2. an active audience + summoned consort renders the presence but no AudiencePrompt/dialog", () => {
+    const { container } = render(<ZichendianScreen {...summonedProps({ activeAudience: audience })} />);
+    expect(container.querySelector(".zichendian-summoned")).not.toBeNull();
+    expect(dialogs()).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "宣进来" })).toBeNull(); // audience prompt suppressed
+  });
+
+  it("3 & 4. all six scene actions are disabled and fire no callback during the summoned session", async () => {
+    const user = userEvent.setup();
+    const props = summonedProps({ deferredAudienceCount: 1, pendingAudienceItems: [pendingItems[0]!] });
+    render(<ZichendianScreen {...props} />);
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
+    expect(action(/^待宣/)).toBeDisabled();
+    await user.click(action("批阅奏折"));
+    await user.click(action("召见侍君"));
+    await user.click(action("休息"));
+    await user.click(action("离开"));
+    expect(props.onReviewMemorials).not.toHaveBeenCalled();
+    expect(props.onSummonConsort).not.toHaveBeenCalled();
+    expect(props.onRest).not.toHaveBeenCalled();
+    expect(props.onLeave).not.toHaveBeenCalled();
+  });
+
+  it("5. 叙话 and 告退 remain enabled (the only controls that can end the session)", () => {
+    render(<ZichendianScreen {...summonedProps()} />);
+    expect(screen.getByRole("button", { name: "叙话" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "告退" })).toBeEnabled();
+  });
+
+  it("6. 告退 invokes the dismiss callback", async () => {
+    const user = userEvent.setup();
+    const onDismissSummonedConsort = vi.fn();
+    render(<ZichendianScreen {...summonedProps({ onDismissSummonedConsort })} />);
+    await user.click(screen.getByRole("button", { name: "告退" }));
+    expect(onDismissSummonedConsort).toHaveBeenCalledTimes(1);
+  });
+
+  it("9. a summoned consort arriving while the drawer is open unmounts it and it does not resurrect", async () => {
+    const user = userEvent.setup();
+    const open = { deferredAudienceCount: 1, pendingAudienceItems: [pendingItems[0]!] } as const;
+    const { rerender } = render(<ZichendianScreen {...makeProps(open)} />);
+    await user.click(action(/^待宣/));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("待宣事务");
+    rerender(<ZichendianScreen {...summonedProps(open)} />); // summoned consort takes over
+    expect(dialogs()).toHaveLength(0);
+    rerender(<ZichendianScreen {...summonedProps(open)} />); // re-render: drawer must not resurrect
+    expect(dialogs()).toHaveLength(0);
+  });
+
+  it("9b. a summoned consort arriving while Chengfeng is open unmounts it and it does not resurrect", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ZichendianScreen {...makeProps()} />);
+    await user.click(action("传乘风"));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("传乘风");
+    rerender(<ZichendianScreen {...summonedProps()} />);
+    expect(dialogs()).toHaveLength(0);
+    rerender(<ZichendianScreen {...summonedProps()} />);
+    expect(dialogs()).toHaveLength(0);
+  });
+
+  it("AP-zero converse is rendered disabled with a reason, never enabled-inert", () => {
+    render(<ZichendianScreen {...summonedProps({ summonedConverseDisabledReason: "行动力不足" })} />);
+    expect(screen.getByRole("button", { name: "叙话" })).toBeDisabled();
+    expect(screen.getByRole("note")).toHaveTextContent("行动力不足");
+  });
+});

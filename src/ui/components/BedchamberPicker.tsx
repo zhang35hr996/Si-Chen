@@ -11,15 +11,19 @@ export function BedchamberPicker({
   registry,
   onPick,
   onClose,
+  mode = "bedchamber",
 }: {
   db: ContentDB;
   state: GameState;
   registry: AssetRegistry;
   onPick: (charId: string) => void;
   onClose: () => void;
+  /** 呈现语义：bedchamber=翻牌子（侍寝，默认）；summon=召见侍君（叙话/临场，不预设侍寝）。仅改标题，选人筛选不变。 */
+  mode?: "bedchamber" | "summon";
 }) {
   const consorts = inPalaceConsorts(db, state).filter((c) => canSummon(state, c.id));
   const bg = registry.background("bg.fanpaizi");
+  const title = mode === "summon" ? "召见侍君" : "翻牌子";
 
   return (
     <div
@@ -28,7 +32,7 @@ export function BedchamberPicker({
       data-fallback={bg.isFallback || undefined}
     >
       <button type="button" className="fanpaizi__close" onClick={onClose}>关闭</button>
-      <h2 className="fanpaizi__title">翻牌子</h2>
+      <h2 className="fanpaizi__title">{title}</h2>
       <div className="fanpaizi__tray">
         {consorts.map((c) => {
           const st = state.standing[c.id]!;

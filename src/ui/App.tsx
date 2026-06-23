@@ -177,6 +177,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [pendingReactionCheckpoint, pendingReactionDispatch] = useReducer(pendingReactionReducer, null);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
+  // 选人盘呈现语义：bedchamber=翻牌子（侍寝，默认，含 canBedchamber 背书）；summon=召见侍君（叙话/临场，无侍寝门槛）。
+  const [flipMode, setFlipMode] = useState<"bedchamber" | "summon">("bedchamber");
   const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
   const [bedchamberRun, setBedchamberRun] = useState<BedchamberPlan | null>(null);
   const [firstNightPromptId, setFirstNightPromptId] = useState<string | null>(null);
@@ -1033,6 +1035,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // 复用权威 atomicFlowInProgress，不另立第二套原子流程定义。
   const zichendianBusy = zichendianExternalBusy({
     atomicFlowInProgress,
+    settlementPending: pendingTimeSettlement !== null, // 刻意独立于 atomicFlow（结算 effect 等 atomicFlow=false 才排空）
     relocateOpen: relocateCharId !== null,
     consortPickerOpen: flipOpen,
     consortListOpen,
@@ -1456,6 +1459,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onFlipTablet={() => {
             const g = canBedchamber(store.getState());
             if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
+            setFlipMode("bedchamber");
             setFlipOpen(true);
           }}
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
@@ -1537,14 +1541,13 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         const deferredQueue = getDeferredAudienceQueue(db, liveState, "zichendian");
         const activeItem = selectActiveAudience(queue);
         const summonedView = summonedConsortId ? summonedConsortToView(db, liveState, registry, summonedConsortId) : undefined;
-        // 召见侍君 / 乘风召见妃嫔：经既有翻牌选人入口（含 canBedchamber 背书）；选中后 onPick 置 summonedConsortId。
-        const summonConsortPicker = () => {
-          const g = canBedchamber(store.getState());
-          if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
-          setFlipOpen(true);
-        };
+        // 召见侍君 / 乘风召见妃嫔：开既有选人盘的 summon 模式（不套 canBedchamber 侍寝门槛——此路通向叙话/临场，
+        // 非即时侍寝）；盘内仍按 canSummon 过滤不可召见者；选中后 onPick 置 summonedConsortId。
+        const summonConsortPicker = () => { setFlipMode("summon"); setFlipOpen(true); };
         // 离开紫宸殿：清召见态，按既有非根地图行为开当前宫城板（返回可逐级回主图）。
         const leaveZichendian = () => { setSummonedConsortId(null); setMapAtRoot(false); setView("map"); };
+        // 叙话需 1 行动点：AP 不足时叙话禁用并显原因（不暴露「可点却静默无效」按钮）。
+        const canConverseSummoned = summonedConsortId !== null && liveState.calendar.ap >= 1;
         return (
           <GameShell
             calendar={liveState.calendar}
@@ -1566,6 +1569,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               pendingAudienceItems={deferredQueue.map((i) => audienceItemToPendingView(db, liveState, registry, i))}
               summonedConsort={summonedView}
               onConverseSummonedConsort={summonedConsortId ? () => { const id = summonedConsortId; if (id) void converse(id); } : undefined}
+              summonedConverseDisabledReason={summonedConsortId && !canConverseSummoned ? "行动力不足" : undefined}
               onDismissSummonedConsort={summonedConsortId ? () => setSummonedConsortId(null) : undefined}
               interruptible={!zichendianBusy}
               busy={zichendianBusy}
@@ -1842,6 +1846,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           db={db}
           state={store.getState()}
           registry={registry}
+          mode={flipMode}
           onPick={(id) => {
             setFlipOpen(false);
             setSummonedConsortId(id);

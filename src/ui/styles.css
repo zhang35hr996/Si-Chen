@@ -3561,35 +3561,50 @@ button:active:enabled {
   letter-spacing: 0.06em;
 }
 .zichendian-summary__line--muted { color: var(--muted); font-size: 0.92rem; }
+/* 召见侍君临场：侍君为舞台主体（整幅立绘、底对齐、留白可见背景），名/位分 + 叙话/告退作克制的旁注，非人物卡。 */
 .zichendian-summoned {
+  min-height: min(62vh, 620px);
   display: flex;
-  align-items: center;
-  gap: 0.9rem;
+  align-items: flex-end;
+  gap: clamp(1rem, 3vw, 2.5rem);
   margin-bottom: 0.7rem;
 }
 .zichendian-summoned__portrait {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid var(--line-gold);
-  box-shadow: var(--shadow-deep);
+  width: auto;
+  height: clamp(280px, 56vh, 580px);
+  max-width: min(46vw, 430px);
+  object-fit: contain;
+  object-position: bottom center;
   flex: 0 0 auto;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.6));
+}
+.zichendian-summoned__caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 0.6rem;
+  min-width: 0;
 }
 .zichendian-summoned__who { margin: 0; display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
 .zichendian-summoned__name {
   font-family: var(--font-display);
-  font-size: 1.3rem;
+  font-size: 1.5rem;
   color: var(--gold-bright);
   letter-spacing: 0.08em;
 }
-.zichendian-summoned__role { color: var(--muted); font-size: 0.85rem; }
-.zichendian-summoned__actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.zichendian-summoned__role { color: var(--muted); font-size: 0.9rem; }
+.zichendian-summoned__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .zichendian-summoned__actions .action-btn { min-height: 44px; }
+.zichendian-summoned__reason { color: var(--cinnabar-soft); font-size: 0.8rem; }
 .zichendian-actions__reason { color: var(--cinnabar-soft); font-size: 0.8rem; align-self: center; }
 /* 动作坞：44px 触控目标，随 .scene-shell__actions 的 flex-wrap 防横向溢出与 safe-area 内边距。 */
 .scene-shell__actions .action-btn { min-height: 44px; }
-@media (max-width: 480px) {
-  .zichendian-summoned__portrait { width: 60px; height: 60px; }
-  .zichendian-summoned__name { font-size: 1.15rem; }
+@media (max-width: 560px) {
+  /* 窄屏：仍是临场立绘（底对齐、占舞台主体），不退回小头像；名/位分与动作转为下方一行。 */
+  .zichendian-summoned {
+    min-height: min(52vh, 460px);
+    gap: 0.8rem;
+  }
+  .zichendian-summoned__portrait { height: clamp(220px, 42vh, 380px); max-width: 60vw; }
+  .zichendian-summoned__name { font-size: 1.25rem; }
 }
