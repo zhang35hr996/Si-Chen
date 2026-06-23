@@ -148,7 +148,10 @@ export function buildMemoryContext(
   const topEvents = opts?.topEvents ?? 3;
 
   const recalled = recallCandidates(state, query);
-  const ranked = rankCandidates(state, ctx, recalled, topN);
+  // Memories and events have INDEPENDENT quotas (P1): rank memories on their own so a
+  // relevant memory is never crowded out of its topN slot by higher-scoring events,
+  // which already get their own prompt quota via selectPromptEventsByActivation below.
+  const rankedMemories = rankCandidates(state, ctx, { memories: recalled.memories, events: [] }, topN);
 
   // All known events, no quota
   const knownEventsAll = recallKnownEvents(state, query.speakerId);
@@ -159,7 +162,7 @@ export function buildMemoryContext(
   const knownEvents = selectPromptEventsByActivation({ state, events: knownEventsAll, ctx, limit: topEvents });
 
   return {
-    activatedMemories: ranked.flatMap((c) => (c.kind === "memory" ? [c.memory] : [])),
+    activatedMemories: rankedMemories.flatMap((c) => (c.kind === "memory" ? [c.memory] : [])),
     knownEvents,
     knownEventsAll,
   };
