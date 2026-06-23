@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay, isGreetingSlot } from "../../engine/calendar/time";
-import { getPresentAt, presentAt, absentAt } from "../../engine/characters/presence";
+import { getPresentAt, absentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
-import { getEligibleEvents } from "../../engine/events/engine";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
-import { canSummon } from "../../store/bedchamber";
 import { canBedchamber as canBedchamberGate } from "../../store/gating";
 import { hasChambers } from "../../engine/characters/chambers";
-import { CharacterCard } from "../components/CharacterCard";
 import { GameShell } from "../components/GameShell";
+import { SceneCharacterBar } from "../components/SceneCharacterBar";
+import { SceneFocusedCharacter } from "../components/SceneFocusedCharacter";
+import { presentBarItems, focusedCharacterView, reconcileSelection } from "../sceneView";
 import { breadcrumbFor } from "../components/breadcrumb";
 import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { CharacterScene } from "./CharacterScene";
@@ -21,7 +21,6 @@ export function LocationScreen({
   registry,
   onOpenMap,
   onOpenSettings,
-  onStartEvent,
   onManage,
   onRelocate,
   onBedchamber,
@@ -36,8 +35,6 @@ export function LocationScreen({
   onOpenResources,
   onOpenStorehouse,
   onViewProfile,
-  summonedConsortId,
-  onDismissSummon,
   focusConsortId,
   greetingAttendeeCount,
   onEnterGreeting,
@@ -49,7 +46,6 @@ export function LocationScreen({
   registry: AssetRegistry;
   onOpenMap: () => void;
   onOpenSettings: () => void;
-  onStartEvent: (eventId: string) => void;
   onManage?: (charId: string) => void;
   onRelocate?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
@@ -64,8 +60,6 @@ export function LocationScreen({
   onOpenResources?: () => void;
   onOpenStorehouse?: () => void;
   onViewProfile?: (charId: string) => void;
-  summonedConsortId?: string | null;
-  onDismissSummon?: () => void;
   focusConsortId?: string | null;
   greetingAttendeeCount?: number;
   onEnterGreeting?: () => void;
@@ -75,30 +69,32 @@ export function LocationScreen({
   const state = useGameState(store);
   const location = db.locations[state.playerLocation];
 
-  // 事件对话以阻断式覆盖层呈现；「稍后再说」可临时收起。换地图即重置。
-  const [eventsDismissed, setEventsDismissed] = useState(false);
+  // 场景人物条选中态（仅普通地点的聚焦立绘用）。换地点清空。
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => {
-    setEventsDismissed(false);
+    setSelectedId(null);
   }, [state.playerLocation]);
 
   if (!location) {
     // Loader guarantees startingLocation exists; this is the render-side backstop.
     return <p className="screen-error">未知地点：{state.playerLocation}</p>;
   }
-  const present = presentAt(db, state, location.id); // 此刻实际在场
   const roster = getPresentAt(db, state, location.id); // 住处花名册（谁住这）
   const absence = absentAt(db, state, location.id); // charId → 去向 locationId
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
-  const eligible = getEligibleEvents(db, state, "location_enter");
   const canBedchamber = state.calendar.ap >= 1;
   const flipGate = canBedchamberGate(store.getState()); // gating：重病 + 服丧
   const greetingHere =
     location.id === "kunninggong" &&
     isGreetingSlot(state.calendar) &&
     (greetingAttendeeCount ?? 0) > 0;
-  // 召见到御书房：把被召见的侍君并入在场（仅御书房）。
-  const summoned =
-    location.id === "zichendian" && summonedConsortId ? db.characters[summonedConsortId] : undefined;
+
+  // 普通地点场景人物条（单一权威：presentAt 物理在场，绝不用住处花名册填充在场）。
+  const presentItems = presentBarItems(db, state, location.id);
+  const presentIds = presentItems.map((i) => i.id);
+  // 选中态调和：曾选中者离开 → 取下一个真实在场人物；无人 → 空。初始未选 → 不强选。
+  const effectiveSelectedId = selectedId == null ? null : reconcileSelection(presentIds, selectedId);
+  const focused = effectiveSelectedId ? focusedCharacterView(db, state, registry, effectiveSelectedId) : undefined;
 
   // 居所宫殿（后宫）有住客侍君 → 视觉小说场景；设宫室的居所即便空置也进场景（显示 5 宫室槽）。
   const sceneConsorts = location.zone === "hougong" ? roster.filter((c) => c.kind === "consort") : [];
@@ -194,61 +190,23 @@ export function LocationScreen({
             </section>
           )}
 
-          <section className="location-screen__present">
-            {summoned && (
-              <div className="summoned-consort">
-                <CharacterCard
-                  db={db}
-                  state={state}
-                  registry={registry}
-                  character={summoned}
-                  onManage={onManage ? () => onManage(summoned.id) : undefined}
-                  onBedchamber={
-                    onBedchamber && canBedchamber && canSummon(state, summoned.id)
-                      ? () => onBedchamber(summoned.id)
-                      : undefined
-                  }
-                  onConverse={
-                    onConverse && canBedchamber && canSummon(state, summoned.id)
-                      ? () => onConverse(summoned.id)
-                      : undefined
-                  }
-                  onViewProfile={onViewProfile ? () => onViewProfile(summoned.id) : undefined}
-                />
-                {onDismissSummon && (
-                  <button type="button" className="summoned-consort__dismiss" onClick={onDismissSummon}>
-                    退下
-                  </button>
-                )}
-              </div>
-            )}
-            {present.length === 0 && !summoned ? (
-              <p className="location-screen__empty">此处无人。</p>
-            ) : (
-              present
-                .filter((character) => character.id !== summoned?.id)
-                .map((character) => (
-                  <CharacterCard
-                    key={character.id}
-                    db={db}
-                    state={state}
-                    registry={registry}
-                    character={character}
-                    onManage={onManage ? () => onManage(character.id) : undefined}
-                    onBedchamber={
-                      onBedchamber && character.kind === "consort" && canBedchamber && canSummon(state, character.id)
-                        ? () => onBedchamber(character.id)
-                        : undefined
-                    }
-                    onConverse={
-                      onConverse && character.kind === "consort" && canBedchamber && canSummon(state, character.id)
-                        ? () => onConverse(character.id)
-                        : undefined
-                    }
-                    onViewProfile={onViewProfile ? () => onViewProfile(character.id) : undefined}
-                  />
-                ))
-            )}
+          {focused && onViewProfile && (
+            <SceneFocusedCharacter
+              view={focused}
+              onConverse={onConverse}
+              onBedchamber={onBedchamber}
+              onViewProfile={onViewProfile}
+              onManage={onManage}
+              onRelocate={onRelocate}
+            />
+          )}
+
+          <section className="location-screen__bar">
+            <SceneCharacterBar
+              characters={presentItems}
+              selectedId={effectiveSelectedId}
+              onFocus={setSelectedId}
+            />
           </section>
         </main>
       )}
@@ -265,24 +223,6 @@ export function LocationScreen({
             </div>
             <button type="button" className="event-overlay__later" onClick={onExitGreeting}>
               退出坤宁宫
-            </button>
-          </div>
-        </div>
-      )}
-      {eligible.length > 0 && !eventsDismissed && (
-        <div className="modal-backdrop">
-          <div className="event-overlay" onClick={(e) => e.stopPropagation()}>
-            <h2 className="event-overlay__title">{location.name}　有事相询</h2>
-            <p className="event-overlay__hint">此处有要事待陛下处置：</p>
-            <div className="event-overlay__choices">
-              {eligible.map(({ event, affordable }) => (
-                <button key={event.id} type="button" disabled={!affordable} onClick={() => onStartEvent(event.id)}>
-                  {event.title}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="event-overlay__later" onClick={() => setEventsDismissed(true)}>
-              稍后再说
             </button>
           </div>
         </div>

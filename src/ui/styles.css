@@ -3700,3 +3700,150 @@ button:active:enabled {
   .zichendian-summoned__portrait { height: clamp(220px, 42vh, 380px); max-width: 60vw; }
   .zichendian-summoned__name { font-size: 1.25rem; }
 }
+
+/* ── 普通地点：场景人物条 + 聚焦立绘（PR3）── */
+.location-screen__bar {
+  margin-top: auto;
+  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom));
+}
+.scene-focus {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.scene-focus__sprite-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+  min-height: 40vh;
+  overflow: hidden;
+}
+.scene-focus__sprite {
+  height: 70%;
+  max-height: 60vh;
+  width: auto;
+  object-fit: contain;
+  object-position: bottom center;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.55));
+  animation: rise 0.4s ease both;
+}
+.scene-focus__panel {
+  position: relative;
+  z-index: 4;
+  margin: -1.6rem 1.1rem 0.9rem;
+  padding: 0.9rem 1.2rem;
+  background: linear-gradient(180deg, rgba(26, 18, 14, 0.92), rgba(15, 11, 9, 0.96));
+  border: 1px solid var(--c-line-gold);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-body);
+}
+.scene-focus__nameplate {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+.scene-focus__name {
+  font-family: var(--font-title);
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  color: var(--c-gold);
+}
+.scene-focus__role {
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+}
+.scene-focus__reason {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+}
+
+/* ── 寝殿宫室槽外出态（PR3 必修缺陷）── */
+.char-scene__chip-away {
+  color: var(--c-gold);
+  opacity: 0.85;
+}
+.char-scene__chip--chamber.is-away {
+  border-style: dashed;
+}
+
+/* ── 御花园探索总览（PR3）── */
+.garden-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem;
+  min-height: 0;
+}
+.garden-overview__name {
+  margin: 0;
+  font-family: var(--font-title);
+  letter-spacing: 0.18em;
+  color: var(--c-gold);
+}
+.garden-overview__areas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+.garden-area-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  padding: 0.8rem 1rem;
+  font: inherit;
+  font-family: var(--font-body);
+  color: var(--c-text);
+  background: rgba(20, 14, 11, 0.78);
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.garden-area-card:hover,
+.garden-area-card:focus-visible {
+  border-color: var(--c-line-gold);
+}
+.garden-area-card__name {
+  font-family: var(--font-title);
+  letter-spacing: 0.1em;
+  color: var(--c-gold);
+}
+.garden-area-card__desc {
+  font-size: 0.85rem;
+  color: var(--c-text-dim);
+}
+.garden-area-card__hint {
+  font-size: 0.85rem;
+  color: var(--c-gold);
+  opacity: 0.92;
+}
+.garden-subarea {
+  padding: 1.4rem 1.2rem;
+}
+.garden-subarea__name {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-title);
+  letter-spacing: 0.16em;
+  color: var(--c-gold);
+}
+.garden-subarea__desc {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--c-text);
+  line-height: 1.7;
+}
+@media (max-width: 480px) {
+  .garden-overview__areas {
+    grid-template-columns: 1fr;
+  }
+}
