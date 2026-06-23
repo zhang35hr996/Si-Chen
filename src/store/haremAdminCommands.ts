@@ -1,10 +1,10 @@
 /**
- * 六宫行政位分处分命令层。
+ * 六宫行政位分处分命令层（凤后主理 / 代理侍君协理均走此层）。
  *
- * 代理侍君对低位侍君进行的晋封/降位/赐封号/褫封号走此命令层，
+ * 凤后正常掌宫或代理侍君奉旨协理时，对低位侍君进行晋封/降位/赐封号/褫封号，
  * 与皇帝直接敕封（rankOps + App.applyRankOp）保持来源区分：
- *   - 编年史 actor = 代理侍君，非 player
- *   - 记忆文案记录代理侍君，非"陛下"
+ *   - 编年史 actor = 实际执行者（凤后 / 代理侍君），非 player
+ *   - 台词与记忆文案按 office 使用对应模板，不归因于皇帝
  *   - 效果仍走同一 funnel，权限校验由 funnel.validateEffects 兜底
  */
 import { toGameTime } from "../engine/calendar/time";

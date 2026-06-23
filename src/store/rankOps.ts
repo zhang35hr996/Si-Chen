@@ -3,8 +3,8 @@
  * Returns null when nothing changes (e.g. selecting the current rank). The
  * effects go through the normal funnel; lines replay through the dialogue seam.
  *
- * 可选 authority 参数用于记录操作来源（皇帝直接敕封 vs 六宫行政处分）。
- * 当 authority 为 harem_administrator 时，记忆文案使用代理侍君姓名代替"陛下"。
+ * authority 为必填参数，用于记录操作来源（皇帝直接敕封 vs 六宫行政处分）。
+ * harem_administrator authority 会选用对应 office 的反应模板，不归因于皇帝。
  */
 import { effectiveOrder } from "../engine/characters/standing";
 import { renderRankReaction, type RankOpKind, type RankReactionAuthority } from "../engine/characters/rankReaction";

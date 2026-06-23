@@ -176,7 +176,7 @@ export function HaremAdminRankModal({
               }
             }}
           >
-            确认下旨
+            确认颁令
           </button>
           <button type="button" className="punish-btn punish-btn--minor" onClick={() => { setLastError(null); setStep({ kind: "rank_select", targetId: step.targetId }); }}>
             返回
