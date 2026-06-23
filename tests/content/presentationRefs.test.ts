@@ -130,29 +130,38 @@ describe("presentation cross-reference validation", () => {
 const noPresentationError = (raw: RawContent) =>
   expect(loadErrors(raw).some((e) => e.code === "PRESENTATION")).toBe(false);
 
-describe("guaranteed-location inference (no over-claiming)", () => {
-  it("all:[atLocation:zichendian, not:eventFired] without presentation → error (guaranteed host)", () => {
+describe("possible-location inference (closes the 'eligible but never presentable' gap)", () => {
+  it("all:[atLocation:zichendian, not:eventFired] without presentation → error (possible at zichendian)", () => {
     const raw = makeRaw();
     delete eventData(raw).presentation;
     eventData(raw).condition = { all: [{ atLocation: "zichendian" }, { not: { eventFired: "ev_a" } }] };
     expectError(raw, "PRESENTATION", "no presentation");
   });
 
-  it("not:atLocation:zichendian without presentation → no error (negation pins nothing)", () => {
-    const raw = makeRaw();
-    delete eventData(raw).presentation;
-    eventData(raw).condition = { not: { atLocation: "zichendian" } };
-    noPresentationError(raw);
-  });
-
-  it("any:[atLocation:zichendian, flagSet] without presentation → no error (not guaranteed)", () => {
+  it("any:[atLocation:zichendian, flagSet] without presentation → ERROR (the counterexample: possible at zichendian via either branch)", () => {
+    // 评审要求的反例：guaranteedLocations 的交集会漏掉 zichendian，possibleLocations 的并集捕获之。
     const raw = makeRaw();
     delete eventData(raw).presentation;
     eventData(raw).condition = { any: [{ atLocation: "zichendian" }, { flagSet: "some_flag" }] };
+    expectError(raw, "PRESENTATION", "no presentation");
+  });
+
+  it("not:atLocation:zichendian without presentation → ERROR (still possible at yuhuayuan, an exploration host)", () => {
+    const raw = makeRaw();
+    delete eventData(raw).presentation;
+    eventData(raw).condition = { not: { atLocation: "zichendian" } };
+    expectError(raw, "PRESENTATION", "no presentation");
+  });
+
+  it("not(any[atLocation:zichendian, atLocation:yuhuayuan]) without presentation → no error (excludes both hosts)", () => {
+    // 既不可能在紫宸殿也不可能在御花园 → 不会推导出需 presentation 的模式 → 不误报。
+    const raw = makeRaw();
+    delete eventData(raw).presentation;
+    eventData(raw).condition = { not: { any: [{ atLocation: "zichendian" }, { atLocation: "yuhuayuan" }] } };
     noPresentationError(raw);
   });
 
-  it("any whose every branch guarantees zichendian without presentation → error", () => {
+  it("any whose every branch is possible at zichendian without presentation → error", () => {
     const raw = makeRaw();
     delete eventData(raw).presentation;
     eventData(raw).condition = {
