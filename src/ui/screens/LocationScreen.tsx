@@ -5,7 +5,6 @@ import { getPresentAt, absentAt } from "../../engine/characters/presence";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
-import { canBedchamber as canBedchamberGate } from "../../store/gating";
 import { hasChambers } from "../../engine/characters/chambers";
 import { GameShell } from "../components/GameShell";
 import { SceneCharacterBar } from "../components/SceneCharacterBar";
@@ -24,13 +23,6 @@ export function LocationScreen({
   onManage,
   onRelocate,
   onBedchamber,
-  onFlipTablet,
-  onSummonZongzheng,
-  onSummonPhysician,
-  onOpenHeirs,
-  onOpenConsorts,
-  onReviewMemorials,
-  onRestAlone,
   onConverse,
   onOpenResources,
   onOpenStorehouse,
@@ -49,13 +41,6 @@ export function LocationScreen({
   onManage?: (charId: string) => void;
   onRelocate?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
-  onFlipTablet?: () => void;
-  onSummonZongzheng?: () => void;
-  onSummonPhysician?: () => void;
-  onOpenHeirs?: () => void;
-  onOpenConsorts?: () => void;
-  onReviewMemorials?: () => void;
-  onRestAlone?: () => void;
   onConverse?: (charId: string) => void;
   onOpenResources?: () => void;
   onOpenStorehouse?: () => void;
@@ -82,8 +67,6 @@ export function LocationScreen({
   const roster = getPresentAt(db, state, location.id); // 住处花名册（谁住这）
   const absence = absentAt(db, state, location.id); // charId → 去向 locationId
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
-  const canBedchamber = state.calendar.ap >= 1;
-  const flipGate = canBedchamberGate(store.getState()); // gating：重病 + 服丧
   const greetingHere =
     location.id === "kunninggong" &&
     isGreetingSlot(state.calendar) &&
@@ -140,55 +123,6 @@ export function LocationScreen({
             <p className="location-screen__desc">{location.description}</p>
             <p className="location-screen__ambience">{location.ambience.join(" · ")}</p>
           </section>
-
-          {location.id === "zichendian" && (
-            <section className="yushufang-menu">
-              <div className="yushufang-actions">
-                {onReviewMemorials && (
-                  <button type="button" disabled={state.calendar.ap < 2} onClick={onReviewMemorials}>
-                    奏折
-                  </button>
-                )}
-                {onRestAlone && (
-                  <button type="button" title="弃当旬剩余行动点，直接进入次旬" onClick={onRestAlone}>
-                    休息
-                  </button>
-                )}
-                {onOpenHeirs && (
-                  <button type="button" onClick={onOpenHeirs}>
-                    查看子嗣
-                  </button>
-                )}
-                {onOpenConsorts && (
-                  <button type="button" onClick={onOpenConsorts}>
-                    查看侍君
-                  </button>
-                )}
-                {onFlipTablet && (
-                  <button type="button" disabled={!canBedchamber || !flipGate.ok} onClick={onFlipTablet} title={!flipGate.ok ? flipGate.reason : undefined}>
-                    翻牌子
-                  </button>
-                )}
-                {onFlipTablet && !flipGate.ok && (
-                  <p className="location-screen__empty">{flipGate.reason}</p>
-                )}
-              </div>
-              {(onSummonPhysician || onSummonZongzheng) && (
-                <div className="yushufang-actions yushufang-actions--minor">
-                  {onSummonPhysician && (
-                    <button type="button" onClick={onSummonPhysician}>
-                      召见太医
-                    </button>
-                  )}
-                  {onSummonZongzheng && (
-                    <button type="button" onClick={onSummonZongzheng}>
-                      召见宗正寺
-                    </button>
-                  )}
-                </div>
-              )}
-            </section>
-          )}
 
           {focused && onViewProfile && (
             <SceneFocusedCharacter

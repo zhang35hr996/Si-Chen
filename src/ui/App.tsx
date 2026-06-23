@@ -853,10 +853,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     sovereignGest !== undefined
       ? monthOrdinal(liveState.calendar) - monthOrdinal(sovereignGest.conceivedAt) + 1
       : 0;
-  // 孕三月自动弹宗正寺；孕四–九月由御书房「召见宗正寺」手动开。
+  // 孕三月自动弹宗正寺（全局中断）。手动「召见宗正寺」入口随紫宸殿迁出 LocationScreen 而移除——
+  // 见 PR 描述「已知非阻塞项」：孕四–九月手动召见入口待 ZichendianScreen 补回（PR2 既存缺口，非本 PR 引入）。
   const successorAutoDue =
     selfCarrying && gestMonth === 3 && successorDismissedMonth !== monthOrdinal(liveState.calendar);
-  const canSummonZongzheng = selfCarrying && gestMonth >= 4 && gestMonth <= 9;
   const consortCarrying = liveState.resources.bloodline.gestations.some((g) => g.carrier !== "sovereign");
 
   const centennialHeir =
@@ -1574,21 +1574,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
           onRelocate={(id) => setRelocateCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
-          onFlipTablet={() => {
-            const g = canBedchamber(store.getState());
-            if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
-            setFlipMode("bedchamber");
-            setFlipOpen(true);
-          }}
-          onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
-          onSummonPhysician={() => setPhysicianOpen(true)}
-          onOpenHeirs={() => setHeirListOpen(true)}
-          onOpenConsorts={() => {
-            setConsortListReturnId(null); // 新开列表：从列表根开始（非管理返回）
-            setConsortListOpen(true);
-          }}
-          onReviewMemorials={reviewMemorials}
-          onRestAlone={restAlone}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
