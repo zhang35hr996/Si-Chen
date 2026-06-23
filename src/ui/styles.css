@@ -3847,3 +3847,92 @@ button:active:enabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── 宣政殿议程 + 朝议结果（PR4）── */
+.court-agenda,
+.court-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.2rem 1.3rem;
+  min-height: 0;
+}
+.court-agenda__title,
+.court-result__title {
+  margin: 0;
+  font-family: var(--font-title);
+  letter-spacing: 0.18em;
+  color: var(--c-gold);
+}
+.court-agenda__hint {
+  margin: 0;
+  color: var(--c-text-dim);
+  font-size: 0.9rem;
+}
+.court-agenda__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.court-agenda__item {
+  padding: 0.6rem 0.9rem;
+  font-family: var(--font-body);
+  color: var(--c-text);
+  background: rgba(20, 14, 11, 0.7);
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+}
+.court-agenda__empty,
+.court-result__empty {
+  margin: 0;
+  color: var(--c-text-dim);
+  font-family: var(--font-body);
+}
+.court-agenda__reason {
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+}
+.court-result__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.court-result__group-title {
+  margin: 0.3rem 0 0;
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  color: var(--c-text-dim);
+}
+.court-result__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.court-result__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0.8rem;
+  border-bottom: 1px solid var(--c-line);
+  font-family: var(--font-body);
+}
+.court-result__label {
+  color: var(--c-text);
+}
+.court-result__delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.court-result__row.is-gain .court-result__delta {
+  color: #7fc99a;
+}
+.court-result__row.is-loss .court-result__delta {
+  color: #d98a8a;
+}

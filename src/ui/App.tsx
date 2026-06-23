@@ -132,8 +132,11 @@ import { DialogueScreen } from "./screens/DialogueScreen";
 import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
 import { GardenOverviewScreen, type GardenSubAreaView } from "./screens/GardenOverviewScreen";
+import { XuanzhengdianScreen } from "./screens/XuanzhengdianScreen";
 import { pickSubLocationEvent } from "../engine/map/subLocations";
 import { presentBarItems, focusedCharacterView, reconcileSelection } from "./sceneView";
+import { courtAgendaPreview, snapshotCourtMetrics, diffCourtMetrics, type CourtMetrics, type CourtMetricsDiff } from "../engine/court/agenda";
+import { buildCourtSummary, courtHoldGate } from "./xuanzhengView";
 import { MapScreen } from "./screens/MapScreen";
 import { ReactionScreen } from "./screens/ReactionScreen";
 import { SettingsMenu } from "./components/SettingsMenu";
@@ -142,7 +145,7 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -163,6 +166,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [view, setView] = useState<View>("title");
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [court, setCourt] = useState<CourtSession | null>(null);
+  // 宣政殿朝议结果（真实快照 diff）；非空 = 结果态。朝议前快照存 ref（不入存档）。
+  const [courtResult, setCourtResult] = useState<CourtMetricsDiff | null>(null);
+  const courtSnapshotRef = useRef<CourtMetrics | null>(null);
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
   // 御花园：当前进入的子地点（null = 总览）+ 园中在场人物选中态。
   const [gardenSubLocationId, setGardenSubLocationId] = useState<string | null>(null);
@@ -308,10 +314,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const queue = pickCourtAffairs(db, `court:${store.getState().rngSeed}:${cal.dayIndex}`);
     doAutosave(); // 行动点已扣，先落盘，再进事务
     if (queue.length === 0) {
-      goHome();
+      // 无可议事务（理论上 升朝 已被议程空状态禁用）：回宣政殿议程屏，不留空 court 会话。
+      setCourtResult(null);
+      enterXuanzhengdianView();
       return;
     }
-    navDispatch({ type: "playerStart", target: { kind: "xuanzhengdian" } }); // 上朝返回 → 宣政殿（当前落主图，PR4 接专用屏）
+    // 朝议前抓一次权威指标快照，结束后 diff 真实差值作结果摘要。
+    courtSnapshotRef.current = snapshotCourtMetrics(store.getState());
+    navDispatch({ type: "playerStart", target: { kind: "xuanzhengdian" } }); // 上朝返回 → 宣政殿专用屏（结果态）
     setCourt({ queue, index: 0 });
     setView("court");
   };
@@ -336,6 +346,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       if (applied.ok) doAutosave();
     }
     setView("zichendian");
+  };
+
+  /** 进入宣政殿专用屏：清召见态，落 xuanzhengdian 视图（结果态由 courtResult 决定，不在此清）。 */
+  const enterXuanzhengdianView = () => {
+    setSummonedConsortId(null);
+    setView("xuanzhengdian");
   };
 
   /** 进入御花园总览（或指定子地点）：清召见态/选中态，落 garden 视图。 */
@@ -364,6 +380,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
     if (loc === "zichendian") { enterZichendianView(); return; }
+    if (loc === "xuanzhengdian") { setCourtResult(null); enterXuanzhengdianView(); return; }
     if (loc === "yuhuayuan") { enterGardenView(null); return; }
     if (loc === "cining_gong") {
       if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
@@ -380,6 +397,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   /** Set the room view for a given location id (no entry-time flavor rolls — used on event return). */
   const setLocationView = (locId: string) => {
     if (locId === "zichendian") { enterZichendianView(); return; } // 候见事件返回须落专用屏并对账
+    if (locId === "xuanzhengdian") { enterXuanzhengdianView(); return; } // 宣政殿事件返回落专用屏（保留结果态）
     if (locId === "yuhuayuan") { enterGardenView(gardenSubLocationId); return; } // 御花园事件返回落回（子）地点
     if (locId === "cining_gong") {
       if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
@@ -399,7 +417,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       setView("map");
       return;
     }
-    if (nav.view === "xuanzhengdian") { goHome(); return; } // 宣政殿专用屏未建（PR4）→ 暂回主图
+    if (nav.view === "xuanzhengdian") { enterXuanzhengdianView(); return; } // 宣政殿专用屏（朝议结果态由 courtResult 决定）
     if (nav.view === "garden") { enterGardenView(nav.subLocationId ?? null); return; } // 精确回到 garden 子地点
     setLocationView(nav.locationId!); // location / zichendian（PR2）→ 对应专用/通用场景
   };
@@ -1753,6 +1771,41 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           </GameShell>
         );
       })()}
+      {view === "xuanzhengdian" && (() => {
+        // 宣政殿专用屏：议程态（真实可议议程 + 升朝）/ 结果态（朝议真实 diff 摘要）。
+        const loc = db.locations["xuanzhengdian"]!;
+        const bg = registry.resolveVariant(loc.backgroundKey, timeOfDay(liveState.calendar), "background");
+        const agenda = courtAgendaPreview(db, liveState);
+        const summary = courtResult ? buildCourtSummary(db, courtResult) : null;
+        // 升朝门槛：健康/服丧 + 卯时满行动力；无议程则禁用（不空跑扣点）。结果态不显升朝。
+        const holdGate = agenda.length === 0 ? { ok: false as const, reason: "今日无政务可议。" } : courtHoldGate(liveState);
+        const leaveXuan = () => { setCourtResult(null); setMapAtRoot(false); setView("map"); };
+        return (
+          <GameShell
+            calendar={liveState.calendar}
+            crumbs={breadcrumbFor(db, "xuanzhengdian")}
+            pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
+            onBack={leaveXuan}
+            onOpenResources={() => setResourcePanelOpen(true)}
+            onOpenStorehouse={() => setStorehouseOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            className="location-shell scene-host-shell"
+          >
+            <XuanzhengdianScreen
+              background={bg.url}
+              isFallbackBackground={bg.isFallback}
+              backgroundPosition={loc.backgroundPosition}
+              agenda={agenda}
+              holdGate={holdGate}
+              onHoldCourt={beginCourt}
+              onLeave={leaveXuan}
+              summary={summary}
+              onBackToHall={() => setCourtResult(null)}
+              onBackToMap={leaveXuan}
+            />
+          </GameShell>
+        );
+      })()}
       {view === "map" && (
         <MapScreen
           db={db}
@@ -1772,6 +1825,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             // 关地图回房：紫宸殿落专用屏（并对账），御花园落探索总览，其余维持既有 location 行为。
             const here = store.getState().playerLocation;
             if (here === "zichendian") enterZichendianView();
+            else if (here === "xuanzhengdian") { setCourtResult(null); enterXuanzhengdianView(); }
             else if (here === "yuhuayuan") enterGardenView(null);
             else setView("location");
           }}
@@ -1932,7 +1986,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             }
             if (committed) doAutosave();
             setCourt(null);
-            restoreReturn(); // 上朝结束 / 退朝 → 按返回上下文（xuanzhengdian，当前落主图）恢复
+            // 朝议毕：以朝议前后真实快照 diff 生成结果摘要（含退朝——已处置之事的真实差值）。
+            if (courtSnapshotRef.current) {
+              setCourtResult(diffCourtMetrics(courtSnapshotRef.current, snapshotCourtMetrics(store.getState())));
+              courtSnapshotRef.current = null;
+            }
+            restoreReturn(); // → 宣政殿专用屏（结果态由 courtResult 决定）
           }}
         />
       )}
