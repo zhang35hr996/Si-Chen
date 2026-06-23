@@ -1,10 +1,10 @@
 /**
- * Save schema v9：官员家族系统字段引入（officialFamilies/familyMembers/kinship +
- * Official 形状扩展 + standing.birthFamilyId）。按 no-save-backcompat 政策不写迁移，
- * v8 及更旧存档隔离；新档 round-trip 稳定。
+ * 官员家族系统存档字段（officialFamilies/familyMembers/kinship + Official 形状扩展 +
+ * standing.birthFamilyId）。随 v9 schema 引入；当前 SAVE_FORMAT_VERSION 已 ≥10（合入禁足
+ * statusEffects / 六宫主理 haremAdministration）。按 no-save-backcompat：官员世界字段无 backfill，
+ * 缺失即被 gameStateSchema 拒绝并 quarantine。新档 round-trip 稳定。
  */
 import { describe, it, expect } from "vitest";
-import { checksumOf } from "../../src/engine/save/canonical";
 import {
   CORRUPT_KEY_PREFIX,
   createSaveData,
@@ -14,16 +14,17 @@ import {
 } from "../../src/engine/save/saveSystem";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 
-describe("save schema v9（官员家族系统）", () => {
-  it("SAVE_FORMAT_VERSION = 9", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(9);
+describe("save schema — 官员家族字段持久化", () => {
+  it("SAVE_FORMAT_VERSION ≥ 10", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(10);
   });
 
-  it("fresh v9 save round-trips with officials/families/members/kinship intact", () => {
+  it("fresh save round-trips with officials/families/members/kinship intact", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
     const save = createSaveData(db, state, "slot1");
@@ -37,40 +38,28 @@ describe("save schema v9（官员家族系统）", () => {
     expect(s.officialFamilies).toEqual(state.officialFamilies);
     expect(s.familyMembers).toEqual(state.familyMembers);
     expect(s.kinship).toEqual(state.kinship);
-    // 侍君 birthFamilyId 随存档保留。
     expect(s.standing["shen_zhibai"]!.birthFamilyId).toBe(state.standing["shen_zhibai"]!.birthFamilyId);
     expect(Object.keys(s.officialFamilies).length).toBeGreaterThan(0);
   });
 
-  it("v8 save quarantines (no MIGRATIONS[8] — no-save-backcompat policy)", () => {
+  /** 模拟「官员家族字段缺失」的旧档，写出并经 readSlot 校验。 */
+  function quarantineWith(strip: (s: Record<string, unknown>) => void, now: number) {
     const storage = createMemoryStorage();
-    const state = createNewGameState(db);
-    const save = createSaveData(db, state, "slot1");
-    const envelope = { ...save, formatVersion: 8, checksum: checksumOf(save.state) };
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(envelope));
-
-    const loaded = readSlot(storage, db, "slot1", { now: () => 8008 });
+    const state = createNewGameState(db) as unknown as Record<string, unknown>;
+    strip(state);
+    const save = createSaveData(db, state as unknown as GameState, "slot1");
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(save));
+    const loaded = readSlot(storage, db, "slot1", { now: () => now });
     expect(loaded.ok).toBe(false);
-    if (loaded.ok) return;
-    expect(loaded.error.code).toBe("CORRUPT");
     expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
-    expect(storage.get(`${CORRUPT_KEY_PREFIX}8008`)).not.toBeNull();
+    expect(storage.get(`${CORRUPT_KEY_PREFIX}${now}`)).not.toBeNull();
+  }
+
+  it("a save missing officialFamilies is rejected (schema gate) and quarantined", () => {
+    quarantineWith((s) => { delete s["officialFamilies"]; }, 2001);
   });
 
-  it("migrating the same old save twice is stable (both quarantine identically)", () => {
-    const make = () => {
-      const storage = createMemoryStorage();
-      const state = createNewGameState(db);
-      const save = createSaveData(db, state, "slot1");
-      const envelope = { ...save, formatVersion: 8, checksum: checksumOf(save.state) };
-      storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(envelope));
-      return readSlot(storage, db, "slot1", { now: () => 1 });
-    };
-    const a = make();
-    const b = make();
-    expect(a.ok).toBe(false);
-    expect(b.ok).toBe(false);
-    if (a.ok || b.ok) return;
-    expect(a.error.code).toBe(b.error.code);
+  it("a save missing kinship is rejected and quarantined", () => {
+    quarantineWith((s) => { delete s["kinship"]; }, 2002);
   });
 });

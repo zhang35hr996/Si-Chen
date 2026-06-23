@@ -10,6 +10,8 @@ import type { GameState } from "../state/types";
 import { effectiveOrder } from "./standing";
 import { shichenSlot, MAO_SLOT } from "../calendar/time";
 import { isExcused, wanderChance, wanders } from "./greeting";
+import { getGreetingLocation } from "./haremAdministration";
+import { canCharacterParticipate } from "./restrictions";
 
 export function getCharacterLocation(
   db: ContentDB,
@@ -80,6 +82,8 @@ export function consortLocationAt(
   if (!char || char.kind !== "consort") return home;
   const st = state.standing[charId];
   if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") return home;
+  // 禁足：闭锁本宫，不请安、不游走、不外出（统一行动许可层）。
+  if (!canCharacterParticipate(state, charId, "leave_palace")) return home;
   // 冷宫 / 待选(储秀宫) / 凤后(坤宁宫常驻) 不请安不游走。
   if (home === "changmengong" || home === "chuxiu_gong" || home === "kunninggong") return home;
 
@@ -87,7 +91,8 @@ export function consortLocationAt(
     const o = state.overnightWith;
     if (o && o.charId === charId && o.morningDayIndex === state.calendar.dayIndex) return home; // 留宿未离宫
     if (isExcused(state, charId)) return home;
-    return "kunninggong";
+    // 请安地点由六宫主理权动态决定（坤宁宫/协理者寝殿/null=无正式请安→留家）。
+    return getGreetingLocation(db, state) ?? home;
   }
   // 物理位置只由 (rngSeed, dayIndex, slot, charId) 确定性决定——**绝不依赖 state.playerLocation**：
   // 否则玩家同一时辰、零行动力移动到侍君住处会使其被重算回宫（御花园↔寝殿瞬移），破坏单一物理位置不变量。

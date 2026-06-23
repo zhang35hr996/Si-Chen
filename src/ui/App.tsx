@@ -40,8 +40,10 @@ import type { RingBufferLogger } from "../engine/infra/logger";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees } from "../engine/characters/greeting";
+import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
+import type { HaremAdminRankCommand } from "../store/haremAdminCommands";
 import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
 import {
@@ -117,6 +119,9 @@ import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
+import { HaremAdminRankModal } from "./components/HaremAdminRankModal";
+import { PunishmentModal } from "./components/PunishmentModal";
+import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
 import { MorningAfterOverlay } from "./components/MorningAfterOverlay";
@@ -175,6 +180,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [gardenSelectedId, setGardenSelectedId] = useState<string | null>(null);
   // 位分管理原子会话（charId + origin）。origin 决定结束后是否补跑被初夜搁置的转旬 checkpoint。
   const [rankAdmin, setRankAdmin] = useState<RankAdminSession>(null);
+  const [punishCharId, setPunishCharId] = useState<string | null>(null);
+  // 六宫行政位分管理：actorId = 协理侍君 charId。
+  const [haremAdminActorId, setHaremAdminActorId] = useState<string | null>(null);
+  // 禁足令在侍君宫殿内发布后需回主图：confinement 成功 + 人在该宫→ 反应播完后 goHome。
+  const [punishGoHome, setPunishGoHome] = useState(false);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
@@ -468,7 +478,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   const applyRankOp = (charId: string, req: RankOpRequest, origin: "normal" | "first_night") => {
-    const op = buildRankOp(db, store.getState(), charId, req);
+    const op = buildRankOp(db, store.getState(), charId, req, { kind: "sovereign", actorId: "player" as const });
     setRankAdmin(null);
     let outcome: "no_op" | "failed" | "reaction_created";
     if (!op) {
@@ -488,6 +498,45 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // 初夜来源：无反应（无变化/失败）须先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬；
     // 生成反应（reaction_created）则交其 onDone 补跑。统一经纯决策收尾。
     applyFirstNightRankDrain(origin, outcome);
+  };
+
+  /** 六宫行政位分处分：由代理侍君对低位侍君晋封/降位。 */
+  const applyHaremAdminRankOp = (command: HaremAdminRankCommand): { ok: boolean; reason?: string } => {
+    const result = store.applyHaremAdminRankCommand(db, command);
+    if (result.ok) {
+      setHaremAdminActorId(null);
+      doAutosave();
+      if (result.value.lines.length > 0) {
+        setReaction({ speakerId: command.targetId, lines: result.value.lines });
+      }
+      return { ok: true };
+    } else {
+      const reason = result.error[0]?.message ?? "操作失败，请重试。";
+      return { ok: false, reason };
+    }
+  };
+
+  /** 惩罚命令（禁足/解除/赐死）统一入口；紫宸殿与侍君宫殿共用。 */
+  const applyImperialCommand = (charId: string, command: ImperialCommand) => {
+    setPunishCharId(null);
+    const result = store.applyImperialCommand(db, command);
+    if (result.ok) {
+      doAutosave();
+      // 禁足令：若在该侍君宫殿内，播完反应后需离宫（宫门已闭不能再留）。
+      if (command.type === "impose_confinement") {
+        const state = store.getState();
+        const charHome = state.standing[charId]?.residence ??
+          ((db.characters[charId] ?? state.generatedConsorts[charId])?.defaultLocation);
+        if (charHome && state.playerLocation === charHome) {
+          setPunishGoHome(true);
+        }
+        // 若禁足者正在被召至紫宸殿，立即清除（宫门已锁，无法应召）。
+        if (summonedConsortId === charId) setSummonedConsortId(null);
+      }
+      setReaction({ speakerId: charId, lines: result.value.lines });
+    } else {
+      reopenConsortListIfReturning();
+    }
   };
 
   const applyRelocate = (charId: string, location: string, chamber: ChamberId) => {
@@ -522,6 +571,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       navDispatch({ type: "clear" }); // 读档清空事件返回上下文（场景态从不入档）
       pendingReactionDispatch({ type: "clear" });
       setRankAdmin(null);
+      setHaremAdminActorId(null);
       timeSettlementDispatch({ type: "clear" });
       invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
@@ -731,6 +781,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
+    setHaremAdminActorId(null);
     timeSettlementDispatch({ type: "clear" });
     invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     doAutosave();
@@ -765,6 +816,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
+    setHaremAdminActorId(null);
     timeSettlementDispatch({ type: "clear" });
     invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     setView("coronation");
@@ -1087,6 +1139,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     reaction !== null || childReaction !== null || physicianReaction !== null ||
     firstNightPromptId !== null || namePetHeirId !== null ||
     bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
+    haremAdminActorId !== null ||
     prompt !== null || daxuanPrompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
     activeEventId !== null || court !== null || dianxuan !== null ||
     shopId !== null || view === "shop" || dialogueInFlight ||
@@ -1594,7 +1647,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setSettingsOpen(true);
           }}
           onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
+          onPunish={(id) => setPunishCharId(id)}
           onRelocate={(id) => setRelocateCharId(id)}
+          onHaremAdminManage={(actorId) => setHaremAdminActorId(actorId)}
           onBedchamber={(id) => beginBedchamber(id)}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
@@ -1782,6 +1837,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               onViewProfile={(id) => setProfileCharId(id)}
               onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
               onRelocate={(id) => setRelocateCharId(id)}
+              onHaremAdminManage={(actorId) => setHaremAdminActorId(actorId)}
             />
           </GameShell>
         );
@@ -2012,6 +2068,15 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           }}
         />
       )}
+      {haremAdminActorId && store.getState().standing[haremAdminActorId] && (
+        <HaremAdminRankModal
+          db={db}
+          state={liveState}
+          actorId={haremAdminActorId}
+          onCommand={applyHaremAdminRankOp}
+          onClose={() => setHaremAdminActorId(null)}
+        />
+      )}
       {rankAdmin && store.getState().standing[rankAdmin.charId] && (
         <RankAdminModal
           db={db}
@@ -2024,6 +2089,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             // 初夜来源关闭（未应用）：先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬，杜绝遗留/抢跑；
             // 普通来源不因关闭补跑。
             applyFirstNightRankDrain(origin, "close");
+            reopenConsortListIfReturning(); // 取消也回到列表
+          }}
+        />
+      )}
+      {punishCharId && (db.characters[punishCharId] ?? liveState.generatedConsorts[punishCharId]) && liveState.standing[punishCharId] && (
+        <PunishmentModal
+          db={db}
+          state={liveState}
+          character={(db.characters[punishCharId] ?? liveState.generatedConsorts[punishCharId])!}
+          onCommand={(command) => applyImperialCommand(punishCharId, command)}
+          onClose={() => {
+            setPunishCharId(null);
             reopenConsortListIfReturning(); // 取消也回到列表
           }}
         />
@@ -2062,7 +2139,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             // 封号管理（自列表进入）的反应播完 → 回到列表并定位回该侍君。
             // 仅列表入口会置 consortListReturnId，故不影响其它反应来源。
             reopenConsortListIfReturning();
-            if (postBirthPromoteId) {
+            if (punishGoHome) {
+              // 禁足令在侍君宫殿发布：宫门已闭，皇帝需离宫回主图。
+              setPunishGoHome(false);
+              goHome();
+            } else if (postBirthPromoteId) {
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
               setRankAdmin({ charId: id, origin: "normal" }); // 产后晋升：普通来源，不因关闭补跑转旬
@@ -2106,6 +2187,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setConsortListReturnId(id); // 操作后回到列表并定位回此侍君
             setConsortListOpen(false); // 先关列表，避免与封号管理弹窗叠层互相遮挡
             setRankAdmin({ charId: id, origin: "normal" });
+          }}
+          onPunish={(id) => {
+            setConsortListReturnId(id);
+            setConsortListOpen(false);
+            setPunishCharId(id);
           }}
           onRelocate={(id) => {
             setConsortListReturnId(id);
@@ -2394,24 +2480,27 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
-          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setSettingsOpen(false); setView("title"); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); setHaremAdminActorId(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setHaremAdminActorId(null); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
       )}
-      {ceremonyOpen && (
-        <GreetingCeremonyOverlay
-          empressName={db.characters.shen_zhibai?.profile.name ?? "皇后"}
-          onDone={() => {
-            setCeremonyOpen(false);
-            if (reactionQueue.length > 0) {
-              const [first, ...rest] = reactionQueue;
-              setReaction(first!);
-              setReactionQueue(rest);
-            }
-          }}
-        />
-      )}
+      {ceremonyOpen && (() => {
+        const hostView = getGreetingHostView(db, store.getState());
+        return hostView ? (
+          <GreetingCeremonyOverlay
+            hostView={hostView}
+            onDone={() => {
+              setCeremonyOpen(false);
+              if (reactionQueue.length > 0) {
+                const [first, ...rest] = reactionQueue;
+                setReaction(first!);
+                setReactionQueue(rest);
+              }
+            }}
+          />
+        ) : null;
+      })()}
       {morningAfterOpen && morningAfterCharId && (
         <MorningAfterOverlay
           consortName={db.characters[morningAfterCharId]?.profile.name ?? "爱卿"}

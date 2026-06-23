@@ -16,6 +16,9 @@
  */
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
+import { isConfined, nextStatusEffectId } from "../characters/confinement";
+import { eligibleHaremAdministrators } from "../characters/haremAdministration";
+import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../characters/haremRankAuthority";
 import { nextHeirId } from "../characters/heirs";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
@@ -42,6 +45,9 @@ export function validateEffects(
   // 批内去重：validate 逐项读批前原始 state，故同批多条 record_physician_visit 对同一人都会过单条校验；
   // 用本集合在批内强制「每月每人一次」，使引擎（含未来事件/AI 生成 effects 的统一入口）真正兜底。
   const physicianVisitsInBatch = new Set<string>();
+  // 批内禁足去重：同一 batch 同一角色只允许一条 confine；confine+lift 矛盾批次一并拒绝。
+  const confineInBatch = new Set<string>();
+  const liftInBatch = new Set<string>();
 
   effects.forEach((effect, index) => {
     const parsed = eventEffectSchema.safeParse(effect);
@@ -79,6 +85,44 @@ export function validateEffects(
         else if (state.standing[ch]!.lifecycle === "deceased" && effect.type === "set_consort_health") bad(index, "BAD_EFFECT_TARGET", `set_consort_health on deceased consort: "${ch}"`, { char: ch });
         break;
       }
+      case "confine": {
+        const ch = e.char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        const st = state.standing[ch];
+        if (!c || c.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `confine needs a consort with standing: "${ch}"`, { char: ch });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot confine a deceased consort: "${ch}"`, { char: ch });
+        } else if (e.endTurnExclusive !== null && e.endTurnExclusive <= e.startTurn) {
+          bad(index, "BAD_EFFECT", `confine endTurnExclusive must be > startTurn`, { char: ch });
+        } else if (isConfined(state, ch, e.startTurn)) {
+          // 单一权威：不允许同一角色叠加第二条活跃禁足。
+          bad(index, "BAD_EFFECT", `consort already confined: "${ch}"`, { char: ch });
+        } else if (confineInBatch.has(ch)) {
+          // 批内去重：同一 batch 不允许对同一角色多条 confine。
+          bad(index, "BAD_EFFECT", `duplicate confine in same batch: "${ch}"`, { char: ch });
+        } else if (liftInBatch.has(ch)) {
+          // 矛盾批次：同一 batch 内同一角色 confine + lift 互相矛盾，整批拒绝。
+          bad(index, "BAD_EFFECT", `contradictory confine+lift_confinement in same batch: "${ch}"`, { char: ch });
+        } else {
+          confineInBatch.add(ch);
+        }
+        break;
+      }
+      case "lift_confinement": {
+        const ch = e.char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        if (!c || c.kind !== "consort" || !state.standing[ch]) {
+          bad(index, "BAD_EFFECT_TARGET", `lift_confinement needs a consort with standing: "${ch}"`, { char: ch });
+        } else if (confineInBatch.has(ch)) {
+          // 矛盾批次：同一 batch 内 lift 先于或后于 confine 均不合法。
+          bad(index, "BAD_EFFECT", `contradictory lift_confinement+confine in same batch: "${ch}"`, { char: ch });
+        } else {
+          liftInBatch.add(ch);
+        }
+        // 幂等：无活跃/到期记录时 apply 是 no-op，不在此报错。
+        break;
+      }
       case "set_consort_posthumous": {
         const ch = (effect as { char: string }).char;
         const c = db.characters[ch] ?? state.generatedConsorts[ch];
@@ -108,7 +152,13 @@ export function validateEffects(
           const r = db.ranks[e.rank];
           if (!r || r.domain !== "harem" || e.rank === "fenghou") {
             bad(index, "BAD_EFFECT", `set_rank to invalid rank "${e.rank}"`, { rank: e.rank });
+          } else if (e.authority.kind === "harem_administrator") {
+            const check = e.authority.office === "empress"
+              ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, e.rank)
+              : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, e.rank);
+            if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char, rank: e.rank });
           }
+          // authority.kind === "sovereign" → no admin check needed
         }
         break;
       }
@@ -120,6 +170,13 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
         } else if (db.lexicon.forbiddenTerms.some((t) => e.title.includes(t))) {
           bad(index, "BAD_EFFECT", `title "${e.title}" contains a forbidden term`, { title: e.title });
+        } else if (e.authority.kind === "harem_administrator") {
+          // 封号操作不改变位分，但仍须目标严格低于协理者（empress 模式只需不是凤后）。
+          const curRankId = state.standing[e.char]!.rank;
+          const check = e.authority.office === "empress"
+            ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, curRankId)
+            : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
+          if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char });
         }
         break;
       }
@@ -129,6 +186,12 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `remove_title needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "fenghou") {
           bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
+        } else if (e.authority.kind === "harem_administrator") {
+          const curRankId = state.standing[e.char]!.rank;
+          const check = e.authority.office === "empress"
+            ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, curRankId)
+            : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
+          if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char });
         }
         break;
       }
@@ -320,6 +383,43 @@ export function validateEffects(
               location: e.location,
               chamber: e.chamber,
             });
+          }
+        }
+        break;
+      }
+      case "set_harem_administration": {
+        // 判断凤后禁足现状（或本批中是否存在禁足/解禁凤后的效果）。
+        const fenghousId = Object.keys(state.standing).find(
+          (id) => state.standing[id]!.rank === "fenghou" && state.standing[id]!.lifecycle !== "deceased",
+        );
+        const alreadyConfined = fenghousId ? isConfined(state, fenghousId) : false;
+        const confinedinBatch = effects.some((be) => be.type === "confine" && (be as { char?: string }).char === fenghousId);
+        const liftedInBatch = effects.some((be) => be.type === "lift_confinement" && (be as { char?: string }).char === fenghousId);
+        const effectivelyConfined = (alreadyConfined && !liftedInBatch) || confinedinBatch;
+
+        const ns = e.state;
+        if (ns.mode === "empress") {
+          if (effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is confined", {});
+          }
+        } else if (ns.mode === "acting_consort") {
+          if (!effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "acting_consort mode requires empress to be confined", {});
+          } else {
+            const c = db.characters[ns.charId] ?? state.generatedConsorts[ns.charId];
+            const st = state.standing[ns.charId];
+            if (!c || c.kind !== "consort" || !st) {
+              bad(index, "BAD_EFFECT_TARGET", `acting consort "${ns.charId}" not found`, { char: ns.charId });
+            } else if (st.rank === "fenghou") {
+              bad(index, "BAD_EFFECT", `acting consort cannot be fenghou: "${ns.charId}"`, { char: ns.charId });
+            } else if (st.lifecycle === "deceased" || st.lifecycle === "candidate") {
+              bad(index, "BAD_EFFECT_TARGET", `acting consort is deceased or candidate: "${ns.charId}"`, { char: ns.charId });
+            }
+          }
+        } else {
+          // neiwu_proxy
+          if (!effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "neiwu_proxy mode requires empress to be confined", {});
           }
         }
         break;
@@ -623,6 +723,55 @@ export function applyEffects(
         }
         break;
       }
+      case "confine": {
+        next.statusEffects.push({
+          id: nextStatusEffectId(next, effect.char),
+          kind: "confinement",
+          characterId: effect.char,
+          startTurn: effect.startTurn,
+          endTurnExclusive: effect.endTurnExclusive,
+          imposedAt: effect.imposedAt,
+          imposedBy: "emperor",
+          ...(effect.sourceLocation !== undefined ? { sourceLocation: effect.sourceLocation } : {}),
+        });
+        // 取消与禁足冲突的留宿/免请安计划（角色被锁在本宫）。
+        if (next.overnightWith?.charId === effect.char) delete next.overnightWith;
+        if (next.excusedFromGreeting?.charIds.includes(effect.char)) {
+          next.excusedFromGreeting = {
+            ...next.excusedFromGreeting,
+            charIds: next.excusedFromGreeting.charIds.filter((id) => id !== effect.char),
+          };
+        }
+        break;
+      }
+      case "lift_confinement": {
+        const turn = effect.at.dayIndex;
+        for (const se of next.statusEffects) {
+          if (se.kind !== "confinement" || se.characterId !== effect.char || se.liftedTurn !== undefined) continue;
+          if (effect.reason === "term_expired") {
+            // 期满结案：只收掉到期记录，liftedTurn = 自动到期旬（独占上界）。
+            if (se.endTurnExclusive !== null && turn >= se.endTurnExclusive) {
+              se.liftedTurn = se.endTurnExclusive;
+              se.liftedAt = effect.at;
+              se.liftReason = "term_expired";
+            }
+          } else if (turn >= se.startTurn && (se.endTurnExclusive === null || turn < se.endTurnExclusive)) {
+            // 皇帝下旨解除：收掉当旬活跃记录，当旬立即失效。
+            se.liftedTurn = turn;
+            se.liftedAt = effect.at;
+            se.liftReason = "lifted_by_emperor";
+          }
+        }
+        // 凤后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
+        if (next.standing[effect.char]?.rank === "fenghou" && next.haremAdministration.mode !== "empress") {
+          next.haremAdministration = { mode: "empress" };
+        }
+        break;
+      }
+      case "set_harem_administration": {
+        next.haremAdministration = effect.state;
+        break;
+      }
       case "consort_decease": {
         const st = next.standing[effect.char];
         if (st && st.lifecycle !== "deceased") {       // idempotent: skip if already dead
@@ -636,6 +785,20 @@ export function applyEffects(
           };
         }
         next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter((g) => g.carrier !== effect.char); // 断胎
+        // 统一死亡清理：作废活跃禁足等持续状态、清留宿与免请安计划。
+        for (const se of next.statusEffects) {
+          if (se.kind === "confinement" && se.characterId === effect.char && se.liftedTurn === undefined) {
+            se.liftedTurn = effect.at.dayIndex;
+            se.liftedAt = effect.at;
+          }
+        }
+        if (next.overnightWith?.charId === effect.char) delete next.overnightWith;
+        if (next.excusedFromGreeting?.charIds.includes(effect.char)) {
+          next.excusedFromGreeting = {
+            ...next.excusedFromGreeting,
+            charIds: next.excusedFromGreeting.charIds.filter((id) => id !== effect.char),
+          };
+        }
         break;
       }
       case "heir_decease": {
@@ -686,5 +849,20 @@ export function applyEffects(
       }
     }
   }
+
+  // 批后不变量：若协理者因本批效果（禁足/赐死/疾毙等）失格，切换内务府代理。
+  // 注意：命令层负责询问玩家选新协理者；此处仅兜底处置非玩家触发的失格（如疾病身亡）。
+  if (next.haremAdministration.mode === "acting_consort") {
+    const adminId = next.haremAdministration.charId;
+    const eligible = eligibleHaremAdministrators(db, next);
+    if (!eligible.some((c) => c.id === adminId)) {
+      next.haremAdministration = {
+        mode: "neiwu_proxy",
+        appointedAt: toGameTime(next.calendar),
+        reason: "no_eligible_consort",
+      };
+    }
+  }
+
   return ok(next);
 }

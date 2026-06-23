@@ -19,7 +19,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 9;
+export const SAVE_FORMAT_VERSION = 10;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -118,10 +118,10 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   // v5 → v6、v6 → v7 迁移均按 no-save-backcompat 政策省略。
   // 旧档命中缺失的 MIGRATIONS[v] 即 quarantine（pre-release，不保旧档）。
 
-  // v8 → v9: 官员家族系统（officialFamilies/familyMembers/kinship + Official 形状扩展 +
-  // standing.birthFamilyId）。按 no-save-backcompat 政策（pre-release，不保旧档）不写迁移：
-  // v8 旧档命中缺失的 MIGRATIONS[8] 即 quarantine，绝不在加载旧档时重随机一套官员世界。
-  // 新档以 v9 schema round-trip；同一新档重复读写结果稳定。
+  // 官员家族系统（officialFamilies/familyMembers/kinship + Official 形状扩展 + standing.birthFamilyId）
+  // 随 v9 schema 引入：按 no-save-backcompat 政策（pre-release）**不写官员世界 backfill**——旧档前向
+  // 迁移到 v10 后仍缺这些字段，由 gameStateSchema 拒绝并 quarantine，绝不在加载旧档时重随机官员世界。
+  // 新档以当前 schema round-trip 稳定。
 
   // v7 → v8: 引入 eventReactionLog 字段（T10）。旧档若缺失此字段补空数组。
   7: (old): SaveEnvelope => {
@@ -133,6 +133,41 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return {
       ...env,
       formatVersion: 8,
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
+    };
+  },
+  // v8 → v9: 引入 statusEffects（禁足等持续状态）。旧档补空数组；清除遗留的 standing.confined
+  // 占位布尔（已由 statusEffects 取代，strictObject 会拒绝未知键）。
+  8: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!Array.isArray(state.statusEffects)) {
+      state.statusEffects = [];
+    }
+    const standing = state.standing as unknown as Record<string, Record<string, unknown>> | undefined;
+    if (standing) {
+      for (const st of Object.values(standing)) {
+        if (st && typeof st === "object" && "confined" in st) delete st.confined;
+      }
+    }
+    return {
+      ...env,
+      formatVersion: 9,
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
+    };
+  },
+  // v9 → v10: 引入 haremAdministration 字段（六宫主理权）。旧档默认 { mode: "empress" }。
+  9: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!state.haremAdministration) {
+      state.haremAdministration = { mode: "empress" };
+    }
+    return {
+      ...env,
+      formatVersion: 10,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };

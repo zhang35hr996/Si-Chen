@@ -55,7 +55,7 @@ export const gameTimeShape = z.strictObject({
 
 export const deathRecordSchema = z.strictObject({
   diedAt: gameTimeShape,
-  cause: z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted"]),
+  cause: z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted", "imperial_execution"]),
   originalRankId: idSchema,
   originalTitle: nonEmpty.optional(),
   posthumousRankId: idSchema.optional(),
@@ -70,7 +70,6 @@ export const characterStandingSchema = z.strictObject({
   recoverUntilMonth: z.number().int().min(1).optional(),
   residence: idSchema.optional(),
   chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
-  confined: z.boolean().optional(),
   affection: percent.optional(),
   palaceEnteredAt: gameTimeShape.optional(),
   availableFromMonth: z.number().int().min(1).optional(),
@@ -154,7 +153,18 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
 
 // ── effects (the single funnel — plan §6, fully discriminated) ────────
 
-const deathCauseSchema = z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted"]);
+/** 位分操作发起者：皇帝直接敕封 vs 六宫代理侍君行政处分。 */
+export const rankOperationAuthoritySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sovereign"), actorId: z.literal("player") }),
+  z.object({
+    kind: z.literal("harem_administrator"),
+    actorId: z.string(),
+    office: z.union([z.literal("empress"), z.literal("acting_consort")]),
+  }),
+]);
+export type RankOperationAuthority = z.infer<typeof rankOperationAuthoritySchema>;
+
+const deathCauseSchema = z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted", "imperial_execution"]);
 
 export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("favor"), char: idSchema, delta }),
@@ -199,9 +209,9 @@ export const eventEffectSchema = z.union([
     key: nonEmpty,
     value: z.union([z.boolean(), z.number(), z.string()]),
   }),
-  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema }),
-  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4) }),
-  z.strictObject({ type: z.literal("remove_title"), char: idSchema }),
+  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema, authority: rankOperationAuthoritySchema }),
+  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4), authority: rankOperationAuthoritySchema }),
+  z.strictObject({ type: z.literal("remove_title"), char: idSchema, authority: rankOperationAuthoritySchema }),
   z.strictObject({
     type: z.literal("bedchamber"),
     char: idSchema,
@@ -282,6 +292,20 @@ export const eventEffectSchema = z.union([
     posthumousRankId: idSchema.optional(),
     posthumousEpithet: z.string().min(1).max(2).optional(),
   }),
+  z.strictObject({
+    type: z.literal("confine"),
+    char: idSchema,
+    startTurn: z.number().int().min(0),
+    endTurnExclusive: z.union([z.number().int().min(0), z.null()]),
+    imposedAt: gameTimeShape,
+    sourceLocation: idSchema.optional(),
+  }),
+  z.strictObject({
+    type: z.literal("lift_confinement"),
+    char: idSchema,
+    at: gameTimeShape,
+    reason: z.enum(["lifted_by_emperor", "term_expired"]),
+  }),
   z.strictObject({ type: z.literal("consort_decease"), char: idSchema, at: gameTimeShape, cause: deathCauseSchema }),
   z.strictObject({ type: z.literal("heir_decease"), heirId: nonEmpty, at: gameTimeShape, cause: deathCauseSchema }),
   z.strictObject({ type: z.literal("taihou_decease"), at: gameTimeShape, cause: deathCauseSchema }),
@@ -291,6 +315,23 @@ export const eventEffectSchema = z.union([
     kind: z.enum(["taihou", "consort", "heir"]),
     subjectId: idSchema,
     at: gameTimeShape,
+  }),
+  z.strictObject({
+    type: z.literal("set_harem_administration"),
+    state: z.discriminatedUnion("mode", [
+      z.strictObject({ mode: z.literal("empress") }),
+      z.strictObject({
+        mode: z.literal("acting_consort"),
+        charId: idSchema,
+        appointedAt: gameTimeShape,
+        reason: z.literal("empress_confined"),
+      }),
+      z.strictObject({
+        mode: z.literal("neiwu_proxy"),
+        appointedAt: gameTimeShape,
+        reason: z.literal("no_eligible_consort"),
+      }),
+    ]),
   }),
   z.strictObject({
     type: z.literal("record_physician_visit"),
@@ -656,6 +697,22 @@ export const rankChangeReactionsSchema = z.strictObject({
   strip_title: rankReactionSchema,
 });
 
+/** 后宫行政处分（凤后/代理侍君）的反应模板，按 office 区分。 */
+export const administratorRankChangeReactionsSchema = z.strictObject({
+  empress: z.strictObject({
+    promote: rankReactionSchema,
+    demote: rankReactionSchema,
+    grant_title: rankReactionSchema,
+    strip_title: rankReactionSchema,
+  }),
+  acting_consort: z.strictObject({
+    promote: rankReactionSchema,
+    demote: rankReactionSchema,
+    grant_title: rankReactionSchema,
+    strip_title: rankReactionSchema,
+  }),
+});
+
 // ── world.json ────────────────────────────────────────────────────────
 export const worldSchema = z.strictObject({
   contentVersion: nonEmpty,
@@ -706,6 +763,8 @@ export const worldSchema = z.strictObject({
   mapPortals: z.array(mapPortalSchema).optional(),
   /** Templated consort reactions to 位分/封号 ops (rank/title system). */
   rankChangeReactions: rankChangeReactionsSchema.optional(),
+  /** 后宫行政处分（凤后 / 协理侍君）的反应模板，按 office 分组。 */
+  administratorRankChangeReactions: administratorRankChangeReactionsSchema.optional(),
   /** 侍寝/受孕调参（缺省走引擎内置 fallback）。 */
   bedchamber: z
     .strictObject({

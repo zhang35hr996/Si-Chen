@@ -9,6 +9,8 @@ import type { ConsortAttributes, CharacterContent } from "../../engine/content/s
 import type { GameState } from "../../engine/state/types";
 import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/favorTier";
 import { bedchamberConfig } from "../../store/bedchamber";
+import { activeConfinement } from "../../engine/characters/confinement";
+import { describeActiveConfinement } from "../format/confinement";
 import { toGameTime } from "../../engine/calendar/time";
 import { describe } from "../format/descriptors";
 import type { ScaleId } from "../format/descriptors";
@@ -28,6 +30,7 @@ export function CharacterCard({
   registry,
   character,
   onManage,
+  onPunish,
   onBedchamber,
   onConverse,
   onViewProfile,
@@ -37,6 +40,7 @@ export function CharacterCard({
   registry: AssetRegistry;
   character: CharacterContent;
   onManage?: () => void;
+  onPunish?: () => void;
   onBedchamber?: () => void;
   onConverse?: () => void;
   onViewProfile?: () => void;
@@ -46,7 +50,10 @@ export function CharacterCard({
   const isConsort = character.kind === "consort";
   const pregnancy = isConsort ? consortGestationDisplay(state, character.id) : null;
   const displayName = character.profile.name; // 界面标识用本名；位分由下方 char-card__rank 并列展示
+  const alive = standing?.lifecycle !== "deceased";
   const canManage = isConsort && character.id !== "shen_zhibai" && onManage;
+  const canPunish = isConsort && character.id !== "shen_zhibai" && alive && onPunish;
+  const confinement = isConsort ? activeConfinement(state, character.id) : undefined;
   const portrait = registry.portrait(character.portraitSet, "neutral");
   const favor =
     isConsort
@@ -109,9 +116,19 @@ export function CharacterCard({
           查看详情
         </button>
       )}
+      {confinement && (
+        <p className="char-card__confined" data-confined="true">
+          禁足中　{describeActiveConfinement(confinement, state.calendar.eraName)}
+        </p>
+      )}
       {canManage && (
         <button type="button" className="char-card__manage" onClick={onManage}>
           管理位分 / 封号
+        </button>
+      )}
+      {canPunish && (
+        <button type="button" className="char-card__punish" onClick={onPunish}>
+          惩罚
         </button>
       )}
       {isConsort && onConverse && (

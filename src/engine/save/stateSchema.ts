@@ -102,6 +102,21 @@ const kinshipSchema = z.strictObject({
 
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
 
+/** 角色持续状态（禁足等）。活跃判定见 characters/confinement.ts，不存「剩余月份」。 */
+const statusEffectSchema = z.strictObject({
+  id: z.string().min(1),
+  kind: z.literal("confinement"),
+  characterId: idSchema,
+  startTurn: z.number().int().min(0),
+  endTurnExclusive: z.union([z.number().int().min(0), z.null()]),
+  imposedAt: gameTimeSchema,
+  imposedBy: z.literal("emperor"),
+  sourceLocation: idSchema.optional(),
+  liftedAt: gameTimeSchema.optional(),
+  liftedTurn: z.number().int().min(0).optional(),
+  liftReason: z.enum(["lifted_by_emperor", "term_expired"]).optional(),
+});
+
 export const gameStateSchema = z.strictObject({
   calendar: calendarStateSchema,
   playerLocation: z.string(),
@@ -248,6 +263,7 @@ export const gameStateSchema = z.strictObject({
       tags: z.array(z.string()),
     }),
   ),
+  statusEffects: z.array(statusEffectSchema).default([]),
   emotionalConditions: z.array(
     z.strictObject({
       id: z.string().min(1),
@@ -277,6 +293,20 @@ export const gameStateSchema = z.strictObject({
   ),
   pendingDaxuan: z.strictObject({ kind: z.enum(["announce", "dianxuan"]), year: z.number() }).optional(),
   gameOver: z.strictObject({ cause: z.literal("sovereign_death"), at: gameTimeSchema }).optional(),
+  haremAdministration: z.discriminatedUnion("mode", [
+    z.strictObject({ mode: z.literal("empress") }),
+    z.strictObject({
+      mode: z.literal("acting_consort"),
+      charId: idSchema,
+      appointedAt: gameTimeSchema,
+      reason: z.literal("empress_confined"),
+    }),
+    z.strictObject({
+      mode: z.literal("neiwu_proxy"),
+      appointedAt: gameTimeSchema,
+      reason: z.literal("no_eligible_consort"),
+    }),
+  ]).default({ mode: "empress" }),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;
 
