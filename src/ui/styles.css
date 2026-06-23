@@ -1268,6 +1268,78 @@ button:active:enabled {
   opacity: 0.65;
 }
 
+/* ── 场景人物条（轻量人物选择器，§5.3 / PR3）── */
+.scene-character-bar {
+  display: flex;
+  align-items: center;
+  min-height: 2.6rem;
+}
+.scene-character-bar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0.2rem;
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.scene-character-bar__item {
+  flex: 0 0 auto;
+}
+.scene-character-bar__chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.3rem 0.85rem;
+  font: inherit;
+  font-family: var(--font-body);
+  color: var(--c-text-dim);
+  background: rgba(15, 11, 9, 0.7);
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  cursor: pointer;
+  line-height: 1.25;
+}
+.scene-character-bar__chip.is-active {
+  color: var(--c-gold);
+  border-color: var(--c-line-gold);
+  background: rgba(40, 28, 18, 0.85);
+}
+.scene-character-bar__chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.scene-character-bar__name {
+  font-family: var(--font-title);
+  letter-spacing: 0.06em;
+  font-size: 0.95rem;
+}
+.scene-character-bar__role {
+  font-size: 0.72rem;
+  color: var(--c-text-dim);
+}
+.scene-character-bar__chip.is-active .scene-character-bar__role {
+  color: var(--c-gold);
+}
+.scene-character-bar__empty {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  font-family: var(--font-title);
+  letter-spacing: 0.2em;
+  color: var(--c-text-dim);
+  opacity: 0.7;
+}
+@media (max-width: 480px) {
+  .scene-character-bar__list {
+    padding-bottom: calc(0.3rem + env(safe-area-inset-bottom));
+  }
+}
+
 .char-scene__sprite-wrap {
   flex: 1;
   min-height: 0;
