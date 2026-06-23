@@ -11,7 +11,7 @@
  *  - actionEventId (scripted event refs)
  *  - backgroundKey / ambience (art assets)
  */
-import { locationSchema, type LocationContent } from "../../content/schemas";
+import { locationSchema } from "../../content/schemas";
 import { contentError, type GameError } from "../../infra/errors";
 import { err, ok, type Result } from "../../infra/result";
 import type { KnowledgeChunkInput, KnowledgeSourceAdapter } from "../model";

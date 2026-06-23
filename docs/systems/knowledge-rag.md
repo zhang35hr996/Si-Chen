@@ -118,9 +118,11 @@ The default when omitted is `public` (safe, conservative).
    - `###` heading under a `##` → `${docId}#${h2Text}/${h3Text}` (e.g. `official.system#中书省/职责`)
    - Two `### 职责` sections under different `##` parents get **distinct** IDs via the H2 prefix.
 4. Intro chunk ID: `${docId}#_intro`.
-5. Empty sections (< 10 chars after trimming) are **discarded** — no garbage chunks.
-6. All chunks inherit the document-level `tags`, `entityIds`, `locationIds`, `visibility`, `validFrom`, `validUntil`.
-7. Chunk title for a `###` section includes the parent `##` for display context: `"H2 — H3"` (e.g. `"中书省 — 职责"`).
+5. If a section body exceeds ~800 characters, it is **split at paragraph boundaries** (blank lines).  Never splits mid-sentence or mid-paragraph.
+6. Sub-chunk IDs: `${docId}#${headingPath}:0`, `${docId}#${headingPath}:1`, … (where `headingPath` follows the H2/H3 rule above).
+7. Empty sections (< 10 chars after trimming) are **discarded** — no garbage chunks.
+8. All chunks inherit the document-level `tags`, `entityIds`, `locationIds`, `visibility`, `validFrom`, `validUntil`.
+9. Chunk title for a `###` section includes the parent `##` for display context: `"H2 — H3"` (e.g. `"中书省 — 职责"`).
 
 ---
 
