@@ -105,6 +105,14 @@ describe("validateOfficialWorld", () => {
     expect(codes(s)).toContain("FAMILY_SURNAME_MISMATCH");
   });
 
+  it("catches a male person used as a mother", () => {
+    const s = createNewGameState(db, 1);
+    // shen_zhibai 为男性侍君，绝不可作 mother。
+    const child = Object.values(s.officials)[0]!.id;
+    s.kinship = [...s.kinship, { fromPersonId: child, toPersonId: "shen_zhibai", type: "mother" }];
+    expect(codes(s)).toContain("KIN_MOTHER_NOT_FEMALE");
+  });
+
   it("catches a record-key / id mismatch", () => {
     const s = createNewGameState(db, 1);
     const [k, o] = Object.entries(s.officials)[0]!;

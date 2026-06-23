@@ -125,7 +125,8 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     // pendingDaxuan store API is used; daxuanPrompt is part of atomicFlow (Zichendian stays busy)
     expect(appSrc).toMatch(/store\.consumeDaxuanAnnounce\(/);
     expect(appSrc).toMatch(/store\.enterDaxuan\(/);
-    expect(appSrc).toMatch(/store\.resolveDaxuanDianxuan\(/);
+    // 委托路径走原子事务入口（内部校验 pending + 落库 + flag + 清 pending）。
+    expect(appSrc).toMatch(/store\.resolveDaxuanByDelegate\(/);
     expect(appSrc).toMatch(/daxuanPrompt !== null/); // atomicFlowInProgress includes the dianxuan prompt
   });
 

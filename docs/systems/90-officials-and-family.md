@@ -93,9 +93,17 @@ child 实际性别严格匹配（male→son、female→daughter）**、sibling/s
 - `getActiveSeatedOfficials(state, db)`（status=active 且 postId 有效）为依赖在任官员的系统统一取人：
   殿选世家候选来源、大臣进献。
 - 殿选世家子弟：候选生成即把完整母族写入 `content.maternalClan`（`familyId/postId` + 确定性
-  `legitimate/birthOrder`），生母只取自年龄合规的在任有效官员；`addGeneratedConsort` 返回
-  `Result`，原子写入母族关联与亲缘，重复提交幂等、身份冲突拒绝（不覆盖留旧亲缘）。入宫/读档后
+  `legitimate/birthOrder`），生母只取自年龄合规的在任有效官员；候选 id 避开所有人物命名空间
+  （确定性取下一个可用 `xiunan_<year>_<n>`）。`addGeneratedConsort(state, db, …)` 返回 `Result`：
+  全局 id 冲突（authored/官员/成员）→ `PERSON_ID_CONFLICT`；`maternalClan` 与 `motherOfficialId`
+  必须成对（`CONSORT_CLAN_PAIRING`）；母官员须 active·有有效官职·familyId/postId 相符·母子年龄合法；
+  重复提交幂等、身份冲突拒绝（不覆盖留旧亲缘）；成功 state 立即过 `validateOfficialWorld`。入宫/读档后
   `familyText()` 持续显示母官品级/官职/嫡庶/排行，不退化为「平民之子」。
+- 殿选落库原子化（UI 经 Result 处理）：`GameStore.commitDaxuanSelections`（玩家多选 + 早退场 NPC 合一批，
+  全成或全不成、成功仅 emit 一次）与 `resolveDaxuanByDelegate`（委托：同一事务内 校验 pending → 落库 →
+  置 flag → 清 pending）。失败时 UI 不关界面、不 autosave、不播成功文案。
+- `assignOfficialPost` 检查顺序：`null` 去职任何状态可（已 null 幂等）；授官先验 `status==="active"`，
+  再做「同职幂等」与席位判定，杜绝非 active 占职者重分配同职被误放行。
 - authored 母家席位双重保护：ContentLoader 按唯一 familyId 统计每官职占用、超 `seatCount` 报
   `SEAT_OVERFLOW`、拒绝 `commoner` 作母家；worldgen 授官前再做防御式上限检查；
   `createNewGameState` 末尾对完整 state 跑一次 `validateOfficialWorld` fail-fast。

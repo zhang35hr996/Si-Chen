@@ -121,6 +121,13 @@ describe("readSlot rejects a save with a broken official world", () => {
     }, 1011);
   });
 
+  it("a male person used as a mother", () => {
+    expectQuarantineAfter((s) => {
+      const child = Object.values(s.officials)[0]!.id;
+      s.kinship = [...s.kinship, { fromPersonId: child, toPersonId: "shen_zhibai", type: "mother" }];
+    }, 1012);
+  });
+
   it("a clean fresh save still loads", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db, 1);

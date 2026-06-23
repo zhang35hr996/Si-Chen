@@ -90,4 +90,39 @@ describe("assignOfficialPost", () => {
     if (!r.ok) return;
     expect(r.value.officials[seated.id]!.postId).toBeNull();
   });
+
+  // 顺序回归：非 active 且已非法占职者，重分配「同一官职」不得被幂等误放行。
+  it.each(["retired", "imprisoned", "exiled", "dead"] as const)(
+    "rejects re-assigning a non-active (%s) official to its CURRENT post",
+    (status) => {
+      const state = createNewGameState(db);
+      const seated = Object.values(state.officials).find((o) => o.postId !== null)!;
+      state.officials[seated.id] = { ...seated, status }; // 保留 postId（非法占职态）
+      const r = assignOfficialPost(state, db, seated.id, seated.postId);
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.error.code).toBe("OFFICIAL_NOT_ACTIVE");
+    },
+  );
+
+  it.each(["retired", "imprisoned", "exiled", "dead"] as const)(
+    "allows null (释放) for a non-active (%s) official holding a post",
+    (status) => {
+      const state = createNewGameState(db);
+      const seated = Object.values(state.officials).find((o) => o.postId !== null)!;
+      state.officials[seated.id] = { ...seated, status };
+      const r = assignOfficialPost(state, db, seated.id, null);
+      expect(r.ok).toBe(true);
+    },
+  );
+
+  it("non-active official already vacant: null again is idempotent ok", () => {
+    const state = createNewGameState(db);
+    const o = Object.values(state.officials)[0]!;
+    state.officials[o.id] = { ...o, status: "retired", postId: null };
+    const r = assignOfficialPost(state, db, o.id, null);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value).toBe(state);
+  });
 });

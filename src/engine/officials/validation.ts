@@ -183,6 +183,12 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       }
       motherOf.set(child, mom);
 
+      // 生母必须为女性：男性家族成员/男性侍君不得作 mother。
+      const momSex = sexOf(state, db, mom);
+      if (momSex !== undefined && momSex !== "female") {
+        e("KIN_MOTHER_NOT_FEMALE", `mother 边终点「${mom}」(${momSex}) 不是女性`, { edge: k });
+      }
+
       // 反向边类型须与 child 实际性别严格匹配：male→son、female→daughter。
       const childSex = sexOf(state, db, child);
       if (childSex === "male" && !has(mom, child, "son")) {

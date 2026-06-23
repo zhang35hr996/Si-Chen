@@ -23,7 +23,7 @@ const db = loadRealContent();
 
 /** 解包 addGeneratedConsort，失败即抛（用于「应当成功」的路径）。 */
 function commit(state: GameState, c: Candidate, rank: string, favor: number, motherId?: string): GameState {
-  const r = addGeneratedConsort(state, c.content, rank, favor, motherId);
+  const r = addGeneratedConsort(state, db, c.content, rank, favor, motherId);
   if (!r.ok) throw new Error(`addGeneratedConsort failed: ${r.error.code}`);
   return r.value;
 }
@@ -102,7 +102,7 @@ describe("addGeneratedConsort — 重复/冲突提交", () => {
     const state = createNewGameState(db, 1);
     const cand = findShijia(state);
     const once = commit(state, cand, "guiren", 18, cand.motherOfficialId!);
-    const r = addGeneratedConsort(once, cand.content, "guiren", 18); // 无 mother
+    const r = addGeneratedConsort(once, db, cand.content, "guiren", 18); // 无 mother
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.code).toBe("CONSORT_FAMILY_CONFLICT");
@@ -113,7 +113,7 @@ describe("addGeneratedConsort — 重复/冲突提交", () => {
     const cand = findShijia(state);
     const once = commit(state, cand, "guiren", 18, cand.motherOfficialId!);
     const otherOfficial = Object.values(state.officials).find((o) => o.id !== cand.motherOfficialId)!;
-    const r = addGeneratedConsort(once, cand.content, "guiren", 18, otherOfficial.id);
+    const r = addGeneratedConsort(once, db, cand.content, "guiren", 18, otherOfficial.id);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.code).toBe("CONSORT_FAMILY_CONFLICT");
@@ -124,7 +124,7 @@ describe("addGeneratedConsort — 重复/冲突提交", () => {
     const cand = findShijia(state);
     const once = commit(state, cand, "guiren", 18, cand.motherOfficialId!);
     const altered = { ...cand, content: { ...cand.content, profile: { ...cand.content.profile, name: "改名" } } };
-    const r = addGeneratedConsort(once, altered.content, "guiren", 18, cand.motherOfficialId!);
+    const r = addGeneratedConsort(once, db, altered.content, "guiren", 18, cand.motherOfficialId!);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.code).toBe("CONSORT_OVERWRITE_CONFLICT");
@@ -135,9 +135,82 @@ describe("addGeneratedConsort — 重复/冲突提交", () => {
     const cand = findShijia(state);
     // 篡改 content.maternalClan.postId 使之与母官员不符。
     const bad = { ...cand.content, maternalClan: { ...cand.content.maternalClan!, postId: "no_such_post" } };
-    const r = addGeneratedConsort(state, bad, "guiren", 18, cand.motherOfficialId!);
+    const r = addGeneratedConsort(state, db, bad, "guiren", 18, cand.motherOfficialId!);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.code).toBe("CONSORT_CLAN_MISMATCH");
   });
+
+  it("maternalClan 无 motherOfficialId（不成对）被拒绝", () => {
+    const state = createNewGameState(db, 1);
+    const cand = findShijia(state);
+    const r = addGeneratedConsort(state, db, cand.content, "guiren", 18); // 有 clan 无 mother
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("CONSORT_CLAN_PAIRING");
+  });
+
+  it("motherOfficialId 无 maternalClan（不成对）被拒绝", () => {
+    const state = createNewGameState(db, 1);
+    const cand = findShijia(state);
+    const stripped = { ...cand.content, maternalClan: undefined };
+    const r = addGeneratedConsort(state, db, stripped, "guiren", 18, cand.motherOfficialId!);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("CONSORT_CLAN_PAIRING");
+  });
+
+  it("生母非 active 被拒绝", () => {
+    const state = createNewGameState(db, 1);
+    const cand = findShijia(state);
+    const mid = cand.motherOfficialId!;
+    state.officials[mid] = { ...state.officials[mid]!, status: "retired" };
+    const r = addGeneratedConsort(state, db, cand.content, "guiren", 18, mid);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("OFFICIAL_NOT_ACTIVE");
+  });
+
+  it.each([
+    ["authored character", "shen_zhibai"],
+    ["official", "official_fam_shen_main"],
+  ])("拒绝与既有 %s id 冲突的新侍君", (_label, conflictId) => {
+    const state = createNewGameState(db, 1);
+    const c = liangjiaziCandidate(state);
+    const bad = { ...c.content, id: conflictId };
+    const before = state.generatedConsorts;
+    const r = addGeneratedConsort(state, db, bad, "guiren", 18);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("PERSON_ID_CONFLICT");
+    expect(state.generatedConsorts).toBe(before); // 不变
+  });
+
+  it("拒绝与既有 FamilyMember id 冲突的新侍君", () => {
+    const state = createNewGameState(db, 1);
+    const memberId = Object.keys(state.familyMembers)[0]!;
+    const c = liangjiaziCandidate(state);
+    const r = addGeneratedConsort(state, db, { ...c.content, id: memberId }, "guiren", 18);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("PERSON_ID_CONFLICT");
+  });
+
+  it("generateCandidates 避开已占用的 xiunan id（确定性取下一个可用序号）", () => {
+    const state = createNewGameState(db, 1);
+    state.generatedConsorts = { ...state.generatedConsorts, ["xiunan_1_0"]: {} as never };
+    const cands = generateCandidates(db, state, 1);
+    const ids = cands.map((c) => c.content.id);
+    expect(ids).not.toContain("xiunan_1_0");
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });
+
+/** 良家子候选（无母族）。 */
+function liangjiaziCandidate(state: GameState): Candidate {
+  for (const year of [1, 4, 7, 10]) {
+    const c = generateCandidates(db, state, year).find((x) => !x.motherOfficialId);
+    if (c) return c;
+  }
+  throw new Error("no 良家子 candidate");
+}

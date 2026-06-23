@@ -18,27 +18,31 @@ export function assignOfficialPost(
   if (!cur) {
     return err(stateError("OFFICIAL_NOT_FOUND", `无此官员「${officialId}」`, { context: { officialId } }));
   }
-  // 幂等：分配同一官职（含同为去职 null）即原样返回。
-  if (cur.postId === newPostId) return ok(state);
 
-  // 只有 active 官员可被授予官职（postId 非空）；非 active 仅允许去职（null 释放席位）。
-  if (newPostId !== null && cur.status !== "active") {
-    return err(stateError("OFFICIAL_NOT_ACTIVE", `非在任官员「${officialId}」(${cur.status}) 不可授官`, { context: { officialId, status: cur.status } }));
+  // 去职（null）：任何状态均允许；已为 null 则幂等。
+  if (newPostId === null) {
+    if (cur.postId === null) return ok(state);
+    return ok({ ...state, officials: { ...state.officials, [officialId]: { ...cur, postId: null } } });
   }
 
-  if (newPostId !== null) {
-    const post = db.officialPosts[newPostId];
-    if (!post) {
-      return err(stateError("OFFICIAL_BAD_POST", `无此官职「${newPostId}」`, { context: { officialId, postId: newPostId } }));
-    }
-    const occupied = Object.values(state.officials).filter((o) => o.id !== officialId && o.postId === newPostId).length;
-    if (occupied >= post.seatCount) {
-      return err(
-        stateError("OFFICIAL_SEAT_FULL", `官职「${newPostId}」席位已满（${occupied}/${post.seatCount}）`, {
-          context: { officialId, postId: newPostId, occupied, seatCount: post.seatCount },
-        }),
-      );
-    }
+  // 授官（非 null）：必须先确认 active，再做「同职幂等」与席位判定——
+  // 否则非 active 官员若已非法占职，重分配同职会被幂等误放行。
+  if (cur.status !== "active") {
+    return err(stateError("OFFICIAL_NOT_ACTIVE", `非在任官员「${officialId}」(${cur.status}) 不可授官`, { context: { officialId, status: cur.status } }));
+  }
+  if (cur.postId === newPostId) return ok(state); // active 确认后才幂等
+
+  const post = db.officialPosts[newPostId];
+  if (!post) {
+    return err(stateError("OFFICIAL_BAD_POST", `无此官职「${newPostId}」`, { context: { officialId, postId: newPostId } }));
+  }
+  const occupied = Object.values(state.officials).filter((o) => o.id !== officialId && o.postId === newPostId).length;
+  if (occupied >= post.seatCount) {
+    return err(
+      stateError("OFFICIAL_SEAT_FULL", `官职「${newPostId}」席位已满（${occupied}/${post.seatCount}）`, {
+        context: { officialId, postId: newPostId, occupied, seatCount: post.seatCount },
+      }),
+    );
   }
 
   return ok({
