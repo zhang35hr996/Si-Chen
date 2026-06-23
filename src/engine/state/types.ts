@@ -462,7 +462,18 @@ export interface GameState {
   overnightWith?: { charId: string; morningDayIndex: number };
   /** 持久化身后事队列（皇帝不入队）。 */
   pendingAftermath: PendingAftermath[];
+  /**
+   * 持久化「待消费的大选日历事件」：到点（catch-up）由时间事务统一入口探测置位，
+   * 与具体行动路径无关；UI 消费后清空。announce 优先于 dianxuan。
+   */
+  pendingDaxuan?: PendingDaxuan;
   /** 终局：皇帝崩逝由时间事务在同批写入；置位后 title「继续」禁用（Task 5/8）。 */
   gameOver?: { cause: "sovereign_death"; at: GameTime };
   rngSeed: number;
+}
+
+/** 待消费的大选日历事件（二月报告 / 四月殿选）。year=对应大选年。 */
+export interface PendingDaxuan {
+  kind: "announce" | "dianxuan";
+  year: number;
 }

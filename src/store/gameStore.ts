@@ -19,7 +19,8 @@ import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { changeOfficialGrade } from "../engine/officials/changeGrade";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
-import { addGeneratedConsort, initialFavorForRank, type Candidate, type KeptConsort } from "./grandSelection";
+import { addGeneratedConsort, buildDaxuanAnnounce, initialFavorForRank, nextPendingDaxuan, type Candidate, type KeptConsort } from "./grandSelection";
+import type { DecreeReaction } from "./empressDecree";
 import { excuseFromGreeting, dismissOvernight, recordOvernight } from "./greeting";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
@@ -143,6 +144,28 @@ export class GameStore {
   /** 设/清一个布尔 flag（大选一次性标记）。 */
   setFlag(key: string, value: boolean): void {
     this.state = { ...this.state, flags: { ...this.state.flags, [key]: value } };
+    this.emit();
+  }
+
+  /**
+   * 消费「二月大选报告」待消费态：原子落 announce flag + 清待消费态，返回播报节拍。
+   * 非 announce 待消费时返回 []（不副作用）。flag 已落则后续 advance 不再补出。
+   */
+  consumeDaxuanAnnounce(db: ContentDB): DecreeReaction[] {
+    if (this.state.pendingDaxuan?.kind !== "announce") return [];
+    const built = buildDaxuanAnnounce(db, this.state);
+    const base = built ? applyEffects(db, this.state, built.effects) : ok(this.state);
+    if (!base.ok) return [];
+    // 落 announce flag 后续接：若同期殿选亦到点（跳过整个二—四月），立即挂上 dianxuan。
+    this.state = { ...base.value, pendingDaxuan: nextPendingDaxuan(base.value) ?? undefined };
+    this.emit();
+    return built?.beats ?? [];
+  }
+
+  /** 清除待消费的大选事件（殿选已决/委托后调用；与设 dianxuan flag 配套）。 */
+  clearPendingDaxuan(): void {
+    if (this.state.pendingDaxuan === undefined) return;
+    this.state = { ...this.state, pendingDaxuan: undefined };
     this.emit();
   }
 
@@ -323,6 +346,13 @@ export class GameStore {
       if (healthOutcome.sovereignDied) {
         candidate = { ...candidate, gameOver: { cause: "sovereign_death", at: toGameTime(candidate.calendar) } };
       }
+    }
+    // 5) 统一探测大选日历事件：到点（catch-up）且无待消费态时置位，使触发与具体
+    //    行动路径（SPEND_AP / SKIP_REMAINDER / travel / resolveTimedAction）解耦。
+    //    sticky：已挂起则保留，待 UI 消费后清空，避免覆盖未决事件。
+    if (candidate.pendingDaxuan === undefined) {
+      const pd = nextPendingDaxuan(candidate);
+      if (pd) candidate = { ...candidate, pendingDaxuan: pd };
     }
     // single commit + single notify — only after every step succeeded
     this.state = candidate;

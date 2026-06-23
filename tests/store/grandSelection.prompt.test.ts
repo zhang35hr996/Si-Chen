@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { createNewGameState } from "../../src/engine/state/newGame";
-import { buildDaxuanAnnounce, buildDaxuanDianxuanPrompt } from "../../src/store/grandSelection";
+import { buildDaxuanAnnounce, buildDaxuanDianxuanPrompt, nextPendingDaxuan } from "../../src/store/grandSelection";
+import { daxuanAnnounceFlagKey, daxuanDianxuanFlagKey } from "../../src/store/grandSelection";
 import { MORNING_SLOT, dayIndexOf } from "../../src/engine/calendar/time";
 
 const content = loadGameContent();
@@ -103,5 +104,39 @@ describe("四月殿选 prompt buildDaxuanDianxuanPrompt", () => {
     // 已决则不再补触发
     const resolved = { ...laterMonth, flags: { ...laterMonth.flags, "daxuan:dianxuan:1": true } };
     expect(buildDaxuanDianxuanPrompt(db, resolved)).toBeNull();
+  });
+});
+
+describe("nextPendingDaxuan（统一入口探测的待消费事件）", () => {
+  const announced = (s: ReturnType<typeof at>) => ({ ...s, flags: { ...s.flags, [daxuanAnnounceFlagKey(1)]: true } });
+
+  it("二月到点前 → null", () => {
+    expect(nextPendingDaxuan(at(createNewGameState(db), 1, "late", MORNING_SLOT))).toBeNull();
+  });
+
+  it("二月到点、未报 → announce（优先）", () => {
+    expect(nextPendingDaxuan(at(createNewGameState(db), 2, "early", MORNING_SLOT))).toEqual({ kind: "announce", year: 1 });
+  });
+
+  it("已报、四月前 → null", () => {
+    expect(nextPendingDaxuan(announced(at(createNewGameState(db), 3, "early", MORNING_SLOT)))).toBeNull();
+  });
+
+  it("已报、四月到点未决 → dianxuan", () => {
+    expect(nextPendingDaxuan(announced(at(createNewGameState(db), 4, "late", MORNING_SLOT)))).toEqual({ kind: "dianxuan", year: 1 });
+  });
+
+  it("两 flag 皆置 → null", () => {
+    const both = announced(at(createNewGameState(db), 4, "late", MORNING_SLOT));
+    expect(nextPendingDaxuan({ ...both, flags: { ...both.flags, [daxuanDianxuanFlagKey(1)]: true } })).toBeNull();
+  });
+
+  it("二月与四月同时到点（未报且过四月）→ announce 优先补出", () => {
+    // 跳过二月直到四月下旬：announce 仍未报、dianxuan 亦到点。
+    expect(nextPendingDaxuan(at(createNewGameState(db), 4, "late", MORNING_SLOT))).toEqual({ kind: "announce", year: 1 });
+  });
+
+  it("非大选年 → null", () => {
+    expect(nextPendingDaxuan(at(withYear(2), 4, "late", MORNING_SLOT))).toBeNull();
   });
 });

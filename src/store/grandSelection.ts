@@ -12,7 +12,7 @@ import {
   ARISTOCRATIC_SURNAME_POOL,
   ARISTOCRATIC_MALE_GIVEN_NAME_POOL,
 } from "../engine/characters/shijunNames";
-import type { GameState } from "../engine/state/types";
+import type { GameState, PendingDaxuan } from "../engine/state/types";
 import type { DecreeReaction } from "./empressDecree";
 import type { ChengFengPrompt } from "./prompt";
 
@@ -171,6 +171,39 @@ export function describeTalent(content: CharacterContent): string {
 }
 
 /**
+ * 「到点即补触发」判定（与生产 gestationDue 同构）：当前日历是否已到/已过指定
+ * 月·旬的辰时。错过单槽不再丢失——大选年内持续为真，直到对应 flag 置位。
+ */
+function dueAtOrAfter(cal: GameState["calendar"], month: number, period: "early" | "mid" | "late"): boolean {
+  const dueDayIndex = dayIndexOf(cal.year, month, period);
+  if (cal.dayIndex < dueDayIndex) return false;
+  if (cal.dayIndex === dueDayIndex && shichenSlot(cal) < MORNING_SLOT) return false;
+  return true;
+}
+
+/** 二月报告到点未报：大选年、未报 flag、且已到/过二月上旬辰时。 */
+export function daxuanAnnounceDue(state: GameState): boolean {
+  const cal = state.calendar;
+  return isDaxuanYear(cal.year) && !state.flags[daxuanAnnounceFlagKey(cal.year)] && dueAtOrAfter(cal, 2, "early");
+}
+
+/** 四月殿选到点未决：大选年、未决 flag、且已到/过四月下旬辰时。 */
+export function daxuanDianxuanDue(state: GameState): boolean {
+  const cal = state.calendar;
+  return isDaxuanYear(cal.year) && !state.flags[daxuanDianxuanFlagKey(cal.year)] && dueAtOrAfter(cal, 4, "late");
+}
+
+/**
+ * 当前应入队的大选日历事件（announce 优先于 dianxuan；皆未到点则 null）。
+ * 由时间事务统一入口（advanceCandidate）调用，使触发与具体行动路径解耦。
+ */
+export function nextPendingDaxuan(state: GameState): PendingDaxuan | null {
+  if (daxuanAnnounceDue(state)) return { kind: "announce", year: state.calendar.year };
+  if (daxuanDianxuanDue(state)) return { kind: "dianxuan", year: state.calendar.year };
+  return null;
+}
+
+/**
  * 大选年、未报过、且已到/已过「二月上旬辰时」→ 凤后遣人禀告大选已备妥（设 flag + 节拍）。
  * 与殿选 prompt 同构用「到点即补触发」而非单槽相等：玩家若在该时辰未经普通行动而错过窗口，
  * 报告仍会在大选年内的后续行动补出，不会永久丢失，也不会因 flag 已设而重复。
@@ -179,14 +212,9 @@ export function buildDaxuanAnnounce(
   _db: ContentDB,
   state: GameState,
 ): { effects: EventEffect[]; beats: DecreeReaction[] } | null {
-  const cal = state.calendar;
-  if (!isDaxuanYear(cal.year)) return null;
-  if (state.flags[daxuanAnnounceFlagKey(cal.year)]) return null;
-  const dueDayIndex = dayIndexOf(cal.year, 2, "early");
-  if (cal.dayIndex < dueDayIndex) return null;
-  if (cal.dayIndex === dueDayIndex && shichenSlot(cal) < MORNING_SLOT) return null;
+  if (!daxuanAnnounceDue(state)) return null;
   return {
-    effects: [{ type: "flag", key: daxuanAnnounceFlagKey(cal.year), value: true }],
+    effects: [{ type: "flag", key: daxuanAnnounceFlagKey(state.calendar.year), value: true }],
     beats: [
       {
         speakerId: "cheng_feng",
@@ -204,12 +232,8 @@ export function buildDaxuanAnnounce(
  * 房间视图而错过窗口，殿选仍会在大选年内的后续时机补出，不会永久丢失。
  */
 export function buildDaxuanDianxuanPrompt(_db: ContentDB, state: GameState): ChengFengPrompt | null {
+  if (!daxuanDianxuanDue(state)) return null;
   const cal = state.calendar;
-  if (!isDaxuanYear(cal.year)) return null;
-  if (state.flags[daxuanDianxuanFlagKey(cal.year)]) return null;
-  const dueDayIndex = dayIndexOf(cal.year, 4, "late");
-  if (cal.dayIndex < dueDayIndex) return null;
-  if (cal.dayIndex === dueDayIndex && shichenSlot(cal) < MORNING_SLOT) return null;
   return {
     speakerId: "cheng_feng",
     line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
