@@ -29,13 +29,16 @@ function isAnniversary(origin: GameTime, now: GameTime): boolean {
 /**
  * Whether the memory is bound to the current location (PR-A item 7).
  *
- * Keyed to the memory's SOURCE EVENT location — its place of occurrence, or for
- * a move, its from/to — not the old broken heuristic (any "residence"-tagged
- * memory whose subject was the speaker, which fired regardless of where the
- * speaker actually stood). Authored memories without a sourceEventId cannot be
- * located yet (deferred to a memory-side triggerContext) and score 0.
+ * The memory must opt in by declaring the "residence" trigger tag (scene-trigger
+ * bonuses are never granted implicitly), AND the current location must match the
+ * memory's SOURCE EVENT location — its place of occurrence, or for a move, its
+ * from/to. This replaces the old broken heuristic (any "residence"-tagged memory
+ * whose subject was the speaker, which fired regardless of where the speaker
+ * actually stood). Authored memories without a sourceEventId cannot be located yet
+ * (deferred to a memory-side triggerContext) and score 0.
  */
 function locationMatches(chronicle: readonly CourtEvent[], memory: MemoryEntry, locationId: string): boolean {
+  if (!memory.triggerTags.includes("residence")) return false;
   if (memory.sourceEventId === undefined) return false;
   const event = chronicle.find((e) => e.id === memory.sourceEventId);
   if (event === undefined) return false;

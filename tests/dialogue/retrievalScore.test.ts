@@ -211,6 +211,19 @@ describe("retrievalScore location match (item 7)", () => {
     expect(elsewhere).toBe(noLocation);
   });
 
+  it("no location bonus when the memory does not declare the residence trigger tag", () => {
+    // Source-event location matches the current location, but the memory never
+    // declared a location trigger — scene-trigger bonuses require the memory to opt in.
+    const s = stateWith([courtEvent({ locationId: "lengong" })]);
+    const tagged = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["residence"], subjectIds: ["a"] });
+    const untagged = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["death"], subjectIds: ["a"] });
+    const here = ctx({ locationId: "lengong" });
+    const elsewhere = ctx({ locationId: "zichendian" });
+    // tagged memory: location contributes; untagged: no contribution at all
+    expect(retrievalScore(s, tagged, here)).toBeGreaterThan(retrievalScore(s, tagged, elsewhere));
+    expect(retrievalScore(s, untagged, here)).toBe(retrievalScore(s, untagged, elsewhere));
+  });
+
   it("a residence move grants the bonus at either the from or the to location", () => {
     const s = stateWith([
       courtEvent({
