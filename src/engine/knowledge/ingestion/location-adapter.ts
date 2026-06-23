@@ -10,9 +10,8 @@
  *  - zone / entry / position (runtime navigation, not lore)
  *  - actionEventId (scripted event refs)
  *  - backgroundKey / ambience (art assets)
- *  - subLocations (only static descriptions are safe to extract here)
  */
-import { z } from "zod";
+import { locationSchema, type LocationContent } from "../../content/schemas";
 import { contentError, type GameError } from "../../infra/errors";
 import { err, ok, type Result } from "../../infra/result";
 import type { KnowledgeChunkInput, KnowledgeSourceAdapter } from "../model";
@@ -24,22 +23,6 @@ interface LocationLike {
   description: string;
   subLocations?: Array<{ id: string; name: string; description: string }>;
 }
-
-/** Strict Zod schema used for fail-closed validation in the build pipeline. */
-const locationLikeSchema = z
-  .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    description: z.string().refine((s) => s.trim().length > 0, {
-      message: "description cannot be blank",
-    }),
-    subLocations: z
-      .array(
-        z.object({ id: z.string().min(1), name: z.string().min(1), description: z.string() }),
-      )
-      .optional(),
-  })
-  .passthrough();
 
 function isLocationLike(source: unknown): source is LocationLike {
   if (typeof source !== "object" || source === null) return false;
@@ -60,12 +43,14 @@ export const locationAdapter: KnowledgeSourceAdapter<LocationLike> & {
   },
 
   /**
-   * Validate `data` with the strict schema and extract chunks.
-   * Returns an error (not silent skip) when required fields are missing or blank.
+   * Validate `data` against the official locationSchema and extract chunks.
+   * Returns INVALID_LOCATION_SOURCE (not silent skip) for any structural error,
+   * including missing backgroundKey, blank sub-location descriptions, travel
+   * locations without connections/travelCost, etc.
    * Used by the fail-closed build pipeline for `location_json` sources.
    */
   extractStrict(data: unknown, sourcePath: string): Result<KnowledgeChunkInput[], GameError[]> {
-    const parsed = locationLikeSchema.safeParse(data);
+    const parsed = locationSchema.safeParse(data);
     if (!parsed.success) {
       return err([
         contentError(
@@ -74,7 +59,7 @@ export const locationAdapter: KnowledgeSourceAdapter<LocationLike> & {
         ),
       ]);
     }
-    return ok(locationAdapter.extract(parsed.data as LocationLike, sourcePath));
+    return ok(locationAdapter.extract(parsed.data, sourcePath));
   },
 
   extract(source: LocationLike, sourcePath: string): KnowledgeChunkInput[] {

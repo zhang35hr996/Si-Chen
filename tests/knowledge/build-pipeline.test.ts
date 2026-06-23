@@ -148,10 +148,15 @@ visibility: public
 });
 
 describe("ingestSourcesStrict — location_json fail-closed contract", () => {
+  // Full valid "free" entry location satisfying locationSchema
   const validLocation = {
     id: "xuanzhengdian",
     name: "宣政殿",
     description: "晴日里，金瓦映着白光，整座殿宇如同悬在天际。丹陛巍巍，百官列班。",
+    backgroundKey: "bg.xuanzhengdian",
+    ambience: ["钟磬", "百官屏息"],
+    position: { x: 0.5, y: 0.1 },
+    entry: "free",
   };
 
   it("succeeds on valid location JSON", () => {
@@ -174,11 +179,11 @@ describe("ingestSourcesStrict — location_json fail-closed contract", () => {
     expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
   });
 
-  it("returns error when description is blank (whitespace only)", () => {
+  it("returns error when description is an empty string", () => {
     const result = ingestSourcesStrict([
       {
         kind: "location_json",
-        data: { ...validLocation, description: "   " },
+        data: { ...validLocation, description: "" },
         sourcePath: "loc.json",
       },
     ]);
@@ -207,6 +212,52 @@ describe("ingestSourcesStrict — location_json fail-closed contract", () => {
         data: { name: "宣政殿", description: "描述文字。" },
         sourcePath: "loc.json",
       },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when backgroundKey is missing (full locationSchema required)", () => {
+    const { backgroundKey: _bk, ...noBackground } = validLocation;
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: noBackground, sourcePath: "loc.json" },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error for travel location missing travelCost", () => {
+    const travelLocation = {
+      ...validLocation,
+      id: "changmengong",
+      entry: "travel",
+      connections: ["cining_gong"],
+      // travelCost deliberately omitted
+    };
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: travelLocation, sourcePath: "loc.json" },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when a sub-location has a blank description", () => {
+    const withSubs = {
+      ...validLocation,
+      subLocations: [
+        {
+          id: "east_wing",
+          name: "东配殿",
+          backgroundKey: "bg.east",
+          description: "", // blank — nonEmpty fails
+        },
+      ],
+    };
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: withSubs, sourcePath: "loc.json" },
     ]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
