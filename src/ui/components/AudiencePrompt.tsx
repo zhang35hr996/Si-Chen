@@ -2,8 +2,9 @@
  * 非阻塞候见提示（scene-ui-narrative-refactor §6.2）。司礼/官员等在殿外候见时，以叙事口吻呈现，
  * 玩家可「宣进来」或「记入待宣」。纯展示 + 回调：组件不读/改 store、不查事件、不做导航，动作只经回调输出。
  *
- * 语义：作为前景对话 landmark（role="dialog" + aria-modal），自持焦点与 Escape（= 记入待宣）。
- * 视觉上仍是场景内叙事面板（无 .modal-backdrop 遮罩），由各屏置于 SceneShell 的 narrative 槽。
+ * 语义：**非模态**场景内叙事面板（role="dialog" 作可命名 landmark，但不设 aria-modal——背景动作仍可交互，
+ * 故不可宣称背景 inert）。自持焦点与 Escape（= 记入待宣）。视觉上无 .modal-backdrop 遮罩，由各屏置于
+ * SceneShell 的 narrative 槽；与抽屉/乘风（真模态：锁背景动作）互斥渲染，保持至多一个 dialog landmark。
  *
  * 身份化生命周期：
  *  - 派发锁按 promptId 建模（非一生一次布尔）。父级在同一 JSX 位置把 A 换成 B（复用同实例）时，旧 ID
@@ -95,7 +96,6 @@ export function AudiencePrompt({
       ref={dialogRef}
       className="audience-prompt"
       role="dialog"
-      aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
       tabIndex={-1}

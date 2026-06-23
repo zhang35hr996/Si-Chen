@@ -13,10 +13,11 @@ const base = {
 };
 
 describe("AudiencePrompt", () => {
-  it("1. renders the visitor identity and message as a dialog landmark", () => {
+  it("1. renders the visitor identity and message as a NON-modal dialog landmark", () => {
     render(<AudiencePrompt {...base} />);
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveAttribute("aria-modal", "true");
+    // 非模态叙事面板：不得宣称 aria-modal（背景动作仍可交互），否则与无障碍语义冲突。
+    expect(dialog).not.toHaveAttribute("aria-modal");
     expect(dialog).toHaveTextContent("卫绥");
     expect(dialog).toHaveTextContent("礼官");
     expect(dialog).toHaveTextContent("为传月祭仪");
