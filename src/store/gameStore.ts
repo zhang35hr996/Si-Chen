@@ -243,22 +243,28 @@ export class GameStore {
     }
   }
 
-  /** 殿选留牌子：按所选位分落库一位秀男（恩宠随位分缩放）。 */
-  commitDaxuanConsort(db: ContentDB, candidate: Candidate, rank: string): void {
+  /** 殿选留牌子：按所选位分落库一位秀男（恩宠随位分缩放）。冲突返回 err，不落半套数据。 */
+  commitDaxuanConsort(db: ContentDB, candidate: Candidate, rank: string): Result<void, GameError> {
     const favor = initialFavorForRank(db.ranks[rank]?.order ?? 50);
-    this.state = addGeneratedConsort(this.state, candidate.content, rank, favor, candidate.motherOfficialId);
+    const result = addGeneratedConsort(this.state, candidate.content, rank, favor, candidate.motherOfficialId);
+    if (!result.ok) return result;
+    this.state = result.value;
     this.emit();
+    return ok(undefined);
   }
 
-  /** 批量落库 NPC 留下的秀男（按各自推荐位分）。 */
-  commitDaxuanKept(db: ContentDB, kept: KeptConsort[]): void {
+  /** 批量落库 NPC 留下的秀男（按各自推荐位分）。任一冲突即整批拒绝，不留半套数据。 */
+  commitDaxuanKept(db: ContentDB, kept: KeptConsort[]): Result<void, GameError> {
     let next = this.state;
     for (const k of kept) {
       const favor = initialFavorForRank(db.ranks[k.rank]?.order ?? 50);
-      next = addGeneratedConsort(next, k.candidate.content, k.rank, favor, k.candidate.motherOfficialId);
+      const result = addGeneratedConsort(next, k.candidate.content, k.rank, favor, k.candidate.motherOfficialId);
+      if (!result.ok) return result;
+      next = result.value;
     }
     this.state = next;
     this.emit();
+    return ok(undefined);
   }
 
   /** 先入库 1 件再赏赐；bestow 失败返回 false，state 不变。 */

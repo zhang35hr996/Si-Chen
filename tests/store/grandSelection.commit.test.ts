@@ -12,7 +12,10 @@ describe("addGeneratedConsort", () => {
   it("写入 generatedConsorts/standing/memories/bedchamber，含 availableFromMonth=五月", () => {
     const s = createNewGameState(db); // 元年
     const cand = generateCandidates(db, s, 1)[0]!;
-    const next = addGeneratedConsort(s, cand.content, "guiren", 18);
+    const r = addGeneratedConsort(s, cand.content, "guiren", 18, cand.motherOfficialId);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const next = r.value;
     const id = cand.content.id;
 
     expect(next.generatedConsorts[id]).toBeDefined();

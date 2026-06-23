@@ -249,7 +249,13 @@ export function generateOfficialWorld(db: ContentDB, rngSeed: number, appointedA
       status: "active",
       appointedAt,
     };
-    if (post) occupy(book, post.id);
+    if (post) {
+      // 防御：即便绕过 ContentLoader 校验，也不静默产生超额世界。
+      if ((book.occupancy[post.id] ?? 0) >= post.seatCount) {
+        throw new Error(`generateOfficialWorld: post ${post.id} over seatCount ${post.seatCount} (family ${famId})`);
+      }
+      occupy(book, post.id);
+    }
 
     const childIds: string[] = [];
     for (const c of linkedConsorts) {

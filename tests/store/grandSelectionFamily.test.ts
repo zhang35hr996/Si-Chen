@@ -21,6 +21,13 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 
+/** 解包 addGeneratedConsort，失败即抛（用于「应当成功」的路径）。 */
+function commit(state: GameState, c: Candidate, rank: string, favor: number, motherId?: string): GameState {
+  const r = addGeneratedConsort(state, c.content, rank, favor, motherId);
+  if (!r.ok) throw new Error(`addGeneratedConsort failed: ${r.error.code}`);
+  return r.value;
+}
+
 /** 找一位带 motherOfficialId 的世家候选（跨年扫描）。 */
 function findShijia(state: GameState): Candidate {
   for (const year of [1, 4, 7, 10, 13]) {
@@ -44,7 +51,7 @@ describe("grand selection — family persistence", () => {
     const state = createNewGameState(db, 1);
     const cand = findShijia(state);
     const motherId = cand.motherOfficialId!;
-    const next = addGeneratedConsort(state, cand.content, "guiren", 18, motherId);
+    const next = commit(state, cand, "guiren", 18, motherId);
 
     expect(getOfficialRelativesOfConsort(next, cand.content.id).map((o) => o.id)).toContain(motherId);
     expect(getPalaceRelativesOfOfficial(next, motherId)).toContain(cand.content.id);
@@ -56,16 +63,17 @@ describe("grand selection — family persistence", () => {
     const state = createNewGameState(db, 1);
     const cand = findShijia(state);
     const motherId = cand.motherOfficialId!;
-    const once = addGeneratedConsort(state, cand.content, "guiren", 18, motherId);
-    const twice = addGeneratedConsort(once, cand.content, "guiren", 18, motherId);
+    const once = commit(state, cand, "guiren", 18, motherId);
+    const twice = commit(once, cand, "guiren", 18, motherId);
     expect(twice.kinship.length).toBe(once.kinship.length);
+    expect(twice).toBe(once); // 完全相同的重复提交：原样返回
   });
 
   it("动态侍君存档 round-trip 后母族与亲缘仍在（不被判 missing character）", () => {
     const state = createNewGameState(db, 1);
     const cand = findShijia(state);
     const motherId = cand.motherOfficialId!;
-    const next = addGeneratedConsort(state, cand.content, "guiren", 18, motherId);
+    const next = commit(state, cand, "guiren", 18, motherId);
 
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, next, "slot1")));
@@ -86,5 +94,50 @@ describe("grand selection — family persistence", () => {
         expect(c.motherOfficialId).toBeUndefined();
       }
     }
+  });
+});
+
+describe("addGeneratedConsort — 重复/冲突提交", () => {
+  it("二次提交缺失 motherOfficialId 不清除 birthFamilyId（冲突拒绝）", () => {
+    const state = createNewGameState(db, 1);
+    const cand = findShijia(state);
+    const once = commit(state, cand, "guiren", 18, cand.motherOfficialId!);
+    const r = addGeneratedConsort(once, cand.content, "guiren", 18); // 无 mother
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("CONSORT_FAMILY_CONFLICT");
+  });
+
+  it("二次提交不同 motherOfficialId 被拒绝（不致两个生母）", () => {
+    const state = createNewGameState(db, 1);
+    const cand = findShijia(state);
+    const once = commit(state, cand, "guiren", 18, cand.motherOfficialId!);
+    const otherOfficial = Object.values(state.officials).find((o) => o.id !== cand.motherOfficialId)!;
+    const r = addGeneratedConsort(once, cand.content, "guiren", 18, otherOfficial.id);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("CONSORT_FAMILY_CONFLICT");
+  });
+
+  it("同 id 不同 content 不静默覆盖", () => {
+    const state = createNewGameState(db, 1);
+    const cand = findShijia(state);
+    const once = commit(state, cand, "guiren", 18, cand.motherOfficialId!);
+    const altered = { ...cand, content: { ...cand.content, profile: { ...cand.content.profile, name: "改名" } } };
+    const r = addGeneratedConsort(once, altered.content, "guiren", 18, cand.motherOfficialId!);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("CONSORT_OVERWRITE_CONFLICT");
+  });
+
+  it("maternalClan 与母官员不符被拒绝", () => {
+    const state = createNewGameState(db, 1);
+    const cand = findShijia(state);
+    // 篡改 content.maternalClan.postId 使之与母官员不符。
+    const bad = { ...cand.content, maternalClan: { ...cand.content.maternalClan!, postId: "no_such_post" } };
+    const r = addGeneratedConsort(state, bad, "guiren", 18, cand.motherOfficialId!);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("CONSORT_CLAN_MISMATCH");
   });
 });

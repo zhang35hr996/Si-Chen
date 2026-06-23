@@ -65,9 +65,10 @@
 成员归属唯一真相 = 各人物 `familyId`/`birthFamilyId`（无 memberIds）。校验覆盖：record key 与对象
 `id` 一致、全局人物 id 唯一（authored characters / generatedConsorts / officials / familyMembers
 四命名空间）、官职/家族引用存在、席位不超额、`isValidOfficialAge`、家族成员引用有效、sex↔role 一致、
-亲缘两端存在、无重复边、无矛盾生母、mother↔daughter/son 反向边、sibling/spouse 对称边、母女年龄
-（`isValidParentChildAge`）、配偶年龄（`isValidSpouseAge`）、侍君 `birthFamilyId` 有效、官员↔宫中亲属
-反向一致、死亡官员不在任。
+家族 surname 一致（内卿可异姓）、亲缘两端存在、无重复边、无矛盾生母、**mother 反向边类型须与
+child 实际性别严格匹配（male→son、female→daughter）**、sibling/spouse 对称、母女/配偶年龄、
+**母子 canonical familyId 一致（KIN_FAMILY_MISMATCH）**、侍君 `birthFamilyId` 与 `maternalClan.familyId`
+一致且有对应母亲边、**非 active 官员不得占职（OFFICIAL_INACTIVE_SEATED）**。
 
 **接入加载链路**：`validateSave`（`readSlot` 内）在 Zod 形状校验通过后调用 `validateOfficialWorld`，
 任一 error 级诊断 → 拒绝并 quarantine（`OFFICIAL_INTEGRITY`，context 含全部诊断）。Zod 只管形状，
@@ -87,10 +88,17 @@
 ## 八之二、安全任免与在任官员 selector
 
 - 任免官职唯一入口 `assignOfficialPost(state, db, officialId, postId|null): Result`，校验官员/官职
-  存在、`seatCount` 未满、死者不可任职、同职幂等、null 去职；`GameStore.assignOfficialPost` 经其
-  Result 落库，绝不裸写 postId。
+  存在、`seatCount` 未满、**仅 active 可授官（非 active 仅允许 null 去职）**、同职幂等；
+  `GameStore.assignOfficialPost` 经其 Result 落库，绝不裸写 postId。
 - `getActiveSeatedOfficials(state, db)`（status=active 且 postId 有效）为依赖在任官员的系统统一取人：
   殿选世家候选来源、大臣进献。
+- 殿选世家子弟：候选生成即把完整母族写入 `content.maternalClan`（`familyId/postId` + 确定性
+  `legitimate/birthOrder`），生母只取自年龄合规的在任有效官员；`addGeneratedConsort` 返回
+  `Result`，原子写入母族关联与亲缘，重复提交幂等、身份冲突拒绝（不覆盖留旧亲缘）。入宫/读档后
+  `familyText()` 持续显示母官品级/官职/嫡庶/排行，不退化为「平民之子」。
+- authored 母家席位双重保护：ContentLoader 按唯一 familyId 统计每官职占用、超 `seatCount` 报
+  `SEAT_OVERFLOW`、拒绝 `commoner` 作母家；worldgen 授官前再做防御式上限检查；
+  `createNewGameState` 末尾对完整 state 跑一次 `validateOfficialWorld` fail-fast。
 
 ## 九、UI（只读开发者入口）
 

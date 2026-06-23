@@ -349,6 +349,36 @@ function checkCharacterRefs(
       }
     }
   }
+
+  // ── 母家官职席位：每个 postId 的「不同 authored familyId 数」不得超过 seatCount ──
+  // 同一 familyId 多名侍君只计一个席位（按 familyDef 去重）；平民非官职席位，不可作母家。
+  const seatRequests = new Map<string, string[]>(); // postId → familyIds
+  for (const [familyId, def] of familyDef) {
+    const post = officialPosts[def.postId];
+    if (post && post.gradeOrder === 0) {
+      errors.push(
+        contentError("BAD_REF", `${def.source}: 家族「${familyId}」母家官职「${def.postId}」是平民，不是官职席位`, {
+          context: { file: def.source, familyId, postId: def.postId },
+        }),
+      );
+      continue;
+    }
+    const list = seatRequests.get(def.postId) ?? [];
+    list.push(familyId);
+    seatRequests.set(def.postId, list);
+  }
+  for (const [postId, familyIds] of seatRequests) {
+    const post = officialPosts[postId];
+    if (post && familyIds.length > post.seatCount) {
+      errors.push(
+        contentError(
+          "SEAT_OVERFLOW",
+          `官职「${postId}」(${post.name}) 席位 ${post.seatCount}，但 ${familyIds.length} 个家族声明为母家初始官职：${familyIds.join("、")}`,
+          { context: { postId, seatCount: post.seatCount, familyIds } },
+        ),
+      );
+    }
+  }
 }
 
 function checkLocationGraph(locations: Parsed<LocationContent>, errors: GameError[]): void {

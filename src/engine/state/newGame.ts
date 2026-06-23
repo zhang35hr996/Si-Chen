@@ -7,6 +7,7 @@ import { createCalendar, toGameTime } from "../calendar/time";
 import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import { generateOfficialWorld } from "../officials/worldgen";
+import { validateOfficialWorld } from "../officials/validation";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
 
 /** 新游戏私库种子（id 须存在于 content/items.json）。 */
@@ -86,7 +87,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     }
   }
 
-  return {
+  const newState: GameState = {
     calendar,
     playerLocation: db.world.startingLocation,
     taihou: { health: 70, healthStatus: "healthy" },
@@ -119,4 +120,13 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     pendingAftermath: [],
     rngSeed,
   };
+
+  // 开局自检（fail-fast）：官员世界完整性。仅在建档时执行一次，数据量小，非重复扫描。
+  const integrity = validateOfficialWorld(newState, db);
+  if (integrity.length > 0) {
+    const first = integrity[0]!;
+    throw new Error(`createNewGameState: official world integrity failed (${first.code}): ${first.message}`);
+  }
+
+  return newState;
 }

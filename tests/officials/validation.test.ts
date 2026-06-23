@@ -58,11 +58,51 @@ describe("validateOfficialWorld", () => {
     expect(codes(s)).toContain("PERSON_DUP_ID");
   });
 
-  it("catches a dead official still seated", () => {
+  it.each(["dead", "retired", "imprisoned", "exiled"] as const)(
+    "catches a non-active (%s) official still seated",
+    (status) => {
+      const s = createNewGameState(db, 1);
+      const seated = Object.values(s.officials).find((o) => o.postId !== null)!;
+      s.officials[seated.id] = { ...seated, status };
+      expect(codes(s)).toContain("OFFICIAL_INACTIVE_SEATED");
+    },
+  );
+
+  it("catches a cross-family mother edge (familyId inconsistency)", () => {
     const s = createNewGameState(db, 1);
-    const seated = Object.values(s.officials).find((o) => o.postId !== null)!;
-    s.officials[seated.id] = { ...seated, status: "dead" };
-    expect(codes(s)).toContain("OFFICIAL_DEAD_SEATED");
+    // 取沈氏一名生成子女，把其 mother 边改指向别族官员。
+    const child = s.kinship.find((k) => k.type === "mother" && state_officialFamily(s, k.toPersonId) === "fam_shen_main")?.fromPersonId
+      ?? s.kinship.find((k) => k.type === "mother")!.fromPersonId;
+    const otherOfficial = Object.values(s.officials).find((o) => o.familyId !== "fam_shen_main")!;
+    s.kinship = s.kinship
+      .filter((k) => !(k.fromPersonId === child && k.type === "mother"))
+      .concat([{ fromPersonId: child, toPersonId: otherOfficial.id, type: "mother" }]);
+    expect(codes(s)).toContain("KIN_FAMILY_MISMATCH");
+  });
+
+  it("catches a daughter reverse edge pointing at a male child", () => {
+    const s = createNewGameState(db, 1);
+    const sonEdge = s.kinship.find((k) => k.type === "son");
+    if (!sonEdge) return; // 该 seed 无男郎则跳过（其它 seed 覆盖）
+    s.kinship = s.kinship.map((k) =>
+      k.fromPersonId === sonEdge.fromPersonId && k.toPersonId === sonEdge.toPersonId && k.type === "son"
+        ? { ...k, type: "daughter" as const }
+        : k,
+    );
+    expect(codes(s)).toContain("KIN_REVERSE_SEX");
+  });
+
+  it("catches maternalClan.familyId disagreeing with birthFamilyId", () => {
+    const s = createNewGameState(db, 1);
+    s.standing["shen_zhibai"] = { ...s.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
+    expect(codes(s)).toContain("CONSORT_CLAN_FAMILY");
+  });
+
+  it("catches a family surname mismatch", () => {
+    const s = createNewGameState(db, 1);
+    const head = s.officials["official_fam_shen_main"]!;
+    s.officials[head.id] = { ...head, surname: "X" };
+    expect(codes(s)).toContain("FAMILY_SURNAME_MISMATCH");
   });
 
   it("catches a record-key / id mismatch", () => {
@@ -118,3 +158,8 @@ describe("validateOfficialWorld", () => {
     expect(codes(s)).toContain("PERSON_DUP_ID");
   });
 });
+
+/** 测试辅助：person 的 canonical 家族（仅取官员/成员，够用）。 */
+function state_officialFamily(s: ReturnType<typeof createNewGameState>, id: string): string | undefined {
+  return s.officials[id]?.familyId ?? s.familyMembers[id]?.familyId;
+}

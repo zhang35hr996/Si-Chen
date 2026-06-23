@@ -81,6 +81,46 @@ describe("readSlot rejects a save with a broken official world", () => {
     }, 1007);
   });
 
+  it("consort birthFamilyId moved to another family while mother edge kept", () => {
+    expectQuarantineAfter((s) => {
+      s.standing["shen_zhibai"] = { ...s.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
+    }, 1008);
+  });
+
+  it("mother edge crossing family lines", () => {
+    expectQuarantineAfter((s) => {
+      const child = s.kinship.find((k) => k.type === "mother")!.fromPersonId;
+      const otherOfficial = Object.values(s.officials).find(
+        (o) => o.familyId !== (s.officials[s.kinship.find((k) => k.fromPersonId === child && k.type === "mother")!.toPersonId]?.familyId),
+      )!;
+      s.kinship = s.kinship
+        .filter((k) => !(k.fromPersonId === child && k.type === "mother"))
+        .concat([{ fromPersonId: child, toPersonId: otherOfficial.id, type: "mother" }]);
+    }, 1009);
+  });
+
+  it("male child with a daughter reverse edge", () => {
+    expectQuarantineAfter((s) => {
+      const sonEdge = s.kinship.find((k) => k.type === "son");
+      if (!sonEdge) {
+        // 兜底：制造一条 daughter 指向男性侍君的边。
+        s.kinship = [...s.kinship, { fromPersonId: "official_fam_shen_main", toPersonId: "shen_zhibai", type: "daughter" }];
+        return;
+      }
+      s.kinship = s.kinship.map((k) =>
+        k.fromPersonId === sonEdge.fromPersonId && k.toPersonId === sonEdge.toPersonId && k.type === "son"
+          ? { ...k, type: "daughter" as const }
+          : k,
+      );
+    }, 1010);
+  });
+
+  it("maternalClan.familyId disagreeing with birthFamilyId", () => {
+    expectQuarantineAfter((s) => {
+      s.standing["shen_zhibai"] = { ...s.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
+    }, 1011);
+  });
+
   it("a clean fresh save still loads", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db, 1);

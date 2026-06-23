@@ -1,13 +1,12 @@
 /**
  * 官员/家族/亲缘的集中完整性校验（spec §14 + review F3/F4）。收集式（不首错即停），每条诊断
- * 带足够上下文。纯函数；供测试、开局自检与存档加载（readSlot）复用。Zod 只管形状，跨集合
- * 不变量一律在此处。
+ * 带足够上下文。纯函数；供测试、开局自检（createNewGameState fail-fast）与存档加载（readSlot）复用。
+ * Zod 只管形状，跨集合不变量一律在此处。
  */
 import type { ContentDB } from "../content/loader";
 import { stateError, type GameError } from "../infra/errors";
 import type { FamilyMemberRole, GameState, PersonSex } from "../state/types";
 import { isValidOfficialAge, isValidParentChildAge, isValidSpouseAge } from "./constraints";
-import { getPalaceRelativesOfOfficial } from "./selectors";
 
 /** 角色（FamilyMember.role）应有的性别。 */
 const ROLE_SEX: Record<FamilyMemberRole, PersonSex> = {
@@ -18,12 +17,34 @@ const ROLE_SEX: Record<FamilyMemberRole, PersonSex> = {
   son: "male",
 };
 
+function consortContent(state: GameState, db: ContentDB, id: string) {
+  const c = db.characters[id] ?? state.generatedConsorts[id];
+  return c && c.kind === "consort" ? c : undefined;
+}
+
 function ageOf(state: GameState, db: ContentDB, personId: string): number | undefined {
   return (
     state.officials[personId]?.age ??
     state.familyMembers[personId]?.age ??
     (db.characters[personId] ?? state.generatedConsorts[personId])?.profile.age
   );
+}
+
+/** 人物性别：官员=女；家族成员看 sex；侍君=男（女尊男侍）。未知返回 undefined。 */
+function sexOf(state: GameState, db: ContentDB, personId: string): PersonSex | undefined {
+  if (state.officials[personId]) return "female";
+  const m = state.familyMembers[personId];
+  if (m) return m.sex;
+  if (consortContent(state, db, personId)) return "male";
+  return undefined;
+}
+
+/** 人物的 canonical 家族归属（唯一真相）：官员/成员看 familyId；侍君看 standing.birthFamilyId。 */
+function canonicalFamilyOf(state: GameState, db: ContentDB, personId: string): string | undefined {
+  if (state.officials[personId]) return state.officials[personId]!.familyId;
+  if (state.familyMembers[personId]) return state.familyMembers[personId]!.familyId;
+  if (consortContent(state, db, personId)) return state.standing[personId]?.birthFamilyId;
+  return undefined;
 }
 
 function personExists(state: GameState, db: ContentDB, personId: string): boolean {
@@ -80,8 +101,9 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     if (!state.officialFamilies[o.familyId]) {
       e("OFFICIAL_BAD_FAMILY", `官员「${o.id}」引用了不存在的家族「${o.familyId}」`, { officialId: o.id, familyId: o.familyId });
     }
-    if (o.status === "dead" && o.postId !== null) {
-      e("OFFICIAL_DEAD_SEATED", `已故官员「${o.id}」仍占官职「${o.postId}」`, { officialId: o.id });
+    // 只有 active 官员可占职（postId 非空）；其余状态占职即错（生命周期前置不变量）。
+    if (o.status !== "active" && o.postId !== null) {
+      e("OFFICIAL_INACTIVE_SEATED", `非在任官员「${o.id}」(${o.status}) 仍占官职「${o.postId}」`, { officialId: o.id, status: o.status });
     }
     if (!isValidOfficialAge(o.age)) {
       e("OFFICIAL_BAD_AGE", `官员「${o.id}」年龄不合规（${o.age}）`, { officialId: o.id, age: o.age });
@@ -102,14 +124,41 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     }
   }
 
-  // ── 侍君 birthFamilyId 指向有效家族 ──
+  // ── 家族 surname 一致：本族官员 + 非内卿母系成员同姓（内卿可异姓赘入） ──
+  for (const fam of Object.values(state.officialFamilies)) {
+    for (const o of Object.values(state.officials)) {
+      if (o.familyId === fam.id && o.surname !== fam.surname) {
+        e("FAMILY_SURNAME_MISMATCH", `家族「${fam.id}」官员「${o.id}」姓「${o.surname}」≠ 族姓「${fam.surname}」`, { familyId: fam.id, officialId: o.id });
+      }
+    }
+    for (const m of Object.values(state.familyMembers)) {
+      if (m.familyId === fam.id && m.role !== "consort_in" && m.surname !== fam.surname) {
+        e("FAMILY_SURNAME_MISMATCH", `家族「${fam.id}」成员「${m.id}」姓「${m.surname}」≠ 族姓「${fam.surname}」`, { familyId: fam.id, memberId: m.id });
+      }
+    }
+  }
+
+  // ── 侍君 birthFamilyId / maternalClan 一致 ──
   for (const [charId, s] of Object.entries(state.standing)) {
     if (s.birthFamilyId !== undefined && !state.officialFamilies[s.birthFamilyId]) {
       e("CONSORT_BAD_FAMILY", `侍君「${charId}」birthFamilyId「${s.birthFamilyId}」无对应家族`, { charId, familyId: s.birthFamilyId });
     }
+    const content = consortContent(state, db, charId);
+    const clan = content?.maternalClan;
+    if (clan) {
+      if (clan.familyId !== s.birthFamilyId) {
+        e("CONSORT_CLAN_FAMILY", `侍君「${charId}」maternalClan.familyId「${clan.familyId}」≠ birthFamilyId「${s.birthFamilyId ?? "无"}」`, { charId });
+      }
+      // 必须存在与关系模型一致的母亲边：consort → 某官员(mother)，且该官员属 clan.familyId。
+      const motherEdge = state.kinship.find((k) => k.fromPersonId === charId && k.type === "mother");
+      const motherFam = motherEdge ? state.officials[motherEdge.toPersonId]?.familyId : undefined;
+      if (!motherEdge || motherFam !== clan.familyId) {
+        e("CONSORT_NO_MOTHER_EDGE", `侍君「${charId}」缺少指向母族「${clan.familyId}」官员的 mother 边`, { charId, familyId: clan.familyId });
+      }
+    }
   }
 
-  // ── 亲缘边：端点存在 / 无重复 / 无矛盾生母 / 母女年龄 / 反向边 / 对称边 ──
+  // ── 亲缘边 ──
   const edgeKey = (from: string, to: string, type: string) => `${from}|${to}|${type}`;
   const present = new Set<string>();
   for (const k of state.kinship) present.add(edgeKey(k.fromPersonId, k.toPersonId, k.type));
@@ -126,22 +175,45 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     seenEdges.add(key);
 
     if (k.type === "mother") {
-      const prev = motherOf.get(k.fromPersonId);
-      if (prev !== undefined && prev !== k.toPersonId) {
-        e("KIN_MULTI_MOTHER", `人物「${k.fromPersonId}」有两个生母（${prev} / ${k.toPersonId}）`, { personId: k.fromPersonId });
+      const child = k.fromPersonId;
+      const mom = k.toPersonId;
+      const prev = motherOf.get(child);
+      if (prev !== undefined && prev !== mom) {
+        e("KIN_MULTI_MOTHER", `人物「${child}」有两个生母（${prev} / ${mom}）`, { personId: child });
       }
-      motherOf.set(k.fromPersonId, k.toPersonId);
-      // 反向边：母→子女（daughter 或 son）。
-      if (!has(k.toPersonId, k.fromPersonId, "daughter") && !has(k.toPersonId, k.fromPersonId, "son")) {
-        e("KIN_NO_REVERSE", `mother 边缺反向 daughter/son（${k.toPersonId} → ${k.fromPersonId}）`, { edge: k });
+      motherOf.set(child, mom);
+
+      // 反向边类型须与 child 实际性别严格匹配：male→son、female→daughter。
+      const childSex = sexOf(state, db, child);
+      if (childSex === "male" && !has(mom, child, "son")) {
+        e("KIN_NO_REVERSE", `male child「${child}」缺正确反向 son 边（${mom}→${child}）`, { edge: k });
       }
-      const childAge = ageOf(state, db, k.fromPersonId);
-      const motherAge = ageOf(state, db, k.toPersonId);
+      if (childSex === "female" && !has(mom, child, "daughter")) {
+        e("KIN_NO_REVERSE", `female child「${child}」缺正确反向 daughter 边（${mom}→${child}）`, { edge: k });
+      }
+
+      // 家族归属一致：child 与 mother 的 canonical familyId 若均定义，必须相等。
+      const cfChild = canonicalFamilyOf(state, db, child);
+      const cfMom = canonicalFamilyOf(state, db, mom);
+      if (cfChild !== undefined && cfMom !== undefined && cfChild !== cfMom) {
+        e("KIN_FAMILY_MISMATCH", `母子家族不一致：「${child}」(${cfChild}) vs 母「${mom}」(${cfMom})`, { edge: k });
+      }
+
+      const childAge = ageOf(state, db, child);
+      const motherAge = ageOf(state, db, mom);
       if (childAge !== undefined && motherAge !== undefined && !isValidParentChildAge(motherAge, childAge)) {
-        e("KIN_BAD_AGE", `母「${k.toPersonId}」(${motherAge}) 与子女「${k.fromPersonId}」(${childAge}) 年龄关系不合理`, { edge: k });
+        e("KIN_BAD_AGE", `母「${mom}」(${motherAge}) 与子女「${child}」(${childAge}) 年龄关系不合理`, { edge: k });
       }
     }
     if (k.type === "daughter" || k.type === "son") {
+      // {from: parent, to: child}：child 性别须与边类型匹配，且有反向 mother 边。
+      const childSex = sexOf(state, db, k.toPersonId);
+      if (k.type === "daughter" && childSex === "male") {
+        e("KIN_REVERSE_SEX", `daughter 边指向男性「${k.toPersonId}」`, { edge: k });
+      }
+      if (k.type === "son" && childSex === "female") {
+        e("KIN_REVERSE_SEX", `son 边指向女性「${k.toPersonId}」`, { edge: k });
+      }
       if (!has(k.toPersonId, k.fromPersonId, "mother")) {
         e("KIN_NO_REVERSE", `${k.type} 边缺反向 mother（${k.toPersonId} → ${k.fromPersonId}）`, { edge: k });
       }
@@ -156,15 +228,6 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       const b = ageOf(state, db, k.toPersonId);
       if (a !== undefined && b !== undefined && !isValidSpouseAge(a, b)) {
         e("KIN_BAD_SPOUSE_AGE", `配偶「${k.fromPersonId}」(${a}) 与「${k.toPersonId}」(${b}) 年龄差不合理`, { edge: k });
-      }
-    }
-  }
-
-  // ── 官员↔宫中亲属反向一致：官员的宫中亲属，其母族必含该官员所属家族 ──
-  for (const o of Object.values(state.officials)) {
-    for (const consortId of getPalaceRelativesOfOfficial(state, o.id)) {
-      if (state.standing[consortId]?.birthFamilyId !== o.familyId) {
-        e("KIN_ASYMMETRIC", `官员「${o.id}」与宫中亲属「${consortId}」家族归属不一致`, { officialId: o.id, consortId });
       }
     }
   }

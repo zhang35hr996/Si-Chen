@@ -68,13 +68,26 @@ describe("assignOfficialPost", () => {
     expect(r.value).toBe(state); // 原样返回
   });
 
-  it("refuses to seat a dead official", () => {
+  it.each(["dead", "retired", "imprisoned", "exiled"] as const)(
+    "refuses to seat a non-active (%s) official to a post",
+    (status) => {
+      const state = createNewGameState(db);
+      const id = Object.keys(state.officials)[0]!;
+      state.officials[id] = { ...state.officials[id]!, status, postId: null };
+      const r = assignOfficialPost(state, db, id, "dianshi");
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.error.code).toBe("OFFICIAL_NOT_ACTIVE");
+    },
+  );
+
+  it("still allows clearing a seat (null) for a non-active official", () => {
     const state = createNewGameState(db);
-    const id = Object.keys(state.officials)[0]!;
-    state.officials[id] = { ...state.officials[id]!, status: "dead", postId: null };
-    const r = assignOfficialPost(state, db, id, "dianshi");
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.error.code).toBe("OFFICIAL_DEAD");
+    const seated = Object.values(state.officials).find((o) => o.postId !== null)!;
+    state.officials[seated.id] = { ...seated, status: "retired" };
+    const r = assignOfficialPost(state, db, seated.id, null);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.officials[seated.id]!.postId).toBeNull();
   });
 });
