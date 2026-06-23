@@ -1571,7 +1571,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             onOpenResources={() => setResourcePanelOpen(true)}
             onOpenStorehouse={() => setStorehouseOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
-            className="location-shell"
+            className="location-shell scene-host-shell"
           >
             <ZichendianScreen
               background={bg.url}

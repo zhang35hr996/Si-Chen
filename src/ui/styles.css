@@ -2621,6 +2621,12 @@ button:active:enabled {
   min-height: 0;
   position: relative;
 }
+/* 承载 SceneShell 的外壳（紫宸殿等）：把 body 设为纵向 flex，使 .scene-shell{flex:1} 真正撑满，
+ * 否则 scene-shell 仅按内容高，动作坞悬在中部、底部留死区（PR2 mobile smoke 发现）。 */
+.scene-host-shell .shell__body {
+  display: flex;
+  flex-direction: column;
+}
 
 /* ── 顶部状态栏 ─────────────────────────────────────────────────── */
 .topbar {
