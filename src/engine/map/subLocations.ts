@@ -17,9 +17,11 @@ export function pickSubLocationEvent(
   subLocationId: string,
 ): GameEventContent | null {
   const loc = db.locations[locationId];
-  // **不按 affordable 过滤**：进入子地点是玩家主动探索（类候见），事件「是否存在」与「是否可承担」须分离——
-  // 否则 AP 不足会被误表现为「此处无事」。可承担性由调用方据 event.apCost 单独判定（见 subLocationEventAffordable）。
-  return getEligibleEvents(db, state, "location_enter")
+  // 候选：本子地点全部 eligible exploration 事件，按 priority desc / id asc 排序。
+  // **不按 affordable 预过滤**：事件「是否存在」与「是否可承担」须分离，否则 AP 不足会被误表现为「此处无事」。
+  // 选取规则（评审 P1）：优先取「最高优先级的可承担事件」；若全部不可承担，退回最高优先级事件，
+  // 让 UI 显真实 AP 原因——避免「高优先级不可承担抢占、可承担低优先级反而不启动」。
+  const candidates = getEligibleEvents(db, state, "location_enter")
     .filter((e) => {
       const p = e.event.presentation;
       return (
@@ -30,7 +32,8 @@ export function pickSubLocationEvent(
       );
     })
     .map((e) => e.event)
-    .sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id))[0] ?? null;
+    .sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id));
+  return candidates.find((event) => subLocationEventAffordable(state, event)) ?? candidates[0] ?? null;
 }
 
 /** 子地点探索事件此刻是否可承担（行动力）。事件存在但不可承担时，UI 应显「行动力不足」而非「普通游览」。 */
