@@ -204,13 +204,94 @@ export interface Resources {
 
 // ── Per-character runtime state ───────────────────────────────────────
 
-/** 朝臣名册条目（轻量运行态）。权势不落字段——由 postId→品级 派生。 */
+/** 官员生命周期状态（本阶段只生成 active；其余为后续升迁/告老/株连预留）。 */
+export type OfficialStatus = "active" | "retired" | "imprisoned" | "exiled" | "dead";
+
+/**
+ * 朝臣名册条目（轻量运行态）。权势不落字段——由 postId→品级 派生（见 officials/power）。
+ * 官员只能是女性（世界观硬约束），故无 sex 字段。postId 可空：官职是稳定席位，
+ * 官员去职/获罪后席位空缺而官职仍在，故 postId 允许 null。familyId 必有（官员必属一族）。
+ */
 export interface Official {
   id: string;
   surname: string;
   givenName: string;
-  postId: string;
-  loyalty: number; // 忠心 0–100
+  /** 占据的官职；null = 无职/空缺（去职后官职仍存于 content，仅席位释放）。 */
+  postId: string | null;
+  loyalty: number; // 忠心 0–100（官员个人，与家族属性分离）
+  age: number; // 入仕年龄约束见 officials/constraints
+  familyId: string; // 所属官员家族（母系实体）
+  status: OfficialStatus; // 本阶段恒为 "active"
+  /** 任职时刻（可空；本阶段开局官员置开局时刻）。 */
+  appointedAt?: GameTime;
+}
+
+/** 官员所属部门（官职归类；驱动名册分组，本阶段不参与数值）。 */
+export type OfficialDepartment =
+  | "chancellery" // 相/政事堂（丞相、三公）
+  | "personnel" // 吏部
+  | "revenue" // 户部
+  | "rites" // 礼部
+  | "military" // 兵部/都督府/卫所
+  | "justice" // 刑部/大理寺
+  | "works" // 工部
+  | "censorate" // 御史台（监察）
+  | "academy" // 太常寺/宗正寺/国子监
+  | "provincial" // 布政/按察/府州县
+  | "none"; // 平民（无部门）
+
+/** 官员家族成员的身份（非官员、非宫中侍君的辅助人物）。 */
+export type FamilyMemberRole =
+  | "matriarch" // 上一代家主/母亲
+  | "consort_in" // 内卿（官员正室，男性）
+  | "daughter" // 女儿
+  | "son" // 男郎（男性子嗣）
+  | "sister"; // 姐妹
+
+export type PersonSex = "female" | "male";
+
+/**
+ * 家族辅助成员（最小人物结构）。统一人物模型缺位时仅为「非官员/非在宫侍君」的近亲建模：
+ * 官员本人用 Official、宫中侍君用 CharacterContent+standing；母亲/内卿/女儿/男郎/姐妹用此。
+ * id 全局唯一且与 Official/角色 id 命名空间隔离（person_*），改名不改 id。
+ */
+export interface FamilyMember {
+  id: string;
+  familyId: string;
+  name: string; // 显示名（姓+名 或 名）
+  surname: string;
+  sex: PersonSex;
+  age: number;
+  role: FamilyMemberRole;
+}
+
+/**
+ * 官员家族（长期政治/亲缘实体）。influence=门第影响、imperialFavor=皇帝整体态度，
+ * 二者与官员个人 loyalty、与官职品级均分离。memberIds 收录该族所有人物 id
+ * （官员 id + 宫中侍君 charId + FamilyMember id）。
+ */
+export interface OfficialFamily {
+  id: string;
+  surname: string;
+  influence: number; // 0–100 家族权势/门第影响（非官职品级）
+  imperialFavor: number; // 0–100 皇帝当前对该族整体态度
+  memberIds: string[]; // 全族人物 id（官员/侍君/家族成员）
+}
+
+/** 亲缘关系类型。语义：`type` 描述「to 相对于 from」的身份（如 mother=「to 是 from 的母亲」）。 */
+export type KinshipType =
+  | "mother" // to 是 from 的母亲
+  | "daughter" // to 是 from 的女儿
+  | "son" // to 是 from 的男郎（子）
+  | "sibling" // to 与 from 互为同胞（对称）
+  | "spouse" // to 与 from 互为配偶（对称）
+  | "close_relative"; // 其它近亲（姨母/姑母…，本阶段预留）
+
+/** 一条有向亲缘边。正反方向均落库（对称关系 sibling/spouse 也存两条等价边）。 */
+export interface KinshipRelation {
+  fromPersonId: string;
+  toPersonId: string;
+  type: KinshipType;
 }
 
 export type ConsortLifecycle = "normal" | "candidate" | "carrying" | "delivered" | "deceased";
@@ -253,6 +334,8 @@ export interface CharacterStanding {
   enteredAtYear?: number;
   /** 身后事记录（死后写入，绝不覆盖生前 rank/title）。 */
   deathRecord?: DeathRecord;
+  /** 母族（官员家族）id；出身平民/良家子则 undefined。开局生成流程统一写入。 */
+  birthFamilyId?: string;
 }
 
 // ── Memory (PR2: 活人感形状) ──────────────────────────────────────────
@@ -443,6 +526,12 @@ export interface GameState {
   /** 殿选运行时生成并落库的侍君（content 之外）；App 合并进 db.characters。 */
   generatedConsorts: Record<string, CharacterContent>;
   officials: Record<string, Official>;
+  /** 官员家族（母系实体）；开局生成，随存档持久化。 */
+  officialFamilies: Record<string, OfficialFamily>;
+  /** 家族辅助成员（母亲/内卿/女儿/男郎/姐妹）；官员与宫中侍君不在此。 */
+  familyMembers: Record<string, FamilyMember>;
+  /** 亲缘关系边（正式可查询，绝不靠姓名临时推断）。 */
+  kinship: KinshipRelation[];
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

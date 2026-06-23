@@ -14,8 +14,8 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 
 describe("SAVE_FORMAT_VERSION = 7（Phase 3 字段引入，旧档隔离）", () => {
-  it("常量已 bump 到 8（T10 eventReactionLog 字段引入）", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(8);
+  it("常量已 bump 到 9（官员家族系统字段引入）", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(9);
   });
 
   it("fresh v7 save round-trips successfully", () => {

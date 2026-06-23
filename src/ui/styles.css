@@ -3952,3 +3952,96 @@ button:active:enabled {
     flex-wrap: wrap;
   }
 }
+
+/* ── 官员名册（调试面板只读入口；列表分组、移动端整行可点） ───────────────── */
+.official-roster__title,
+.official-detail__name {
+  margin: 8px 0 4px;
+  font-size: 15px;
+}
+.official-roster__group {
+  margin-bottom: 10px;
+}
+.official-roster__group-title {
+  margin: 6px 0 2px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+.official-roster__list,
+.official-detail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.official-roster__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px; /* 移动端可点击触达区 */
+  padding: 8px 10px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.official-roster__row:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+.official-roster__name {
+  font-weight: 600;
+}
+.official-roster__post {
+  opacity: 0.9;
+}
+.official-roster__meta {
+  opacity: 0.65;
+  font-size: 12px;
+}
+.official-roster__kin-badge {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(212, 175, 55, 0.25);
+}
+.official-roster__empty,
+.official-detail__empty {
+  opacity: 0.6;
+  font-size: 13px;
+}
+.official-detail__back {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.8;
+  padding: 6px 0;
+}
+.official-detail__section {
+  margin-top: 8px;
+}
+.official-detail__section h4 {
+  margin: 4px 0;
+  font-size: 13px;
+  opacity: 0.75;
+}
+.official-detail__list li {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  align-items: baseline;
+}
+.official-detail__role {
+  min-width: 3em;
+  opacity: 0.7;
+  font-size: 12px;
+}
+.official-detail__member-meta {
+  opacity: 0.6;
+  font-size: 12px;
+}

@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 8;
+export const SAVE_FORMAT_VERSION = 9;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -116,6 +116,11 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   },
   // v5 → v6、v6 → v7 迁移均按 no-save-backcompat 政策省略。
   // 旧档命中缺失的 MIGRATIONS[v] 即 quarantine（pre-release，不保旧档）。
+
+  // v8 → v9: 官员家族系统（officialFamilies/familyMembers/kinship + Official 形状扩展 +
+  // standing.birthFamilyId）。按 no-save-backcompat 政策（pre-release，不保旧档）不写迁移：
+  // v8 旧档命中缺失的 MIGRATIONS[8] 即 quarantine，绝不在加载旧档时重随机一套官员世界。
+  // 新档以 v9 schema round-trip；同一新档重复读写结果稳定。
 
   // v7 → v8: 引入 eventReactionLog 字段（T10）。旧档若缺失此字段补空数组。
   7: (old): SaveEnvelope => {

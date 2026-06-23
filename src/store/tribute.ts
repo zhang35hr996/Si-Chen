@@ -63,7 +63,7 @@ export function buildMinisterTribute(db: ContentDB, state: GameState, seedKey: s
   const itemId = pick(pool, `min:item:${seedKey}`);
   if (!itemId) return null;
   const official = officials[gestationRoll(`min:who:${seedKey}`) % officials.length]!;
-  const postName = db.officialPosts[official.postId]?.name ?? "大臣";
+  const postName = (official.postId ? db.officialPosts[official.postId]?.name : undefined) ?? "大臣";
   const name = db.items[itemId]!.name;
   return {
     speakerId: "cheng_feng",

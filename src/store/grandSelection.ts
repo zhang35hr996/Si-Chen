@@ -108,8 +108,9 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
       fatherOfficialId = officialIds[gestationRollRaw(`${seed}:father`) % officialIds.length]!;
       const father = state.officials[fatherOfficialId]!;
       surname = father.surname;
-      grade = db.officialPosts[father.postId]?.gradeOrder ?? "commoner";
-      const postName = db.officialPosts[father.postId]?.name ?? "官员";
+      const fatherPost = father.postId ? db.officialPosts[father.postId] : undefined;
+      grade = fatherPost?.gradeOrder ?? "commoner";
+      const postName = fatherPost?.name ?? "官员";
       announce = `${postName}之男 ${surname}${givenName}，年${chineseNumeral(age)}。`;
     } else {
       surname = pick(ARISTOCRATIC_SURNAME_POOL, `${seed}:surname`);
