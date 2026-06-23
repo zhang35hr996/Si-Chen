@@ -336,9 +336,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   /** Checkpoint wiring: time_advance (after a rollover) wins over location_enter. */
   const runCheckpoints = (rolledOver: boolean, stayOnMap = false) => {
     const state = store.getState();
+    // 出宫/在城内地图（stayOnMap）时玩家并未进入紫宸殿等房间，playerLocation 只是
+    // 未变的留痕；此时不可触发 location_enter 事件（否则刚点宫门就被司礼祭仪等
+    // 房间事件拦下），仅允许跨月 time_advance 事件。
     const pick =
       (rolledOver ? pickNextEvent(db, state, "time_advance") : null) ??
-      pickNextEvent(db, state, "location_enter");
+      (stayOnMap ? null : pickNextEvent(db, state, "location_enter"));
     if (pick) startEvent(pick.id);
     // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在京城地图板，
     // 不能按 playerLocation 切回房间视图。
