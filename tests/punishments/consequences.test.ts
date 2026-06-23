@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { planPunishmentConsequences } from "../../src/engine/punishments/consequencePlanner";
 import { getPersonalityModifier } from "../../src/engine/punishments/personalityModifiers";

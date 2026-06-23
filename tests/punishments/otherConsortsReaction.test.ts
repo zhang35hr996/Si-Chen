@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { evaluateOtherConsortReactions } from "../../src/engine/punishments/otherConsortsReaction";
 import { loadRealContent } from "../helpers/contentFixture";
-import { toGameTime, makeGameTime } from "../../src/engine/calendar/time";
+import { toGameTime } from "../../src/engine/calendar/time";
 import type { PunishmentOutcomeContext } from "../../src/engine/punishments/types";
 import type { ConfinementEffect } from "../../src/engine/state/types";
 

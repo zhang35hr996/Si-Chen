@@ -42,6 +42,12 @@ export function punishmentSeverity(kind: PunishmentKind): PunishmentSeverity {
 
 // ── Context passed to the consequence planner ────────────────────────────────
 
+/**
+ * Full context used internally by planPunishmentConsequences.
+ * Callers of the GameStore entry points (applyImperialPunishmentWithConsequences /
+ * applyPunitiveRankChangeWithConsequences) supply only PunishmentMeta; the store
+ * derives targetId / kind / severity / occurredAt from the validated command.
+ */
 export interface PunishmentOutcomeContext {
   /** Stable ID for this punishment event (used as RNG seed component). */
   punishmentId: string;
@@ -55,6 +61,17 @@ export interface PunishmentOutcomeContext {
   sourceLocation?: string;
   /** Publicity of the case; affects what other consorts can react to. */
   publicity?: "secret" | "palace" | "public";
+}
+
+/**
+ * Minimal caller-supplied metadata for the GameStore punitive entry points.
+ * targetId / kind / severity / occurredAt are derived from the validated command.
+ */
+export interface PunishmentMeta {
+  punishmentId: string;
+  caseId?: string;
+  publicity?: "secret" | "palace" | "public";
+  sourceLocation?: string;
 }
 
 // ── Consequence plan returned by the planner ─────────────────────────────────

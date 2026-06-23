@@ -69,11 +69,13 @@ export function validateEffects(
         }
         break;
       }
-      case "memory":
-        if (!db.characters[e.char] || !state.memories[e.char]) {
+      case "memory": {
+        const memChar = db.characters[e.char] ?? state.generatedConsorts[e.char];
+        if (!memChar || !state.memories[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `unknown memory target "${e.char}"`, { char: e.char });
         }
         break;
+      }
       case "resource":
       case "set_bloodline_status":
       case "flag":

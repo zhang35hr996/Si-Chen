@@ -478,13 +478,28 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   const applyRankOp = (charId: string, req: RankOpRequest, origin: "normal" | "first_night") => {
-    const op = buildRankOp(db, store.getState(), charId, req, { kind: "sovereign", actorId: "player" as const });
+    const state = store.getState();
+    const op = buildRankOp(db, state, charId, req, { kind: "sovereign", actorId: "player" as const });
     setRankAdmin(null);
     let outcome: "no_op" | "failed" | "reaction_created";
     if (!op) {
       reopenConsortListIfReturning(); // 无变化：直接回到列表
       outcome = "no_op";
+    } else if (op.kind === "demote" || op.kind === "strip_title") {
+      // 惩罚性降位/褫号 — 触发后果规划器并播放旁观者反应
+      const punishmentId = `rank:${charId}:${state.calendar.dayIndex}`;
+      const result = store.applyPunitiveRankChangeWithConsequences(db, charId, req, { punishmentId });
+      if (result.ok) {
+        doAutosave();
+        const { baseLine, reactionBeats } = result.value;
+        playReactions([{ speakerId: charId, lines: [baseLine] }, ...reactionBeats], null);
+        outcome = "reaction_created";
+      } else {
+        reopenConsortListIfReturning();
+        outcome = "failed";
+      }
     } else {
+      // 普通位分管理（册封/晋升）——不触发惩罚后果
       const result = store.applyEffects(db, op.effects);
       if (result.ok) {
         doAutosave();
@@ -519,23 +534,37 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   /** 惩罚命令（禁足/解除/赐死）统一入口；紫宸殿与侍君宫殿共用。 */
   const applyImperialCommand = (charId: string, command: ImperialCommand) => {
     setPunishCharId(null);
-    const result = store.applyImperialCommand(db, command);
-    if (result.ok) {
-      doAutosave();
-      // 禁足令：若在该侍君宫殿内，播完反应后需离宫（宫门已闭不能再留）。
-      if (command.type === "impose_confinement") {
-        const state = store.getState();
-        const charHome = state.standing[charId]?.residence ??
-          ((db.characters[charId] ?? state.generatedConsorts[charId])?.defaultLocation);
-        if (charHome && state.playerLocation === charHome) {
-          setPunishGoHome(true);
+
+    if (command.type === "impose_confinement" || command.type === "execute") {
+      // 惩罚性命令 — 触发后果规划器（fear/loyalty/旁观者反应）
+      const state = store.getState();
+      const punishmentId = `${command.type}:${charId}:${state.calendar.dayIndex}`;
+      const result = store.applyImperialPunishmentWithConsequences(db, command, { punishmentId });
+      if (result.ok) {
+        doAutosave();
+        if (command.type === "impose_confinement") {
+          const newState = store.getState();
+          const charHome = newState.standing[charId]?.residence ??
+            ((db.characters[charId] ?? newState.generatedConsorts[charId])?.defaultLocation);
+          if (charHome && newState.playerLocation === charHome) {
+            setPunishGoHome(true);
+          }
+          if (summonedConsortId === charId) setSummonedConsortId(null);
         }
-        // 若禁足者正在被召至紫宸殿，立即清除（宫门已锁，无法应召）。
-        if (summonedConsortId === charId) setSummonedConsortId(null);
+        const { baseLine, reactionBeats } = result.value;
+        playReactions([{ speakerId: charId, lines: [baseLine] }, ...reactionBeats], null);
+      } else {
+        reopenConsortListIfReturning();
       }
-      setReaction({ speakerId: charId, lines: result.value.lines });
     } else {
-      reopenConsortListIfReturning();
+      // 非惩罚性指令（lift_confinement 等）— 不触发后果规划
+      const result = store.applyImperialCommand(db, command);
+      if (result.ok) {
+        doAutosave();
+        setReaction({ speakerId: charId, lines: result.value.lines });
+      } else {
+        reopenConsortListIfReturning();
+      }
     }
   };
 

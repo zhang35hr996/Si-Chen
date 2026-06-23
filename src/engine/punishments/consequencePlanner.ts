@@ -47,9 +47,6 @@ const BASELINES: Record<string, {
   execution:            { affection: [0, 0],     fear: [0, 0],    loyalty: [0, 0],   health: [0, 0] }, // death pipeline handles
 };
 
-function clamp(v: number): number {
-  return Math.min(100, Math.max(0, Math.round(v)));
-}
 
 // ── Target effect builder ─────────────────────────────────────────────────────
 
@@ -97,7 +94,7 @@ function buildTargetEffects(
     effects.push({ type: "adjust_consort_attr", char: ctx.targetId, field: "fear",      delta: fearDelta });
   }
   if (loyaltyDelta !== 0) {
-    effects.push({ type: "adjust_consort_attr", char: ctx.targetId, field: "loyalty",   delta: clamp(loyaltyDelta) - 100 > 50 ? loyaltyDelta : loyaltyDelta });
+    effects.push({ type: "adjust_consort_attr", char: ctx.targetId, field: "loyalty",   delta: loyaltyDelta });
   }
   if (ambitionDelta !== 0) {
     effects.push({ type: "adjust_consort_attr", char: ctx.targetId, field: "ambition",  delta: ambitionDelta });
@@ -106,52 +103,10 @@ function buildTargetEffects(
     effects.push({ type: "set_consort_health", char: ctx.targetId, healthDelta });
   }
 
-  // Target memory
-  // attrs available for future memory content personalisation
-  const memoryKind = ctx.kind === "strip_title" || ctx.kind === "rank_demotion" ? "grievance" : "trauma";
-  const memoryStrength = ctx.severity === "terminal" ? 100 : ctx.severity === "severe" ? 85 : ctx.severity === "moderate" ? 70 : 55;
-  const memoryText = targetMemoryText(ctx.kind);
-
-  effects.push({
-    type: "memory",
-    char: ctx.targetId,
-    entry: {
-      kind: memoryKind,
-      summary: memoryText,
-      strength: memoryStrength,
-      retention: ctx.severity === "severe" || ctx.severity === "terminal" ? "permanent" : "slow",
-      subjectIds: ["player", ctx.targetId],
-      perspective: "target",
-      triggerTags: ["punishment", ctx.kind, "player"],
-      unresolved: true,
-      emotions: emotionsForKind(ctx.kind),
-    },
-  });
+  // Target memory is written by the base command (imperialCommands / buildRankOp);
+  // the consequence planner must NOT add a second memory to avoid duplicates.
 
   return effects;
-}
-
-function targetMemoryText(kind: string): string {
-  switch (kind) {
-    case "strip_title":           return "陛下下令褫夺我封号，此事刻骨难忘。";
-    case "rank_demotion":         return "陛下降我位分，昔日风光已成过往。";
-    case "finite_confinement":    return "陛下令我禁足，我困于宫室，不知何日方休。";
-    case "indefinite_confinement":return "陛下命我无诏不得出，此禁令如同囚笼。";
-    case "cold_palace":           return "陛下将我打入冷宫，废为庶人，往日一切已成空。";
-    case "execution":             return ""; // death pipeline handles memory
-    default:                      return "陛下降旨处分，我铭记于心。";
-  }
-}
-
-function emotionsForKind(kind: string): Partial<Record<string, number>> {
-  switch (kind) {
-    case "strip_title":           return { shame: 40, grief: 20 };
-    case "rank_demotion":         return { shame: 50, grief: 30 };
-    case "finite_confinement":    return { fear: 50, grief: 30 };
-    case "indefinite_confinement":return { fear: 65, grief: 40 };
-    case "cold_palace":           return { fear: 70, grief: 60, anger: 20 };
-    default:                      return { fear: 40 };
-  }
 }
 
 // ── Chronicle draft ───────────────────────────────────────────────────────────

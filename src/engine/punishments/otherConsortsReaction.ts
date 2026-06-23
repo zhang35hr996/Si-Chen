@@ -118,9 +118,9 @@ function bystanterEffects(
 // ── Bystander memory summary ──────────────────────────────────────────────────
 
 function bystanterMemorySummary(reactionKind: PunishmentReactionKind, publicity: string): string {
-  // Never leak non-public case details; only what the publicity permits
+  // secret hides the crime/evidence, NOT the target's identity.
   const what = publicity === "secret"
-    ? "宫中有人突然受罚，原因不明。"
+    ? "某侍君突然受罚，缘由未明。"
     : "宫中有人因事获罪受罚。";
 
   switch (reactionKind) {
@@ -258,7 +258,7 @@ export function evaluateOtherConsortReactions(
         summary: bystanterMemorySummary(reactionKind, publicity),
         strength: ctx.severity === "severe" || ctx.severity === "terminal" ? 60 : 40,
         retention: "fast",
-        subjectIds: publicity === "secret" ? ["player"] : ["player", ctx.targetId],
+        subjectIds: ["player", ctx.targetId],
         perspective: "witness",
         triggerTags: ["punishment", ctx.kind],
         unresolved: reactionKind === "plead_intent" || reactionKind === "revenge_intent",
