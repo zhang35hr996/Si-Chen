@@ -17,7 +17,7 @@ import type { ReactionPlan } from "./reactionTypes";
 import { eventToReactionContext } from "./eventReaction";
 import { selectReactionEvent } from "./eventReaction";
 import { deriveSubjectRelation } from "./subjectRelation";
-import { DEFAULT_DISPOSITION } from "./disposition";
+import { DEFAULT_DISPOSITION, deriveDisposition } from "./disposition";
 import { planReaction } from "./planReaction";
 import type { AudienceContext, AudienceRole } from "./reactionTypes";
 
@@ -53,12 +53,16 @@ function classifyAudienceRole(state: GameState, audienceId: string): AudienceRol
  *   - the selected event yields no EventReactionContext (should not happen in
  *     practice — selectReactionEvent already filters these out)
  *
- * Disposition: uses DEFAULT_DISPOSITION because personality traits are not
- * available at this layer (ContentDB not in scope). Callers with full content
- * context may post-process or override the plan.
+ * Disposition: derived from the speaker's authored personalityTraits when
+ * supplied (deriveDisposition); falls back to DEFAULT_DISPOSITION otherwise.
  *
- * SubjectRelation: derives from state.standing[subjectId].affection (runtime
- * dynamic signal) with no authored attitude (neutral baseline).
+ * SubjectRelation: derived from the speaker's authored stance toward the event
+ * subject (PR-A item 5). The previous code read state.standing[subjectId].affection
+ * — that is the subject's OWN affection toward the sovereign, NOT the speaker's
+ * relation to the subject, so it is intentionally no longer consulted here.
+ *
+ * Audience: privacy and present-cast flow from the caller (PR-A item 3) rather
+ * than being hardcoded to semi_private / [audienceId].
  */
 export function buildReactionPlan(args: {
   speakerId: string;
@@ -68,6 +72,14 @@ export function buildReactionPlan(args: {
   state: GameState;
   currentDayIndex: number;
   sceneDirective?: string;
+  /** Speaker's authored personality traits → social disposition. */
+  personalityTraits?: readonly string[];
+  /** Speaker's authored stances → relation to the event subject. */
+  stances?: readonly { charId: string; attitude: string }[];
+  /** Real scene cast; defaults to [audienceId]. */
+  presentCharacterIds?: readonly string[];
+  /** Real scene privacy; defaults to "semi_private". */
+  privacy?: "public" | "semi_private" | "private";
 }): BuiltReaction | undefined {
   const { speakerId, audienceId, knownEventsAll, chronicle, state, currentDayIndex, sceneDirective } = args;
 
@@ -88,23 +100,24 @@ export function buildReactionPlan(args: {
   const reactionCtx = eventToReactionContext(event);
   if (reactionCtx === undefined) return undefined; // guard — should not happen after selectReactionEvent
 
-  // 3. Derive SubjectRelation from runtime state (no authored stances at this layer)
+  // 3. Derive SubjectRelation from the speaker's authored stance toward the subject.
   const subjectId = reactionCtx.subjectId;
-  const standingAffection = state.standing[subjectId]?.affection;
+  const authoredAttitude = args.stances?.find((s) => s.charId === subjectId)?.attitude;
   const { relation } = deriveSubjectRelation({
     charId: subjectId,
-    standingAffection,
-    // No authoredAttitude — neutral baseline without ContentDB
+    ...(authoredAttitude !== undefined ? { authoredAttitude } : {}),
   });
 
-  // 4. Use DEFAULT_DISPOSITION (personality traits not available without ContentDB)
-  const disposition = DEFAULT_DISPOSITION;
+  // 4. Derive disposition from the speaker's personality traits (fallback to default).
+  const disposition = args.personalityTraits
+    ? deriveDisposition(args.personalityTraits).disposition
+    : DEFAULT_DISPOSITION;
 
-  // 5. Build AudienceContext (planReaction uses AudienceContext, not DialogueAudienceContext)
+  // 5. Build AudienceContext from the real scene (planReaction uses AudienceContext).
   const audience: AudienceContext = {
     targetRole: classifyAudienceRole(state, audienceId),
-    privacy: "semi_private",
-    presentCharacterIds: [audienceId],
+    privacy: args.privacy ?? "semi_private",
+    presentCharacterIds: args.presentCharacterIds ? [...args.presentCharacterIds] : [audienceId],
   };
 
   // 6. Build the ReactionPlan

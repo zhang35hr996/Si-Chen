@@ -113,6 +113,11 @@ export function assembleDialogueRequest(
     state,
     currentDayIndex: now.dayIndex,
     sceneDirective: options.sceneDirective,
+    // Real disposition / relation / audience (PR-A items 3+4+5)
+    personalityTraits: character.profile.personalityTraits,
+    stances: character.stances ?? [],
+    presentCharacterIds,
+    privacy: options.privacy ?? "semi_private",
   });
 
   // 2. Select prompt events BEFORE assembleClaims (pinned event always first)
