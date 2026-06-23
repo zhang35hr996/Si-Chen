@@ -174,8 +174,20 @@ describe("App settlement wiring source contract (no jsdom)", () => {
   });
 
   it("dialogue ops are invalidated on new game / load / settings load / death (and return-to-title)", () => {
-    const bumps = appSrc.match(/dialogueOpRef\.current = invalidateDialogueOps\(/g) ?? [];
-    expect(bumps.length).toBeGreaterThanOrEqual(4);
+    // 失效统一收口于 invalidateDialogue()（纪元自增 + 清 dialogueInFlight + 清续接 token/UI pending）。
+    // 助手内含唯一一次 invalidateDialogueOps 调用，且在 ≥4 个生命周期点被调用。
+    expect(appSrc).toMatch(/const invalidateDialogue = \(\) => \{[\s\S]*invalidateDialogueOps\(dialogueOpRef\.current\)[\s\S]*choiceOpTokenRef\.current = null[\s\S]*setChoicePendingToken\(null\)/);
+    const callSites = appSrc.match(/invalidateDialogue\(\)/g) ?? [];
+    expect(callSites.length).toBeGreaterThanOrEqual(4); // 新游戏/读档/设置内读档/驾崩/回标题
+  });
+
+  it("choice continuation UI pending is token-owned, released by lifecycle invalidation and owner-only finally", () => {
+    // P1 (re-review): choicePending must not be an un-owned boolean.
+    expect(appSrc).toContain("const choiceOpTokenRef = useRef<number | null>(null)");
+    expect(appSrc).toMatch(/setChoicePendingToken\(opToken\)/); // continuation claims the UI pending by token
+    expect(appSrc).not.toContain("choiceInFlightRef"); // the un-owned boolean gate is gone
+    // owner-scoped finally: only the holder of opToken clears the UI pending
+    expect(appSrc).toMatch(/if \(choiceOpTokenRef\.current === opToken\) \{[\s\S]*setChoicePendingToken\(null\)/);
   });
 });
 

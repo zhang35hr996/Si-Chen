@@ -234,9 +234,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
   const converseTranscriptRef = useRef<{ speaker: string; text: string }[]>([]);
-  // Single-flight guard for onConverseChoice — prevents concurrent choice requests.
-  const choiceInFlightRef = useRef(false);
-  const [choicePending, setChoicePending] = useState(false);
+  // 续接（onConverseChoice）的 UI pending 也归 token 所有：choiceOpTokenRef=当前续接 op 的 token（同步 owner 判定），
+  // choicePendingToken!==null 驱动 ReactionScreen 禁用选项。并发门只由 startDialogueOp（activeOp!=null 即拒）把守，
+  // 不再用独立布尔。生命周期失效（invalidateDialogue）立即清两者；旧续接的 finally 仅在仍持有同一 token 时清。
+  const choiceOpTokenRef = useRef<number | null>(null);
+  const [choicePendingToken, setChoicePendingToken] = useState<number | null>(null);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   // BGM effect: compute zone defensively (content may not be ok)
@@ -407,6 +409,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (storage) autosave(storage, db, store.getState(), { logger });
   };
 
+  /**
+   * 生命周期作废（新游戏/读档/驾崩/回标题）统一收口：纪元自增使任何进行中 token 永不再 current，并**立即**
+   * 解除对话/续接的 in-flight 与 UI pending（不等旧 provider promise settle）。旧续接的 finally 因 token 不再
+   * current 而不会清新会话状态。
+   */
+  const invalidateDialogue = () => {
+    dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current);
+    setDialogueInFlight(false);
+    choiceOpTokenRef.current = null;
+    setChoicePendingToken(null);
+  };
+
   /** 若管理/搬迁是从「查看侍君」列表进入的，操作结束后重开列表（定位到该侍君）。 */
   const reopenConsortListIfReturning = () => {
     if (consortListReturnId) setConsortListOpen(true);
@@ -468,7 +482,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       pendingReactionDispatch({ type: "clear" });
       setRankAdmin(null);
       timeSettlementDispatch({ type: "clear" });
-      dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); // 作废 await 中的旧对话
+      invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
       if (store.getState().gameOver) {
         setContinueError("先帝已崩，请开新局。");
@@ -677,7 +691,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
     timeSettlementDispatch({ type: "clear" });
-    dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); // 作废 await 中的旧对话
+    invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     doAutosave();
     setView("title");
   };
@@ -711,7 +725,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
     timeSettlementDispatch({ type: "clear" });
-    dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); // 作废 await 中的旧对话
+    invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     setView("coronation");
   };
 
@@ -1065,7 +1079,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     storehouseOpen,
     profileOpen: profileCharId !== null,
     settingsOpen,
-    choicePending,
+    choicePending: choicePendingToken !== null,
     globalInterruptActive: activeGlobalInterrupt !== null,
   });
 
@@ -1233,17 +1247,15 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // No extra AP is spent here — AP was already spent in converse().
   const onConverseChoice = useCallback(async (choice: { id: string; text: string; tone?: string }) => {
     if (!dialogueProvider || !reaction?.generatedLine) return;
-    // Single-flight guard: prevent concurrent choice requests (double-tap, etc.)
-    if (choiceInFlightRef.current) return;
-    // 续接也是一次 provider request：纳入对话操作所有权。首轮 converse 的 op 已收尾，此处重新认领唯一 token；
-    // 若 await 期间发生新游戏/读档/驾崩（invalidateDialogueOps 自增纪元），token 不再 current → 丢弃本次完成：
-    // 不提交 state、不设置反应、不清新 operation 的忙碌位。杜绝旧 choice 让新会话长期保持忙碌。
+    // 续接也是一次 provider request：纳入对话操作所有权。并发门只由 startDialogueOp 把守（activeOp!=null → 拒绝），
+    // 不再用独立布尔（杜绝失效后旧布尔卡死新续接）。若 await 期间发生新游戏/读档/驾崩（invalidateDialogue 自增纪元、
+    // 清 choice token），token 不再 current → 丢弃本次完成：不提交 state、不设反应、不清新会话的忙碌位与 UI pending。
     const started = startDialogueOp(dialogueOpRef.current);
-    if (started.token === null) return; // 已有活动对话操作：拒绝并发
+    if (started.token === null) return; // 已有活动对话操作（含正在进行的续接）：拒绝并发
     dialogueOpRef.current = started.state;
     const opToken = started.token;
-    choiceInFlightRef.current = true;
-    setChoicePending(true);
+    choiceOpTokenRef.current = opToken;
+    setChoicePendingToken(opToken);
     setDialogueInFlight(true);
 
     const currentLine = reaction.generatedLine;
@@ -1288,11 +1300,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       // Update reaction state with the new generated line; carry decree beats from the queue
       setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
     } finally {
-      // 仅当 token 仍是当前操作才释放忙碌位（旧操作绝不清新操作的 in-flight）；choiceInFlight 始终复位。
+      // 全程 owner-scoped 收尾：仅当本 token 仍是当前 op 才释放忙碌位 + UI pending；旧（已失效/被接管的）续接
+      // 绝不清新会话的 dialogueInFlight / choicePending。生命周期失效已由 invalidateDialogue 即时清两者。
       dialogueOpRef.current = finishDialogueOp(dialogueOpRef.current, opToken);
       if (dialogueOpRef.current.activeOp === null) setDialogueInFlight(false);
-      choiceInFlightRef.current = false;
-      setChoicePending(false);
+      if (choiceOpTokenRef.current === opToken) {
+        choiceOpTokenRef.current = null;
+        setChoicePendingToken(null);
+      }
     }
   }, [dialogueProvider, reaction, store, db, logger]);
 
@@ -1855,7 +1870,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           backgroundKey={reaction.backgroundKey}
           generatedLine={reaction.generatedLine}
           onChoice={reaction?.generatedLine && dialogueProvider ? onConverseChoice : undefined}
-          choicePending={choicePending}
+          choicePending={choicePendingToken !== null}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {
@@ -2199,8 +2214,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); setSettingsOpen(false); enterCurrentLocation(); }}
-          onReturnTitle={() => { doAutosave(); dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current); setDialogueInFlight(false); setSettingsOpen(false); setView("title"); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
       )}

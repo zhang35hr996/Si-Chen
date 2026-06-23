@@ -90,12 +90,82 @@ describe("continuation turn ownership (onConverseChoice protocol)", () => {
   });
 
   it("5. after a stale continuation, a fresh session can still start (no permanent lock)", () => {
-    // models that choiceInFlightRef is always cleared in finally, so the op machine is the only gate
+    // models that the op machine is the only concurrency gate (no separate boolean to get stuck)
     const first = startDialogueOp(initialDialogueOpState);
     let s = finishDialogueOp(first.state, first.token!);
     const cont = startDialogueOp(s);
     s = invalidateDialogueOps(cont.state); // stale; activeOp cleared by invalidation
     const next = startDialogueOp(s);
     expect(next.token).not.toBeNull(); // a new conversation is not blocked by the orphaned old one
+  });
+});
+
+/**
+ * 续接 UI pending 的 token 所有权（onConverseChoice 协议）。choicePendingToken 与 choiceOpTokenRef 都绑到
+ * 续接 op 的 token；生命周期失效（invalidateDialogue）立即清两者；旧续接 finally 仅在仍持有同一 token 时清，
+ * 绝不清新会话。下方小型模拟精确复刻 App 的并发门 + owner-scoped 收尾，覆盖评审要求的交错场景。
+ */
+describe("choice-pending token ownership (onConverseChoice UI state)", () => {
+  // 模拟 App 三态：dialogueOp 状态机 + choiceOpTokenRef（同步 owner 判定）+ choicePendingToken（渲染用）。
+  function makeApp() {
+    let op: DialogueOpState = initialDialogueOpState;
+    let choiceOpToken: number | null = null; // choiceOpTokenRef.current
+    let choicePendingToken: number | null = null; // setChoicePendingToken
+    return {
+      get pending() { return choicePendingToken; },
+      get activeOp() { return op.activeOp; },
+      /** 启动续接：并发门=startDialogueOp（activeOp!=null → 返回 null 表示被拒）。 */
+      startChoice(): number | null {
+        const s = startDialogueOp(op);
+        if (s.token === null) return null; // rejected — no second provider call
+        op = s.state;
+        choiceOpToken = s.token;
+        choicePendingToken = s.token;
+        return s.token;
+      },
+      /** 生命周期失效：立即清 UI pending（不等旧 promise settle）。 */
+      invalidate() {
+        op = invalidateDialogueOps(op);
+        choiceOpToken = null;
+        choicePendingToken = null;
+      },
+      /** 续接 finally：owner-scoped——仅在仍持有同一 token 时清。 */
+      finishChoice(token: number) {
+        op = finishDialogueOp(op, token);
+        if (choiceOpToken === token) { choiceOpToken = null; choicePendingToken = null; }
+      },
+    };
+  }
+
+  it("lifecycle invalidate immediately releases the old choice's UI pending (no wait for the promise)", () => {
+    const app = makeApp();
+    const a = app.startChoice()!;
+    expect(app.pending).toBe(a);
+    app.invalidate(); // before A's promise settles
+    expect(app.pending).toBeNull(); // released immediately
+    expect(a).not.toBeNull();
+  });
+
+  it("interleave: A pending → invalidate → B starts → stale A finally → B stays pending → B finishes → only B clears", () => {
+    const app = makeApp();
+    const a = app.startChoice()!; // choice A pending
+    app.invalidate(); // lifecycle switch
+    const b = app.startChoice()!; // choice B starts
+    expect(b).not.toBe(a);
+    expect(app.pending).toBe(b); // B owns the UI pending
+
+    app.finishChoice(a); // stale A's finally runs
+    expect(app.activeOp).toBe(b); // B remains active
+    expect(app.pending).toBe(b); // B remains pending — A could not clear it
+
+    app.finishChoice(b); // B finishes
+    expect(app.activeOp).toBeNull();
+    expect(app.pending).toBeNull(); // only B cleared its own state
+  });
+
+  it("a second choice while one is pending is rejected by the op gate (no separate boolean)", () => {
+    const app = makeApp();
+    app.startChoice();
+    expect(app.startChoice()).toBeNull(); // double-tap rejected
   });
 });
