@@ -3584,6 +3584,8 @@ button:active:enabled {
   letter-spacing: 0.08em;
 }
 .zichendian-summoned__role { color: var(--muted); font-size: 0.85rem; }
+.zichendian-summoned__actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.zichendian-summoned__actions .action-btn { min-height: 44px; }
 .zichendian-actions__reason { color: var(--cinnabar-soft); font-size: 0.8rem; align-self: center; }
 /* 动作坞：44px 触控目标，随 .scene-shell__actions 的 flex-wrap 防横向溢出与 safe-area 内边距。 */
 .scene-shell__actions .action-btn { min-height: 44px; }

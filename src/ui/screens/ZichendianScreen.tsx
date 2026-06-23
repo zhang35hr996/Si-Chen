@@ -42,6 +42,10 @@ export interface ZichendianScreenProps {
   pendingAudienceItems: readonly PendingAudienceViewItem[];
 
   summonedConsort?: ZichendianSummonedView;
+  /** 被召见侍君的「叙话」入口（普通互动路径，可选；不可叙话时父层省略以隐藏按钮）。 */
+  onConverseSummonedConsort?: () => void;
+  /** 被召见侍君的「告退」结束入口（可选；提供时渲染告退按钮，由父层清 summoned 态）。 */
+  onDismissSummonedConsort?: () => void;
 
   /** 当前场景是否可被打断而传乘风；false → 传乘风入口禁用并显 interruptDisabledReason。透传给乘风，不在屏内重算。 */
   interruptible: boolean;
@@ -79,6 +83,8 @@ export function ZichendianScreen({
   activeAudience,
   pendingAudienceItems,
   summonedConsort,
+  onConverseSummonedConsort,
+  onDismissSummonedConsort,
   interruptible,
   interruptDisabledReason,
   busy = false,
@@ -137,6 +143,20 @@ export function ZichendianScreen({
             <span className="zichendian-summoned__name">{summonedConsort.name}</span>
             {summonedConsort.role && <span className="zichendian-summoned__role">{summonedConsort.role}</span>}
           </p>
+          {(onConverseSummonedConsort || onDismissSummonedConsort) && (
+            <div className="zichendian-summoned__actions">
+              {onConverseSummonedConsort && (
+                <button type="button" className="action-btn" onClick={onConverseSummonedConsort} disabled={screenActionsLocked}>
+                  叙话
+                </button>
+              )}
+              {onDismissSummonedConsort && (
+                <button type="button" className="action-btn" onClick={onDismissSummonedConsort} disabled={screenActionsLocked}>
+                  告退
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
       <p className="zichendian-summary__line">候见之人 {audienceCount}</p>

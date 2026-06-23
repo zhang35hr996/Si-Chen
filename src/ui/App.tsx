@@ -40,8 +40,28 @@ import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees } from "../engine/characters/greeting";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
-import { monthOrdinal, isGreetingSlot } from "../engine/calendar/time";
+import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
+import {
+  audienceCount,
+  audienceReconciliationEffects,
+  clearAudience,
+  defer,
+  deferredAudienceCount,
+  getAudienceQueue,
+  getDeferredAudienceQueue,
+} from "../engine/events/audience";
+import { GameShell } from "./components/GameShell";
+import { breadcrumbFor } from "./components/breadcrumb";
+import { ZichendianScreen } from "./screens/ZichendianScreen";
+import {
+  audienceItemToPendingView,
+  audienceItemToView,
+  selectActiveAudience,
+  shouldClearAudienceOnCommit,
+  summonedConsortToView,
+  zichendianExternalBusy,
+} from "./zichendianView";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue/orchestrator";
@@ -115,7 +135,7 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian";
 
 /**
  * 可安全消费大选 prompt/报告的自由活动视图（地图 + 各宫房间）。pendingDaxuan 由引擎持久
@@ -314,9 +334,25 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     maybeAutumnHunt();
   };
 
+  /**
+   * 进紫宸殿：先在「进入时」对账（清掉属本殿但已不合法的 pending），再进专用屏。
+   * 仅本 host 对账（audienceReconciliationEffects 内部跳过他 host）；不在渲染期、不在每次状态更新的宽 effect 里跑。
+   * 普通进入与事件语义返回都经此（reconcile-on-entry）。
+   */
+  const enterZichendianView = () => {
+    setSummonedConsortId(null);
+    const effects = audienceReconciliationEffects(db, store.getState(), "zichendian");
+    if (effects.length > 0) {
+      const applied = store.applyEffects(db, effects);
+      if (applied.ok) doAutosave();
+    }
+    setView("zichendian");
+  };
+
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
+    if (loc === "zichendian") { enterZichendianView(); return; }
     if (loc === "cining_gong") {
       if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
       setView("cining_gong"); maybeShizhi(); return;
@@ -327,6 +363,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
   /** Set the room view for a given location id (no entry-time flavor rolls — used on event return). */
   const setLocationView = (locId: string) => {
+    if (locId === "zichendian") { enterZichendianView(); return; } // 候见事件返回须落专用屏并对账
     if (locId === "cining_gong") {
       if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
       setView("cining_gong"); return;
@@ -992,6 +1029,24 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         grandSelectionDue: grandSelectionPrompt !== null,
       });
 
+  // 紫宸殿外部 busy 归属（§9）：atomicFlow 之外、本殿仍可触达的浮层/选择器/全局中断一并计入。
+  // 复用权威 atomicFlowInProgress，不另立第二套原子流程定义。
+  const zichendianBusy = zichendianExternalBusy({
+    atomicFlowInProgress,
+    relocateOpen: relocateCharId !== null,
+    consortPickerOpen: flipOpen,
+    consortListOpen,
+    physicianOpen,
+    physicianPickerOpen: physicianConsortPickerOpen || physicianHeirPickerOpen,
+    heirListOpen,
+    resourcePanelOpen,
+    storehouseOpen,
+    profileOpen: profileCharId !== null,
+    settingsOpen,
+    choicePending,
+    globalInterruptActive: activeGlobalInterrupt !== null,
+  });
+
   /** 原地行动转旬请求：只跑 time_advance；返回上下文 = 当前地点（或显式 board）；开新链。 */
   const stationaryRequest = (boardId?: string): AutoCheckpointRequest => ({
     source: "stationary_rollover",
@@ -1474,6 +1529,64 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onOpenStorehouse={() => setStorehouseOpen(true)}
         />
       )}
+      {view === "zichendian" && (() => {
+        // 紫宸殿专用屏：用订阅态（liveState）构建权威候见视图模型；专用屏外仍由 GameShell 提供顶栏/面包屑/国情/库房/设置/地图导航。
+        const location = db.locations["zichendian"]!;
+        const bg = registry.resolveVariant(location.backgroundKey, timeOfDay(liveState.calendar), "background");
+        const queue = getAudienceQueue(db, liveState, "zichendian");
+        const deferredQueue = getDeferredAudienceQueue(db, liveState, "zichendian");
+        const activeItem = selectActiveAudience(queue);
+        const summonedView = summonedConsortId ? summonedConsortToView(db, liveState, registry, summonedConsortId) : undefined;
+        // 召见侍君 / 乘风召见妃嫔：经既有翻牌选人入口（含 canBedchamber 背书）；选中后 onPick 置 summonedConsortId。
+        const summonConsortPicker = () => {
+          const g = canBedchamber(store.getState());
+          if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
+          setFlipOpen(true);
+        };
+        // 离开紫宸殿：清召见态，按既有非根地图行为开当前宫城板（返回可逐级回主图）。
+        const leaveZichendian = () => { setSummonedConsortId(null); setMapAtRoot(false); setView("map"); };
+        return (
+          <GameShell
+            calendar={liveState.calendar}
+            crumbs={breadcrumbFor(db, "zichendian")}
+            pregnant={liveState.resources.bloodline.gestations.some((g) => g.carrier === "sovereign")}
+            onBack={leaveZichendian}
+            onOpenResources={() => setResourcePanelOpen(true)}
+            onOpenStorehouse={() => setStorehouseOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            className="location-shell"
+          >
+            <ZichendianScreen
+              background={bg.url}
+              backgroundPosition={location.backgroundPosition}
+              isFallbackBackground={bg.isFallback}
+              audienceCount={audienceCount(db, liveState, "zichendian")}
+              deferredAudienceCount={deferredAudienceCount(db, liveState, "zichendian")}
+              activeAudience={activeItem ? audienceItemToView(db, liveState, registry, activeItem) : undefined}
+              pendingAudienceItems={deferredQueue.map((i) => audienceItemToPendingView(db, liveState, registry, i))}
+              summonedConsort={summonedView}
+              onConverseSummonedConsort={summonedConsortId ? () => { const id = summonedConsortId; if (id) void converse(id); } : undefined}
+              onDismissSummonedConsort={summonedConsortId ? () => setSummonedConsortId(null) : undefined}
+              interruptible={!zichendianBusy}
+              busy={zichendianBusy}
+              onAdmitAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
+              onDeferAudience={(eventId) => {
+                const applied = store.applyEffects(db, defer(eventId, store.getState().calendar.dayIndex));
+                if (applied.ok) doAutosave(); // 仅成功延期后落盘；不清/完成事件、不本地删项——订阅态更新使提示自然消失
+              }}
+              onAdmitPendingAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
+              onReviewMemorials={reviewMemorials}
+              onSummonConsort={summonConsortPicker}
+              onRest={restAlone}
+              onLeave={leaveZichendian}
+              onManageRank={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
+              onRelocate={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
+              onBestow={() => setStorehouseOpen(true)}
+              onPhysician={() => setPhysicianOpen(true)}
+            />
+          </GameShell>
+        );
+      })()}
       {view === "map" && (
         <MapScreen
           db={db}
@@ -1488,7 +1601,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setView("freeview");
           }}
           onOpenSettings={() => setSettingsOpen(true)}
-          onClose={() => { setFocusConsortId(null); setView("location"); }}
+          onClose={() => {
+            setFocusConsortId(null);
+            // 关地图回房：紫宸殿落专用屏（并对账），其余维持既有 location 行为。
+            if (store.getState().playerLocation === "zichendian") enterZichendianView();
+            else setView("location");
+          }}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
           onOpenCourtyard={(loc) => {
@@ -1562,10 +1680,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           eventId={activeEventId}
           logger={logger}
           onDone={(committed, rolledOver) => {
+            const completedEventId = activeEventId; // 快照：清 activeEventId 前留存，供清账判定
             setActiveEventId(null);
             if (!committed) {
               // 弃场：若链内前序事件已留下待结算（pendingTimeSettlement），不得消费/恢复导航上下文——
               // activeEventId 已清，交由既有结算 effect 排空并最终恢复一次；否则立即恢复。
+              // 弃场绝不清候见账（仅打开未提交 ≠ 候见完成）。
               const abandonPlan = eventSceneCompletionPlan({
                 committed: false,
                 rolledOver: false,
@@ -1576,7 +1696,17 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               if (abandonPlan.restore) restoreReturn();
               return;
             }
-            doAutosave(); // scene-commit autosave (plan §9)
+            // 候见事件成功提交：清本殿候见账（pending/shownAt/remindAt）并对账，再落盘——持久态须含清账。
+            // 仅 request_audience 且 host===zichendian 才清；他 host / 非候见事件不动。
+            const completedEvent = completedEventId ? db.events[completedEventId] : undefined;
+            if (completedEventId && shouldClearAudienceOnCommit(completedEvent, true, "zichendian")) {
+              const applied = store.applyEffects(db, clearAudience(completedEventId));
+              if (applied.ok) {
+                const recon = audienceReconciliationEffects(db, store.getState(), "zichendian");
+                if (recon.length > 0) store.applyEffects(db, recon);
+              }
+            }
+            doAutosave(); // scene-commit autosave (plan §9) — 现已含候见清账
             const sceneEndState = store.getState();
             const pick = pickAutoStartEvent(db, sceneEndState, "scene_end", db.locations[sceneEndState.playerLocation]);
             const plan = eventSceneCompletionPlan({
