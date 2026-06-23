@@ -346,6 +346,10 @@ export function addGeneratedConsort(
       [id]: {
         rank,
         favor,
+        affection: content.hidden?.affection ?? 50,
+        fear:      content.hidden?.fear      ?? 30,
+        ambition:  content.hidden?.ambition  ?? 35,
+        loyalty:   content.hidden?.loyalty   ?? 50,
         residence: "chuxiu_gong",
         chamber: "main",
         availableFromMonth: monthOrdinal({ year: state.calendar.year, month: 5 }),

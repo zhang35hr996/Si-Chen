@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 10;
+export const SAVE_FORMAT_VERSION = 11;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -164,6 +164,23 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       formatVersion: 10,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
+    };
+  },
+  // v10 → v11: 引入侍君 fear/ambition/loyalty 运行时属性和 haremFactionId。
+  // fear/ambition 保持 undefined（由 resolveConsortRuntimeAttrs 回退到 authored hidden 值）。
+  // loyalty 保持 undefined（resolver 回退到 hidden.loyalty ?? 50）。
+  // haremFactionId 初始化为 undefined（无阵营）。
+  // standing schema 新增这 4 个 optional 字段，无需在 migration 中物化。
+  10: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    // No mutations needed: all new fields are optional with resolver fallbacks.
+    // The migration exists to bump the format version and recompute the checksum.
+    return {
+      ...env,
+      formatVersion: 11,
+      state,
+      checksum: checksumOf(state),
     };
   },
 };

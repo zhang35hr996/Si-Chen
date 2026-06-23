@@ -14,6 +14,9 @@ import { expiredUnrecordedConfinements } from "../engine/characters/confinement"
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
 import { planHaremAdminRankCommand, type HaremAdminRankCommand, type HaremAdminCommandPlan } from "./haremAdminCommands";
+import { planPunishmentConsequences } from "../engine/punishments/consequencePlanner";
+import { buildRankOp, type RankOpRequest } from "./rankOps";
+import type { PunishmentOutcomeContext, PunishmentConsequencePlan, ReactionBeat } from "../engine/punishments/types";
 import type { CourtEvent } from "../engine/state/types";
 import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
@@ -364,6 +367,121 @@ export class GameStore {
     this.lastEffectReport = { effects: plan.effects, outcome: "applied", errors: [] };
     this.emit();
     return ok(plan);
+  }
+
+  /**
+   * Internal atomic helper shared by the two punitive entry points below.
+   * Applies effects → chronicle → single emit.  Returns the final plan + beats.
+   * On any failure the state is left unchanged.
+   */
+  private commitPlannedTransaction(
+    db: ContentDB,
+    effects: readonly EventEffect[],
+    chronicle: Omit<CourtEvent, "id">[],
+    reactionBeats: ReactionBeat[],
+  ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
+    const applied = applyEffects(db, this.state, effects);
+    if (!applied.ok) {
+      for (const e of applied.error) this.logger?.logGameError(e);
+      this.lastEffectReport = { effects: [...effects], outcome: "rejected", errors: applied.error };
+      return err(applied.error);
+    }
+    let candidate = applied.value;
+    for (const draft of chronicle) {
+      const ap = appendCourtEvent(candidate, draft);
+      if (!ap.ok) {
+        for (const e of ap.error) this.logger?.logGameError(e);
+        return err(ap.error); // this.state untouched — atomic
+      }
+      candidate = ap.value.state;
+    }
+    this.state = candidate;
+    this.lastEffectReport = { effects: [...effects], outcome: "applied", errors: [] };
+    this.emit();
+    return ok({ reactionBeats });
+  }
+
+  /**
+   * Punitive imperial command (confinement / execution) WITH consequence
+   * effects.  Both the base command effects and the consequence effects are
+   * committed atomically in a single transaction.  Returns reaction beats for
+   * the UI to enqueue in reactionQueue.
+   *
+   * Ordinary non-punitive imperial commands (lift_confinement) must use
+   * applyImperialCommand instead to avoid triggering consequence planner.
+   */
+  applyImperialPunishmentWithConsequences(
+    db: ContentDB,
+    command: ImperialCommand & { type: "impose_confinement" | "execute" },
+    ctx: PunishmentOutcomeContext,
+  ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
+    const planned = planImperialCommand(db, this.state, command);
+    if (!planned.ok) {
+      const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    const base = planned.plan;
+    const conseq: PunishmentConsequencePlan = planPunishmentConsequences(db, this.state, ctx);
+    return this.commitPlannedTransaction(
+      db,
+      [...base.effects, ...conseq.effects],
+      [...base.chronicle, ...conseq.chronicle],
+      conseq.reactionBeats,
+    );
+  }
+
+  /**
+   * Punitive rank change (demotion / strip_title) WITH consequence effects.
+   * Uses buildRankOp for the base effects and planPunishmentConsequences for
+   * the cascade.  Ordinary 册封/晋升 and harem-admin rank changes must NOT
+   * call this; they should not trigger punishment consequences.
+   */
+  applyPunitiveRankChangeWithConsequences(
+    db: ContentDB,
+    targetId: string,
+    request: RankOpRequest,
+    ctx: PunishmentOutcomeContext,
+  ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
+    const op = buildRankOp(db, this.state, targetId, request, { kind: "sovereign", actorId: "player" });
+    if (!op) {
+      const error = stateError("RANK_OP_INVALID", "rank change is a no-op or target has no standing");
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    const conseq: PunishmentConsequencePlan = planPunishmentConsequences(db, this.state, ctx);
+
+    // Chronicle entry for the rank change
+    const now = toGameTime(this.state.calendar);
+    const chronicle: Omit<CourtEvent, "id">[] = [
+      {
+        type: "rank_changed",
+        occurredAt: now,
+        participants: [
+          { charId: "player", role: "actor" },
+          { charId: targetId, role: op.kind === "demote" ? "demoted" : "demoted" },
+        ],
+        payload: {
+          decree: "imperial_punitive_rank_change",
+          targetId,
+          direction: op.kind,
+          punishmentId: ctx.punishmentId,
+          caseId: ctx.caseId,
+        },
+        publicity: { scope: "palace", persistence: "institutional" },
+        publicSalience: 65,
+        retention: "slow",
+        tags: ["punitive", "rank_change", op.kind],
+      },
+      ...conseq.chronicle,
+    ];
+
+    return this.commitPlannedTransaction(
+      db,
+      [...op.effects, ...conseq.effects],
+      chronicle,
+      conseq.reactionBeats,
+    );
   }
 
   /**

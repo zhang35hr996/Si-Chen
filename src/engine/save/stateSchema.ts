@@ -187,6 +187,8 @@ export const gameStateSchema = z.strictObject({
     }),
   }),
   flags: z.record(z.string(), flagValueSchema),
+  // characterStandingSchema already includes the new optional fields
+  // (fear, ambition, loyalty, haremFactionId) added in v11.
   standing: z.record(idSchema, characterStandingSchema),
   generatedConsorts: z.record(idSchema, characterSchema),
   officials: z.record(z.string(), officialSchema),

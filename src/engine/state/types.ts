@@ -236,6 +236,14 @@ export interface CharacterStanding {
   chamber?: ChamberId;
   /** 好感/情意 0–100（仅侍君；缺省回退 authored hidden.affection）。 */
   affection?: number;
+  /** 恐惧 0–100（仅侍君；缺省回退 hidden.fear，无则 30）。 */
+  fear?: number;
+  /** 野心 0–100（仅侍君；缺省回退 hidden.ambition，无则 35）。 */
+  ambition?: number;
+  /** 忠诚 0–100（仅侍君；缺省回退 hidden.loyalty，无则 50）。 */
+  loyalty?: number;
+  /** 后宫阵营标识（可选；预置角色通过 initialStanding.haremFactionId authored）。 */
+  haremFactionId?: string;
   /** 入宫时刻（知情资格用）；非常住者 undefined。所有入宫流程必须写此字段。 */
   palaceEnteredAt?: GameTime;
   /** 殿选新晋侍君的侍寝解禁月序（monthOrdinal）；缺省即无门槛。 */

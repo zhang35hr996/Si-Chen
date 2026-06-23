@@ -81,6 +81,8 @@ export interface DialoguePromptContext {
   /** The event id that triggered the speaker's reactionPlan, if any (populated in T6+). */
   reactionSourceEventId?: string;
   choiceCandidates: DialogueChoiceCandidate[];    // [] until LLM-2
+  /** Resolved hidden runtime attributes.  Only present for consorts. */
+  behavioralState?: { affection: number; fear: number; ambition: number; loyalty: number };
 }
 
 // ── Conversion helper ─────────────────────────────────────────────────────────
@@ -109,6 +111,17 @@ export interface DialogueSpeakerPayload {
   personalityTraits: string[];
   coreFacts: string[];
   voice: CharacterContent["voice"];
+  /**
+   * Runtime hidden attributes.  Influences tone and emotional register only.
+   * The LLM must NOT state these as numeric facts, must NOT modify them, and
+   * must NOT treat them as public knowledge the character would announce.
+   */
+  behavioralState?: {
+    affection: number;
+    fear: number;
+    ambition: number;
+    loyalty: number;
+  };
 }
 
 // ── DialoguePromptPayload ─────────────────────────────────────────────────────
@@ -239,6 +252,7 @@ export function compilePromptPayload(request: DialogueRequest): DialoguePromptPa
       personalityTraits: request.speakerContext.profile.personalityTraits,
       coreFacts: request.speakerContext.profile.coreFacts,
       voice: request.speakerContext.voice,
+      ...(ctx.behavioralState !== undefined ? { behavioralState: ctx.behavioralState } : {}),
     },
     audience: ctx.audience,
     reactionPlan: ctx.reactionPlan,

@@ -8,6 +8,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import { formatErrorTag } from "../../engine/infra/errors";
 import type { LogEntry, RingBufferLogger } from "../../engine/infra/logger";
 import { listMemories, memoryAgeDays, memoryOriginLabel } from "../../engine/memory/inspect";
+import { resolveConsortRuntimeAttrs } from "../../engine/characters/consortAttrs";
 import type { GameState } from "../../engine/state/types";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
@@ -83,6 +84,46 @@ function MemoryBrowser({ db, state }: { db?: ContentDB; state: GameState }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function ConsortAttrsBrowser({ db, state }: { db?: ContentDB; state: GameState }) {
+  const consortIds = Object.keys(state.standing).filter((id) => {
+    const char = db?.characters[id] ?? state.generatedConsorts[id];
+    return char?.kind === "consort" && state.standing[id]?.lifecycle !== "deceased";
+  });
+  if (!db || consortIds.length === 0) return null;
+  return (
+    <section className="debug-panel__consort-attrs">
+      <h4>侍君隐藏属性</h4>
+      <table style={{ fontSize: "11px", borderCollapse: "collapse" }}>
+        <thead>
+          <tr>
+            {["姓名", "情意", "恐惧", "野心", "忠诚", "阵营"].map((h) => (
+              <th key={h} style={{ padding: "2px 6px", borderBottom: "1px solid #666" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {consortIds.map((id) => {
+            const char = db.characters[id] ?? state.generatedConsorts[id];
+            const name = char?.profile.name ?? id;
+            const attrs = resolveConsortRuntimeAttrs(db, state, id);
+            const faction = state.standing[id]?.haremFactionId ?? "—";
+            return (
+              <tr key={id}>
+                <td style={{ padding: "1px 6px" }}>{name}</td>
+                <td style={{ padding: "1px 6px" }}>{attrs.affection}</td>
+                <td style={{ padding: "1px 6px" }}>{attrs.fear}</td>
+                <td style={{ padding: "1px 6px" }}>{attrs.ambition}</td>
+                <td style={{ padding: "1px 6px" }}>{attrs.loyalty}</td>
+                <td style={{ padding: "1px 6px" }}>{faction}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -251,6 +292,7 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
       {db && onForceEvent && <ForceTrigger db={db} onForceEvent={onForceEvent} />}
       {logger && <Diagnostics logger={logger} />}
       {db && <ContentSummary db={db} />}
+      {gameStarted && <ConsortAttrsBrowser db={db} state={state} />}
       {gameStarted && <MemoryBrowser db={db} state={state} />}
       <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
     </aside>
