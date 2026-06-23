@@ -130,6 +130,21 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     expect(appSrc).toMatch(/daxuanPrompt !== null/); // atomicFlowInProgress includes the dianxuan prompt
   });
 
+  it("delegate failure keeps the prompt open — setDaxuanPrompt(null) is never called before the Result.ok check", () => {
+    // 取出委托分支源码块。
+    const block = appSrc.match(/action\.type === "daxuanDelegate"[\s\S]*?\n {4}\}/)?.[0] ?? "";
+    expect(block).toMatch(/store\.resolveDaxuanByDelegate\(/);
+    // 不得在 resolveDaxuanByDelegate 调用与 !res.ok 检查之间无条件关闭 prompt（P1 回归）。
+    expect(block).not.toMatch(/resolveDaxuanByDelegate\([^;]*\);\s*setDaxuanPrompt\(null\);/);
+    // 错误分支内的关闭必须由 NO_PENDING_DAXUAN 守卫。
+    expect(block).toMatch(/NO_PENDING_DAXUAN"\)\s*setDaxuanPrompt\(null\)/);
+    // 成功关闭（末次 setDaxuanPrompt(null)）必须在 !res.ok 之后。
+    const okIdx = block.indexOf("if (!res.ok)");
+    const lastClose = block.lastIndexOf("setDaxuanPrompt(null)");
+    expect(okIdx).toBeGreaterThan(-1);
+    expect(lastClose).toBeGreaterThan(okIdx);
+  });
+
   it("grand-selection drains via state-based atomic ownership, not view === \"event\" (no settlement deadlock)", () => {
     // pendingDaxuan must be able to drain after an event clears activeEventId even while view still reads
     // "event"; the atomic gate keys on activeEventId (state), never on a "view === \"event\"" string.

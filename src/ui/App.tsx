@@ -1480,12 +1480,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       // [校验该年未决 pending → 落库 → 置 flag → 清 pending]，杜绝部分状态。
       const kept = npcKeepOnDelegate(db, store.getState(), action.year);
       const res = store.resolveDaxuanByDelegate(db, action.year, kept);
-      setDaxuanPrompt(null);
       if (!res.ok) {
-        // NO_PENDING（陈旧/重复/错年）静默收起；其余（落库冲突）提示且不播成功文案、不 autosave。
-        if (res.error.code !== "NO_PENDING_DAXUAN") setNotice("殿选留牌出了岔子，本次未能留牌，请稍后再试。");
+        // NO_PENDING（陈旧/重复/错年）静默关闭 prompt；真正的落库冲突保留 prompt 允许原地重试，
+        // 且不播成功文案、不 autosave。仅 Result.ok 才关界面。
+        if (res.error.code === "NO_PENDING_DAXUAN") setDaxuanPrompt(null);
+        else setNotice("殿选留牌出了岔子，本次未能留牌，请稍后再试。");
         return;
       }
+      setDaxuanPrompt(null);
       const beats: DecreeReaction[] = kept.length > 0
         ? kept.map((k) => ({
             speakerId: "cheng_feng",
