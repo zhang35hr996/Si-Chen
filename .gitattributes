@@ -1,0 +1,18 @@
+# Enforce LF line endings across the repo; auto-detect text vs binary.
+* text=auto eol=lf
+
+# Binary assets — never normalize line endings.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.mp3  binary
+*.wav  binary
+*.ogg  binary
+*.mp4  binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
