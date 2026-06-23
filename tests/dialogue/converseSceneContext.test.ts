@@ -19,9 +19,9 @@ const OTHER = "wei_sui"; // an unrelated consort who might co-reside in the broa
 const LOC = "zichendian";
 
 describe("deriveConverseSceneContext", () => {
-  it("includes only the speaker as present and uses the conservative non-private value", () => {
+  it("carries no extra bystanders (orchestrator adds speaker+target) and is conservatively non-private", () => {
     const ctx = deriveConverseSceneContext(SPEAKER);
-    expect(ctx.presentCharacterIds).toEqual([SPEAKER]);
+    expect(ctx.presentCharacterIds).toEqual([]);
     expect(ctx.privacy).toBe("semi_private");
   });
 

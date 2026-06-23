@@ -7,9 +7,10 @@
  * sequence.
  *
  * Deliberately conservative (PR-A runtime wiring):
- *   - presentCharacterIds contains ONLY the active speaker — the one character the
- *     UI can reliably establish as physically present. It does NOT enumerate every
- *     resident of the broader location (co-residents are not guaranteed present).
+ *   - presentCharacterIds lists only ADDITIONAL confirmed-present bystanders. The
+ *     speaker and the conversation target are always supplied by the orchestrator,
+ *     so this returns [] — the UI cannot reliably establish anyone else as present,
+ *     and does NOT enumerate every resident of the broader location.
  *   - privacy is the contract's non-private value "semi_private". converse() is
  *     reachable from shared-location visits as well as private summons, so the flow
  *     does not guarantee a one-on-one scene; we do not infer privacy from the
@@ -26,9 +27,10 @@ export interface ConverseSceneContext {
 
 /**
  * Build the scene context for a conversation with `speakerId`.
- * Pure and state-free: presence is limited to the speaker by design, and privacy
- * is fixed to the conservative non-private value.
+ * Pure and state-free: presence carries no extra bystanders (the orchestrator adds
+ * speaker + target itself), and privacy is fixed to the conservative non-private value.
  */
 export function deriveConverseSceneContext(speakerId: string): ConverseSceneContext {
-  return { presentCharacterIds: [speakerId], privacy: "semi_private" };
+  void speakerId; // speaker presence is supplied by the orchestrator, not the caller
+  return { presentCharacterIds: [], privacy: "semi_private" };
 }

@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 import { assembleDialogueRequest } from "../../src/engine/dialogue/orchestrator";
 import { compilePromptPayload } from "../../src/engine/dialogue/promptPayload";
+import { deriveConverseSceneContext } from "../../src/ui/converseScene";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 import { makeGameTime } from "../../src/engine/calendar/time";
@@ -48,6 +49,36 @@ const memoryIds = (state: GameState, opts = {}) => {
   if (!r.ok) throw new Error("assemble failed");
   return r.value.promptContext.relevantMemories.map((m) => m.id);
 };
+
+/** A memory ABOUT the conversation partner (the player/target), sub-threshold,
+ *  no topic tag — the most central free-chat case. */
+const targetMemory: MemoryEntry = {
+  id: "mem_shen_target",
+  ownerId: SPEAKER,
+  kind: "promise",
+  subjectIds: ["player"],
+  perspective: "target",
+  summary: "陛下曾答应来看臣侍。",
+  strength: 60,
+  retention: "slow",
+  emotions: {},
+  triggerTags: [],
+  unresolved: true,
+  createdAt: makeGameTime(1, 1, "early"),
+};
+
+describe("target/player participates in recall + activation (P0a)", () => {
+  it("recalls a sub-threshold memory about the current target with no options passed", () => {
+    const state = withMemory(baseState, targetMemory);
+    // No assembly options at all — the orchestrator must still treat the target as present.
+    expect(memoryIds(state)).toContain(targetMemory.id);
+  });
+
+  it("recalls it through the converse scene context (which adds no extra present cast)", () => {
+    const state = withMemory(baseState, targetMemory);
+    expect(memoryIds(state, deriveConverseSceneContext(SPEAKER))).toContain(targetMemory.id);
+  });
+});
 
 describe("scene topic threading → recall + activation", () => {
   it("a sub-threshold memory about the subject stays UNrecalled without topic context", () => {

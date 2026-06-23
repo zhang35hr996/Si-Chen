@@ -83,17 +83,20 @@ export function assembleDialogueRequest(
   // Real scene context (PR-A items 1+2): topic / subject / present / privacy flow
   // from the caller into recall, activation, audience, and the compiled prompt.
   const topicTags = options.topicTags ?? [];
-  const presentCharacterIds = options.presentCharacterIds ?? [];
+  // The conversation target is always physically present, so memories/events ABOUT
+  // the target surface in recall/activation even when the caller supplies no extra
+  // cast. `options.presentCharacterIds` are additional confirmed-present bystanders.
+  // The speaker is intentionally NOT in this set: they are trivially always present,
+  // so a "present-bystander" bonus on events/memories about themselves would be
+  // meaningless (those are reached via subjectIds), and audience already drops them.
+  const scenePresentIds = [...new Set([targetId, ...(options.presentCharacterIds ?? [])])];
   // subjectIds always includes the speaker (self-memories stay reachable) plus
   // whoever the beat is about, so a sub-threshold memory about them can be recalled.
-  const subjectIds = options.subjectIds
-    ? [...new Set([speakerId, ...options.subjectIds])]
-    : [speakerId];
+  const subjectIds = [...new Set([speakerId, ...(options.subjectIds ?? [])])];
   const memCtx = buildMemoryContext(
     state,
-    { speakerId, subjectIds, topicTags, presentCharacterIds },
-    // audienceId, targetId, speakerId all use the resolved targetId — single source.
-    { now, topicTags, presentCharacterIds, audienceId: targetId, speakerId, locationId },
+    { speakerId, subjectIds, topicTags, presentCharacterIds: scenePresentIds },
+    { now, topicTags, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
   );
   const audience = buildAudienceContext(state, db, {
     speakerId,
@@ -116,7 +119,7 @@ export function assembleDialogueRequest(
     // Real disposition / relation / audience (PR-A items 3+4+5)
     personalityTraits: character.profile.personalityTraits,
     stances: character.stances ?? [],
-    presentCharacterIds,
+    presentCharacterIds: scenePresentIds,
     privacy: options.privacy ?? "semi_private",
   });
 
@@ -126,7 +129,7 @@ export function assembleDialogueRequest(
   const promptEvents = selectPromptEventsByActivation({
     state,
     events: memCtx.knownEventsAll,
-    ctx: { now, topicTags, presentCharacterIds, audienceId: targetId, speakerId, locationId },
+    ctx: { now, topicTags, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
     pinnedEventId: builtReaction?.sourceEventId,
     limit: 3,
   });
