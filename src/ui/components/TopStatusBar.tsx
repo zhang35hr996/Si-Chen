@@ -8,14 +8,15 @@ import { formatGameTime, formatShichen } from "../../engine/calendar/time";
 export function TopStatusBar({
   calendar,
   locationName,
-  pregnant,
+  pregnancyMonth,
   onOpenResources,
   onOpenSettings,
   onOpenStorehouse,
 }: {
   calendar: CalendarState;
   locationName?: string;
-  pregnant?: boolean;
+  /** 帝王当前孕月（受孕月=1）；提供时显示「怀胎 · 孕N月」，缺省不显示孕情（pending 披露前不在此暴露）。 */
+  pregnancyMonth?: number;
   onOpenResources?: () => void;
   onOpenSettings?: () => void;
   onOpenStorehouse?: () => void;
@@ -36,7 +37,7 @@ export function TopStatusBar({
           </span>
         </span>
         {locationName && <span className="topbar__loc">{locationName}</span>}
-        {pregnant && <span className="topbar__preg">怀胎</span>}
+        {pregnancyMonth !== undefined && <span className="topbar__preg">怀胎 · 孕{pregnancyMonth}月</span>}
       </div>
 
       <nav className="topbar__actions" aria-label="全局">

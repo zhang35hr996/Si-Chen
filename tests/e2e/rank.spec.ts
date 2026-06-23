@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("promote a consort from 查看侍君 list and return to her detail with new 称呼", async ({ page }) => {
+test("promote a consort from the 乘风·调整位分 list and return to her detail with new 称呼", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "新游戏" }).click();
   // 登基改元
@@ -8,12 +8,13 @@ test("promote a consort from 查看侍君 list and return to her detail with new
   await page.getByRole("button", { name: "确认年号" }).click();
   await page.getByRole("button", { name: "开始" }).click();
 
-  // map-as-hub: enter 紫宸殿, dismiss its location_enter event prompt
+  // map-as-hub: enter 紫宸殿. Its request-audience prompt is non-blocking, so the
+  // scene actions stay live — open the consort list via 乘风 → 调整位分.
   await page.getByRole("button", { name: "紫宸殿" }).click();
-  await page.getByRole("button", { name: "稍后再说" }).click();
+  await page.getByRole("button", { name: "传乘风" }).click();
+  await page.getByRole("button", { name: "调整位分" }).click();
 
-  // 查看侍君 → 陆怀瑾（承徽）→ 封号管理（直接从列表进；列表会先收起，弹窗不再被遮挡）
-  await page.getByRole("button", { name: "查看侍君" }).click();
+  // 陆怀瑾（承徽）→ 封号管理（直接从列表进；列表会先收起，弹窗不再被遮挡）
   await page.getByRole("button", { name: "陆怀瑾 承徽" }).click();
   await page.getByRole("button", { name: "封号管理" }).click();
 

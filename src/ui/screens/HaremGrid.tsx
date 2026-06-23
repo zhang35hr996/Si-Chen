@@ -7,7 +7,8 @@
 import { useState } from "react";
 import type { ContentDB } from "../../engine/content/loader";
 import type { LocationContent } from "../../engine/content/schemas";
-import type { CharacterStanding, GameState } from "../../engine/state/types";
+import type { GameState } from "../../engine/state/types";
+import { consortGestationDisplay } from "../format/gestationDisplay";
 import { getPresentAt } from "../../engine/characters/presence";
 import { CHAMBERED_PALACE_ORDER } from "../../engine/characters/chambers";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
@@ -24,10 +25,13 @@ interface Status {
   tone: string;
 }
 
-/** 单名侍君的状态标：仅 病 / 禁足 / 孕。不标注「可侍寝/可对话」，也不标 育/候/故。 */
-function statusesOf(standing: CharacterStanding | undefined): Status[] {
+/** 单名侍君的状态标：仅 病 / 禁足 / 孕。不标注「可侍寝/可对话」，也不标 育/候/故。
+ *  孕标 title 携带真实孕月（地图节点视觉仍是图标，无障碍/悬浮文本含月份）。 */
+function statusesOf(state: GameState, charId: string): Status[] {
+  const standing = state.standing[charId];
   const out: Status[] = [];
-  if (standing?.lifecycle === "carrying") out.push({ icon: "孕", label: "怀胎", tone: "warn" });
+  const preg = consortGestationDisplay(state, charId);
+  if (preg) out.push({ icon: "孕", label: preg.label, tone: "warn" });
   if (standing?.healthStatus && standing.healthStatus !== "healthy") out.push({ icon: "病", label: "凤体违和", tone: "warn" });
   if (standing?.confined) out.push({ icon: "禁", label: "禁足", tone: "dim" });
   return out;
@@ -54,7 +58,7 @@ function viewOf(db: ContentDB, state: GameState, loc: LocationContent, role?: st
   const seen = new Set<string>();
   const statuses: Status[] = [];
   for (const c of consorts) {
-    for (const s of statusesOf(state.standing[c.id])) {
+    for (const s of statusesOf(state, c.id)) {
       if (seen.has(s.icon)) continue;
       seen.add(s.icon);
       statuses.push(s);

@@ -13,6 +13,8 @@ import { toGameTime } from "../../engine/calendar/time";
 import { describe } from "../format/descriptors";
 import type { ScaleId } from "../format/descriptors";
 import { HealthStatusChip } from "./HealthStatusChip";
+import { PregnancyStatusChip } from "./PregnancyStatusChip";
+import { consortGestationDisplay } from "../format/gestationDisplay";
 
 /** 侍君明面数值属性 — 特长/喜好是标签，单独渲染。 */
 export const ATTRIBUTE_LABELS: Array<[keyof ConsortAttributes & ("appearance" | "health"), string]> = [
@@ -42,6 +44,7 @@ export function CharacterCard({
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
   const isConsort = character.kind === "consort";
+  const pregnancy = isConsort ? consortGestationDisplay(state, character.id) : null;
   const displayName = character.profile.name; // 界面标识用本名；位分由下方 char-card__rank 并列展示
   const canManage = isConsort && character.id !== "shen_zhibai" && onManage;
   const portrait = registry.portrait(character.portraitSet, "neutral");
@@ -87,15 +90,18 @@ export function CharacterCard({
           />
         </p>
       )}
-      {isConsort && standing?.lifecycle && standing.lifecycle !== "normal" && (
+      {isConsort && pregnancy && (
+        <p className="char-card__pregnancy">
+          <PregnancyStatusChip label={pregnancy.label} />
+        </p>
+      )}
+      {isConsort && standing?.lifecycle && standing.lifecycle !== "normal" && standing.lifecycle !== "carrying" && (
         <p className="char-card__lifecycle" data-lifecycle={standing.lifecycle}>
-          {standing.lifecycle === "carrying"
-            ? "承嗣君·怀胎"
-            : standing.lifecycle === "delivered"
-              ? "育嗣君"
-              : standing.lifecycle === "candidate"
-                ? "候选承嗣"
-                : "已故"}
+          {standing.lifecycle === "delivered"
+            ? "育嗣君"
+            : standing.lifecycle === "candidate"
+              ? "候选承嗣"
+              : "已故"}
         </p>
       )}
       {onViewProfile && (

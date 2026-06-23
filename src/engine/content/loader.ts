@@ -6,6 +6,7 @@
  */
 import { contentError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
+import { resolveEntryMode } from "../events/entryMode";
 import {
   characterSchema,
   gameEventSchema,
@@ -110,6 +111,7 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
   checkCharacterRefs(characters, ranks, locations.byId, officialPosts, errors);
   checkLocationGraph(locations, errors);
   checkEventRefs(events, scenes.byId, errors);
+  checkPresentationRefs(events, characters.byId, locations.byId, errors);
   for (const { value, source } of scenes.items) {
     checkSceneGraph(value, source, errors);
     checkSceneRefs(value, source, characters.byId, locations.byId, errors);
@@ -367,6 +369,134 @@ function checkEventRefs(
   for (const { value: event, source } of events.items) {
     if (!scenes[event.sceneId]) {
       errors.push(missingRef(source, "scene", event.sceneId));
+    }
+  }
+}
+
+const intersectSets = (a: Set<string>, b: Set<string>): Set<string> => {
+  const out = new Set<string>();
+  for (const l of a) if (b.has(l)) out.add(l);
+  return out;
+};
+
+/**
+ * Locations where the condition COULD be satisfied (conservative over-approximation; never under-claims).
+ * Used so a presentation-less location_enter event merely *possibly* eligible at a request_audience/
+ * exploration host is still flagged — closing the gap that `guaranteedLocations` (intersection-only `any`) left.
+ *  - atLocation:x ⇒ {x};
+ *  - all[...] ⇒ intersection of children;
+ *  - any[...] ⇒ union of children;
+ *  - not(c) ⇒ where c could be false (De Morgan; see `falseLocations`);
+ *  - flagSet / eventFired / month / … ⇒ universe (location-unconstrained leaf).
+ */
+function possibleLocations(condition: TriggerCondition, allIds: string[]): Set<string> {
+  if ("atLocation" in condition) return new Set<string>([condition.atLocation]);
+  if ("all" in condition) {
+    let acc = new Set<string>(allIds);
+    for (const c of condition.all) acc = intersectSets(acc, possibleLocations(c, allIds));
+    return acc;
+  }
+  if ("any" in condition) {
+    const acc = new Set<string>();
+    for (const c of condition.any) for (const l of possibleLocations(c, allIds)) acc.add(l);
+    return acc;
+  }
+  if ("not" in condition) return falseLocations(condition.not, allIds);
+  return new Set<string>(allIds); // location-unconstrained leaf
+}
+
+/** Locations where the condition could be FALSE (for `not`). De Morgan over all/any; complement of atLocation. */
+function falseLocations(condition: TriggerCondition, allIds: string[]): Set<string> {
+  if ("atLocation" in condition) {
+    const s = new Set<string>(allIds);
+    s.delete(condition.atLocation); // false at every location except x
+    return s;
+  }
+  if ("all" in condition) {
+    // ¬(c₁∧c₂…) = (¬c₁)∨(¬c₂)… ⇒ union of children's false-sets
+    const acc = new Set<string>();
+    for (const c of condition.all) for (const l of falseLocations(c, allIds)) acc.add(l);
+    return acc;
+  }
+  if ("any" in condition) {
+    // ¬(c₁∨c₂…) = (¬c₁)∧(¬c₂)… ⇒ intersection of children's false-sets
+    let acc = new Set<string>(allIds);
+    for (const c of condition.any) acc = intersectSets(acc, falseLocations(c, allIds));
+    return acc;
+  }
+  if ("not" in condition) return possibleLocations(condition.not, allIds); // ¬¬c = c
+  return new Set<string>(allIds); // non-location leaf can be false at any location
+}
+
+/**
+ * Validate event `presentation` (scene-ui-narrative-refactor §3.5):
+ *  - checkpoint compatibility: request_audience/exploration ⇒ location_enter;
+ *    scheduled ⇒ court; a court event with presentation ⇒ scheduled (so it can never
+ *    be silently unreachable by the router/queue);
+ *  - declared refs (audienceCharacterId/hostLocationId/subLocationId) must resolve;
+ *  - missing presentation on an event GUARANTEED to run at a request_audience/exploration
+ *    host is an error (UI needs candidate/sub-location metadata).
+ *  manual has no derivation path → not detectable, intentionally not checked.
+ */
+function checkPresentationRefs(
+  events: Parsed<GameEventContent>,
+  characters: Record<string, CharacterContent>,
+  locations: Record<string, LocationContent>,
+  errors: GameError[],
+): void {
+  const compat = (source: string, msg: string): void => {
+    errors.push(contentError("PRESENTATION", `${source}: ${msg}`));
+  };
+  for (const { value: event, source } of events.items) {
+    const p = event.presentation;
+    // ── presentation ↔ checkpoint compatibility ──
+    if (p) {
+      const ck = event.checkpoint;
+      if ((p.mode === "request_audience" || p.mode === "exploration") && ck !== "location_enter") {
+        compat(source, `presentation mode "${p.mode}" requires checkpoint "location_enter" (got "${ck}")`);
+      }
+      if (p.mode === "scheduled" && ck !== "court") {
+        compat(source, `presentation mode "scheduled" requires checkpoint "court" (got "${ck}")`);
+      }
+      if (ck === "court" && p.mode !== "scheduled") {
+        compat(source, `court event presentation must be "scheduled" (got "${p.mode}")`);
+      }
+    }
+    // ── reference validation + missing-presentation inference ──
+    if (p?.mode === "request_audience") {
+      if (!characters[p.audienceCharacterId]) errors.push(missingRef(source, "character", p.audienceCharacterId));
+      if (!locations[p.hostLocationId]) errors.push(missingRef(source, "location", p.hostLocationId));
+    } else if (p?.mode === "exploration") {
+      const host = locations[p.hostLocationId];
+      if (!host) {
+        errors.push(missingRef(source, "location", p.hostLocationId));
+      } else if (!(host.subLocations ?? []).some((s) => s.id === p.subLocationId)) {
+        errors.push(
+          contentError(
+            "PRESENTATION",
+            `${source}: exploration presentation references unknown subLocation "${p.subLocationId}" in location "${p.hostLocationId}"`,
+            { context: { file: source, ref: p.subLocationId } },
+          ),
+        );
+      }
+    } else if (!p && event.checkpoint === "location_enter") {
+      // 漏检闭合：不止「必然在场」的 host，凡「可能在场」于 request_audience/exploration host（含 any 含
+      // flagSet 分支）的 presentation-less location_enter 事件都须报错——否则它既不自动启动也不入候见队列。
+      const possible = possibleLocations(event.condition, Object.keys(locations));
+      for (const locId of Object.keys(locations)) {
+        if (!possible.has(locId)) continue; // 该 host 必不可能在场 → 跳过
+        const mode = resolveEntryMode(event, locations[locId]);
+        if (mode === "request_audience" || mode === "exploration") {
+          errors.push(
+            contentError(
+              "PRESENTATION",
+              `${source}: location_enter event possibly eligible at "${locId}" derives to ${mode} but declares no presentation`,
+              { context: { file: source, id: event.id } },
+            ),
+          );
+          break;
+        }
+      }
     }
   }
 }

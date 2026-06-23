@@ -31,15 +31,17 @@ test("vertical slice: new game → 登基 → event → choose → save → relo
   // lands on the 皇城主地图 hub; first 行动点 = 卯时
   await expect(page.getByText("卯时（早上）")).toBeVisible();
 
-  // ── enter the starting room (紫宸殿) from the map, then its event ──────
+  // ── enter the starting room (紫宸殿); its request-audience event shows as a
+  //    non-blocking AudiencePrompt — admit it (宣进来) to start the dialogue ──
   await page.getByRole("button", { name: "紫宸殿" }).click();
-  await page.getByRole("button", { name: "司礼请示传月祭仪" }).click();
+  await page.getByRole("button", { name: "宣进来" }).click();
 
   // ── dialogue: pick 准奏, then advance the closing line to commit ──────
   await page.getByRole("button", { name: /准奏/ }).click();
   await page.getByRole("button", { name: "（继续）" }).click();
 
-  // back on the 皇城主地图 — one AP spent advances 卯时 → 辰时 (6 → 5)
+  // committed audience returns to 紫宸殿 ({kind:"zichendian"}); one AP spent
+  // advances 卯时 → 辰时 (6 → 5) — shown in the top bar.
   await expect(page.getByText("辰时（上午）")).toBeVisible();
 
   // ── verify the committed outcome ────────────────────────────────────

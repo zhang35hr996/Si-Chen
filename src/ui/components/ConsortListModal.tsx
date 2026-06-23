@@ -13,6 +13,8 @@ import { ATTRIBUTE_LABELS } from "./CharacterCard";
 import { describe } from "../format/descriptors";
 import type { ScaleId } from "../format/descriptors";
 import { HealthStatusChip } from "./HealthStatusChip";
+import { PregnancyStatusChip } from "./PregnancyStatusChip";
+import { consortGestationDisplay } from "../format/gestationDisplay";
 
 export function ConsortListModal({
   db,
@@ -54,8 +56,9 @@ export function ConsortListModal({
   const renderRow = (c: CharacterContent) => {
     const st = state.standing[c.id]!;
     const lc = st.lifecycle;
+    const preg = consortGestationDisplay(state, c.id);
     const lifecycleSuffix =
-      lc === "carrying" ? "·承嗣君·怀胎"
+      preg ? `·${preg.label}` // 「·承嗣君 · 孕N月」（退化态「·怀胎」）
       : lc === "delivered" ? "·育嗣君"
       : lc === "candidate" ? "·候选承嗣"
       : "";
@@ -103,6 +106,9 @@ export function ConsortListModal({
               status={st.healthStatus ?? "healthy"}
               health={st.health ?? 100}
             />
+            {consortGestationDisplay(state, c.id) && (
+              <PregnancyStatusChip label={consortGestationDisplay(state, c.id)!.label} />
+            )}
           </p>
           <p className="consort-detail__field">{c.profile.role}</p>
           {c.attributes && (

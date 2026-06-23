@@ -4,6 +4,7 @@ import { timeOfDay } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
@@ -25,6 +26,7 @@ export function CiningGongScreen({
     <GameShell
       calendar={state.calendar}
       crumbs={breadcrumbFor(db, location.id)}
+      pregnancyMonth={sovereignGestationDisplay(state)?.month ?? undefined}
       onBack={onOpenMap}
       onOpenResources={onOpenResources}
       onOpenStorehouse={onOpenStorehouse}
