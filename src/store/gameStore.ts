@@ -14,12 +14,17 @@ import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
 import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
-import type { GameState } from "../engine/state/types";
+import type { GameState, PendingDaxuan } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { changeOfficialGrade } from "../engine/officials/changeGrade";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
-import { addGeneratedConsort, initialFavorForRank, type Candidate, type KeptConsort } from "./grandSelection";
+import {
+  addGeneratedConsort, daxuanAnnounceBeats, daxuanAnnounceFlagKey, daxuanDianxuanDueForYear,
+  daxuanDianxuanFlagKey, initialFavorForRank, isPendingDaxuanResolved, matchesPendingDianxuan,
+  nextPendingDaxuan, type Candidate, type KeptConsort,
+} from "./grandSelection";
+import type { DecreeReaction } from "./empressDecree";
 import { excuseFromGreeting, dismissOvernight, recordOvernight } from "./greeting";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
@@ -143,6 +148,71 @@ export class GameStore {
   /** 设/清一个布尔 flag（大选一次性标记）。 */
   setFlag(key: string, value: boolean): void {
     this.state = { ...this.state, flags: { ...this.state.flags, [key]: value } };
+    this.emit();
+  }
+
+  /**
+   * 消费「二月大选报告」待消费态，按 pending.year（年份权威，不取当前日历年——跨年存档稳定）：
+   *  - 该年 announce flag 已置 → 陈旧 pending，调和清除并返回 []（不重播）；
+   *  - 否则原子落该年 announce flag，并链接：同年殿选已到点未决则续 dianxuan（跳过整个二—四月时
+   *    立即挂上），否则清空。返回播报节拍。非 announce 待消费时返回 []。
+   */
+  consumeDaxuanAnnounce(_db: ContentDB): DecreeReaction[] {
+    const pd = this.state.pendingDaxuan;
+    if (pd?.kind !== "announce") return [];
+    if (this.state.flags[daxuanAnnounceFlagKey(pd.year)]) {
+      this.state = { ...this.state, pendingDaxuan: undefined }; // 陈旧调和
+      this.emit();
+      return [];
+    }
+    const flags = { ...this.state.flags, [daxuanAnnounceFlagKey(pd.year)]: true };
+    const chained: PendingDaxuan | undefined = daxuanDianxuanDueForYear({ ...this.state, flags }, pd.year)
+      ? { kind: "dianxuan", year: pd.year }
+      : undefined;
+    this.state = { ...this.state, flags, pendingDaxuan: chained };
+    this.emit();
+    return daxuanAnnounceBeats();
+  }
+
+  /**
+   * 原子解决殿选 pending（enter 扣点成功后 / delegate 直接调用）。完整性不变量：仅当确有
+   * 「该 year、未决」的 dianxuan 待消费事件时才置该年 flag + 清 pending + emit，返回 true；
+   * 否则（无 pending / announce pending / 错年 / 已决）**不改 state、不 emit**，返回 false。
+   * 据此拒绝陈旧/重复/错年点击，杜绝委托业务二次执行。
+   */
+  resolveDaxuanDianxuan(year: number): boolean {
+    if (!matchesPendingDianxuan(this.state, year)) return false; // 无/announce/错年/已决(陈旧) → 不动、不 emit
+    this.state = {
+      ...this.state,
+      flags: { ...this.state.flags, [daxuanDianxuanFlagKey(year)]: true },
+      pendingDaxuan: undefined,
+    };
+    this.emit();
+    return true;
+  }
+
+  /**
+   * 殿选「前往」事务。先校验完整性不变量（确有该年未决 dianxuan pending）——不满足（陈旧/
+   * 重复/错年）则返回 NO_PENDING_DAXUAN 错误且**不扣点、state 不变**，杜绝重复扣点。满足则
+   * 扣 1AP（失败如行动点不足亦原子不变）；扣点成功后解决同一 pending（同步、经 advanceCandidate
+   * sticky 保留，必成功；万一消失视为不变量破坏返回错误，绝不静默进殿选）。返回扣点结果。
+   */
+  enterDaxuan(db: ContentDB, year: number): Result<TimedOutcome, GameError[]> {
+    if (!matchesPendingDianxuan(this.state, year)) {
+      return err([stateError("NO_PENDING_DAXUAN", `no unresolved dianxuan pending for year ${year}`)]);
+    }
+    const spend = this.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    if (!spend.ok) return spend;
+    if (!this.resolveDaxuanDianxuan(year)) {
+      return err([stateError("DAXUAN_RESOLVE_FAILED", `dianxuan pending for year ${year} vanished after AP spend`)]);
+    }
+    return spend;
+  }
+
+  /** 清除待消费的大选事件（陈旧 dianxuan pending 调和用）。 */
+  clearPendingDaxuan(): void {
+    if (this.state.pendingDaxuan === undefined) return;
+    this.state = { ...this.state, pendingDaxuan: undefined };
     this.emit();
   }
 
@@ -323,6 +393,16 @@ export class GameStore {
       if (healthOutcome.sovereignDied) {
         candidate = { ...candidate, gameOver: { cause: "sovereign_death", at: toGameTime(candidate.calendar) } };
       }
+    }
+    // 5) 统一探测/调和大选日历事件，使触发与具体行动路径（SPEND_AP / SKIP_REMAINDER /
+    //    travel / resolveTimedAction）解耦。先调和陈旧（对应 flag 已置）以免 sticky 永久
+    //    阻塞下一大选年；再于无待消费态时按到点（catch-up）置位。sticky：未决则保留。
+    if (candidate.pendingDaxuan && isPendingDaxuanResolved(candidate, candidate.pendingDaxuan)) {
+      candidate = { ...candidate, pendingDaxuan: undefined };
+    }
+    if (candidate.pendingDaxuan === undefined) {
+      const pd = nextPendingDaxuan(candidate);
+      if (pd) candidate = { ...candidate, pendingDaxuan: pd };
     }
     // single commit + single notify — only after every step succeeded
     this.state = candidate;

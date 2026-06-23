@@ -25,7 +25,7 @@ import { buildAutumnHuntPrompt } from "../store/autumnHunt";
 import { ChengFengPromptScreen } from "./screens/ChengFengPromptScreen";
 import { DianxuanScreen } from "./screens/DianxuanScreen";
 import {
-  buildDaxuanAnnounce, buildDaxuanDianxuanPrompt, generateCandidates,
+  daxuanDianxuanPromptFor, generateCandidates,
   npcKeepOnDelegate, npcKeepOnLeave, daxuanDianxuanFlagKey,
   type Candidate,
 } from "../store/grandSelection";
@@ -90,6 +90,15 @@ import { ShopScreen } from "./screens/ShopScreen";
 const MAX_EVENT_CHAIN = 3;
 
 type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan";
+
+/**
+ * 可安全消费大选 prompt/报告的自由活动视图（地图 + 各宫房间）。pendingDaxuan 由引擎持久
+ * 探测，永不丢失；故在非安全视图（事件/朝会/殿选/标题等阻断流程）按兵不动、待回到这些
+ * 视图再补出是安全的，且避免覆盖在进行中的事件/朝会之上将其挤掉。
+ */
+const DAXUAN_SAFE_VIEWS: readonly View[] = [
+  "location", "map", "wenzhaodian", "yuqing_gong", "fengxiandian", "cining_gong", "courtyard",
+];
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -177,7 +186,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     audioController.play(trackFor({ view, board: currentBoard, zone: bgmZone }));
   }, [view, currentBoard, bgmZone]);
 
-  // 大选·四月 prompt：进入房间且到节点时声明式弹出（reactiveState 订阅日历驱动重算）。
   const reactiveState = useGameState(store);
 
   // 死者视图清理：被召见的侍君若在跨月健康 tick 中身故，清除召见态（不在死者宫中停留）。
@@ -187,12 +195,28 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       setSummonedConsortId(null);
     }
   }, [reactiveState.standing, summonedConsortId]);
+
+  // 大选日历事件消费（单点）：pendingDaxuan 由时间事务统一入口在任意推进路径置位，
+  // 与房间视图、具体行动路径均解耦。当前有反应/任一 prompt 占场时按兵不动——pendingDaxuan
+  // 持久，待清场后由本 effect 补出。announce 原子落 flag + 播报；dianxuan 弹选择 prompt
+  // （flag 留待玩家选定时写，见 onDaxuanChoose）。
   useEffect(() => {
     if (!content.ok) return;
-    if (view !== "location" || daxuanPrompt || dianxuan) return;
-    const p = buildDaxuanDianxuanPrompt(content.value, store.getState());
-    if (p) setDaxuanPrompt(p);
-  }, [reactiveState.calendar.dayIndex, reactiveState.calendar.ap, view, daxuanPrompt, dianxuan]);
+    const pd = reactiveState.pendingDaxuan;
+    if (!pd) return;
+    if (reaction || daxuanPrompt || dianxuan || prompt) return;
+    if (!DAXUAN_SAFE_VIEWS.includes(view)) return; // 待回到自由活动视图再消费（事件不丢失）
+    if (pd.kind === "announce") {
+      const beats = store.consumeDaxuanAnnounce(content.value);
+      doAutosave(); // 消费已改写状态（落 flag + 清/续 pending）→ 持久化，避免重载重播
+      if (beats.length) { setReaction(beats[0]!); setReactionQueue(beats.slice(1)); }
+    } else if (store.getState().flags[daxuanDianxuanFlagKey(pd.year)]) {
+      store.clearPendingDaxuan(); // 陈旧：该年殿选已决 → 调和清除，避免 sticky 永久阻塞下一大选年
+      doAutosave();
+    } else {
+      setDaxuanPrompt(daxuanDianxuanPromptFor(pd.year)); // 按 pending.year 构造（年份权威，不取当前日历年）
+    }
+  }, [reactiveState.pendingDaxuan, reaction, daxuanPrompt, dianxuan, prompt, view]);
 
   if (!content.ok || !manifest.success) {
     const errors = [
@@ -409,15 +433,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     return [];
   };
 
-  /** 二月大选报告（节拍，设 flag）；每大选年一次。返回节拍。 */
-  const rollDaxuanAnnounce = (): DecreeReaction[] => {
-    const r = buildDaxuanAnnounce(db, store.getState());
-    if (!r) return [];
-    const applied = store.applyEffects(db, r.effects);
-    if (!applied.ok) return [];
-    return r.beats;
-  };
-
   /** action 解释器：玩家在进贡/秋猎 prompt 中的选择。 */
   const resolvePromptAction = (action: PromptAction) => {
     switch (action.type) {
@@ -504,7 +519,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
    * + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果、台词、皇帝是否崩逝。
    * 皇帝崩逝时不再掷后续节拍（落在已 gameOver 的局上无意义），交调用方 short-circuit 回 title。
    */
-  /** 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报 + 大选报告。 */
+  /**
+   * 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报。
+   * 注：大选二月报告 / 四月殿选不在此处——它们由时间事务统一入口探测 pendingDaxuan，
+   * 任意推进路径（含休息 / 旅行 / 看诊 / 承养）都会置位，由 pendingDaxuan 消费 effect 统一处理。
+   */
   const rollActionBeats = (
     before: { apMax: number; ap: number; dayIndex: number },
     amount: number,
@@ -513,7 +532,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     beats = [...beats, ...rollRebuke(before, amount)];
     const tributeShown = rollTribute(before, amount);
     if (!tributeShown) beats = [...beats, ...rollChengFeng(before, amount)];
-    beats = [...beats, ...rollDaxuanAnnounce()];
     return beats;
   };
 
@@ -1049,20 +1067,29 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
   /** 大选·四月 prompt 选择：进殿选（扣 1AP）或委托太后皇后（不扣 AP）。 */
   const onDaxuanChoose = (action: PromptAction) => {
-    setDaxuanPrompt(null);
     if (action.type === "daxuanEnter") {
-      // 设决定 flag + 扣 1AP，打开殿选。
-      store.setFlag(daxuanDianxuanFlagKey(action.year), true);
-      const { spend, decreeBeats, sovereignDied } = spendAp(1);
-      if (!spend.ok) return;
-      if (sovereignDied) { onSovereignDeath(); return; }
+      // store 校验完整性不变量后再扣 1AP（殿选原子流程，advanceTime 不掷随机节拍）。
+      const enter = store.enterDaxuan(db, action.year);
+      if (!enter.ok) {
+        // 行动点不足：保留 prompt + pending、不写 flag，提示原因（可改委托或养足精神再去）。
+        if (enter.error.some((e) => e.code === "AP_INSUFFICIENT")) {
+          setNotice("行动点不足，无法移驾体元殿。可改由太后皇后决定，或养足精神再去。");
+          return;
+        }
+        setDaxuanPrompt(null); // 无匹配 pending（陈旧/重复点击等）：静默收起，不重复执行
+        return;
+      }
+      setDaxuanPrompt(null); // 扣点成功后才关 prompt；flag + pending 已由 enterDaxuan 原子落定
+      if (enter.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
       const cands = generateCandidates(db, store.getState(), action.year);
       setDianxuan({ candidates: cands, year: action.year });
       setView("dianxuan");
-      // 殿选为原子流程：扣点产生的节拍此处先忽略串播。
-      void decreeBeats;
+      doAutosave(); // 殿选已决落盘（避免重载重弹 prompt）
     } else if (action.type === "daxuanDelegate") {
-      store.setFlag(daxuanDianxuanFlagKey(action.year), true);
+      // 仅当真正消费了「该年未决」pending 才执行委托业务，杜绝陈旧/重复点击二次留牌/重播。
+      const resolved = store.resolveDaxuanDianxuan(action.year);
+      setDaxuanPrompt(null);
+      if (!resolved) return;
       const kept = npcKeepOnDelegate(db, store.getState(), action.year);
       if (kept.length > 0) store.commitDaxuanKept(db, kept);
       const beats: DecreeReaction[] = kept.length > 0

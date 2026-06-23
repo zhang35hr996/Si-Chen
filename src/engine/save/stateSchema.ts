@@ -245,6 +245,7 @@ export const gameStateSchema = z.strictObject({
       resolved: z.boolean(),
     }),
   ),
+  pendingDaxuan: z.strictObject({ kind: z.enum(["announce", "dianxuan"]), year: z.number() }).optional(),
   gameOver: z.strictObject({ cause: z.literal("sovereign_death"), at: gameTimeSchema }).optional(),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;

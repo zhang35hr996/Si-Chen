@@ -46,4 +46,20 @@ describe("funnel: pregnancy_transfer", () => {
     expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }])).toHaveLength(1);
     expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "wei_sui", atMonth: 3 }])).toHaveLength(1);
   });
+
+  it("rejects a carrier who is already carrying a gestation", () => {
+    // First transfer to lu_huaijin succeeds (sovereign carrying → consort carrying).
+    const first = applyEffects(db, carrying(), [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    // Sovereign conceives again and reaches carrying.
+    const begun = applyEffects(db, first.value, [{ type: "pregnancy", op: "begin" }]);
+    if (!begun.ok) throw new Error("begin failed");
+    const carryingAgain = applyEffects(db, begun.value, [{ type: "pregnancy", op: "carry" }]);
+    if (!carryingAgain.ok) throw new Error("carry failed");
+    // A second transfer to the already-pregnant lu_huaijin must be rejected.
+    expect(
+      validateEffects(db, carryingAgain.value, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]),
+    ).toHaveLength(1);
+  });
 });
