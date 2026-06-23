@@ -3,7 +3,7 @@ import { retrievalScore } from "../../src/engine/dialogue/retrievalScore";
 import { createInitialState } from "../../src/engine/state/initialState";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import { appendMention } from "../../src/engine/dialogue/mention";
-import type { MemoryEntry } from "../../src/engine/state/types";
+import type { CourtEvent, GameState, MemoryEntry } from "../../src/engine/state/types";
 
 const trauma = (over: Partial<MemoryEntry> = {}): MemoryEntry => ({
   id: "mem_a_1", ownerId: "a", kind: "trauma", subjectIds: ["heir_7"], perspective: "parent",
@@ -140,5 +140,59 @@ describe("retrievalScore 补充覆盖", () => {
     const scoreNoMention = retrievalScore(s, trauma(), ctxNow);
     const scoreWithMention = retrievalScore(sWithMention, trauma(), ctxNow);
     expect(scoreWithMention).toBeLessThan(scoreNoMention);
+  });
+});
+
+// ── PR-A item 7: location match keyed to the source event's location ─────────
+
+const stateWith = (chronicle: CourtEvent[]): GameState => ({ ...createInitialState(), chronicle });
+
+const courtEvent = (over: Partial<CourtEvent> = {}): CourtEvent => ({
+  id: "evt_loc_1",
+  type: "rank_changed",
+  occurredAt: makeGameTime(1, 5, "mid"),
+  participants: [{ charId: "a", role: "subject" }],
+  locationId: "lengong",
+  payload: {},
+  publicity: { scope: "palace", persistence: "contemporaneous" },
+  publicSalience: 40,
+  retention: "slow",
+  tags: [],
+  ...over,
+});
+
+describe("retrievalScore location match (item 7)", () => {
+  it("location bonus applies only when current location matches the source event's location", () => {
+    const s = stateWith([courtEvent({ locationId: "lengong" })]);
+    const mem = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["residence"], subjectIds: ["a"] });
+    const here = retrievalScore(s, mem, ctx({ locationId: "lengong" }));
+    const elsewhere = retrievalScore(s, mem, ctx({ locationId: "zichendian" }));
+    expect(here).toBeGreaterThan(elsewhere);
+  });
+
+  it("standing in an unrelated location adds NO location bonus (old residence-tag bug)", () => {
+    const s = stateWith([courtEvent({ locationId: "lengong" })]);
+    const mem = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["residence"], subjectIds: ["a"] });
+    const elsewhere = retrievalScore(s, mem, ctx({ locationId: "zichendian" }));
+    const noLocation = retrievalScore(s, mem, ctx({ locationId: undefined }));
+    expect(elsewhere).toBe(noLocation);
+  });
+
+  it("a residence move grants the bonus at either the from or the to location", () => {
+    const s = stateWith([
+      courtEvent({
+        id: "evt_move",
+        type: "residence_changed",
+        participants: [{ charId: "a", role: "mover" }],
+        locationId: undefined,
+        payload: { from: "zichendian", to: "lengong" },
+      }),
+    ]);
+    const mem = trauma({ sourceEventId: "evt_move", triggerTags: ["residence"], subjectIds: ["a"] });
+    const atTo = retrievalScore(s, mem, ctx({ locationId: "lengong" }));
+    const atFrom = retrievalScore(s, mem, ctx({ locationId: "zichendian" }));
+    const atOther = retrievalScore(s, mem, ctx({ locationId: "yanxidian" }));
+    expect(atTo).toBeGreaterThan(atOther);
+    expect(atFrom).toBeGreaterThan(atOther);
   });
 });
