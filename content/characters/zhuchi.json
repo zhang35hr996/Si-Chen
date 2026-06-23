@@ -1,0 +1,28 @@
+{
+  "id": "zhuchi",
+  "kind": "elder",
+  "profile": {
+    "name": "住持",
+    "age": 60,
+    "role": "慈恩寺住持，主持正觉殿香火祈禳的方外尊宿",
+    "appearance": "身披袈裟，眉目慈和，手持念珠，举止安详，自有出尘之气。",
+    "personalityTraits": ["慈和", "超然", "持重", "明理"],
+    "coreFacts": ["慈恩寺住持，主理寺中香火与祈禳", "正觉殿求签问卜由其主持", "不预世事，只论因果福报"],
+    "goals": ["为社稷祈福消灾", "以佛理劝化世人修德安民"],
+    "speechStyle": "言语温缓平和，多引佛理因果；称陛下而自谦贫僧，合十而言。"
+  },
+  "defaultLocation": "simiao",
+  "selfRefs": {
+    "toPlayer": ["贫僧"],
+    "formal": ["贫僧"]
+  },
+  "portraitSet": "zhuchi",
+  "expressions": ["neutral"],
+  "voice": {
+    "register": "formal",
+    "quirks": ["自称『贫僧』", "称陛下『陛下』", "言谈多引因果福报"],
+    "tabooTopics": []
+  },
+  "initialMemories": [],
+  "secrets": []
+}

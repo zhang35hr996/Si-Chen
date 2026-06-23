@@ -117,6 +117,13 @@ export function MapScreen({
     setStack((s) => s.slice(0, -1));
     setBoard(stack[stack.length - 1]!);
   };
+  // 回宫：从京城/郊外直接返回皇城主图（root），不耗行动点。出宫只推进了时间、
+  // 未改 playerLocation，故回宫仅是切板；重置面包屑到根，避免堆栈里残留京城。
+  const returnToPalace = () => {
+    const rootId = boards[0]!.id;
+    setStack([]);
+    setBoard(rootId);
+  };
   const jumpToCrumb = (index: number) => {
     // crumbs = [...stack, board]; only ancestor crumbs (index < stack.length) jump.
     if (index >= stack.length) return;
@@ -243,6 +250,17 @@ export function MapScreen({
                 {r.text}
               </span>
             ))}
+            {board === "jingcheng" && (
+              <button
+                type="button"
+                className="map-node map-node--portal map-node--return"
+                style={{ left: "50%", top: "6%" }}
+                onClick={returnToPalace}
+              >
+                <span className="map-node__dot map-node__dot--portal" aria-hidden="true" />
+                <span className="map-node__name">回宫</span>
+              </button>
+            )}
             {onBoard.map(renderNode)}
             {boardPortals.map(renderPortal)}
           </section>

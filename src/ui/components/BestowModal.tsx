@@ -12,6 +12,7 @@ import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import type { RecipientKind } from "../../store/treasury";
 import { resolveDisplayName } from "../../engine/characters/standing";
+import { byRankDesc } from "../../engine/characters/presence";
 
 // ── Pure helpers ─────────────────────────────────────────────────────────
 
@@ -26,10 +27,10 @@ export function bestowTargets(
   state: GameState,
 ): { consorts: BestowTarget[]; heirs: BestowTarget[]; clan: BestowTarget[] } {
   const consorts: BestowTarget[] = [];
-  for (const c of Object.values(db.characters)) {
-    if (c.kind !== "consort") continue;
+  for (const c of Object.values(db.characters)
+    .filter((c) => c.kind === "consort" && state.standing[c.id]?.lifecycle !== "deceased")
+    .sort(byRankDesc(db, state))) {
     const st = state.standing[c.id];
-    if (st?.lifecycle === "deceased") continue;
     consorts.push({
       id: c.id,
       kind: "consort",

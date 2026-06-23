@@ -6,8 +6,12 @@ import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { GameTime } from "../engine/calendar/time";
 import { dayIndexOf } from "../engine/calendar/time";
+import { getCharacterLocation } from "../engine/characters/presence";
 import { planHealthChange } from "./health";
 import { currentAgeOf, livingConsortIds } from "./healthRoster";
+
+/** 冷宫（长门宫）孕侍君每月额外小产几率（百分点）。设计：冷宫缺医少食，胎息难安。 */
+const COLD_PALACE_MISCARRIAGE_PCT = 20;
 
 export interface MonthlyHealthContext { health: number; status: HealthStatus; age: number; isYearStart: boolean; pregnancyMonthlyCost: boolean; seedKey: string; }
 export interface MonthlyHealthOutcome { previousHealth: number; nextHealth: number; previousStatus: HealthStatus; nextStatus: HealthStatus; died: boolean; deathCause?: DeathCause; }
@@ -129,6 +133,13 @@ export function buildMonthlyHealthTick(db: ContentDB, state: GameState): Monthly
     effects.push(...fx);
     if (out.died) {
       aftermathDeaths.push({ kind: "consort", subjectId: consortId });
+      continue; // 已亡：不再判小产
+    }
+    // 冷宫孕侍君每月小产判定（+20%）：缺医少食，胎息难安。母方存活方判。
+    if (carrying && getCharacterLocation(db, state, consortId) === "changmengong") {
+      if (healthRoll(`${seedKey}:miscarry`) < COLD_PALACE_MISCARRIAGE_PCT) {
+        effects.push({ type: "consort_miscarriage", carrierId: consortId } as EventEffect);
+      }
     }
   }
 

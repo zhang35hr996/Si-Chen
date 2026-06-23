@@ -40,6 +40,22 @@ export function getPresentAt(
     );
 }
 
+/** 位分降序比较子（封号计入有效序）：侍君各列表统一排序入口。无 standing 视为中性。 */
+export function byRankDesc(
+  db: ContentDB,
+  state: GameState,
+): (a: CharacterContent, b: CharacterContent) => number {
+  return (a, b) => {
+    const ra = state.standing[a.id];
+    const rb = state.standing[b.id];
+    if (!ra || !rb) return 0; // 无 standing（如存档后新增）按中性处理
+    return (
+      effectiveOrder(db.ranks[rb.rank]!, rb.title !== undefined) -
+      effectiveOrder(db.ranks[ra.rank]!, ra.title !== undefined)
+    );
+  };
+}
+
 /** 宫中侍君：在宫（非冷宫）、未故的侍君（含凤后），按位分降序。查看侍君与翻牌子共用。 */
 export function inPalaceConsorts(db: ContentDB, state: GameState): CharacterContent[] {
   return Object.values(db.characters)
@@ -49,15 +65,7 @@ export function inPalaceConsorts(db: ContentDB, state: GameState): CharacterCont
         state.standing[c.id]?.lifecycle !== "deceased" &&
         c.defaultLocation !== "changmengong",
     )
-    .sort((a, b) => {
-      const ra = state.standing[a.id];
-      const rb = state.standing[b.id];
-      if (!ra || !rb) return 0; // 无 standing（如存档后新增）按中性处理
-      return (
-        effectiveOrder(db.ranks[rb.rank]!, rb.title !== undefined) -
-        effectiveOrder(db.ranks[ra.rank]!, ra.title !== undefined)
-      );
-    });
+    .sort(byRankDesc(db, state));
 }
 
 /** 某侍君在给定 slot 的实际所在 locationId（设计 §4）。非侍君返回其住处。 */

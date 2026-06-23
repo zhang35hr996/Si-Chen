@@ -202,6 +202,7 @@ export const eventEffectSchema = z.union([
     atMonth: z.number().int().min(1),
   }),
   z.strictObject({ type: z.literal("pregnancy_abort") }),
+  z.strictObject({ type: z.literal("consort_miscarriage"), carrierId: idSchema }),
   z.strictObject({
     type: z.literal("birth"),
     sex: z.enum(["daughter", "son"]),

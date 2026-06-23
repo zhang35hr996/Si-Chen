@@ -492,6 +492,14 @@ export function applyEffects(
         );
         break;
       }
+      case "consort_miscarriage": {
+        // 侍君小产：仅断该侍君那条承嗣胎息，位分生命周期回 normal；帝王自孕不受影响。
+        const bl = next.resources.bloodline;
+        bl.gestations = bl.gestations.filter((g) => g.carrier !== effect.carrierId);
+        const st = next.standing[effect.carrierId];
+        if (st && st.lifecycle === "carrying") st.lifecycle = "normal";
+        break;
+      }
       case "birth": {
         const bl = next.resources.bloodline;
         const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";

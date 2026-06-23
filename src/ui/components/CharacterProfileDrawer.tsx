@@ -141,7 +141,7 @@ export function CharacterProfileDrawer({
           ) : (
             <ul className="profile-log">
               {[...memories]
-                .sort((a, b) => b.strength - a.strength)
+                .sort((a, b) => b.createdAt.dayIndex - a.createdAt.dayIndex)
                 .map((m) => (
                   <li key={m.id} className="profile-log__item">
                     {m.summary}

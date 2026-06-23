@@ -18,11 +18,11 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 7 characters, 23 locations, 17 events, 17 scenes, 22 ranks", () => {
+  it("contains the planned slice + cold-palace pack: 8 characters, 23 locations, 17 events, 17 scenes, 22 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(Object.keys(db.characters).sort()).toEqual(
-      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya", "cheng_feng"].sort(),
+      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya", "cheng_feng", "zhuchi"].sort(),
     );
     expect(Object.keys(db.locations).sort()).toEqual(
       [

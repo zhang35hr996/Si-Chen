@@ -6,6 +6,7 @@
  */
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
+import { timeOfDay } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent, LocationContent } from "../../engine/content/schemas";
 import type { ChamberId, GameState } from "../../engine/state/types";
@@ -68,7 +69,7 @@ export function CharacterScene({
 
   const standing = character ? state.standing[character.id] : undefined;
   const rank = standing ? db.ranks[standing.rank] : undefined;
-  const background = registry.resolveVariant(location.backgroundKey, "day", "background").url;
+  const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background").url;
   // 对话/侍寝 与卡片同一门槛：有行动点且本旬可侍寝。
   const actionable = !!character && state.calendar.ap >= 1 && canSummon(state, character.id);
 

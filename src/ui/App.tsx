@@ -832,7 +832,17 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     const decreeBeats = rollActionBeats(before.calendar, 1);
     doAutosave();
-    playReactions([{ speakerId: "wei_sui", lines: plan.lines }, ...decreeBeats], settled.value.rolledOver);
+    // 上香在慈恩寺(ciensi)；求签移步正觉殿(zhengjuedian)。先由住持当面禀报签辞/祝祷，
+    // 再由乘风回禀俗世应验（流言四起 / 民心归附）。
+    const sceneBg = kind === "incense" ? "bg.ciensi" : "bg.zhengjuedian";
+    playReactions(
+      [
+        { speakerId: "zhuchi", lines: plan.zhuchiLines, backgroundKey: sceneBg },
+        { speakerId: "cheng_feng", lines: plan.chengfengLines, backgroundKey: sceneBg },
+        ...decreeBeats,
+      ],
+      settled.value.rolledOver,
+    );
   };
 
   // 进店（耗 1 行动点）：先切换到 shop 视图，再串播懿旨/乘风节拍（若有）。
@@ -1246,7 +1256,13 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onClose={() => { setFocusConsortId(null); setView("location"); }}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
-          onOpenCourtyard={(loc) => { setCourtyardLocId(loc.id); setView("courtyard"); }}
+          onOpenCourtyard={(loc) => {
+            // 长门宫（冷宫）是 free-view 居所：以冷宫场景直接呈现住客，不走院子→travel
+            // （changmengong 非 travel 节点，进院子点殿会落空回主图）。
+            if (loc.id === "changmengong") { setFreeViewId(loc.id); setView("freeview"); return; }
+            setCourtyardLocId(loc.id);
+            setView("courtyard");
+          }}
           onEnterShop={enterShop}
           onBoardChange={(boardId) => {
             setCurrentBoard(boardId);
@@ -1297,6 +1313,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onClose={() => setView("map")}
           onOfferIncense={() => templeAction("incense")}
           onDrawFortune={() => templeAction("fortune")}
+          onViewProfile={(id) => setProfileCharId(id)}
         />
       )}
       {view === "event" && activeEventId && (

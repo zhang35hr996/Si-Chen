@@ -1,6 +1,7 @@
 /** 孕二月敬事房上书：列「可能生父」，可即刻选定候选承嗣（全体在世侍君多选）。 */
 import { useState } from "react";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
+import { byRankDesc } from "../../engine/characters/presence";
 import { canSummon } from "../../store/bedchamber";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
@@ -30,6 +31,7 @@ export function JingshifangModal({
 
   const living = Object.values(db.characters)
     .filter((c) => c.kind === "consort" && canSummon(state, c.id))
+    .sort(byRankDesc(db, state))
     .map((c) => c.id);
 
   const toggle = (id: string) =>

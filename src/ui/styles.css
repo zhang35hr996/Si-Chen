@@ -2966,6 +2966,32 @@ button:active:enabled {
 .temple-menu { display: flex; gap: 12px; justify-content: center; padding: 12px; }
 .temple-menu button { padding: 10px 22px; font-size: 1rem; }
 
+/* 冷宫（长门宫）free-view 住客名牌：立绘缩略 + 本名·位分，可点开详情。 */
+.coldpalace-resident {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(20, 16, 14, 0.55);
+  border: 1px solid #4a3f31;
+  border-radius: 8px;
+  color: #e8ddca;
+  cursor: pointer;
+}
+.coldpalace-resident:hover { border-color: #8c7757; }
+.coldpalace-resident__portrait {
+  width: 96px;
+  height: 128px;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: 6px;
+}
+.coldpalace-resident__name { font-size: 0.95rem; }
+
+/* 京城地图·回宫入口（顶部）：沿用 portal 样式，居中置顶。 */
+.map-node--return { transform: translate(-50%, 0); }
+
 /* ── DescriptorStat (.attr-line) ── */
 .attr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 0; }
 .attr-line__label { color: var(--c-text-dim); font-size: 0.9rem; }

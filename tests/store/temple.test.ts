@@ -34,7 +34,8 @@ describe("buildIncense", () => {
     expect(map["sovereign.prestige"]).toBeLessThanOrEqual(5);
     expect(map["sovereign.health"]).toBeGreaterThanOrEqual(0);
     expect(map["sovereign.health"]).toBeLessThanOrEqual(5);
-    expect(r.lines.length).toBeGreaterThan(0);
+    expect(r.zhuchiLines.length).toBeGreaterThan(0);
+    expect(r.chengfengLines.length).toBeGreaterThan(0);
   });
   it("同 key 确定性", () => {
     expect(buildIncense(db, state, "same")).toEqual(buildIncense(db, state, "same"));
@@ -47,7 +48,8 @@ describe("buildFortune", () => {
       const r = buildFortune(db, state, `key${i}`);
       expect(r.effects.some((e: any) => e.field === "publicSupport")).toBe(true);
       for (const e of r.effects as any[]) expect(Math.abs(e.delta)).toBeLessThanOrEqual(10);
-      expect(r.lines.length).toBeGreaterThan(0);
+      expect(r.zhuchiLines.length).toBeGreaterThan(0);
+      expect(r.chengfengLines.length).toBeGreaterThan(0);
     }
   });
   it("同 key 确定性", () => {

@@ -38,7 +38,7 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(65); // origin/main 51 + 6 宫隶 portraits (portrait.gongli1–6.neutral) + 8 官员 portraits (portrait.official1–8.neutral)
+    expect(result.entryCount).toBe(73); // 65 + 慈恩寺/正觉殿/冷宫 背景 7 + 住持立绘 1 (portrait.zhuchi.neutral)
     expect(result.placeholderCount).toBe(0); // all consort portraits now have real art
   });
 
