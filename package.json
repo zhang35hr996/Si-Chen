@@ -29,11 +29,14 @@
     "eval:run": "tsx tools/eval-run.ts",
     "eval:score": "tsx tools/eval-score.ts",
     "eval:export": "tsx tools/eval-export.ts",
-    "eval:report": "tsx tools/eval-report.ts"
+    "eval:report": "tsx tools/eval-report.ts",
+    "knowledge:build": "tsx tools/knowledge-build.ts",
+    "knowledge:inspect": "tsx tools/knowledge-inspect.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
     "@google/genai": "^2.9.0",
+    "better-sqlite3": "^12.11.1",
     "openai": "^6.44.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -44,6 +47,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

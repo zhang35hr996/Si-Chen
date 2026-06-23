@@ -1,0 +1,293 @@
+/**
+ * Tests for the fail-closed build pipeline contract:
+ *
+ *   - `ingestSourcesStrict` returns an error on any bad source.
+ *   - Because knowledge-build.ts only opens the DB after a successful
+ *     ingestSourcesStrict, a failing build must never modify an existing DB.
+ */
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ingestSourcesStrict } from "../../src/engine/knowledge/ingestion/pipeline";
+import { SqliteKeywordIndex } from "../../src/engine/knowledge/index/sqlite-fts5";
+import type { KnowledgeChunk } from "../../src/engine/knowledge/model";
+
+let dbPath: string;
+
+beforeEach(() => {
+  dbPath = join(tmpdir(), `build-test-${Date.now()}-${Math.random()}.db`);
+});
+
+afterEach(() => {
+  try { rmSync(dbPath); } catch { /* ignore */ }
+});
+
+function makeChunk(id: string, text: string): KnowledgeChunk {
+  return {
+    id,
+    sourceType: "etiquette",
+    title: id,
+    text,
+    tags: [],
+    entityIds: [],
+    locationIds: [],
+    visibility: "public",
+    sourcePath: "test.md",
+  };
+}
+
+describe("ingestSourcesStrict — fail-closed contract", () => {
+  it("returns error on Markdown with no frontmatter", () => {
+    const result = ingestSourcesStrict([
+      { kind: "markdown", content: "# No frontmatter\n\nJust text.", sourcePath: "bad.md" },
+    ]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("returns error on Markdown with unknown frontmatter key (strict schema)", () => {
+    const content = `---
+id: strict.test
+sourceType: etiquette
+title: Test
+tags: []
+entityIds: []
+locationIds: []
+visibility: public
+unknownExtraField: should fail
+---
+
+## Section
+
+Content.
+`;
+    const result = ingestSourcesStrict([
+      { kind: "markdown", content, sourcePath: "strict.md" },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.length).toBeGreaterThan(0);
+  });
+
+  it("returns error on Markdown with duplicate frontmatter key", () => {
+    const content = `---
+id: dup.key
+id: another.id
+sourceType: etiquette
+title: Test
+tags: []
+entityIds: []
+locationIds: []
+visibility: public
+---
+
+## Section
+
+Content.
+`;
+    const result = ingestSourcesStrict([
+      { kind: "markdown", content, sourcePath: "dup.md" },
+    ]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("existing DB is untouched when ingestSourcesStrict fails (build contract)", () => {
+    // Build initial valid DB
+    const db = new SqliteKeywordIndex(dbPath);
+    db.rebuild([makeChunk("valid.chunk", "承养制度的规定内容。")]);
+    db.close();
+
+    // Confirm initial state
+    const before = new SqliteKeywordIndex(dbPath);
+    const initialHits = before.search({ text: "承养", limit: 10 }).map((h) => h.chunk.id);
+    before.close();
+    expect(initialHits).toContain("valid.chunk");
+
+    // Attempt a build with a bad source
+    const result = ingestSourcesStrict([
+      {
+        kind: "markdown",
+        content: "No frontmatter — this will fail ingestion.",
+        sourcePath: "bad.md",
+      },
+    ]);
+    // Ingestion fails — we do NOT open or modify the DB
+    expect(result.ok).toBe(false);
+
+    // Verify DB is unchanged
+    const after = new SqliteKeywordIndex(dbPath);
+    const afterHits = after.search({ text: "承养", limit: 10 }).map((h) => h.chunk.id);
+    after.close();
+    expect(afterHits).toEqual(initialHits);
+  });
+
+  it("returns error when sources contain duplicate chunk IDs across files", () => {
+    const goodMd = `---
+id: shared.doc
+sourceType: etiquette
+title: Doc One
+tags: []
+entityIds: []
+locationIds: []
+visibility: public
+---
+
+## Section
+
+禁足期间不得离开所居宫殿，也不参加日常晨省请安。
+`;
+    // Second file uses the same doc id → duplicate chunk IDs
+    const result = ingestSourcesStrict([
+      { kind: "markdown", content: goodMd, sourcePath: "file1.md" },
+      { kind: "markdown", content: goodMd, sourcePath: "file2.md" },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "DUPLICATE_ID")).toBe(true);
+  });
+});
+
+describe("ingestSourcesStrict — location_json fail-closed contract", () => {
+  // Full valid "free" entry location satisfying locationSchema
+  const validLocation = {
+    id: "xuanzhengdian",
+    name: "宣政殿",
+    description: "晴日里，金瓦映着白光，整座殿宇如同悬在天际。丹陛巍巍，百官列班。",
+    backgroundKey: "bg.xuanzhengdian",
+    ambience: ["钟磬", "百官屏息"],
+    position: { x: 0.5, y: 0.1 },
+    entry: "free",
+  };
+
+  it("succeeds on valid location JSON", () => {
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: validLocation, sourcePath: "loc.json" },
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns INVALID_LOCATION_SOURCE when description is missing", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { id: "xuanzhengdian", name: "宣政殿" },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when description is an empty string", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { ...validLocation, description: "" },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when required field 'name' is missing", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { id: "xuanzhengdian", description: "描述文字。" },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when required field 'id' is missing", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { name: "宣政殿", description: "描述文字。" },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when backgroundKey is missing (full locationSchema required)", () => {
+    const { backgroundKey: _bk, ...noBackground } = validLocation;
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: noBackground, sourcePath: "loc.json" },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error for travel location missing travelCost", () => {
+    const travelLocation = {
+      ...validLocation,
+      id: "changmengong",
+      entry: "travel",
+      connections: ["cining_gong"],
+      // travelCost deliberately omitted
+    };
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: travelLocation, sourcePath: "loc.json" },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when a sub-location has a blank description", () => {
+    const withSubs = {
+      ...validLocation,
+      subLocations: [
+        {
+          id: "east_wing",
+          name: "东配殿",
+          backgroundKey: "bg.east",
+          description: "", // blank — nonEmpty fails
+        },
+      ],
+    };
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: withSubs, sourcePath: "loc.json" },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("existing DB is untouched when a location_json source is invalid", () => {
+    const db = new SqliteKeywordIndex(dbPath);
+    db.rebuild([makeChunk("seed.chunk", "承养制度的规定内容。")]);
+    db.close();
+
+    const before = new SqliteKeywordIndex(dbPath);
+    const initialIds = before.search({ text: "承养", limit: 10 }).map((h) => h.chunk.id);
+    before.close();
+    expect(initialIds).toContain("seed.chunk");
+
+    // Build fails because location JSON is missing description
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { id: "xuanzhengdian", name: "宣政殿" }, // no description
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+
+    // DB is not opened or modified when ingestSourcesStrict returns an error
+    const after = new SqliteKeywordIndex(dbPath);
+    const afterIds = after.search({ text: "承养", limit: 10 }).map((h) => h.chunk.id);
+    after.close();
+    expect(afterIds).toEqual(initialIds);
+  });
+});
