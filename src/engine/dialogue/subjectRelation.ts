@@ -1,6 +1,7 @@
-/** 说话人对某当事人的关系（spec：数值 + stance 枚举 + reasons）。词表驱动，确定性，无 NLP。 */
-export type RelationStance =
-  | "devoted" | "friendly" | "neutral" | "competitive" | "contemptuous" | "hostile";
+/** 说话人对某当事人的关系（spec：数值 + stance 枚举 + reasons）。结构化驱动，确定性，无 NLP。 */
+import type { RelationStance } from "../content/schemas";
+
+export type { RelationStance };
 
 export interface RelationVector {
   affection: number; trust: number; hostility: number; envy: number; fear: number; respect: number;
@@ -10,16 +11,6 @@ export interface SubjectRelation extends RelationVector {
   stance: RelationStance;
   reasons: string[];
 }
-
-/** 限定别名词表（不做字符串相似度）。`防备` 归 neutral，用低 trust/高 suspicion 表达，不当 hostile。 */
-export const ATTITUDE_ALIASES: Record<string, RelationStance> = {
-  亲近: "friendly", 交好: "friendly", 友善: "friendly",
-  忠心: "devoted", 敬爱: "devoted",
-  平淡: "neutral", 不熟: "neutral", 疏远: "neutral", 防备: "neutral",
-  争宠: "competitive", 竞争: "competitive", 嫉妒: "competitive",
-  轻视: "contemptuous", 鄙夷: "contemptuous",
-  交恶: "hostile", 敌视: "hostile", 仇恨: "hostile",
-};
 
 export const STANCE_DEFAULTS: Record<RelationStance, RelationVector> = {
   devoted:      { affection: 75, trust: 80, hostility: 0,  envy: 5,  fear: 10, respect: 80 },
@@ -33,26 +24,20 @@ export const STANCE_DEFAULTS: Record<RelationStance, RelationVector> = {
 const clampPct = (n: number): number => Math.min(100, Math.max(0, n));
 const clampSigned = (n: number): number => Math.min(100, Math.max(-100, n));
 
-export interface RelationDiagnostic { code: "unknown_authored_attitude"; value: string }
-
+/**
+ * Derive the speaker's relation to a subject from the authored structured `stance`
+ * (machine field; defaults to "neutral" when unstated). The narrative `attitude`
+ * string is intentionally NOT parsed — content carries the canonical stance.
+ */
 export function deriveSubjectRelation(input: {
   charId: string;
-  authoredAttitude?: string;
+  authoredStance?: RelationStance;
   standingAffection?: number;  // −100..100 运行时 affection
   favorThreat?: number;        // 0–100 对方恩宠上升威胁度
-}): { relation: SubjectRelation; diagnostics: RelationDiagnostic[] } {
-  const diagnostics: RelationDiagnostic[] = [];
-  let stance: RelationStance = "neutral";
+}): { relation: SubjectRelation } {
+  const stance: RelationStance = input.authoredStance ?? "neutral";
   const reasons: string[] = [];
-  if (input.authoredAttitude !== undefined) {
-    const mapped = ATTITUDE_ALIASES[input.authoredAttitude];
-    if (mapped) {
-      stance = mapped;
-      reasons.push(`授定态度「${input.authoredAttitude}」`);
-    } else {
-      diagnostics.push({ code: "unknown_authored_attitude", value: input.authoredAttitude });
-    }
-  }
+  if (input.authoredStance !== undefined) reasons.push(`授定态度「${stance}」`);
   const base = STANCE_DEFAULTS[stance];
   // 动态 affection 微调（不翻转 stance）：60% 基线 + 40% 运行时
   const affection = input.standingAffection !== undefined
@@ -72,5 +57,5 @@ export function deriveSubjectRelation(input: {
     respect: base.respect,
     reasons,
   };
-  return { relation, diagnostics };
+  return { relation };
 }

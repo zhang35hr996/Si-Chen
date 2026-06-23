@@ -2,10 +2,21 @@ import { describe, it, expect } from "vitest";
 import {
   createGeminiProvider,
   sanitizeJsonSchemaForGemini,
+  buildGeminiToolRequest,
   type GeminiTransport,
 } from "../../src/engine/dialogue/providers/geminiProvider";
 import { ok, err } from "../../src/engine/infra/result";
 import { makeDialogueRequest } from "../../tools/fixtures/dialogueRequest";
+
+describe("gemini tool contract carries mentionedContextRefs", () => {
+  const req = buildGeminiToolRequest(makeDialogueRequest(), "gemini-2.0-flash");
+  it("system instruction includes the mentionedContextRefs rule", () => {
+    expect(req.systemInstruction).toContain("mentionedContextRefs");
+  });
+  it("tool description mentions referenced context", () => {
+    expect(req.functionDeclaration.description).toContain("引用");
+  });
+});
 
 describe("sanitizeJsonSchemaForGemini", () => {
   it("strips additionalProperties, $schema, default deeply", () => {

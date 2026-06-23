@@ -11,7 +11,10 @@ const TOOL_NAME = "emit_dialogue_line";
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_TOKENS = 800;
 
-// ── WORLD_RULES_TEXT — exactly 12 rules ──────────────────────────────────────
+// ── WORLD_RULES_TEXT — exactly 13 rules ──────────────────────────────────────
+
+/** Tool description — shared by all providers so the contract stays consistent. */
+export const TOOL_DESCRIPTION = "提交角色台词、结构化事实，以及本轮台词实际引用的上下文。";
 
 export const WORLD_RULES_TEXT = `
 你是一位宫廷叙事引擎，负责生成单个角色在一轮对话中的中文台词。
@@ -28,6 +31,7 @@ export const WORLD_RULES_TEXT = `
 10. forbiddenClaims 中的事实内容一律不在台词中出现。
 11. allowedClaims 为空不代表禁止问候、情绪表达或主观感受。
 12. 台词长度适中，符合人物身份与场景私密度（audience.privacy）。
+13. 若本轮台词实际使用了 relevantMemories 或 knownEvents 中的内容，必须把对应的 { kind, id } 填入 mentionedContextRefs；仅填实际使用的项，未使用则填空数组，不得引用输入未提供的 id。
 `.trim();
 
 // ── renderEtiquetteBlock ──────────────────────────────────────────────────────
@@ -94,7 +98,7 @@ export function buildAnthropicToolRequest(request: DialogueRequest, model: strin
       },
     ],
     messages: [{ role: "user", content: JSON.stringify(payload) }],
-    tools: [{ name: TOOL_NAME, description: "提交角色台词及其结构化事实。", strict: true, input_schema: dialogueToolOutputJsonSchema }],
+    tools: [{ name: TOOL_NAME, description: TOOL_DESCRIPTION, strict: true, input_schema: dialogueToolOutputJsonSchema }],
     tool_choice: { type: "tool", name: TOOL_NAME, disable_parallel_tool_use: true },
   };
 }
@@ -172,6 +176,7 @@ function parseToolUse(res: AnthropicTransportResult, request: DialogueRequest, m
     text: parsed.data.text,
     choices: [],
     proposedClaims: parsed.data.proposedClaims,
+    mentionedContextRefs: parsed.data.mentionedContextRefs,
     ...(usage ? { usage } : {}),
     providerMeta: { provider: "anthropic", model, ...(res.requestId ? { requestId: res.requestId } : {}) },
   });

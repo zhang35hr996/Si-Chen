@@ -1,7 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { createOpenAIProvider, type OpenAITransport } from "../../src/engine/dialogue/providers/openaiProvider";
+import { createOpenAIProvider, buildOpenAIToolRequest, type OpenAITransport } from "../../src/engine/dialogue/providers/openaiProvider";
 import { ok, err } from "../../src/engine/infra/result";
 import { makeDialogueRequest } from "../../tools/fixtures/dialogueRequest";
+
+describe("openai tool contract carries mentionedContextRefs", () => {
+  const req = buildOpenAIToolRequest(makeDialogueRequest(), "gpt-4o");
+  it("system message includes the mentionedContextRefs rule", () => {
+    expect(String(req.messages[0]!.content)).toContain("mentionedContextRefs");
+  });
+  it("tool description mentions referenced context", () => {
+    expect(req.tools[0]!.function.description).toContain("引用");
+  });
+});
 
 function transportReturning(args: object): OpenAITransport {
   return {

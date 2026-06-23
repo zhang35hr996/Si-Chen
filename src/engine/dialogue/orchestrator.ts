@@ -17,7 +17,7 @@ import { buildAudienceContext } from "./audience";
 import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
-import { buildMemoryContext, selectPromptEvents } from "./memoryContext";
+import { buildMemoryContext, selectPromptEventsByActivation } from "./memoryContext";
 import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
 import { mapProviderErrorToGameError } from "./providerError";
@@ -80,13 +80,34 @@ export function assembleDialogueRequest(
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
   }
   const now = toGameTime(state.calendar);
+  // Real scene context (PR-A items 1+2): topic / subject / present / privacy flow
+  // from the caller into recall, activation, audience, and the compiled prompt.
+  const topicTags = options.topicTags ?? [];
+  // The conversation target is always physically present, so memories/events ABOUT
+  // the target surface in recall/activation even when the caller supplies no extra
+  // cast. `options.presentCharacterIds` are additional confirmed-present bystanders.
+  // The speaker is filtered out defensively (even if a caller passes it): they are
+  // trivially always present, so a "present-bystander" bonus on events/memories about
+  // themselves would be meaningless, and audience already drops them.
+  const scenePresentIds = [...new Set([targetId, ...(options.presentCharacterIds ?? [])])].filter((id) => id !== speakerId);
+  // Beat subjects = who the beat is explicitly ABOUT. They drive BOTH recall and
+  // activation (a memory/event about them surfaces even if that person is absent).
+  // The speaker is NOT a beat subject (self-memories stay recallable via recallSubjectIds
+  // but must not get an automatic activation bonus).
+  const beatSubjectIds = options.subjectIds ?? [];
+  // Recall net also includes the speaker so self-memories remain reachable.
+  const recallSubjectIds = [...new Set([speakerId, ...beatSubjectIds])];
   const memCtx = buildMemoryContext(
     state,
-    { speakerId, subjectIds: [speakerId] },
-    // audienceId, targetId, speakerId all use the resolved targetId — single source.
-    { now, topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
+    { speakerId, subjectIds: recallSubjectIds, topicTags, presentCharacterIds: scenePresentIds },
+    { now, topicTags, subjectIds: beatSubjectIds, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
   );
-  const audience = buildAudienceContext(state, db, { speakerId, targetId });
+  const audience = buildAudienceContext(state, db, {
+    speakerId,
+    targetId,
+    ...(options.presentCharacterIds !== undefined ? { presentCharacterIds: options.presentCharacterIds } : {}),
+    ...(options.privacy !== undefined ? { privacy: options.privacy } : {}),
+  });
 
   // §5 assembly order: reaction → promptEvents → claims → promptContext
 
@@ -99,11 +120,20 @@ export function assembleDialogueRequest(
     state,
     currentDayIndex: now.dayIndex,
     sceneDirective: options.sceneDirective,
+    // Real disposition / relation / audience (PR-A items 3+4+5) — canonical machine fields
+    reactionTraits: character.profile.reactionTraits,
+    stances: character.stances ?? [],
+    presentCharacterIds: scenePresentIds,
+    privacy: options.privacy ?? "semi_private",
   });
 
-  // 2. Select prompt events BEFORE assembleClaims (pinned event always first)
-  const promptEvents = selectPromptEvents({
-    events: Array.from(memCtx.knownEventsAll),
+  // 2. Select prompt events BEFORE assembleClaims, ranked by unified activation
+  // (decayed salience × relevance + present − recent reaction); the reaction
+  // source event is always pinned first (PR-A item 9).
+  const promptEvents = selectPromptEventsByActivation({
+    state,
+    events: memCtx.knownEventsAll,
+    ctx: { now, topicTags, subjectIds: beatSubjectIds, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
     pinnedEventId: builtReaction?.sourceEventId,
     limit: 3,
   });
@@ -152,6 +182,7 @@ export function assembleDialogueRequest(
     },
     sceneDirective,
     transcript: transcript ?? [],
+    topicTags,
     ...(scripted !== undefined ? { scripted } : {}),
     promptContext,
   });
@@ -434,11 +465,15 @@ async function produceDialogueLineWithPolicy(
   if (!outcome.ok) return err(outcome.error);
 
   // ── memory write-back ─────────────────────────────────────────────
+  // Mention cooldown is driven by BOTH accepted-claim sources AND the model's
+  // mentionedContextRefs, so a trauma referenced without a factual claim still
+  // cools down (PR-A item 6).
   let nextState = recordMentionedContext(
     state,
     outcome.diagnostics.acceptedClaims,
     { speakerId: request.speakerId, audienceId: request.targetId, now: policy.now },
     policy.offeredRefKeys,
+    raw.value.mentionedContextRefs ?? [],
   );
 
   // ── event reaction write-back (T10) ───────────────────────────────

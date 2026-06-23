@@ -7,6 +7,7 @@
     "role": "掌祭仪与宫廷礼制的礼官",
     "appearance": "一丝不苟的碧色官服，腰间悬礼部铜符，神色永远平静。",
     "personalityTraits": ["严谨", "守制", "不徇私", "忠于礼法"],
+    "reactionTraits": ["discreet", "status_conscious"],
     "coreFacts": ["执掌传月祭仪与宫廷礼制十余年", "先帝旧人，深谙典章"],
     "goals": ["确保祭仪依制按期举行", "以礼法护国本"],
     "speechStyle": "公事公办，条理分明，引经据典；从不多言一句私话。"

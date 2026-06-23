@@ -24,4 +24,15 @@ describe("generatedConsorts in GameState", () => {
     const parsed = gameStateSchema.safeParse(withGen);
     expect(parsed.success).toBe(true);
   });
+
+  it("pendingDaxuan round-trips through the save schema (and is optional)", () => {
+    const s = createNewGameState(db);
+    expect(s.pendingDaxuan).toBeUndefined();
+    expect(gameStateSchema.safeParse(s).success).toBe(true); // optional → omitted is valid
+
+    const withPending = { ...s, pendingDaxuan: { kind: "dianxuan" as const, year: 1 } };
+    const parsed = gameStateSchema.safeParse(withPending);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.pendingDaxuan).toEqual({ kind: "dianxuan", year: 1 });
+  });
 });

@@ -10,6 +10,7 @@
     "role": "执掌凤印，总理后宫的世族之后",
     "appearance": "身量颀长，常服绯红凤纹礼衣，眉目端凝，不怒自威。",
     "personalityTraits": ["端肃", "克制", "重礼法", "外冷内热"],
+    "reactionTraits": ["status_conscious", "discreet", "compassionate"],
     "coreFacts": ["大婚四年，执掌凤印总理后宫", "出身世族，母家在朝中有根基", "久不承宠，地位全系名分"],
     "goals": ["整肃宫规，维持后宫秩序", "守住凤后体面与母家颜面"],
     "speechStyle": "措辞雅正，多用敬语，句短而克制；急时仍不失礼数。"
@@ -38,7 +39,7 @@
   ],
   "secrets": [],
   "stances": [
-    { "charId": "lu_huaijin", "attitude": "怜其失宠，亦虑其失仪，面上以礼相待" }
+    { "charId": "lu_huaijin", "stance": "friendly", "attitude": "怜其失宠，亦虑其失仪，面上以礼相待" }
   ],
   "maternalClan": { "postId": "chengxiang", "legitimate": true, "birthOrder": 1 }
 }

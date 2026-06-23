@@ -1,9 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  type EventReturnTarget,
+  MAX_EVENT_CHAIN,
+  type RankAdminSession,
+  type RankAdminOrigin,
+  type RankAdminOutcome,
+  canChain,
+  checkpointReturnTarget,
+  firstNightRankDrainAction,
+  initialNavState,
+  navReducer,
+  type AutoCheckpointRequest,
+  autoCheckpointTriggers,
+  deferredAutoCheckpointMode,
+  eventSceneCompletionPlan,
+  pendingReactionReducer,
+  resolveReturnNavigation,
+} from "./eventReturn";
+import {
+  type DialogueOpState,
+  finishDialogueOp,
+  initialDialogueOpState,
+  invalidateDialogueOps,
+  isCurrentDialogueOp,
+  startDialogueOp,
+} from "./dialogueOp";
+import {
+  type GlobalInterruptKind,
+  pickNextGlobalInterrupt,
+  timeSettlementReducer,
+} from "./settlement";
 import rawManifest from "../../assets/manifest.json";
 import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
 import { loadGameContent } from "../engine/content/viteSource";
-import { pickNextEvent } from "../engine/events/engine";
+import { pickAutoStartEvent } from "../engine/events/router";
 import { assetError, stateError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
@@ -11,11 +42,33 @@ import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees } from "../engine/characters/greeting";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
-import { monthOrdinal, isGreetingSlot } from "../engine/calendar/time";
+import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
+import {
+  audienceCount,
+  audienceReconciliationEffects,
+  clearAudience,
+  defer,
+  deferredAudienceCount,
+  getAudienceQueue,
+  getDeferredAudienceQueue,
+} from "../engine/events/audience";
+import { GameShell } from "./components/GameShell";
+import { breadcrumbFor } from "./components/breadcrumb";
+import { sovereignGestationDisplay } from "./format/gestationDisplay";
+import { ZichendianScreen } from "./screens/ZichendianScreen";
+import {
+  audienceItemToPendingView,
+  audienceItemToView,
+  selectActiveAudience,
+  shouldClearAudienceOnCommit,
+  summonedConsortToView,
+  zichendianExternalBusy,
+} from "./zichendianView";
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue/orchestrator";
+import { deriveConverseSceneContext, type ConverseSceneContext } from "./converseScene";
 import type { DialogueLine, DialogueProvider } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
@@ -25,7 +78,7 @@ import { buildAutumnHuntPrompt } from "../store/autumnHunt";
 import { ChengFengPromptScreen } from "./screens/ChengFengPromptScreen";
 import { DianxuanScreen } from "./screens/DianxuanScreen";
 import {
-  buildDaxuanAnnounce, buildDaxuanDianxuanPrompt, generateCandidates,
+  daxuanDianxuanPromptFor, generateCandidates,
   npcKeepOnDelegate, npcKeepOnLeave, daxuanDianxuanFlagKey,
   type Candidate,
 } from "../store/grandSelection";
@@ -86,10 +139,7 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-/** Cap on scene_end→event chains per player action (plan §10 #9 latent guard). */
-const MAX_EVENT_CHAIN = 3;
-
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -111,17 +161,19 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [court, setCourt] = useState<CourtSession | null>(null);
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
-  const [manageCharId, setManageCharId] = useState<string | null>(null);
+  // 位分管理原子会话（charId + origin）。origin 决定结束后是否补跑被初夜搁置的转旬 checkpoint。
+  const [rankAdmin, setRankAdmin] = useState<RankAdminSession>(null);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
-  // 对话/反应/初夜提示等过场若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
-  const [reactionRollover, setReactionRollover] = useState(false);
-  // 出宫结算若需延后补跑 checkpoint（懿旨过场后换旬），记下「留在地图」意图，
-  // 使补跑不按 playerLocation 把视图切回房间（玩家在京城板，位置未变）。
-  const [reactionStayOnMap, setReactionStayOnMap] = useState(false);
+  // 过场（对话/反应/初夜提示）若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
+  // 原 reactionRollover + reactionStayOnBoardId 合并为单一原子待处理上下文：null=无；非空={boardId}
+  // 决定补跑落点（出宫携带权威板 ID，普通行动为 undefined）。杜绝两状态错位串台（§ deferred-reaction）。
+  const [pendingReactionCheckpoint, pendingReactionDispatch] = useReducer(pendingReactionReducer, null);
   // 侍寝流程：选人 → 选模式 → 播放体验 → 提交（→ 初夜晋升）
   const [flipOpen, setFlipOpen] = useState(false);
+  // 选人盘呈现语义：bedchamber=翻牌子（侍寝，默认，含 canBedchamber 背书）；summon=召见侍君（叙话/临场，无侍寝门槛）。
+  const [flipMode, setFlipMode] = useState<"bedchamber" | "summon">("bedchamber");
   const [bedchamberPickId, setBedchamberPickId] = useState<string | null>(null);
   const [bedchamberRun, setBedchamberRun] = useState<BedchamberPlan | null>(null);
   const [firstNightPromptId, setFirstNightPromptId] = useState<string | null>(null);
@@ -158,17 +210,33 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
   const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
   const [giftItemId, setGiftItemId] = useState<string | null>(null);
-  const [daxuanPrompt, setDaxuanPrompt] = useState<ChengFengPrompt | null>(null);
   const [dianxuan, setDianxuan] = useState<{ candidates: Candidate[]; year: number } | null>(null);
+  // 殿选（四月）选择 prompt。pendingDaxuan（持久）经结算系统选中 grand_selection 时由消费 effect 置位；
+  // 既是当前 atomicFlow（防其它全局中断抢占），又驱动 ChengFengPromptScreen 渲染。
+  const [daxuanPrompt, setDaxuanPrompt] = useState<ChengFengPrompt | null>(null);
   const lastBoardRef = useRef<string>("palace");
-  const chainDepth = useRef(0);
+  // 事件返回上下文 + 链预算（scene-ui-narrative-refactor §3.4）：玩家发起覆盖 target 并重置
+  // chainDepth；自动续接继承 target、不重置；整链结束/弃场恢复一次并清空；新游戏/读档/驾崩清空。
+  const [navState, navDispatch] = useReducer(navReducer, initialNavState);
+  // 时间推进后的全局中断结算（§ post-time-advance settlement）：成功转旬登记一次（携带返回上下文），
+  // 待场内过场与全局中断逐个消化完毕后，再跑 time_advance 事件并恢复。
+  const [pendingTimeSettlement, timeSettlementDispatch] = useReducer(timeSettlementReducer, null);
+  // 生成式对话在 await provider 期间的 in-flight 标记（计入 atomicFlowInProgress，避免孕/产提示插队）。
+  const [dialogueInFlight, setDialogueInFlight] = useState(false);
+  // 对话操作所有权状态机（唯一 token + 单活动操作）：拒绝并发、防 stale async 串播、旧操作不清新操作忙碌位。
+  const dialogueOpRef = useRef<DialogueOpState>(initialDialogueOpState);
   const rolledSlots = useRef<Set<string>>(new Set());
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
   const converseTranscriptRef = useRef<{ speaker: string; text: string }[]>([]);
-  // Single-flight guard for onConverseChoice — prevents concurrent choice requests.
-  const choiceInFlightRef = useRef(false);
-  const [choicePending, setChoicePending] = useState(false);
+  // Presence/privacy scene context derived once per converse() session, reused by
+  // the opening turn and every choice-driven continuation.
+  const converseSceneCtxRef = useRef<ConverseSceneContext | null>(null);
+  // 续接（onConverseChoice）的 UI pending 也归 token 所有：choiceOpTokenRef=当前续接 op 的 token（同步 owner 判定），
+  // choicePendingToken!==null 驱动 ReactionScreen 禁用选项。并发门只由 startDialogueOp（activeOp!=null 即拒）把守，
+  // 不再用独立布尔。生命周期失效（invalidateDialogue）立即清两者；旧续接的 finally 仅在仍持有同一 token 时清。
+  const choiceOpTokenRef = useRef<number | null>(null);
+  const [choicePendingToken, setChoicePendingToken] = useState<number | null>(null);
   const storage = useMemo(() => createLocalStorageAdapter(), []);
 
   // BGM effect: compute zone defensively (content may not be ok)
@@ -177,7 +245,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     audioController.play(trackFor({ view, board: currentBoard, zone: bgmZone }));
   }, [view, currentBoard, bgmZone]);
 
-  // 大选·四月 prompt：进入房间且到节点时声明式弹出（reactiveState 订阅日历驱动重算）。
   const reactiveState = useGameState(store);
 
   // 死者视图清理：被召见的侍君若在跨月健康 tick 中身故，清除召见态（不在死者宫中停留）。
@@ -187,12 +254,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       setSummonedConsortId(null);
     }
   }, [reactiveState.standing, summonedConsortId]);
-  useEffect(() => {
-    if (!content.ok) return;
-    if (view !== "location" || daxuanPrompt || dianxuan) return;
-    const p = buildDaxuanDianxuanPrompt(content.value, store.getState());
-    if (p) setDaxuanPrompt(p);
-  }, [reactiveState.calendar.dayIndex, reactiveState.calendar.ap, view, daxuanPrompt, dianxuan]);
 
   if (!content.ok || !manifest.success) {
     const errors = [
@@ -209,13 +270,15 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     characters: { ...content.value.characters, ...store.getState().generatedConsorts },
   };
 
-  const startEvent = (eventId: string) => {
+  /** Player-initiated event start: overwrite the return target and reset the chain budget. */
+  const startEvent = (eventId: string, returnTarget: EventReturnTarget) => {
     // 上朝是一场会话而非单个事件：进殿即扣 1 行动点，随机抽 2–3 件事务逐件处理。
+    // 上朝自带 xuanzhengdian 返回上下文（beginCourt 内设），忽略此处传入的 target。
     if (eventId === "ev_chaohui") {
       beginCourt();
       return;
     }
-    chainDepth.current = 0; // player-initiated start resets the chain budget
+    navDispatch({ type: "playerStart", target: returnTarget }); // 覆盖旧 target + 重置 chainDepth
     setActiveEventId(eventId);
     setView("event");
   };
@@ -242,7 +305,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       goHome();
       return;
     }
-    chainDepth.current = 0;
+    navDispatch({ type: "playerStart", target: { kind: "xuanzhengdian" } }); // 上朝返回 → 宣政殿（当前落主图，PR4 接专用屏）
     setCourt({ queue, index: 0 });
     setView("court");
   };
@@ -254,9 +317,25 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     maybeAutumnHunt();
   };
 
+  /**
+   * 进紫宸殿：先在「进入时」对账（清掉属本殿但已不合法的 pending），再进专用屏。
+   * 仅本 host 对账（audienceReconciliationEffects 内部跳过他 host）；不在渲染期、不在每次状态更新的宽 effect 里跑。
+   * 普通进入与事件语义返回都经此（reconcile-on-entry）。
+   */
+  const enterZichendianView = () => {
+    setSummonedConsortId(null);
+    const effects = audienceReconciliationEffects(db, store.getState(), "zichendian");
+    if (effects.length > 0) {
+      const applied = store.applyEffects(db, effects);
+      if (applied.ok) doAutosave();
+    }
+    setView("zichendian");
+  };
+
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
+    if (loc === "zichendian") { enterZichendianView(); return; }
     if (loc === "cining_gong") {
       if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
       setView("cining_gong"); maybeShizhi(); return;
@@ -265,9 +344,61 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (loc === "wenzhaodian") maybeAutumnHunt();
   };
 
+  /** Set the room view for a given location id (no entry-time flavor rolls — used on event return). */
+  const setLocationView = (locId: string) => {
+    if (locId === "zichendian") { enterZichendianView(); return; } // 候见事件返回须落专用屏并对账
+    if (locId === "cining_gong") {
+      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
+      setView("cining_gong"); return;
+    }
+    setView(locId === "wenzhaodian" ? "wenzhaodian" : locId === "yuqing_gong" ? "yuqing_gong" : locId === "fengxiandian" ? "fengxiandian" : "location");
+  };
+
+  /** 落到返回上下文对应的视图（原样消费完整语义目标；未建成的专用屏暂用最近现有视图，字段不丢）。 */
+  const navigateToReturnTarget = (target: EventReturnTarget) => {
+    const nav = resolveReturnNavigation(target);
+    if (nav.view === "map") {
+      // atRoot=true 保留既有 goHome 行为（含 maybeAutumnHunt）；atRoot=false 恢复被打断的嵌套板（不置根、不掷秋猎）。
+      if (nav.atRoot) { goHome(); return; }
+      setMapAtRoot(false);
+      if (nav.boardId) setCurrentBoard(nav.boardId);
+      setView("map");
+      return;
+    }
+    if (nav.view === "xuanzhengdian") { goHome(); return; } // 宣政殿专用屏未建（PR4）→ 暂回主图
+    setLocationView(nav.locationId!); // location / zichendian（PR2）/ garden（PR3）→ 暂用对应 location 场景
+  };
+
+  /**
+   * Restore the view after an event chain ends (or a scene is abandoned). Snapshots the return
+   * target, consumes it exactly once, then navigates via the exact semantic target.
+   */
+  const restoreReturn = () => {
+    const target = navState.target;
+    navDispatch({ type: "consume" }); // clear exactly once; a stale target cannot leak to the next event
+    if (!target) { goHome(); return; }
+    navigateToReturnTarget(target);
+  };
+
   /** Autosave hooks: scene commit + travel only (plan §9), never mid-scene. */
   const doAutosave = () => {
     if (storage) autosave(storage, db, store.getState(), { logger });
+  };
+
+  /**
+   * 生命周期作废（新游戏/读档/驾崩/回标题）统一收口：纪元自增使任何进行中 token 永不再 current，并**立即**
+   * 解除对话/续接的 in-flight 与 UI pending（不等旧 provider promise settle）。旧续接的 finally 因 token 不再
+   * current 而不会清新会话状态。
+   */
+  const invalidateDialogue = () => {
+    dialogueOpRef.current = invalidateDialogueOps(dialogueOpRef.current);
+    setDialogueInFlight(false);
+    choiceOpTokenRef.current = null;
+    setChoicePendingToken(null);
+    // Lifecycle cleanup: drop any retained converse scene context so a new game,
+    // load, sovereign death, or return-to-title cannot leak the old conversation's
+    // presence/privacy into the next one.
+    converseSceneCtxRef.current = null;
   };
 
   /** 若管理/搬迁是从「查看侍君」列表进入的，操作结束后重开列表（定位到该侍君）。 */
@@ -275,20 +406,27 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (consortListReturnId) setConsortListOpen(true);
   };
 
-  const applyRankOp = (charId: string, req: RankOpRequest) => {
+  const applyRankOp = (charId: string, req: RankOpRequest, origin: "normal" | "first_night") => {
     const op = buildRankOp(db, store.getState(), charId, req);
-    setManageCharId(null);
+    setRankAdmin(null);
+    let outcome: "no_op" | "failed" | "reaction_created";
     if (!op) {
       reopenConsortListIfReturning(); // 无变化：直接回到列表
-      return;
-    }
-    const result = store.applyEffects(db, op.effects);
-    if (result.ok) {
-      doAutosave();
-      setReaction({ speakerId: charId, lines: op.lines }); // 列表在反应播完后（onDone）重开
+      outcome = "no_op";
     } else {
-      reopenConsortListIfReturning();
+      const result = store.applyEffects(db, op.effects);
+      if (result.ok) {
+        doAutosave();
+        setReaction({ speakerId: charId, lines: op.lines }); // 列表在反应播完后（onDone）重开
+        outcome = "reaction_created";
+      } else {
+        reopenConsortListIfReturning();
+        outcome = "failed";
+      }
     }
+    // 初夜来源：无反应（无变化/失败）须先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬；
+    // 生成反应（reaction_created）则交其 onDone 补跑。统一经纯决策收尾。
+    applyFirstNightRankDrain(origin, outcome);
   };
 
   const applyRelocate = (charId: string, location: string, chamber: ChamberId) => {
@@ -320,6 +458,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (result.ok) {
       store.loadState(result.value.state);
       resetRollGuards();
+      navDispatch({ type: "clear" }); // 读档清空事件返回上下文（场景态从不入档）
+      pendingReactionDispatch({ type: "clear" });
+      setRankAdmin(null);
+      timeSettlementDispatch({ type: "clear" });
+      invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
       if (store.getState().gameOver) {
         setContinueError("先帝已崩，请开新局。");
@@ -333,27 +476,27 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     }
   };
 
-  /** Checkpoint wiring: time_advance (after a rollover) wins over location_enter. */
-  const runCheckpoints = (rolledOver: boolean, stayOnMap = false) => {
-    const state = store.getState();
-    // 出宫/在城内地图（stayOnMap）时玩家并未进入紫宸殿等房间，playerLocation 只是
-    // 未变的留痕；此时不可触发 location_enter 事件（否则刚点宫门就被司礼祭仪等
-    // 房间事件拦下），仅允许跨月 time_advance 事件。
-    const pick =
-      (rolledOver ? pickNextEvent(db, state, "time_advance") : null) ??
-      (stayOnMap ? null : pickNextEvent(db, state, "location_enter"));
-    if (pick) startEvent(pick.id);
-    // 出宫：玩家位置未变（仍在紫宸殿），无 event 时须留在京城地图板，
-    // 不能按 playerLocation 切回房间视图。
-    else if (stayOnMap) setView("map");
-    else if (store.getState().playerLocation === "wenzhaodian") setView("wenzhaodian");
-    else if (store.getState().playerLocation === "yuqing_gong") setView("yuqing_gong");
-    else if (store.getState().playerLocation === "fengxiandian") setView("fengxiandian");
-    else if (store.getState().playerLocation === "cining_gong") {
-      if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); }
-      else { setView("cining_gong"); maybeShizhi(); }
+  /** 终结一段过场时统一消费待补跑上下文：快照→consume→（若有）把该 request 转入全局结算。 */
+  const flushPendingReactionCheckpoint = () => {
+    const pending = pendingReactionCheckpoint;
+    pendingReactionDispatch({ type: "consume" });
+    // 反应队列结束后续接：arrival 即时完成（仅 location_enter，不排空全局中断）；转旬进结算排空。
+    if (pending) completeDeferredAutoCheckpoint(pending.request);
+  };
+
+  /**
+   * 初夜位分会话结束（close/no_op/failed/reaction_created）的统一收尾。纯决策 firstNightRankDrainAction
+   * 决定动作：有排队反应（凤后懿旨等）→ 先播队列（末条 onDone 再补跑结算，绝不抢跑/遗留）；无队列 → 直接
+   * flush；reaction_created/normal → 交由反应 onDone 或不补跑。
+   */
+  const applyFirstNightRankDrain = (origin: RankAdminOrigin, outcome: RankAdminOutcome) => {
+    const action = firstNightRankDrainAction(origin, outcome, reactionQueue.length);
+    if (action === "flush_now") { flushPendingReactionCheckpoint(); return; }
+    if (action === "play_queue") {
+      const [next, ...rest] = reactionQueue;
+      setReactionQueue(rest);
+      setReaction(next!); // 反应 onDone 续播剩余队列并在末条补跑 pending（见 ReactionScreen onDone）
     }
-    else setView("location"); // arrived somewhere with no event → show that room
   };
 
   /** 为本次行动消耗的每个行动点掷骰凤后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
@@ -407,15 +550,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       }
     }
     return [];
-  };
-
-  /** 二月大选报告（节拍，设 flag）；每大选年一次。返回节拍。 */
-  const rollDaxuanAnnounce = (): DecreeReaction[] => {
-    const r = buildDaxuanAnnounce(db, store.getState());
-    if (!r) return [];
-    const applied = store.applyEffects(db, r.effects);
-    if (!applied.ok) return [];
-    return r.beats;
   };
 
   /** action 解释器：玩家在进贡/秋猎 prompt 中的选择。 */
@@ -504,7 +638,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
    * + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果、台词、皇帝是否崩逝。
    * 皇帝崩逝时不再掷后续节拍（落在已 gameOver 的局上无意义），交调用方 short-circuit 回 title。
    */
-  /** 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报 + 大选报告。 */
+  /**
+   * 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报。
+   * 注：大选二月报告 / 四月殿选不在此处——它们由时间事务统一入口探测 pendingDaxuan，
+   * 任意推进路径（含休息 / 旅行 / 看诊 / 承养）都会置位，由 pendingDaxuan 消费 effect 统一处理。
+   */
   const rollActionBeats = (
     before: { apMax: number; ap: number; dayIndex: number },
     amount: number,
@@ -513,7 +651,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     beats = [...beats, ...rollRebuke(before, amount)];
     const tributeShown = rollTribute(before, amount);
     if (!tributeShown) beats = [...beats, ...rollChengFeng(before, amount)];
-    beats = [...beats, ...rollDaxuanAnnounce()];
     return beats;
   };
 
@@ -530,30 +667,45 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const onSovereignDeath = () => {
     setReaction(null);
     setReactionQueue([]);
+    navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
+    pendingReactionDispatch({ type: "clear" });
+    setRankAdmin(null);
+    timeSettlementDispatch({ type: "clear" });
+    invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     doAutosave();
     setView("title");
   };
 
-  /** 串播一组反应节拍（行动自身台词 + 凤后懿旨），空则按需补跑转旬 checkpoint。 */
-  const playReactions = (beats: DecreeReaction[], rolledOver: boolean) => {
+  /**
+   * 串播一组反应节拍（行动自身台词 + 凤后懿旨）。`request` 非空=本段为转旬，反应结束后须按该请求结算；
+   * null=非转旬（覆盖清空任何旧待处理上下文，杜绝串台）。空队列：转旬即时进结算。
+   */
+  const playReactions = (beats: DecreeReaction[], request: AutoCheckpointRequest | null) => {
     if (beats.length === 0) {
-      if (rolledOver) runCheckpoints(true);
+      pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
+      if (request) completeDeferredAutoCheckpoint(request);
       return;
     }
+    pendingReactionDispatch({ type: "begin", request }); // 非空登记请求；null 覆盖清空
     setReaction(beats[0]!);
     setReactionQueue(beats.slice(1));
-    if (rolledOver) setReactionRollover(true);
   };
 
   const proceedAfterNewGame = () => {
-    const pick = pickNextEvent(db, store.getState(), "game_start");
-    if (pick) startEvent(pick.id);
+    const state = store.getState();
+    const pick = pickAutoStartEvent(db, state, "game_start", db.locations[state.playerLocation]);
+    if (pick) startEvent(pick.id, { kind: "map", atRoot: true });
     else goHome();
   };
 
   const newGame = () => {
     store.newGame(db);
     resetRollGuards();
+    navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
+    pendingReactionDispatch({ type: "clear" });
+    setRankAdmin(null);
+    timeSettlementDispatch({ type: "clear" });
+    invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     setView("coronation");
   };
 
@@ -585,12 +737,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
     if (firstNight) {
       setFirstNightPromptId(plan.charId);
-      if (spend.value.rolledOver) setReactionRollover(true); // 初夜提示关闭后再补跑
+      pendingReactionDispatch({ type: "begin", request: spend.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending（初夜提示关闭后据此补跑）
       // 初夜弹窗在上：懿旨入队，待晋升后续反应或「暂且不必」时排空。
       if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     } else {
       // 非初夜：懿旨台词即时串播（playReactions 内含转旬补跑；无懿旨且转旬也会补跑）。
-      playReactions(decreeBeats, spend.value.rolledOver);
+      playReactions(decreeBeats, spend.value.rolledOver ? stationaryRequest() : null);
     }
   };
 
@@ -718,7 +870,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (plan.actualHealing > 0) lines.push(`调理一番，气色稍复（健康 +${plan.actualHealing}）。`);
     if (lines.length === 0) lines.push("太医诊脉后嘱咐，仍需静养调理。"); // 主体中性（太后/侍君/皇嗣皆可用，不写「陛下」）
     setPhysicianReaction({ portraitSet: physician.portraitSet, speakerName: physician.name, lines });
-    if (settled.value.rolledOver) setReactionRollover(true);
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
   };
 
   // 候选承嗣注释管理（御书房）：同时段只能一位候选；传嗣/流产会自动清除。
@@ -748,7 +900,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const own: DecreeReaction[] = spend.value.rolledOver
       ? []
       : [{ speakerId: "wei_sui", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] }];
-    playReactions([...own, ...decreeBeats], spend.value.rolledOver);
+    playReactions([...own, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
   // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
@@ -758,7 +910,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!spend.ok) return;
     if (spend.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    runCheckpoints(true);
+    beginSettlement(stationaryRequest());
   };
 
   // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。行动先于时间，跨月 tick 不会杀死再宠爱。
@@ -773,7 +925,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     doAutosave();
     setHeirListOpen(false);
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    if (settled.value.rolledOver) setReactionRollover(true);
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
     setChildReaction(plan);
   };
 
@@ -788,7 +940,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    if (settled.value.rolledOver) setReactionRollover(true);
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
     setChildReaction(plan);
   };
 
@@ -800,7 +952,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!spend.ok) return;
     if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver);
+    playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
   const adoptHeir = (heirId: string, fatherId: string) => {
@@ -816,7 +968,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    if (settled.value.rolledOver) setReactionRollover(true);
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
     const [first, ...rest] = reactions;
     setReactionQueue(rest);
     if (first) setReaction(first);
@@ -844,12 +996,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         { speakerId: "cheng_feng", lines: plan.chengfengLines, backgroundKey: sceneBg },
         ...decreeBeats,
       ],
-      settled.value.rolledOver,
+      settled.value.rolledOver ? stationaryRequest() : null,
     );
   };
 
   // 进店（耗 1 行动点）：先切换到 shop 视图，再串播懿旨/乘风节拍（若有）。
-  // 转旬 rollover 不触发 runCheckpoints，避免 checkpoint 视图抢占商铺界面。
+  // 转旬 rollover 不在此即时结算，避免 checkpoint 视图抢占商铺界面（关店时再走结算 seam）。
   const enterShop = (id: "wanbaolou" | "zuixianlou") => {
     if (store.getState().calendar.ap < 1) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -861,11 +1013,150 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     shopRollover.current = spend.value.rolledOver;
     // 节拍串播以 rolledOver=false 调用，确保播完后不切走商铺视图。
     // 转旬 checkpoint 延迟到关店时执行（见 ShopScreen onClose）。
-    playReactions(decreeBeats, false);
+    playReactions(decreeBeats, null);
   };
 
   const [ceremonyOpen, setCeremonyOpen] = useState(false);
   const [morningAfterOpen, setMorningAfterOpen] = useState(false);
+
+  // ── 时间推进后全局中断结算（§ post-time-advance settlement）────────────────
+  // 场内原子过场（对话/反应/侍寝/初夜/封赏/场景/朝会/商铺/进贡/赏赐/生成式对话/殿选 prompt）须先结束，全局中断才呈现。
+  // 用状态而非 view 字符串判定：事件结束时 activeEventId 先置 null（view 可能仍是 "event"），避免结算死锁。
+  const atomicFlowInProgress =
+    reaction !== null || childReaction !== null || physicianReaction !== null ||
+    firstNightPromptId !== null || namePetHeirId !== null ||
+    bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
+    prompt !== null || daxuanPrompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
+    activeEventId !== null || court !== null || dianxuan !== null ||
+    shopId !== null || view === "shop" || dialogueInFlight ||
+    view === "title" || view === "coronation"; // 标题/登基（开局前）不呈现全局中断
+  // 同一时刻只呈现一个全局中断（确定性优先级）；场内过场进行中时一律不呈现。
+  // 大选由持久 pendingDaxuan 驱动（PR#24 架构）：作为最低优先级全局中断接入结算系统，授权窗口为 grand_selection。
+  const activeGlobalInterrupt: GlobalInterruptKind | null = atomicFlowInProgress
+    ? null
+    : pickNextGlobalInterrupt({
+        birthDue: activeBirthPlan !== null,
+        pregnancyDisclosureDue: jingshifangDue,
+        successorDue: successorAutoDue && selfCarrying,
+        centennialDue: centennialHeir !== null,
+        grandSelectionDue: liveState.pendingDaxuan !== undefined,
+      });
+
+  // 大选消费（单点）：仅当结算系统在所有更高优先级全局中断之后选中 grand_selection 时消费 pendingDaxuan——
+  // 改用 PR#25 的「状态原子所有权 + 选中中断种类」门，**不**用旧的安全视图白名单（避免 activeEventId
+  // 已清而 view 仍为 "event" 时把 grand_selection 永久选中却拒绝消费的死锁）。announce 原子落 flag + 经反应所有权
+  // 路径播报（可链 dianxuan）；该年殿选已决的陈旧 pending 调和清除；否则按 pending.year 弹殿选 prompt（年份权威）。
+  // 一经置 daxuanPrompt / reaction，atomicFlow 即真、grand_selection 退出，杜绝重复消费。
+  useEffect(() => {
+    if (!content.ok) return;
+    if (activeGlobalInterrupt !== "grand_selection") return;
+    const pd = store.getState().pendingDaxuan;
+    if (!pd) return;
+    if (pd.kind === "announce") {
+      const beats = store.consumeDaxuanAnnounce(content.value);
+      doAutosave(); // 消费已改写状态（落 flag + 清/续 pending）→ 持久化，避免重载重播
+      if (beats.length) { setReaction(beats[0]!); setReactionQueue(beats.slice(1)); }
+    } else if (store.getState().flags[daxuanDianxuanFlagKey(pd.year)]) {
+      store.clearPendingDaxuan(); // 陈旧：该年殿选已决 → 调和清除，避免 sticky 永久阻塞下一大选年
+      doAutosave();
+    } else {
+      setDaxuanPrompt(daxuanDianxuanPromptFor(pd.year)); // 按 pending.year 构造（年份权威，不取当前日历年）
+    }
+  }, [activeGlobalInterrupt]);
+
+  // 紫宸殿外部 busy 归属（§9）：atomicFlow 之外、本殿仍可触达的浮层/选择器/全局中断一并计入。
+  // 复用权威 atomicFlowInProgress，不另立第二套原子流程定义。
+  const zichendianBusy = zichendianExternalBusy({
+    atomicFlowInProgress,
+    settlementPending: pendingTimeSettlement !== null, // 刻意独立于 atomicFlow（结算 effect 等 atomicFlow=false 才排空）
+    relocateOpen: relocateCharId !== null,
+    consortPickerOpen: flipOpen,
+    consortListOpen,
+    physicianOpen,
+    physicianPickerOpen: physicianConsortPickerOpen || physicianHeirPickerOpen,
+    heirListOpen,
+    resourcePanelOpen,
+    storehouseOpen,
+    profileOpen: profileCharId !== null,
+    settingsOpen,
+    choicePending: choicePendingToken !== null,
+    globalInterruptActive: activeGlobalInterrupt !== null,
+  });
+
+  /** 原地行动转旬请求：只跑 time_advance；返回上下文 = 当前地点（或显式 board）；开新链。 */
+  const stationaryRequest = (boardId?: string): AutoCheckpointRequest => ({
+    source: "stationary_rollover",
+    returnTarget: checkpointReturnTarget(boardId, store.getState().playerLocation),
+    dispatch: "new_chain",
+  });
+
+  /** 成功转旬后登记一次结算（携带完整 AutoCheckpointRequest）；完成由下方结算 effect 驱动。 */
+  const beginSettlement = (request: AutoCheckpointRequest) => {
+    timeSettlementDispatch({ type: "begin", request });
+  };
+
+  /**
+   * 反应队列/过场结束后统一续接：arrival（未转旬，仅 location_enter）即时完成、不进全局结算排空；
+   * 其余（转旬）进结算排空全局中断后再补跑。
+   */
+  const completeDeferredAutoCheckpoint = (request: AutoCheckpointRequest) => {
+    if (deferredAutoCheckpointMode(request) === "complete_now") completeAutoCheckpoint(request);
+    else beginSettlement(request);
+  };
+
+  /**
+   * 完成自动 checkpoint：按来源决定跑哪些 checkpoint（stationary 只 time_advance；travel 先
+   * time_advance 后 location_enter；arrival 只 location_enter）；命中事件用「原样的返回上下文」启动，
+   * 否则按该上下文恢复。绝不从 playerLocation 重建目标。
+   */
+  const completeAutoCheckpoint = (request: AutoCheckpointRequest) => {
+    const state = store.getState();
+    const location = db.locations[state.playerLocation];
+    const t = autoCheckpointTriggers(request.source);
+    const timeEvent = t.timeAdvance ? pickAutoStartEvent(db, state, "time_advance", location) : null;
+    const locationEvent = !timeEvent && t.locationEnter ? pickAutoStartEvent(db, state, "location_enter", location) : null;
+    const event = timeEvent ?? locationEvent;
+    if (event) {
+      if (request.dispatch === "continue_chain") {
+        // 事件场景转旬产生的 time_advance：留在当前链（chainAdvance，不重置 chainDepth、不消费返回上下文）。
+        if (canChain(navState)) {
+          navDispatch({ type: "chainAdvance" });
+          setActiveEventId(event.id);
+          setView("event");
+        } else {
+          logger?.logGameError(
+            stateError("EVENT_CHAIN_LIMIT", `time_advance chain capped at ${MAX_EVENT_CHAIN}`, {
+              severity: "warn",
+              context: { deferred: event.id },
+            }),
+          );
+          restoreReturn(); // 链满：恢复原始返回上下文一次
+        }
+      } else {
+        startEvent(event.id, request.returnTarget); // 新链
+      }
+      return;
+    }
+    // 无事件：continue_chain 经 restoreReturn 消费导航上下文一次；new_chain 按完整目标恢复 + 落点氛围掷骰。
+    if (request.dispatch === "continue_chain") { restoreReturn(); return; }
+    navigateToReturnTarget(request.returnTarget);
+    const nav = resolveReturnNavigation(request.returnTarget);
+    if (nav.view === "location") {
+      const loc2 = store.getState().playerLocation;
+      if (loc2 === "wenzhaodian") maybeAutumnHunt();
+      else if (loc2 === "cining_gong" && !store.getState().taihou.deceased) maybeShizhi();
+    }
+  };
+
+  // 结算完成：无场内过场、无待处理全局中断时，消费结算 → 按 request 跑相应 checkpoint → 恢复一次。
+  // 不在此 effect 内开浮层（浮层由渲染体按 activeGlobalInterrupt 声明式呈现）；此处只做「排空后完成」。
+  useEffect(() => {
+    if (!pendingTimeSettlement) return;
+    if (atomicFlowInProgress || activeGlobalInterrupt) return;
+    const request = pendingTimeSettlement.request;
+    timeSettlementDispatch({ type: "consume" });
+    completeAutoCheckpoint(request);
+  }, [pendingTimeSettlement, atomicFlowInProgress, activeGlobalInterrupt]);
 
   const enterGreeting = () => {
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -901,6 +1192,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
   // 与在场侍君对话（耗 1 行动点）：脚本化反应台词；若 dialogueProvider 可用则走生成式路径。
   const converse = async (charId: string) => {
+    if (dialogueOpRef.current.activeOp !== null) return; // 已有对话操作进行中：拒绝并发，且不扣行动点
     const fallbackLines = buildConversation(db, store.getState(), charId);
     if (!fallbackLines) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
@@ -910,40 +1202,65 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setSummonedConsortId(null);
     doAutosave();
 
-    // Generative path: assemble request, snapshot expected state, produce turn, CAS
+    // Generative path: assemble request, snapshot expected state, produce turn, CAS。
+    // 期间标记 in-flight（计入 atomicFlowInProgress，孕/产等全局中断不得插队）；以操作令牌防 stale async：
+    // 若 await 期间发生新游戏/读档/驾崩（令牌自增），则丢弃本次完成，不串播、不结算。
     if (dialogueProvider) {
       const expectedState = store.getState();
-      const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation);
+      // Derive presence/privacy scene context once for this conversation; the same
+      // object feeds the opening turn and every choice-driven continuation.
+      const sceneContext = deriveConverseSceneContext(charId);
+      converseSceneCtxRef.current = sceneContext;
+      const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation, sceneContext);
       if (reqResult.ok) {
-        const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
-        if (turnResult.ok) {
-          const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
-          if (committed) {
-            doAutosave();
-            const generatedLine = turnResult.value.line;
-            converseTranscriptRef.current = []; // reset transcript for new conversation
-            const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
-            playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver);
-            return;
+        const started = startDialogueOp(dialogueOpRef.current); // 唯一 token + 占用
+        if (started.token !== null) {
+          dialogueOpRef.current = started.state;
+          const opToken = started.token;
+          setDialogueInFlight(true);
+          try {
+            const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+            if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略
+            if (turnResult.ok) {
+              const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
+              if (committed) {
+                doAutosave();
+                const generatedLine = turnResult.value.line;
+                converseTranscriptRef.current = []; // reset transcript for new conversation
+                const generativeBeat = { speakerId: charId, lines: [generatedLine.text], generatedLine };
+                playReactions([generativeBeat, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
+                return;
+              }
+              // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
+            }
+            // produceDialogueTurn failed — fall through to fallback (AP already spent)
+          } finally {
+            // 仅当 token 仍是当前操作才释放（旧操作绝不清新操作的忙碌位）。
+            dialogueOpRef.current = finishDialogueOp(dialogueOpRef.current, opToken);
+            if (dialogueOpRef.current.activeOp === null) setDialogueInFlight(false);
           }
-          // CAS failed: DIALOGUE_STATE_STALE — fall through to fallback
         }
-        // produceDialogueTurn failed — fall through to fallback (AP already spent)
       }
     }
 
     // Fallback path: scripted lines
-    playReactions([{ speakerId: charId, lines: fallbackLines }, ...decreeBeats], spend.value.rolledOver);
+    playReactions([{ speakerId: charId, lines: fallbackLines }, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
   // Handles a player choice click during a generative conversation turn.
   // No extra AP is spent here — AP was already spent in converse().
   const onConverseChoice = useCallback(async (choice: { id: string; text: string; tone?: string }) => {
     if (!dialogueProvider || !reaction?.generatedLine) return;
-    // Single-flight guard: prevent concurrent choice requests (double-tap, etc.)
-    if (choiceInFlightRef.current) return;
-    choiceInFlightRef.current = true;
-    setChoicePending(true);
+    // 续接也是一次 provider request：纳入对话操作所有权。并发门只由 startDialogueOp 把守（activeOp!=null → 拒绝），
+    // 不再用独立布尔（杜绝失效后旧布尔卡死新续接）。若 await 期间发生新游戏/读档/驾崩（invalidateDialogue 自增纪元、
+    // 清 choice token），token 不再 current → 丢弃本次完成：不提交 state、不设反应、不清新会话的忙碌位与 UI pending。
+    const started = startDialogueOp(dialogueOpRef.current);
+    if (started.token === null) return; // 已有活动对话操作（含正在进行的续接）：拒绝并发
+    dialogueOpRef.current = started.state;
+    const opToken = started.token;
+    choiceOpTokenRef.current = opToken;
+    setChoicePendingToken(opToken);
+    setDialogueInFlight(true);
 
     const currentLine = reaction.generatedLine;
     const speakerId = reaction.speakerId;
@@ -959,14 +1276,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
       // Re-snapshot state AFTER previous CAS was committed
       const expectedState = store.getState();
-      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { transcript });
+      // Reuse the conversation's scene context so presence/privacy stay stable across turns.
+      const sceneContext = converseSceneCtxRef.current ?? deriveConverseSceneContext(speakerId);
+      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { ...sceneContext, transcript });
       if (!reqResult.ok) {
+        if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：失效后不得改界面
         // Assembly failed — strip generatedLine so normal onDone drains the queue/rollover
         setReaction({ speakerId, lines: ["（对话暂时中断）"] });
         return;
       }
 
       const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+      if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略本次完成
       if (!turnResult.ok) {
         // Turn failed — same graceful path
         setReaction({ speakerId, lines: ["（对话暂时中断）"] });
@@ -985,8 +1306,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       // Update reaction state with the new generated line; carry decree beats from the queue
       setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
     } finally {
-      choiceInFlightRef.current = false;
-      setChoicePending(false);
+      // 全程 owner-scoped 收尾：仅当本 token 仍是当前 op 才释放忙碌位 + UI pending；旧（已失效/被接管的）续接
+      // 绝不清新会话的 dialogueInFlight / choicePending。生命周期失效已由 invalidateDialogue 即时清两者。
+      dialogueOpRef.current = finishDialogueOp(dialogueOpRef.current, opToken);
+      if (dialogueOpRef.current.activeOp === null) setDialogueInFlight(false);
+      if (choiceOpTokenRef.current === opToken) {
+        choiceOpTokenRef.current = null;
+        setChoicePendingToken(null);
+      }
     }
   }, [dialogueProvider, reaction, store, db, logger]);
 
@@ -1000,7 +1327,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   /** 旅行结算（MapScreen.onTravelled 与院子 enterConsortQuarters 共用）。 */
-  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false, stayOnMap = false) => {
+  const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false, stayOnMapBoardId?: string) => {
     if (sovereignDied) { onSovereignDeath(); return; } // 跨月旅行皇帝崩逝：清场回 title。
     doAutosave();
     // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
@@ -1016,8 +1343,28 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         if (applied.ok) beats = plan.reactions;
       }
     }
-    if (beats.length) { setReactionStayOnMap(stayOnMap); playReactions(beats, rolledOver); }
-    else runCheckpoints(rolledOver, stayOnMap);
+    const travelTarget = checkpointReturnTarget(stayOnMapBoardId, store.getState().playerLocation);
+    // 出宫/城内地图（stayOnMapBoardId）：玩家未进房间，playerLocation 只是未变留痕，绝不触发 location_enter
+    // （否则刚点宫门就被司礼传月祭仪等房间事件拦下；承自 main 447b4c7）；仅转旬时跑 time_advance（stationary 语义）。
+    // 真正抵达房间：转旬=travel_rollover（time_advance 优先，无则 location_enter）；未转旬=arrival（仅 location_enter）。
+    // 两者都开新链；arrival 也须在反应队列结束后跑 location_enter（不可丢，见 Blocker 1）。
+    const request: AutoCheckpointRequest | null = stayOnMapBoardId
+      ? rolledOver
+        ? { source: "stationary_rollover", returnTarget: travelTarget, dispatch: "new_chain" }
+        : null
+      : rolledOver
+        ? { source: "travel_rollover", returnTarget: travelTarget, dispatch: "new_chain" }
+        : { source: "arrival", returnTarget: travelTarget, dispatch: "new_chain" };
+    if (request) {
+      if (beats.length) playReactions(beats, request);
+      else completeDeferredAutoCheckpoint(request);
+    } else {
+      // 出宫未转旬：无 checkpoint，先播完节拍，再落到目标地图板（不按 playerLocation 切回房间）。
+      if (beats.length) playReactions(beats, null);
+      setMapAtRoot(false);
+      setCurrentBoard(stayOnMapBoardId!);
+      setView("map");
+    }
   };
 
   const enterConsortQuarters = (palaceId: string, consortId: string) => {
@@ -1049,20 +1396,29 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
   /** 大选·四月 prompt 选择：进殿选（扣 1AP）或委托太后皇后（不扣 AP）。 */
   const onDaxuanChoose = (action: PromptAction) => {
-    setDaxuanPrompt(null);
     if (action.type === "daxuanEnter") {
-      // 设决定 flag + 扣 1AP，打开殿选。
-      store.setFlag(daxuanDianxuanFlagKey(action.year), true);
-      const { spend, decreeBeats, sovereignDied } = spendAp(1);
-      if (!spend.ok) return;
-      if (sovereignDied) { onSovereignDeath(); return; }
+      // store 校验完整性不变量后再扣 1AP（殿选原子流程，advanceTime 不掷随机节拍）。
+      const enter = store.enterDaxuan(db, action.year);
+      if (!enter.ok) {
+        // 行动点不足：保留 prompt + pending、不写 flag，提示原因（可改委托或养足精神再去）。
+        if (enter.error.some((e) => e.code === "AP_INSUFFICIENT")) {
+          setNotice("行动点不足，无法移驾体元殿。可改由太后皇后决定，或养足精神再去。");
+          return;
+        }
+        setDaxuanPrompt(null); // 无匹配 pending（陈旧/重复点击等）：静默收起，不重复执行
+        return;
+      }
+      setDaxuanPrompt(null); // 扣点成功后才关 prompt；flag + pending 已由 enterDaxuan 原子落定
+      if (enter.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
       const cands = generateCandidates(db, store.getState(), action.year);
       setDianxuan({ candidates: cands, year: action.year });
       setView("dianxuan");
-      // 殿选为原子流程：扣点产生的节拍此处先忽略串播。
-      void decreeBeats;
+      doAutosave(); // 殿选已决落盘（避免重载重弹 prompt）
     } else if (action.type === "daxuanDelegate") {
-      store.setFlag(daxuanDianxuanFlagKey(action.year), true);
+      // 仅当真正消费了「该年未决」pending 才执行委托业务，杜绝陈旧/重复点击二次留牌/重播。
+      const resolved = store.resolveDaxuanDianxuan(action.year);
+      setDaxuanPrompt(null);
+      if (!resolved) return;
       const kept = npcKeepOnDelegate(db, store.getState(), action.year);
       if (kept.length > 0) store.commitDaxuanKept(db, kept);
       const beats: DecreeReaction[] = kept.length > 0
@@ -1162,13 +1518,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setSummonedConsortId(null);
             setSettingsOpen(true);
           }}
-          onStartEvent={startEvent}
-          onManage={(id) => setManageCharId(id)}
+          onStartEvent={(id) => startEvent(id, { kind: "location", locationId: store.getState().playerLocation })}
+          onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
           onRelocate={(id) => setRelocateCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
           onFlipTablet={() => {
             const g = canBedchamber(store.getState());
             if (!g.ok) { setReaction({ speakerId: "wei_sui", lines: [g.reason] }); return; }
+            setFlipMode("bedchamber");
             setFlipOpen(true);
           }}
           onSummonZongzheng={canSummonZongzheng ? () => setSuccessorOpen(true) : undefined}
@@ -1237,11 +1594,69 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
           onOpenSettings={() => setSettingsOpen(true)}
           // ev_taihou_converse 用 checkpoint:"game_start" 故永不自动触发，只由此按钮手动开启；勿改成 location_enter（会变强制弹出）。
-          onConverse={() => startEvent("ev_taihou_converse")}
+          onConverse={() => startEvent("ev_taihou_converse", { kind: "location", locationId: "cining_gong" })}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
         />
       )}
+      {view === "zichendian" && (() => {
+        // 紫宸殿专用屏：用订阅态（liveState）构建权威候见视图模型；专用屏外仍由 GameShell 提供顶栏/面包屑/国情/库房/设置/地图导航。
+        const location = db.locations["zichendian"]!;
+        const bg = registry.resolveVariant(location.backgroundKey, timeOfDay(liveState.calendar), "background");
+        const queue = getAudienceQueue(db, liveState, "zichendian");
+        const deferredQueue = getDeferredAudienceQueue(db, liveState, "zichendian");
+        const activeItem = selectActiveAudience(queue);
+        const summonedView = summonedConsortId ? summonedConsortToView(db, liveState, registry, summonedConsortId) : undefined;
+        // 召见侍君 / 乘风召见妃嫔：开既有选人盘的 summon 模式（不套 canBedchamber 侍寝门槛——此路通向叙话/临场，
+        // 非即时侍寝）；盘内仍按 canSummon 过滤不可召见者；选中后 onPick 置 summonedConsortId。
+        const summonConsortPicker = () => { setFlipMode("summon"); setFlipOpen(true); };
+        // 离开紫宸殿：清召见态，按既有非根地图行为开当前宫城板（返回可逐级回主图）。
+        const leaveZichendian = () => { setSummonedConsortId(null); setMapAtRoot(false); setView("map"); };
+        // 叙话需 1 行动点：AP 不足时叙话禁用并显原因（不暴露「可点却静默无效」按钮）。
+        const canConverseSummoned = summonedConsortId !== null && liveState.calendar.ap >= 1;
+        return (
+          <GameShell
+            calendar={liveState.calendar}
+            crumbs={breadcrumbFor(db, "zichendian")}
+            pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
+            onBack={leaveZichendian}
+            onOpenResources={() => setResourcePanelOpen(true)}
+            onOpenStorehouse={() => setStorehouseOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            className="location-shell scene-host-shell"
+          >
+            <ZichendianScreen
+              background={bg.url}
+              backgroundPosition={location.backgroundPosition}
+              isFallbackBackground={bg.isFallback}
+              audienceCount={audienceCount(db, liveState, "zichendian")}
+              deferredAudienceCount={deferredAudienceCount(db, liveState, "zichendian")}
+              activeAudience={activeItem ? audienceItemToView(db, liveState, registry, activeItem) : undefined}
+              pendingAudienceItems={deferredQueue.map((i) => audienceItemToPendingView(db, liveState, registry, i))}
+              summonedConsort={summonedView}
+              onConverseSummonedConsort={summonedConsortId ? () => { const id = summonedConsortId; if (id) void converse(id); } : undefined}
+              summonedConverseDisabledReason={summonedConsortId && !canConverseSummoned ? "行动力不足" : undefined}
+              onDismissSummonedConsort={summonedConsortId ? () => setSummonedConsortId(null) : undefined}
+              interruptible={!zichendianBusy}
+              busy={zichendianBusy}
+              onAdmitAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
+              onDeferAudience={(eventId) => {
+                const applied = store.applyEffects(db, defer(eventId, store.getState().calendar.dayIndex));
+                if (applied.ok) doAutosave(); // 仅成功延期后落盘；不清/完成事件、不本地删项——订阅态更新使提示自然消失
+              }}
+              onAdmitPendingAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
+              onReviewMemorials={reviewMemorials}
+              onSummonConsort={summonConsortPicker}
+              onRest={restAlone}
+              onLeave={leaveZichendian}
+              onManageRank={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
+              onRelocate={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
+              onBestow={() => setStorehouseOpen(true)}
+              onPhysician={() => setPhysicianOpen(true)}
+            />
+          </GameShell>
+        );
+      })()}
       {view === "map" && (
         <MapScreen
           db={db}
@@ -1256,7 +1671,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setView("freeview");
           }}
           onOpenSettings={() => setSettingsOpen(true)}
-          onClose={() => { setFocusConsortId(null); setView("location"); }}
+          onClose={() => {
+            setFocusConsortId(null);
+            // 关地图回房：紫宸殿落专用屏（并对账），其余维持既有 location 行为。
+            if (store.getState().playerLocation === "zichendian") enterZichendianView();
+            else setView("location");
+          }}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
           onOpenCourtyard={(loc) => {
@@ -1299,11 +1719,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       {view === "shop" && shopId && (
         <ShopScreen db={db} store={store} registry={registry} shopId={shopId}
           onClose={() => {
+            // 先离开 shop 视图回到被动地图板，再视情况结算——否则 shopId=null 但 view 仍 "shop" 会让
+            // atomicFlow 永久判真、结算永不排空（§ Blocker 2 死锁）。currentBoard 此刻已稳定。
+            const rolled = shopRollover.current;
+            shopRollover.current = false;
             setShopId(null);
-            // 店在京城（free-entry，playerLocation 未变）：转旬补跑亦须留在地图，
-            // 否则会按 playerLocation 落回紫宸殿；无转旬则直接回京城板。
-            if (shopRollover.current) { shopRollover.current = false; runCheckpoints(true, true); }
-            else { setView("map"); }
+            setMapAtRoot(false);
+            setView("map");
+            if (rolled) beginSettlement(stationaryRequest(currentBoard));
           }} />
       )}
       {view === "freeview" && freeViewId && (
@@ -1312,7 +1735,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           store={store}
           registry={registry}
           locationId={freeViewId}
-          onStartEvent={startEvent}
+          onStartEvent={(id) => startEvent(id, { kind: "map", atRoot: true })}
           onClose={() => setView("map")}
           onOfferIncense={() => templeAction("incense")}
           onDrawFortune={() => templeAction("fortune")}
@@ -1327,38 +1750,66 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           eventId={activeEventId}
           logger={logger}
           onDone={(committed, rolledOver) => {
+            const completedEventId = activeEventId; // 快照：清 activeEventId 前留存，供清账判定
             setActiveEventId(null);
-            if (committed) {
-              doAutosave(); // scene-commit autosave (plan §9)
-              const pick = pickNextEvent(db, store.getState(), "scene_end");
-              if (pick) {
-                if (chainDepth.current < MAX_EVENT_CHAIN) {
-                  chainDepth.current += 1;
-                  setActiveEventId(pick.id); // chained event keeps the depth budget
-                  return;
-                }
-                logger?.logGameError(
-                  stateError("EVENT_CHAIN_LIMIT", `scene_end chain capped at ${MAX_EVENT_CHAIN}`, {
-                    severity: "warn",
-                    context: { deferred: pick.id },
-                  }),
-                );
-              }
-              // 若本场景消耗行动点导致转旬/转月，立刻触发 time_advance 事件，
-              // 不必等玩家转换地图再 trigger。
-              if (rolledOver) {
-                const t = pickNextEvent(db, store.getState(), "time_advance");
-                if (t && chainDepth.current < MAX_EVENT_CHAIN) {
-                  chainDepth.current += 1;
-                  setActiveEventId(t.id);
-                  return;
-                }
-              }
-              goHome(); // 事件结束 → 跳回皇城主地图
+            if (!committed) {
+              // 弃场：若链内前序事件已留下待结算（pendingTimeSettlement），不得消费/恢复导航上下文——
+              // activeEventId 已清，交由既有结算 effect 排空并最终恢复一次；否则立即恢复。
+              // 弃场绝不清候见账（仅打开未提交 ≠ 候见完成）。
+              const abandonPlan = eventSceneCompletionPlan({
+                committed: false,
+                rolledOver: false,
+                hasSceneEndEvent: false,
+                canChain: false,
+                hasPendingSettlement: pendingTimeSettlement !== null,
+              });
+              if (abandonPlan.restore) restoreReturn();
               return;
             }
-            // Abandoned mid-scene (零代价离开): back to the room you were in.
-            setView("location");
+            // 候见事件成功提交：清本殿候见账（pending/shownAt/remindAt）并对账，再落盘——持久态须含清账。
+            // 仅 request_audience 且 host===zichendian 才清；他 host / 非候见事件不动。
+            const completedEvent = completedEventId ? db.events[completedEventId] : undefined;
+            if (completedEventId && shouldClearAudienceOnCommit(completedEvent, true, "zichendian")) {
+              const applied = store.applyEffects(db, clearAudience(completedEventId));
+              if (applied.ok) {
+                const recon = audienceReconciliationEffects(db, store.getState(), "zichendian");
+                if (recon.length > 0) store.applyEffects(db, recon);
+              }
+            }
+            doAutosave(); // scene-commit autosave (plan §9) — 现已含候见清账
+            const sceneEndState = store.getState();
+            const pick = pickAutoStartEvent(db, sceneEndState, "scene_end", db.locations[sceneEndState.playerLocation]);
+            const plan = eventSceneCompletionPlan({
+              committed: true,
+              rolledOver: rolledOver === true,
+              hasSceneEndEvent: pick !== null,
+              canChain: canChain(navState),
+              hasPendingSettlement: pendingTimeSettlement !== null,
+            });
+            // 任一链内事件转旬都登记/刷新 continue_chain 结算（保留转旬至整条 scene_end 链走完才排空）。
+            if (plan.beginSettlement) {
+              beginSettlement({
+                source: "stationary_rollover",
+                returnTarget: navState.target ?? { kind: "map", atRoot: true },
+                dispatch: "continue_chain",
+              });
+            }
+            if (plan.startSceneEnd) {
+              navDispatch({ type: "chainAdvance" }); // 续接 scene_end：继承 target、不重置、不消费；结算（若有）由 activeEventId 守住不排空
+              setActiveEventId(pick!.id);
+              return;
+            }
+            if (pick && !canChain(navState)) {
+              logger?.logGameError(
+                stateError("EVENT_CHAIN_LIMIT", `scene_end chain capped at ${MAX_EVENT_CHAIN}`, {
+                  severity: "warn",
+                  context: { deferred: pick.id },
+                }),
+              );
+            }
+            // 终端：有待结算则交结算 effect 排空全局中断 + 补跑 time_advance + 恢复一次（不在此 restoreReturn）；
+            // 否则（无转旬、无 pending）立即恢复。
+            if (plan.restore) restoreReturn();
           }}
         />
       )}
@@ -1383,18 +1834,22 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             }
             if (committed) doAutosave();
             setCourt(null);
-            goHome(); // 上朝结束 / 退朝 → 直接回到紫禁城主地图
+            restoreReturn(); // 上朝结束 / 退朝 → 按返回上下文（xuanzhengdian，当前落主图）恢复
           }}
         />
       )}
-      {manageCharId && store.getState().standing[manageCharId] && (
+      {rankAdmin && store.getState().standing[rankAdmin.charId] && (
         <RankAdminModal
           db={db}
-          character={db.characters[manageCharId]!}
-          standing={store.getState().standing[manageCharId]!}
-          onApply={(req) => applyRankOp(manageCharId, req)}
+          character={db.characters[rankAdmin.charId]!}
+          standing={store.getState().standing[rankAdmin.charId]!}
+          onApply={(req) => applyRankOp(rankAdmin.charId, req, rankAdmin.origin)}
           onClose={() => {
-            setManageCharId(null);
+            const origin = rankAdmin.origin;
+            setRankAdmin(null);
+            // 初夜来源关闭（未应用）：先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬，杜绝遗留/抢跑；
+            // 普通来源不因关闭补跑。
+            applyFirstNightRankDrain(origin, "close");
             reopenConsortListIfReturning(); // 取消也回到列表
           }}
         />
@@ -1421,7 +1876,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           backgroundKey={reaction.backgroundKey}
           generatedLine={reaction.generatedLine}
           onChoice={reaction?.generatedLine && dialogueProvider ? onConverseChoice : undefined}
-          choicePending={choicePending}
+          choicePending={choicePendingToken !== null}
           onDone={() => {
             setReaction(null);
             if (reactionQueue.length > 0) {
@@ -1436,11 +1891,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             if (postBirthPromoteId) {
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
-              setManageCharId(id);
-            } else if (reactionRollover) {
-              setReactionRollover(false);
-              setReactionStayOnMap(false);
-              runCheckpoints(true, reactionStayOnMap); // 对话耗尽行动点导致换旬 → 补跑时间推进 checkpoint
+              setRankAdmin({ charId: id, origin: "normal" }); // 产后晋升：普通来源，不因关闭补跑转旬
+            } else {
+              flushPendingReactionCheckpoint(); // 对话耗尽行动点导致换旬 → 统一补跑（无 pending 则空操作）
             }
           }}
         />
@@ -1460,6 +1913,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           db={db}
           state={store.getState()}
           registry={registry}
+          mode={flipMode}
           onPick={(id) => {
             setFlipOpen(false);
             setSummonedConsortId(id);
@@ -1477,7 +1931,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onManage={(id) => {
             setConsortListReturnId(id); // 操作后回到列表并定位回此侍君
             setConsortListOpen(false); // 先关列表，避免与封号管理弹窗叠层互相遮挡
-            setManageCharId(id);
+            setRankAdmin({ charId: id, origin: "normal" });
           }}
           onRelocate={(id) => {
             setConsortListReturnId(id);
@@ -1525,7 +1979,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               onClick={() => {
                 const id = firstNightPromptId;
                 setFirstNightPromptId(null);
-                setManageCharId(id);
+                setRankAdmin({ charId: id, origin: "first_night" }); // 初夜晋升：来源 first_night，须接管搁置的转旬补跑
               }}
             >
               晋升
@@ -1535,13 +1989,12 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               onClick={() => {
                 setFirstNightPromptId(null);
                 if (reactionQueue.length > 0) {
-                  // 先串播待播的凤后懿旨；其 onDone 会接手转旬补跑（reactionRollover 保留）。
+                  // 先串播待播的凤后懿旨；其 onDone 会接手转旬补跑（pending 上下文保留）。
                   const [next, ...rest] = reactionQueue;
                   setReactionQueue(rest);
                   setReaction(next!);
-                } else if (reactionRollover) {
-                  setReactionRollover(false);
-                  runCheckpoints(true); // 初夜恰逢转旬 → 补跑时间推进 checkpoint
+                } else {
+                  flushPendingReactionCheckpoint(); // 初夜「暂且不必」且无队列 → 统一补跑（无 pending 则空操作）
                 }
               }}
             >
@@ -1550,7 +2003,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           </div>
         </div>
       )}
-      {activeBirthPlan && (
+      {activeGlobalInterrupt === "birth" && activeBirthPlan && (
         <BirthScreen
           db={db}
           store={store}
@@ -1560,7 +2013,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onDone={commitBirth}
         />
       )}
-      {jingshifangDue && (
+      {activeGlobalInterrupt === "pregnancy_disclosure" && (
         <JingshifangModal
           db={db}
           state={liveState}
@@ -1569,7 +2022,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onDesignate={designateCandidates}
         />
       )}
-      {(successorAutoDue || successorOpen) && selfCarrying && (
+      {((activeGlobalInterrupt === "successor") || successorOpen) && selfCarrying && (
         <SuccessorModal
           db={db}
           state={liveState}
@@ -1617,7 +2070,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           }}
         />
       )}
-      {!namePetHeirId && centennialHeir && (
+      {activeGlobalInterrupt === "centennial_heir" && centennialHeir && (
         <HeirNameModal
           title="百日宴 · 为皇嗣赐名"
           hint="皇嗣已满百日，请陛下赐下正名。"
@@ -1648,10 +2101,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               setReaction(next!);
               return;
             }
-            if (reactionRollover) {
-              setReactionRollover(false);
-              runCheckpoints(true);
-            }
+            flushPendingReactionCheckpoint();
           }}
         />
       )}
@@ -1671,10 +2121,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               setReaction(next!);
               return;
             }
-            if (reactionRollover) {
-              setReactionRollover(false);
-              runCheckpoints(true);
-            }
+            flushPendingReactionCheckpoint();
           }}
         />
       )}
@@ -1773,8 +2220,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); setSettingsOpen(false); enterCurrentLocation(); }}
-          onReturnTitle={() => { doAutosave(); setSettingsOpen(false); setView("title"); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
       )}
@@ -1798,7 +2245,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onSilent={silentLeave}
         />
       )}
-      <DebugPanel store={store} db={db} logger={logger} onForceEvent={startEvent} />
+      <DebugPanel store={store} db={db} logger={logger} onForceEvent={(id) => startEvent(id, { kind: "map", atRoot: true })} />
     </>
   );
 }

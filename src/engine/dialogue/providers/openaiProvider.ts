@@ -17,7 +17,7 @@ import {
   type NormalizedUsage,
 } from "../providerContract";
 import type { DialogueProvider, DialogueGenerationOptions, DialogueRequest } from "../types";
-import { WORLD_RULES_TEXT, renderEtiquetteBlock } from "./anthropicProvider";
+import { WORLD_RULES_TEXT, TOOL_DESCRIPTION, renderEtiquetteBlock } from "./anthropicProvider";
 import { compilePromptPayload } from "../promptPayload";
 import { runWithDeadline } from "./withDeadline";
 
@@ -76,7 +76,7 @@ export function buildOpenAIToolRequest(
     tools: [
       {
         type: "function",
-        function: { name: TOOL_NAME, description: "提交角色台词及其结构化事实。", parameters: dialogueToolOutputJsonSchema, strict: true },
+        function: { name: TOOL_NAME, description: TOOL_DESCRIPTION, parameters: dialogueToolOutputJsonSchema, strict: true },
       },
     ],
     tool_choice: { type: "function", function: { name: TOOL_NAME } },
@@ -144,6 +144,7 @@ function parseOpenAIToolCall(
     text: parsed.data.text,
     choices: [],
     proposedClaims: parsed.data.proposedClaims,
+    mentionedContextRefs: parsed.data.mentionedContextRefs,
     ...(usage ? { usage } : {}),
     providerMeta: { provider: "openai", model, ...(res.requestId ? { requestId: res.requestId } : {}) },
   });

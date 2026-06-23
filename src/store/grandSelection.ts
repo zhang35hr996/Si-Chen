@@ -3,16 +3,16 @@
  * 纯逻辑集中于此；殿选界面与 App 接线只调用本模块。确定性随机走 gestationRoll。
  */
 import type { ContentDB } from "../engine/content/loader";
-import type { CharacterRank, CharacterContent, EventEffect } from "../engine/content/schemas";
+import type { CharacterRank, CharacterContent, EventEffect, CanonicalReactionTrait } from "../engine/content/schemas";
 import { characterSchema } from "../engine/content/schemas";
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
-import { chineseNumeral, MORNING_SLOT, shichenSlot, monthOrdinal, toGameTime } from "../engine/calendar/time";
+import { chineseNumeral, dayIndexOf, MORNING_SLOT, shichenSlot, monthOrdinal, toGameTime } from "../engine/calendar/time";
 import { memoryEntryId } from "../engine/state/newGame";
 import {
   ARISTOCRATIC_SURNAME_POOL,
   ARISTOCRATIC_MALE_GIVEN_NAME_POOL,
 } from "../engine/characters/shijunNames";
-import type { GameState } from "../engine/state/types";
+import type { GameState, PendingDaxuan } from "../engine/state/types";
 import type { DecreeReaction } from "./empressDecree";
 import type { ChengFengPrompt } from "./prompt";
 
@@ -54,7 +54,20 @@ export function pickableRanks(db: ContentDB): CharacterRank[] {
 
 // ── 生成池（确定性取样） ──────────────────────────────────────────────
 const SPECIALTY_POOL = ["古筝", "琵琶", "书法", "丹青", "刺绣", "烹茶", "棋艺", "舞乐", "诗赋", "骑射"];
-const TRAIT_POOL = ["温婉", "活泼", "沉静", "孤傲", "机敏", "腼腆", "爽利", "细腻", "执拗", "娴雅"];
+// Each pool entry carries the narrative display word AND its canonical reaction
+// traits, so generated consorts never need free-text trait inference.
+const TRAIT_POOL = [
+  { display: "温婉", reactionTraits: ["compassionate", "discreet"] },
+  { display: "活泼", reactionTraits: ["blunt"] },
+  { display: "沉静", reactionTraits: ["discreet"] },
+  { display: "孤傲", reactionTraits: ["proud", "cold"] },
+  { display: "机敏", reactionTraits: ["calculating"] },
+  { display: "腼腆", reactionTraits: ["discreet"] },
+  { display: "爽利", reactionTraits: ["blunt"] },
+  { display: "细腻", reactionTraits: ["compassionate"] },
+  { display: "执拗", reactionTraits: ["proud"] },
+  { display: "娴雅", reactionTraits: ["status_conscious", "discreet"] },
+] as const satisfies readonly { display: string; reactionTraits: readonly CanonicalReactionTrait[] }[];
 const LIKES_POOL = ["玉器", "香料", "古籍", "骏马", "茶饮", "花木", "字画", "珠玉", "琴谱", "棋具"];
 const PORTRAIT_SETS = ["consort1", "consort2", "consort3", "consort4", "consort5", "consort6"];
 
@@ -105,11 +118,13 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
     }
 
     const traitCount = 2 + (gestationRollRaw(`${seed}:tc`) % 2); // 2–3
-    const traits: string[] = [];
+    const picked: (typeof TRAIT_POOL)[number][] = [];
     for (let t = 0; t < traitCount; t++) {
       const tr = pick(TRAIT_POOL, `${seed}:trait:${t}`);
-      if (!traits.includes(tr)) traits.push(tr);
+      if (!picked.includes(tr)) picked.push(tr);
     }
+    const traits = picked.map((p) => p.display);
+    const reactionTraits = [...new Set(picked.flatMap((p) => p.reactionTraits))];
     const specialty = pick(SPECIALTY_POOL, `${seed}:spec`);
     const likes = [pick(LIKES_POOL, `${seed}:like0`), pick(LIKES_POOL, `${seed}:like1`)]
       .filter((v, idx, arr) => arr.indexOf(v) === idx);
@@ -136,6 +151,7 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
         role: isShijia ? "殿选新晋，世家出身" : "殿选新晋，良家子",
         appearance: "眉目清秀，举止拘谨，初入宫闱，难掩怯意。",
         personalityTraits: traits,
+        reactionTraits,
         coreFacts: [isShijia ? "经三年大选入宫，初居储秀宫" : "良家子，经大选入宫，初居储秀宫"],
         goals: ["在宫中站稳脚跟", "得陛下垂顾"],
         speechStyle: "语气谨慎，言辞守礼。",
@@ -170,44 +186,113 @@ export function describeTalent(content: CharacterContent): string {
   return `秀男恭敬回道：小男儿自幼习${specialty}，略通一二，让陛下见笑了。`;
 }
 
-/** 二月上旬辰时、大选年、未报过 → 凤后遣人禀告大选已备妥（设 flag + 节拍）。否则 null。 */
-export function buildDaxuanAnnounce(
-  _db: ContentDB,
-  state: GameState,
-): { effects: EventEffect[]; beats: DecreeReaction[] } | null {
-  const cal = state.calendar;
-  if (!isDaxuanYear(cal.year)) return null;
-  if (cal.month !== 2 || cal.period !== "early") return null;
-  if (shichenSlot(cal) !== MORNING_SLOT) return null;
-  if (state.flags[daxuanAnnounceFlagKey(cal.year)]) return null;
-  return {
-    effects: [{ type: "flag", key: daxuanAnnounceFlagKey(cal.year), value: true }],
-    beats: [
-      {
-        speakerId: "cheng_feng",
-        lines: [
-          "陛下，凤后娘娘遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
-        ],
-      },
-    ],
-  };
+/**
+ * 「到点即补触发」判定（与生产 gestationDue 同构）：当前日历是否已到/已过 `year` 年
+ * `month`·`period` 的辰时。错过单槽不再丢失——该到期日之后持续为真，直到对应 flag 置位。
+ * year 显式传入（而非取 cal.year），使「按 pending 自身年份消费」成为可能（跨年存档稳定）。
+ */
+function dueAtOrAfter(cal: GameState["calendar"], year: number, month: number, period: "early" | "mid" | "late"): boolean {
+  const dueDayIndex = dayIndexOf(year, month, period);
+  if (cal.dayIndex < dueDayIndex) return false;
+  if (cal.dayIndex === dueDayIndex && shichenSlot(cal) < MORNING_SLOT) return false;
+  return true;
 }
 
-/** 四月下旬辰时、大选年、未决 → 殿选 prompt（前往 / 委托）。否则 null。 */
-export function buildDaxuanDianxuanPrompt(_db: ContentDB, state: GameState): ChengFengPrompt | null {
+/** 二月报告到点未报：大选年、未报 flag、且已到/过二月上旬辰时（按当前日历年）。 */
+export function daxuanAnnounceDue(state: GameState): boolean {
   const cal = state.calendar;
-  if (!isDaxuanYear(cal.year)) return null;
-  if (cal.month !== 4 || cal.period !== "late") return null;
-  if (shichenSlot(cal) !== MORNING_SLOT) return null;
-  if (state.flags[daxuanDianxuanFlagKey(cal.year)]) return null;
+  return isDaxuanYear(cal.year) && !state.flags[daxuanAnnounceFlagKey(cal.year)] && dueAtOrAfter(cal, cal.year, 2, "early");
+}
+
+/** 四月殿选到点未决：大选年、未决 flag、且已到/过四月下旬辰时（按当前日历年）。 */
+export function daxuanDianxuanDue(state: GameState): boolean {
+  const cal = state.calendar;
+  return isDaxuanYear(cal.year) && !state.flags[daxuanDianxuanFlagKey(cal.year)] && dueAtOrAfter(cal, cal.year, 4, "late");
+}
+
+/**
+ * 指定年份的殿选是否已到点未决（按 pending.year，年份权威；当前日历已过该年四月下旬辰时
+ * 且该年 dianxuan flag 未置）。用于 announce 消费后链接同年 dianxuan、及跨年存档消费。
+ */
+export function daxuanDianxuanDueForYear(state: GameState, year: number): boolean {
+  return !state.flags[daxuanDianxuanFlagKey(year)] && dueAtOrAfter(state.calendar, year, 4, "late");
+}
+
+/**
+ * 该 pending 对应的 flag 是否已置（已报 / 已决）→ 陈旧，应调和清除而非永久 sticky。
+ * 用于时间事务边界与 UI 消费两处去重，避免陈旧 pending 阻塞下一大选年的探测。
+ */
+export function isPendingDaxuanResolved(state: GameState, pending: PendingDaxuan): boolean {
+  const key = pending.kind === "announce" ? daxuanAnnounceFlagKey(pending.year) : daxuanDianxuanFlagKey(pending.year);
+  return Boolean(state.flags[key]);
+}
+
+/**
+ * 殿选解决的完整性不变量：当前确有「该 year、未决」的 dianxuan 待消费事件。
+ * 殿选 enter/delegate 据此拒绝陈旧/重复/错年点击——store 才是真正的去重边界（React 移除
+ * prompt 不足为凭：按钮无同步一次性锁，双击/滞留动作可能重复触发）。
+ */
+export function matchesPendingDianxuan(state: GameState, year: number): boolean {
+  const pd = state.pendingDaxuan;
+  return pd?.kind === "dianxuan" && pd.year === year && !state.flags[daxuanDianxuanFlagKey(year)];
+}
+
+/**
+ * 当前应入队的大选日历事件（announce 优先于 dianxuan；皆未到点则 null）。
+ * 由时间事务统一入口（advanceCandidate）调用，使触发与具体行动路径解耦。
+ */
+export function nextPendingDaxuan(state: GameState): PendingDaxuan | null {
+  if (daxuanAnnounceDue(state)) return { kind: "announce", year: state.calendar.year };
+  if (daxuanDianxuanDue(state)) return { kind: "dianxuan", year: state.calendar.year };
+  return null;
+}
+
+/** 二月大选报告的播报节拍（纯：与到期无关，消费时按 pending.year 执行）。 */
+export function daxuanAnnounceBeats(): DecreeReaction[] {
+  return [
+    {
+      speakerId: "cheng_feng",
+      lines: [
+        "陛下，凤后娘娘遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
+      ],
+    },
+  ];
+}
+
+/** 指定年份的殿选 prompt（两选项均携带该 year；纯：不做到期判定）。 */
+export function daxuanDianxuanPromptFor(year: number): ChengFengPrompt {
   return {
     speakerId: "cheng_feng",
     line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
     choices: [
-      { label: "前往体元殿", action: { type: "daxuanEnter", year: cal.year } },
-      { label: "让太后皇后决定", action: { type: "daxuanDelegate", year: cal.year } },
+      { label: "前往体元殿", action: { type: "daxuanEnter", year } },
+      { label: "让太后皇后决定", action: { type: "daxuanDelegate", year } },
     ],
   };
+}
+
+/**
+ * 大选年、未报过、且已到/已过「二月上旬辰时」→ 凤后遣人禀告大选已备妥（设 flag + 节拍）。
+ * 仅供纯到期判定测试 / 旧调用方使用；实机消费走 store.consumeDaxuanAnnounce（按 pending.year）。
+ */
+export function buildDaxuanAnnounce(
+  _db: ContentDB,
+  state: GameState,
+): { effects: EventEffect[]; beats: DecreeReaction[] } | null {
+  if (!daxuanAnnounceDue(state)) return null;
+  return {
+    effects: [{ type: "flag", key: daxuanAnnounceFlagKey(state.calendar.year), value: true }],
+    beats: daxuanAnnounceBeats(),
+  };
+}
+
+/**
+ * 大选年、未决、且已到/已过「四月下旬辰时」→ 殿选 prompt（前往 / 委托）。否则 null。
+ * 仅供纯到期判定测试 / 旧调用方使用；实机消费走 pending-aware daxuanDianxuanPromptFor。
+ */
+export function buildDaxuanDianxuanPrompt(_db: ContentDB, state: GameState): ChengFengPrompt | null {
+  if (!daxuanDianxuanDue(state)) return null;
+  return daxuanDianxuanPromptFor(state.calendar.year);
 }
 
 // ── NPC 自留（委托 + 早退场） ──────────────────────────────────────

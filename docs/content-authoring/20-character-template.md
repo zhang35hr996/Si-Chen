@@ -15,6 +15,7 @@ Scaffold one with `npm run new:character <id>`.
     "role": "初入宫的承徽",
     "appearance": "外貌一两句。",
     "personalityTraits": ["克制"],
+    "reactionTraits": ["discreet", "status_conscious"],
     "coreFacts": ["入宫一年"],
     "goals": ["承宠"],
     "speechStyle": "克制而有礼。"
@@ -45,7 +46,14 @@ Scaffold one with `npm run new:character <id>`.
   "health", "nurture" }`, each an integer 0–100 (容貌/才情/家世/健康/承养; background
   §四.4.1). When present the character card renders them. Officials normally omit it.
 - **`secrets`** — must be `[]` (secrets gameplay isn't implemented).
-- **`stances`** (optional) — `[{ "charId": "<other>", "attitude": "…" }]`.
+- **`profile.reactionTraits`** — canonical engine traits the ReactionPlanner derives
+  disposition from. The narrative `personalityTraits` are NOT parsed; author these
+  machine IDs separately. Allowed: `status_conscious`, `compassionate`, `cold`,
+  `discreet`, `blunt`, `impulsive`, `calculating`, `proud`. `[]` for non-reaction roles.
+- **`stances`** (optional) — `[{ "charId": "<other>", "stance": "<RelationStance>",
+  "attitude": "…" }]`. `stance` is the engine-used relation category
+  (`devoted` | `friendly` | `neutral` | `competitive` | `contemptuous` | `hostile`);
+  `attitude` is the free-text narrative description (for authors and the LLM, never parsed).
 
 ## Initial memories (optional)
 

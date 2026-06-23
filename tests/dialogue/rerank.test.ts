@@ -9,7 +9,7 @@ const m = (id: string, over: Partial<MemoryEntry> = {}): MemoryEntry => ({
   summary: "x", strength: 80, retention: "slow", emotions: {}, triggerTags: [], unresolved: false,
   createdAt: makeGameTime(1, 1, "early"), ...over,
 });
-const ctx = { now: makeGameTime(1, 2, "early"), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
+const ctx = { now: makeGameTime(1, 2, "early"), topicTags: [], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
 
 describe("rankCandidates", () => {
   it("过门槛者按分降序、top-N、确定性；低于门槛被剔", () => {

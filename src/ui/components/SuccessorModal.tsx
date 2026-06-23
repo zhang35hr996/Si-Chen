@@ -21,8 +21,10 @@ export function SuccessorModal({
   const candidateIds = state.resources.bloodline.pregnancy.candidateIds;
   const fenghouChildless = !state.resources.bloodline.heirs.some((h) => h.bearer === "shen_zhibai");
 
+  // 已承嗣怀胎者不可再受传胎；从可选承嗣君中剔除。
+  const alreadyCarrying = (id: string) => state.resources.bloodline.gestations.some((g) => g.carrier === id);
   const living = Object.values(db.characters)
-    .filter((c) => c.kind === "consort" && canSummon(state, c.id))
+    .filter((c) => c.kind === "consort" && canSummon(state, c.id) && !alreadyCarrying(c.id))
     .sort(byRankDesc(db, state))
     .map((c) => c.id);
   const name = (id: string) => {

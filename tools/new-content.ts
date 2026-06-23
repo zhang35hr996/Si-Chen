@@ -42,6 +42,7 @@ export function buildScaffold(kind: ContentKind, id: string): Scaffold {
             role: "TODO 一句话身份",
             appearance: "TODO 外貌一两句。",
             personalityTraits: ["TODO 性格"],
+            reactionTraits: [],
             coreFacts: ["TODO 关键事实"],
             goals: ["TODO 目标"],
             speechStyle: "TODO 说话风格。",

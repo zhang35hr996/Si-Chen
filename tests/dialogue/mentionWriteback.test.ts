@@ -164,3 +164,65 @@ describe("recordMentionedContext", () => {
     expect(s0.mentionLog.length).toBe(original);
   });
 });
+
+// ── PR-A item 6: mentionedContextRefs decouples cooldown from claims ──────────
+
+describe("recordMentionedContext — mentionedContextRefs (no claim required)", () => {
+  it("logs a mention for a memory the model referenced even with NO accepted claim", () => {
+    const s0 = createNewGameState(db);
+    const offered = new Set([memKey("mem_1")]);
+    const s1 = recordMentionedContext(
+      s0,
+      [], // no claims at all
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      offered,
+      [memRef("mem_1")],
+    );
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length + 1);
+    const p = recentMentionPenalty(s1, {
+      speakerId: "shen_zhibai",
+      audienceId: "player",
+      memoryId: "mem_1",
+      now,
+    });
+    expect(p).toBeGreaterThan(0);
+  });
+
+  it("ignores event-kind mentionedContextRefs (only memories cool down)", () => {
+    const s0 = createNewGameState(db);
+    const offered = new Set([evtKey("evt_001")]);
+    const s1 = recordMentionedContext(
+      s0,
+      [],
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      offered,
+      [evtRef("evt_001")],
+    );
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length);
+  });
+
+  it("never logs a mentionedContextRef that was not offered (defense in depth)", () => {
+    const s0 = createNewGameState(db);
+    const s1 = recordMentionedContext(
+      s0,
+      [],
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      new Set([memKey("mem_1")]),
+      [memRef("mem_hallucinated")],
+    );
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length);
+  });
+
+  it("dedupes a memory referenced both as a claim source and a mentionedContextRef", () => {
+    const s0 = createNewGameState(db);
+    const offered = new Set([memKey("mem_1")]);
+    const s1 = recordMentionedContext(
+      s0,
+      [accepted([memRef("mem_1")])],
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      offered,
+      [memRef("mem_1")],
+    );
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length + 1);
+  });
+});

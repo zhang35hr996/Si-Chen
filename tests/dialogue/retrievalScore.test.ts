@@ -3,14 +3,14 @@ import { retrievalScore } from "../../src/engine/dialogue/retrievalScore";
 import { createInitialState } from "../../src/engine/state/initialState";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import { appendMention } from "../../src/engine/dialogue/mention";
-import type { MemoryEntry } from "../../src/engine/state/types";
+import type { CourtEvent, GameState, MemoryEntry } from "../../src/engine/state/types";
 
 const trauma = (over: Partial<MemoryEntry> = {}): MemoryEntry => ({
   id: "mem_a_1", ownerId: "a", kind: "trauma", subjectIds: ["heir_7"], perspective: "parent",
   summary: "夭折", strength: 100, retention: "permanent", emotions: { grief: 95 },
   triggerTags: ["death", "heir", "anniversary"], unresolved: true, createdAt: makeGameTime(1, 5, "mid"), ...over,
 });
-const ctx = (over = {}) => ({ now: makeGameTime(3, 1, "early"), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId: "a", ...over });
+const ctx = (over = {}) => ({ now: makeGameTime(3, 1, "early"), topicTags: [], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a", ...over });
 
 describe("retrievalScore 乘加混合", () => {
   it("permanent 创伤：日常问安（无任何 match）得低分；忌辰得高分（加项独立抬分，不被 topic=0 清零）", () => {
@@ -30,6 +30,12 @@ describe("retrievalScore 乘加混合", () => {
     const base = retrievalScore(s, trauma(), ctx());
     const present = retrievalScore(s, trauma(), ctx({ presentCharacterIds: ["heir_7"] }));
     expect(present).toBeGreaterThan(base);
+  });
+  it("正在谈论的当事人（subjectIds）即便不在场也加分", () => {
+    const s = createInitialState();
+    const base = retrievalScore(s, trauma(), ctx());
+    const onSubject = retrievalScore(s, trauma(), ctx({ subjectIds: ["heir_7"] }));
+    expect(onSubject).toBeGreaterThan(base);
   });
   it("确定性", () => {
     const s = createInitialState();
@@ -140,5 +146,105 @@ describe("retrievalScore 补充覆盖", () => {
     const scoreNoMention = retrievalScore(s, trauma(), ctxNow);
     const scoreWithMention = retrievalScore(sWithMention, trauma(), ctxNow);
     expect(scoreWithMention).toBeLessThan(scoreNoMention);
+  });
+});
+
+// ── PR-A item 7: location match keyed to the source event's location ─────────
+
+const stateWith = (chronicle: CourtEvent[]): GameState => ({ ...createInitialState(), chronicle });
+
+const courtEvent = (over: Partial<CourtEvent> = {}): CourtEvent => ({
+  id: "evt_loc_1",
+  type: "rank_changed",
+  occurredAt: makeGameTime(1, 5, "mid"),
+  participants: [{ charId: "a", role: "subject" }],
+  locationId: "lengong",
+  payload: {},
+  publicity: { scope: "palace", persistence: "contemporaneous" },
+  publicSalience: 40,
+  retention: "slow",
+  tags: [],
+  ...over,
+});
+
+describe("retrievalScore emotional-condition activation fades (item 8)", () => {
+  const sourceEventId = "evt_grief";
+  const griefMem = () => trauma({ sourceEventId, triggerTags: ["death", "heir"] }); // no "anniversary"
+  const withCondition = (recoveryProfile: "fast" | "stuck"): GameState => ({
+    ...createInitialState(),
+    emotionalConditions: [
+      {
+        id: "cond_a_000001",
+        ownerId: "a",
+        type: "acute_grief" as const,
+        sourceEventId,
+        severity: 100,
+        startedAt: makeGameTime(1, 1, "early"),
+        recoveryProfile,
+      },
+    ],
+  });
+
+  it("an acute (fast) condition contributes less as years pass (no permanent +40)", () => {
+    const s = withCondition("fast");
+    const soon = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(1, 2, "early") }));
+    const yearsLater = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(6, 1, "early") }));
+    expect(yearsLater).toBeLessThan(soon);
+  });
+
+  it("a 'stuck' condition keeps contributing across the years", () => {
+    const s = withCondition("stuck");
+    const soon = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(1, 2, "early") }));
+    const yearsLater = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(6, 1, "early") }));
+    expect(yearsLater).toBe(soon);
+  });
+});
+
+describe("retrievalScore location match (item 7)", () => {
+  it("location bonus applies only when current location matches the source event's location", () => {
+    const s = stateWith([courtEvent({ locationId: "lengong" })]);
+    const mem = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["residence"], subjectIds: ["a"] });
+    const here = retrievalScore(s, mem, ctx({ locationId: "lengong" }));
+    const elsewhere = retrievalScore(s, mem, ctx({ locationId: "zichendian" }));
+    expect(here).toBeGreaterThan(elsewhere);
+  });
+
+  it("standing in an unrelated location adds NO location bonus (old residence-tag bug)", () => {
+    const s = stateWith([courtEvent({ locationId: "lengong" })]);
+    const mem = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["residence"], subjectIds: ["a"] });
+    const elsewhere = retrievalScore(s, mem, ctx({ locationId: "zichendian" }));
+    const noLocation = retrievalScore(s, mem, ctx({ locationId: undefined }));
+    expect(elsewhere).toBe(noLocation);
+  });
+
+  it("no location bonus when the memory does not declare the residence trigger tag", () => {
+    // Source-event location matches the current location, but the memory never
+    // declared a location trigger — scene-trigger bonuses require the memory to opt in.
+    const s = stateWith([courtEvent({ locationId: "lengong" })]);
+    const tagged = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["residence"], subjectIds: ["a"] });
+    const untagged = trauma({ sourceEventId: "evt_loc_1", triggerTags: ["death"], subjectIds: ["a"] });
+    const here = ctx({ locationId: "lengong" });
+    const elsewhere = ctx({ locationId: "zichendian" });
+    // tagged memory: location contributes; untagged: no contribution at all
+    expect(retrievalScore(s, tagged, here)).toBeGreaterThan(retrievalScore(s, tagged, elsewhere));
+    expect(retrievalScore(s, untagged, here)).toBe(retrievalScore(s, untagged, elsewhere));
+  });
+
+  it("a residence move grants the bonus at either the from or the to location", () => {
+    const s = stateWith([
+      courtEvent({
+        id: "evt_move",
+        type: "residence_changed",
+        participants: [{ charId: "a", role: "mover" }],
+        locationId: undefined,
+        payload: { from: "zichendian", to: "lengong" },
+      }),
+    ]);
+    const mem = trauma({ sourceEventId: "evt_move", triggerTags: ["residence"], subjectIds: ["a"] });
+    const atTo = retrievalScore(s, mem, ctx({ locationId: "lengong" }));
+    const atFrom = retrievalScore(s, mem, ctx({ locationId: "zichendian" }));
+    const atOther = retrievalScore(s, mem, ctx({ locationId: "yanxidian" }));
+    expect(atTo).toBeGreaterThan(atOther);
+    expect(atFrom).toBeGreaterThan(atOther);
   });
 });

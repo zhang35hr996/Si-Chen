@@ -1,7 +1,7 @@
 import { canKnowEvent } from "../chronicle/awareness";
 import { recallCandidates, type RecallQuery } from "./recall";
 import { rankCandidates } from "./rerank";
-import type { ActivationContext } from "./retrievalScore";
+import { eventActivationScore, type ActivationContext } from "./retrievalScore";
 import type { CourtEvent, GameState, MemoryEntry } from "../state/types";
 
 export interface DialogueMemoryContext {
@@ -83,6 +83,54 @@ export function selectPromptEvents(opts: SelectPromptEventsOpts): CourtEvent[] {
   return result;
 }
 
+// ── selectPromptEventsByActivation (PR-A item 9) ──────────────────────────────
+
+export interface SelectPromptEventsByActivationOpts {
+  state: GameState;
+  events: readonly CourtEvent[];
+  ctx: ActivationContext;
+  /** If set, this event must appear first. Throws if not present in `events`. */
+  pinnedEventId?: string;
+  limit: number;
+}
+
+/**
+ * Selects up to `limit` events for a dialogue prompt, ranked by unified
+ * eventActivationScore (decayed salience × relevance + present bonus − recent
+ * reaction) instead of raw publicSalience. The reaction source event, when given,
+ * is always pinned first. Deterministic tiebreak: score desc → occurredAt desc → id asc.
+ */
+export function selectPromptEventsByActivation(opts: SelectPromptEventsByActivationOpts): CourtEvent[] {
+  const { state, events, ctx, pinnedEventId, limit } = opts;
+  if (limit < 1) throw new RangeError(`selectPromptEventsByActivation: limit must be ≥ 1, got ${limit}`);
+
+  let pinned: CourtEvent | undefined;
+  if (pinnedEventId !== undefined) {
+    pinned = events.find((e) => e.id === pinnedEventId);
+    if (!pinned) {
+      throw new Error(`selectPromptEventsByActivation: pinnedEventId "${pinnedEventId}" not found in events array`);
+    }
+  }
+
+  const scored = events
+    .filter((e) => e.id !== pinnedEventId)
+    .map((e) => ({ e, score: eventActivationScore(state, e, ctx) }))
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.e.occurredAt.dayIndex - a.e.occurredAt.dayIndex ||
+        (a.e.id < b.e.id ? -1 : a.e.id > b.e.id ? 1 : 0),
+    );
+
+  const result: CourtEvent[] = [];
+  if (pinned) result.push(pinned);
+  for (const { e } of scored) {
+    if (result.length >= limit) break;
+    result.push(e);
+  }
+  return result;
+}
+
 // ── buildMemoryContext ────────────────────────────────────────────────────────
 
 export interface BuildMemoryContextOpts {
@@ -100,16 +148,21 @@ export function buildMemoryContext(
   const topEvents = opts?.topEvents ?? 3;
 
   const recalled = recallCandidates(state, query);
-  const ranked = rankCandidates(state, ctx, recalled, topN);
+  // Memories and events have INDEPENDENT quotas (P1): rank memories on their own so a
+  // relevant memory is never crowded out of its topN slot by higher-scoring events,
+  // which already get their own prompt quota via selectPromptEventsByActivation below.
+  const rankedMemories = rankCandidates(state, ctx, { memories: recalled.memories, events: [] }, topN);
 
   // All known events, no quota
   const knownEventsAll = recallKnownEvents(state, query.speakerId);
 
-  // Quota'd events for prompt
-  const knownEvents = selectPromptEvents({ events: knownEventsAll, limit: topEvents });
+  // Quota'd events for prompt, ranked by unified activation (PR-A item 9) so the
+  // selection agrees with the orchestrator's pinned selection rather than diverging
+  // on a separate publicSalience scan.
+  const knownEvents = selectPromptEventsByActivation({ state, events: knownEventsAll, ctx, limit: topEvents });
 
   return {
-    activatedMemories: ranked.flatMap((c) => (c.kind === "memory" ? [c.memory] : [])),
+    activatedMemories: rankedMemories.flatMap((c) => (c.kind === "memory" ? [c.memory] : [])),
     knownEvents,
     knownEventsAll,
   };

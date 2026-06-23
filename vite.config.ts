@@ -13,21 +13,24 @@ export default defineConfig({
     },
   },
   test: {
+    // Two explicit lanes so `npm test` runs both, but environments never mix
+    // (scene-ui-narrative-refactor PR2: isolated jsdom/RTL lane for *.test.tsx only).
     projects: [
       {
+        extends: true,
         test: {
           name: "node",
           environment: "node",
-          include: ["tests/**/*.test.ts"],
+          include: ["tests/**/*.test.ts"], // existing engine/logic tests — unchanged
         },
       },
       {
-        plugins: [react()],
+        extends: true,
         test: {
-          name: "jsdom",
+          name: "ui",
           environment: "jsdom",
-          include: ["tests/**/*.test.tsx"],
-          setupFiles: ["tests/setup.ui.ts"],
+          include: ["tests/**/*.test.tsx"], // interaction-heavy UI components (RTL)
+          setupFiles: ["./tests/setup.ui.ts"],
         },
       },
     ],
