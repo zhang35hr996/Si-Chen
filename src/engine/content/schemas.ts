@@ -152,6 +152,13 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
 
 // ── effects (the single funnel — plan §6, fully discriminated) ────────
 
+/** 位分操作发起者：皇帝直接敕封 vs 六宫代理侍君行政处分。 */
+export const rankOperationAuthoritySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sovereign"), actorId: z.literal("player") }),
+  z.object({ kind: z.literal("harem_administrator"), actorId: z.string() }),
+]);
+export type RankOperationAuthority = z.infer<typeof rankOperationAuthoritySchema>;
+
 const deathCauseSchema = z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted", "imperial_execution"]);
 
 export const eventEffectSchema = z.union([
@@ -197,9 +204,9 @@ export const eventEffectSchema = z.union([
     key: nonEmpty,
     value: z.union([z.boolean(), z.number(), z.string()]),
   }),
-  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema }),
-  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4) }),
-  z.strictObject({ type: z.literal("remove_title"), char: idSchema }),
+  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema, authority: rankOperationAuthoritySchema.optional() }),
+  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4), authority: rankOperationAuthoritySchema.optional() }),
+  z.strictObject({ type: z.literal("remove_title"), char: idSchema, authority: rankOperationAuthoritySchema.optional() }),
   z.strictObject({
     type: z.literal("bedchamber"),
     char: idSchema,

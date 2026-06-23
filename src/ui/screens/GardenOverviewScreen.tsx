@@ -50,6 +50,7 @@ export interface GardenOverviewScreenProps {
   onViewProfile: (id: string) => void;
   onManage?: (id: string) => void;
   onRelocate?: (id: string) => void;
+  onHaremAdminManage?: (actorId: string) => void;
 }
 
 export function GardenOverviewScreen(props: GardenOverviewScreenProps) {

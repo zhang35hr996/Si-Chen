@@ -43,6 +43,7 @@ import { greetingAttendees } from "../engine/characters/greeting";
 import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
+import { planHaremAdminRankCommand, type HaremAdminRankCommand } from "../store/haremAdminCommands";
 import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
 import {
@@ -118,6 +119,7 @@ import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
+import { HaremAdminRankModal } from "./components/HaremAdminRankModal";
 import { PunishmentModal } from "./components/PunishmentModal";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
@@ -179,6 +181,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // 位分管理原子会话（charId + origin）。origin 决定结束后是否补跑被初夜搁置的转旬 checkpoint。
   const [rankAdmin, setRankAdmin] = useState<RankAdminSession>(null);
   const [punishCharId, setPunishCharId] = useState<string | null>(null);
+  // 六宫行政位分管理：actorId = 协理侍君 charId。
+  const [haremAdminActorId, setHaremAdminActorId] = useState<string | null>(null);
   // 禁足令在侍君宫殿内发布后需回主图：confinement 成功 + 人在该宫→ 反应播完后 goHome。
   const [punishGoHome, setPunishGoHome] = useState(false);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
@@ -494,6 +498,20 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // 初夜来源：无反应（无变化/失败）须先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬；
     // 生成反应（reaction_created）则交其 onDone 补跑。统一经纯决策收尾。
     applyFirstNightRankDrain(origin, outcome);
+  };
+
+  /** 六宫行政位分处分：由代理侍君对低位侍君晋封/降位。 */
+  const applyHaremAdminRankOp = (command: HaremAdminRankCommand) => {
+    setHaremAdminActorId(null);
+    const result = planHaremAdminRankCommand(db, store.getState(), command);
+    if (!result.ok) return; // 命令层已拒绝（UI 已提示）
+    const funnelResult = store.applyEffects(db, result.plan.effects);
+    if (funnelResult.ok) {
+      doAutosave();
+      if (result.plan.lines.length > 0) {
+        setReaction({ speakerId: command.targetId, lines: result.plan.lines });
+      }
+    }
   };
 
   /** 惩罚命令（禁足/解除/赐死）统一入口；紫宸殿与侍君宫殿共用。 */
@@ -1611,6 +1629,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
           onPunish={(id) => setPunishCharId(id)}
           onRelocate={(id) => setRelocateCharId(id)}
+          onHaremAdminManage={(actorId) => setHaremAdminActorId(actorId)}
           onBedchamber={(id) => beginBedchamber(id)}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
@@ -1798,6 +1817,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               onViewProfile={(id) => setProfileCharId(id)}
               onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
               onRelocate={(id) => setRelocateCharId(id)}
+              onHaremAdminManage={(actorId) => setHaremAdminActorId(actorId)}
             />
           </GameShell>
         );
@@ -2026,6 +2046,15 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             }
             restoreReturn(); // → 宣政殿专用屏（结果态由 courtResult 决定）
           }}
+        />
+      )}
+      {haremAdminActorId && store.getState().standing[haremAdminActorId] && (
+        <HaremAdminRankModal
+          db={db}
+          state={liveState}
+          actorId={haremAdminActorId}
+          onCommand={applyHaremAdminRankOp}
+          onClose={() => setHaremAdminActorId(null)}
         />
       )}
       {rankAdmin && store.getState().standing[rankAdmin.charId] && (
