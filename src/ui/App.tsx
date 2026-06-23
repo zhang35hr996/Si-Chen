@@ -43,7 +43,7 @@ import { greetingAttendees } from "../engine/characters/greeting";
 import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
-import { planHaremAdminRankCommand, type HaremAdminRankCommand } from "../store/haremAdminCommands";
+import type { HaremAdminRankCommand } from "../store/haremAdminCommands";
 import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
 import {
@@ -478,7 +478,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   const applyRankOp = (charId: string, req: RankOpRequest, origin: "normal" | "first_night") => {
-    const op = buildRankOp(db, store.getState(), charId, req);
+    const op = buildRankOp(db, store.getState(), charId, req, { kind: "sovereign", actorId: "player" as const });
     setRankAdmin(null);
     let outcome: "no_op" | "failed" | "reaction_created";
     if (!op) {
@@ -501,16 +501,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   /** 六宫行政位分处分：由代理侍君对低位侍君晋封/降位。 */
-  const applyHaremAdminRankOp = (command: HaremAdminRankCommand) => {
-    setHaremAdminActorId(null);
-    const result = planHaremAdminRankCommand(db, store.getState(), command);
-    if (!result.ok) return; // 命令层已拒绝（UI 已提示）
-    const funnelResult = store.applyEffects(db, result.plan.effects);
-    if (funnelResult.ok) {
+  const applyHaremAdminRankOp = (command: HaremAdminRankCommand): { ok: boolean; reason?: string } => {
+    const result = store.applyHaremAdminRankCommand(db, command);
+    if (result.ok) {
+      setHaremAdminActorId(null);
       doAutosave();
-      if (result.plan.lines.length > 0) {
-        setReaction({ speakerId: command.targetId, lines: result.plan.lines });
+      if (result.value.lines.length > 0) {
+        setReaction({ speakerId: command.targetId, lines: result.value.lines });
       }
+      return { ok: true };
+    } else {
+      const reason = result.error[0]?.message ?? "操作失败，请重试。";
+      return { ok: false, reason };
     }
   };
 
@@ -569,6 +571,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       navDispatch({ type: "clear" }); // 读档清空事件返回上下文（场景态从不入档）
       pendingReactionDispatch({ type: "clear" });
       setRankAdmin(null);
+      setHaremAdminActorId(null);
       timeSettlementDispatch({ type: "clear" });
       invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
@@ -778,6 +781,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
+    setHaremAdminActorId(null);
     timeSettlementDispatch({ type: "clear" });
     invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     doAutosave();
@@ -812,6 +816,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
+    setHaremAdminActorId(null);
     timeSettlementDispatch({ type: "clear" });
     invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     setView("coronation");
@@ -1134,6 +1139,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     reaction !== null || childReaction !== null || physicianReaction !== null ||
     firstNightPromptId !== null || namePetHeirId !== null ||
     bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
+    haremAdminActorId !== null ||
     prompt !== null || daxuanPrompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
     activeEventId !== null || court !== null || dianxuan !== null ||
     shopId !== null || view === "shop" || dialogueInFlight ||
@@ -2460,8 +2466,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
-          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setSettingsOpen(false); setView("title"); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); setHaremAdminActorId(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setHaremAdminActorId(null); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
       )}

@@ -13,6 +13,7 @@ import { fromTurnIndex, monthOrdinal, toGameTime } from "../engine/calendar/time
 import { expiredUnrecordedConfinements } from "../engine/characters/confinement";
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
+import { planHaremAdminRankCommand, type HaremAdminRankCommand, type HaremAdminCommandPlan } from "./haremAdminCommands";
 import type { CourtEvent } from "../engine/state/types";
 import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
@@ -304,6 +305,42 @@ export class GameStore {
     const planned = planImperialCommand(db, this.state, command);
     if (!planned.ok) {
       const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    const plan = planned.plan;
+    const applied = applyEffects(db, this.state, plan.effects);
+    if (!applied.ok) {
+      for (const e of applied.error) this.logger?.logGameError(e);
+      this.lastEffectReport = { effects: plan.effects, outcome: "rejected", errors: applied.error };
+      return err(applied.error);
+    }
+    let candidate = applied.value;
+    for (const draft of plan.chronicle) {
+      const ap = appendCourtEvent(candidate, draft);
+      if (!ap.ok) {
+        for (const e of ap.error) this.logger?.logGameError(e);
+        return err(ap.error); // this.state untouched — atomic
+      }
+      candidate = ap.value.state;
+    }
+    this.state = candidate;
+    this.lastEffectReport = { effects: plan.effects, outcome: "applied", errors: [] };
+    this.emit();
+    return ok(plan);
+  }
+
+  /**
+   * 六宫行政位分处分命令的唯一执行入口。原子地：
+   * 校验 → 漏斗应用效果 → append 编年史 → 单次提交。任一步失败 state 不变。
+   */
+  applyHaremAdminRankCommand(
+    db: ContentDB,
+    command: HaremAdminRankCommand,
+  ): Result<HaremAdminCommandPlan, GameError[]> {
+    const planned = planHaremAdminRankCommand(db, this.state, command);
+    if (!planned.ok) {
+      const error = stateError("HAREM_ADMIN_RANK_REJECTED", planned.reason);
       this.logger?.logGameError(error);
       return err([error]);
     }

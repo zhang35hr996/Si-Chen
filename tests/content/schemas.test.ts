@@ -228,10 +228,11 @@ describe("rank/title fields", () => {
 });
 
 describe("rank/title effects", () => {
+  const sovereign = { kind: "sovereign" as const, actorId: "player" as const };
   it("accepts set_rank / set_title / remove_title", () => {
-    expect(eventEffectSchema.safeParse({ type: "set_rank", char: "lu_huaijin", rank: "jun" }).success).toBe(true);
-    expect(eventEffectSchema.safeParse({ type: "set_title", char: "lu_huaijin", title: "婉" }).success).toBe(true);
-    expect(eventEffectSchema.safeParse({ type: "remove_title", char: "lu_huaijin" }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "set_rank", char: "lu_huaijin", rank: "jun", authority: sovereign }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "set_title", char: "lu_huaijin", title: "婉", authority: sovereign }).success).toBe(true);
+    expect(eventEffectSchema.safeParse({ type: "remove_title", char: "lu_huaijin", authority: sovereign }).success).toBe(true);
   });
   it("rejects a 封号 longer than 4 漢字", () => {
     expect(eventEffectSchema.safeParse({ type: "set_title", char: "lu_huaijin", title: "一二三四五" }).success).toBe(false);

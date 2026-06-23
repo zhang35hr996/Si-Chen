@@ -28,10 +28,11 @@ export function HaremAdminRankModal({
   db: ContentDB;
   state: GameState;
   actorId: string;
-  onCommand: (command: HaremAdminRankCommand) => void;
+  onCommand: (command: HaremAdminRankCommand) => { ok: boolean; reason?: string };
   onClose: () => void;
 }) {
   const [step, setStep] = useState<Step>({ kind: "target_select" });
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const authority = getHaremRankAuthority(db, state);
 
@@ -88,7 +89,7 @@ export function HaremAdminRankModal({
                     <button
                       type="button"
                       className="harem-rank__pick"
-                      onClick={() => setStep({ kind: "rank_select", targetId: c.id })}
+                      onClick={() => { setLastError(null); setStep({ kind: "rank_select", targetId: c.id }); }}
                     >
                       <span className="harem-rank__name">{c.profile.name}</span>
                       <span className="harem-rank__rank">
@@ -115,8 +116,8 @@ export function HaremAdminRankModal({
         targetId={step.targetId}
         actorName={actorName}
         actorRankOrder={actorRankOrder}
-        onConfirm={(request) => setStep({ kind: "confirm", targetId: step.targetId, request })}
-        onBack={() => setStep({ kind: "target_select" })}
+        onConfirm={(request) => { setLastError(null); setStep({ kind: "confirm", targetId: step.targetId, request }); }}
+        onBack={() => { setLastError(null); setStep({ kind: "target_select" }); }}
         onClose={onClose}
       />
     );
@@ -152,15 +153,24 @@ export function HaremAdminRankModal({
         <p className="harem-rank__confirm-row">协理者：{actorName}</p>
         <p className="harem-rank__confirm-row">目标：{targetName}</p>
         <p className="harem-rank__confirm-row">{opLine}</p>
+        {lastError && <p className="harem-rank__error" role="alert">{lastError}</p>}
         <div className="punish-modal__actions">
           <button
             type="button"
             className="punish-btn punish-btn--confine"
-            onClick={() => onCommand({ type: "harem_admin_rank_change", actorId, targetId: step.targetId, request: step.request })}
+            onClick={() => {
+              const result = onCommand({ type: "harem_admin_rank_change", actorId, targetId: step.targetId, request: step.request });
+              if (result.ok) {
+                setLastError(null);
+                onClose();
+              } else {
+                setLastError(result.reason ?? "操作失败，请重试。");
+              }
+            }}
           >
             确认下旨
           </button>
-          <button type="button" className="punish-btn punish-btn--minor" onClick={() => setStep({ kind: "rank_select", targetId: step.targetId })}>
+          <button type="button" className="punish-btn punish-btn--minor" onClick={() => { setLastError(null); setStep({ kind: "rank_select", targetId: step.targetId }); }}>
             返回
           </button>
         </div>

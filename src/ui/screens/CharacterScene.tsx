@@ -87,7 +87,10 @@ export function CharacterScene({
   const confinement = character ? activeConfinement(state, character.id) : undefined;
   // 协理六宫：若当前场景侍君是协理者，显示标识。
   const admin = state.haremAdministration;
-  const isActingAdmin = character && admin.mode === "acting_consort" && admin.charId === character.id;
+  const isActingAdmin = character && (
+    (admin.mode === "acting_consort" && admin.charId === character.id) ||
+    (admin.mode === "empress" && state.standing[character.id]?.rank === "fenghou")
+  );
 
   const awayTo = character ? absence?.[character.id] : undefined;
   const awayName = character && standing ? resolveDisplayName(character, standing, rank) : "";

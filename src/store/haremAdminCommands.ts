@@ -8,7 +8,7 @@
  *   - 效果仍走同一 funnel，权限校验由 funnel.validateEffects 兜底
  */
 import { toGameTime } from "../engine/calendar/time";
-import { canAdministratorAdjustRank } from "../engine/characters/haremRankAuthority";
+import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../engine/characters/haremRankAuthority";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
@@ -49,10 +49,13 @@ export function planHaremAdminRankCommand(
   // 校验访问权（rank 约束仅 set_rank 时需要检查新位分；title 操作只检查目标访问权）。
   const newRankId =
     request.kind === "set_rank" ? request.rank : (state.standing[targetId]?.rank ?? "");
-  const check = canAdministratorAdjustRank(db, state, actorId, targetId, newRankId);
+  const office: "empress" | "acting_consort" = state.haremAdministration.mode === "empress" ? "empress" : "acting_consort";
+  const check = office === "empress"
+    ? canEmpressAdjustRank(db, state, actorId, targetId, newRankId)
+    : canAdministratorAdjustRank(db, state, actorId, targetId, newRankId);
   if (!check.ok) return { ok: false, reason: check.reason };
 
-  const authority = { kind: "harem_administrator" as const, actorId };
+  const authority = { kind: "harem_administrator" as const, actorId, office };
   const op = buildRankOp(db, state, targetId, request, authority);
   if (!op) return { ok: false, reason: "操作无效（位分未发生变化）。" };
 

@@ -18,7 +18,7 @@ import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
 import { eligibleHaremAdministrators } from "../characters/haremAdministration";
-import { canAdministratorAdjustRank } from "../characters/haremRankAuthority";
+import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../characters/haremRankAuthority";
 import { nextHeirId } from "../characters/heirs";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
@@ -152,10 +152,13 @@ export function validateEffects(
           const r = db.ranks[e.rank];
           if (!r || r.domain !== "harem" || e.rank === "fenghou") {
             bad(index, "BAD_EFFECT", `set_rank to invalid rank "${e.rank}"`, { rank: e.rank });
-          } else if (e.authority?.kind === "harem_administrator") {
-            const check = canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, e.rank);
+          } else if (e.authority.kind === "harem_administrator") {
+            const check = e.authority.office === "empress"
+              ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, e.rank)
+              : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, e.rank);
             if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char, rank: e.rank });
           }
+          // authority.kind === "sovereign" → no admin check needed
         }
         break;
       }
@@ -167,10 +170,12 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
         } else if (db.lexicon.forbiddenTerms.some((t) => e.title.includes(t))) {
           bad(index, "BAD_EFFECT", `title "${e.title}" contains a forbidden term`, { title: e.title });
-        } else if (e.authority?.kind === "harem_administrator") {
-          // 封号操作不改变位分，但仍须目标严格低于协理者。
+        } else if (e.authority.kind === "harem_administrator") {
+          // 封号操作不改变位分，但仍须目标严格低于协理者（empress 模式只需不是凤后）。
           const curRankId = state.standing[e.char]!.rank;
-          const check = canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
+          const check = e.authority.office === "empress"
+            ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, curRankId)
+            : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
           if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char });
         }
         break;
@@ -181,9 +186,11 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `remove_title needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "fenghou") {
           bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
-        } else if (e.authority?.kind === "harem_administrator") {
+        } else if (e.authority.kind === "harem_administrator") {
           const curRankId = state.standing[e.char]!.rank;
-          const check = canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
+          const check = e.authority.office === "empress"
+            ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, curRankId)
+            : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
           if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char });
         }
         break;

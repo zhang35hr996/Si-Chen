@@ -122,33 +122,35 @@ describe("invalid effects reject", () => {
   });
 });
 
+const sovereign = { kind: "sovereign" as const, actorId: "player" as const };
+
 describe("rank/title effects", () => {
   it("set_rank changes a consort's rank", () => {
-    const r = applyEffects(db, fresh(), [{ type: "set_rank", char: "lu_huaijin", rank: "jun" }]);
+    const r = applyEffects(db, fresh(), [{ type: "set_rank", char: "lu_huaijin", rank: "jun", authority: sovereign }]);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.standing["lu_huaijin"]!.rank).toBe("jun");
   });
   it("set_title then remove_title sets and clears the 封号", () => {
     const state = fresh();
-    const a = applyEffects(db, state, [{ type: "set_title", char: "lu_huaijin", title: "婉" }]);
+    const a = applyEffects(db, state, [{ type: "set_title", char: "lu_huaijin", title: "婉", authority: sovereign }]);
     expect(a.ok && a.value.standing["lu_huaijin"]!.title).toBe("婉");
     if (!a.ok) return;
-    const b = applyEffects(db, a.value, [{ type: "remove_title", char: "lu_huaijin" }]);
+    const b = applyEffects(db, a.value, [{ type: "remove_title", char: "lu_huaijin", authority: sovereign }]);
     expect(b.ok && b.value.standing["lu_huaijin"]!.title).toBeUndefined();
   });
   it("rejects set_rank to 凤后 (the cap)", () => {
-    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "lu_huaijin", rank: "fenghou" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "lu_huaijin", rank: "fenghou", authority: sovereign }]).ok).toBe(false);
   });
   it("rejects set_rank on an official", () => {
-    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "wei_sui", rank: "jun" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "wei_sui", rank: "jun", authority: sovereign }]).ok).toBe(false);
   });
   it("rejects a 封号 containing a forbidden term", () => {
-    expect(applyEffects(db, fresh(), [{ type: "set_title", char: "lu_huaijin", title: "女帝" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "set_title", char: "lu_huaijin", title: "女帝", authority: sovereign }]).ok).toBe(false);
   });
   it("rejects rank/title ops targeting the 凤后 consort (the 正宫 cap)", () => {
-    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "shen_zhibai", rank: "jun" }]).ok).toBe(false);
-    expect(applyEffects(db, fresh(), [{ type: "set_title", char: "shen_zhibai", title: "婉" }]).ok).toBe(false);
-    expect(applyEffects(db, fresh(), [{ type: "remove_title", char: "shen_zhibai" }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "set_rank", char: "shen_zhibai", rank: "jun", authority: sovereign }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "set_title", char: "shen_zhibai", title: "婉", authority: sovereign }]).ok).toBe(false);
+    expect(applyEffects(db, fresh(), [{ type: "remove_title", char: "shen_zhibai", authority: sovereign }]).ok).toBe(false);
   });
 });
 

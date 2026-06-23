@@ -2,7 +2,7 @@
  * 六宫行政位分处分权（§IV-IX）。
  *
  * 三态权限：
- *   empress mode        → sovereign（凤后代理皇帝，可处分所有驸级以上至凤后以下）
+ *   empress mode        → harem_administrator/office:empress（凤后以自身名义处分驸级以上至凤后以下）
  *   acting_consort mode → harem_administrator（受限于自身位分，只能处分严格低于自己的侍君）
  *   neiwu_proxy mode    → none（内务府无位分处分权）
  *
@@ -22,7 +22,7 @@ export type RankAuthority =
 
 /**
  * 当前六宫行政位分处分权。
- *   empress mode        → sovereign（等同皇帝直接处分，可调整凤后以下所有位分）
+ *   empress mode        → harem_administrator（凤后以 charId 行使，maxTargetOrder = fenghou.order - 1）
  *   acting_consort mode → harem_administrator（只能处分严格低于自身位分 order 的侍君）
  *   neiwu_proxy mode    → none（无权）
  */
@@ -34,8 +34,15 @@ export function getHaremRankAuthority(db: ContentDB, state: GameState): RankAuth
   }
 
   if (admin.mode === "empress") {
+    // 凤后以自身名义行使处分权：找当前凤后 charId。
+    const fenghouId = Object.keys(state.standing).find(
+      (id) => state.standing[id]!.rank === "fenghou" && state.standing[id]!.lifecycle !== "deceased",
+    );
+    if (!fenghouId) {
+      return { kind: "none", reason: "当前宫中无凤后，无法行使处分权。" };
+    }
     const fenghousOrder = db.ranks["fenghou"]?.order ?? 1000;
-    return { kind: "sovereign", actorId: "player", maxTargetOrder: fenghousOrder - 1 };
+    return { kind: "harem_administrator", actorId: fenghouId, maxTargetOrder: fenghousOrder - 1 };
   }
 
   // acting_consort：只能处分 order 严格低于自身的侍君。
@@ -82,13 +89,7 @@ export function canAdministratorAdjustRank(
   if (!fenghousId) {
     return { ok: false, reason: "当前宫中无凤后，协理权限异常。" };
   }
-  const fenghousConfined = state.statusEffects.some(
-    (se) =>
-      se.kind === "confinement" &&
-      se.characterId === fenghousId &&
-      (se as { liftedTurn?: number }).liftedTurn === undefined,
-  );
-  if (!fenghousConfined) {
+  if (!isConfined(state, fenghousId)) {
     return { ok: false, reason: "凤后已恢复主理，协理者位分处分权失效。" };
   }
 
@@ -133,6 +134,58 @@ export function canAdministratorAdjustRank(
       reason: `目标位分不能晋升到协理者（${actorRank.name}，order ${actorRank.order}）同级或以上。`,
     };
   }
+
+  return { ok: true };
+}
+
+/**
+ * 校验凤后能否对目标进行指定位分变更（empress 模式专用）。
+ *
+ * 必须同时满足：
+ *  1. haremAdministration 为 empress 模式。
+ *  2. actorId 必须是当前存活凤后的 charId。
+ *  3. actor !== target。
+ *  4. target 非凤后、非已故、非候选。
+ *  5. newRankId 不为 fenghou。
+ *  6. newRank 存在于 db.ranks。
+ */
+export function canEmpressAdjustRank(
+  db: ContentDB,
+  state: GameState,
+  actorId: string,
+  targetId: string,
+  newRankId: string,
+): { ok: true } | { ok: false; reason: string } {
+  const admin = state.haremAdministration;
+  if (admin.mode !== "empress") {
+    return { ok: false, reason: "当前六宫并非凤后主理，此权限无效。" };
+  }
+
+  // actorId 必须是当前存活凤后。
+  const fenghouSt = state.standing[actorId];
+  if (!fenghouSt || fenghouSt.rank !== "fenghou" || fenghouSt.lifecycle === "deceased") {
+    return { ok: false, reason: "行为者不是当前凤后。" };
+  }
+
+  if (actorId === targetId) {
+    return { ok: false, reason: "凤后不能调整自己的位分。" };
+  }
+
+  // target 合法性。
+  const targetSt = state.standing[targetId];
+  if (!targetSt || targetSt.lifecycle === "deceased" || targetSt.lifecycle === "candidate") {
+    return { ok: false, reason: "目标侍君状态不可处分。" };
+  }
+  if (targetSt.rank === "fenghou") {
+    return { ok: false, reason: "不得处分凤后。" };
+  }
+
+  // 目标新位分合法性。
+  if (newRankId === "fenghou") {
+    return { ok: false, reason: "不得册立凤后。" };
+  }
+  const newRank = db.ranks[newRankId];
+  if (!newRank) return { ok: false, reason: "目标位分不存在。" };
 
   return { ok: true };
 }

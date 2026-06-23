@@ -155,7 +155,11 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
 /** 位分操作发起者：皇帝直接敕封 vs 六宫代理侍君行政处分。 */
 export const rankOperationAuthoritySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("sovereign"), actorId: z.literal("player") }),
-  z.object({ kind: z.literal("harem_administrator"), actorId: z.string() }),
+  z.object({
+    kind: z.literal("harem_administrator"),
+    actorId: z.string(),
+    office: z.union([z.literal("empress"), z.literal("acting_consort")]),
+  }),
 ]);
 export type RankOperationAuthority = z.infer<typeof rankOperationAuthoritySchema>;
 
@@ -204,9 +208,9 @@ export const eventEffectSchema = z.union([
     key: nonEmpty,
     value: z.union([z.boolean(), z.number(), z.string()]),
   }),
-  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema, authority: rankOperationAuthoritySchema.optional() }),
-  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4), authority: rankOperationAuthoritySchema.optional() }),
-  z.strictObject({ type: z.literal("remove_title"), char: idSchema, authority: rankOperationAuthoritySchema.optional() }),
+  z.strictObject({ type: z.literal("set_rank"), char: idSchema, rank: idSchema, authority: rankOperationAuthoritySchema }),
+  z.strictObject({ type: z.literal("set_title"), char: idSchema, title: z.string().min(1).max(4), authority: rankOperationAuthoritySchema }),
+  z.strictObject({ type: z.literal("remove_title"), char: idSchema, authority: rankOperationAuthoritySchema }),
   z.strictObject({
     type: z.literal("bedchamber"),
     char: idSchema,

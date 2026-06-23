@@ -31,7 +31,7 @@ export function buildRankOp(
   state: GameState,
   charId: string,
   req: RankOpRequest,
-  authority?: RankOperationAuthority,
+  authority: RankOperationAuthority,
 ): RankOp | null {
   const standing = state.standing[charId];
   if (!standing) return null;
@@ -50,17 +50,17 @@ export function buildRankOp(
       ? "promote"
       : "demote";
     postRank = target;
-    effects.push({ type: "set_rank", char: charId, rank: req.rank, ...(authority ? { authority } : {}) });
+    effects.push({ type: "set_rank", char: charId, rank: req.rank, authority });
   } else if (req.kind === "set_title") {
     if (!req.title || req.title === standing.title) return null;
     kind = "grant_title";
     postTitle = req.title;
-    effects.push({ type: "set_title", char: charId, title: req.title, ...(authority ? { authority } : {}) });
+    effects.push({ type: "set_title", char: charId, title: req.title, authority });
   } else {
     if (standing.title === undefined) return null; // nothing to strip
     kind = "strip_title";
     postTitle = undefined;
-    effects.push({ type: "remove_title", char: charId, ...(authority ? { authority } : {}) });
+    effects.push({ type: "remove_title", char: charId, authority });
   }
 
   const reaction = renderRankReaction(db, kind, postRank, postTitle);
@@ -68,7 +68,7 @@ export function buildRankOp(
   // 记忆文案：代理侍君操作时用侍君姓名替换"陛下"。
   let memoryText = reaction.memory;
   let actorId: string = "player";
-  if (authority?.kind === "harem_administrator") {
+  if (authority.kind === "harem_administrator") {
     actorId = authority.actorId;
     const actorChar = db.characters[actorId] ?? state.generatedConsorts[actorId];
     const actorSt = state.standing[actorId];
