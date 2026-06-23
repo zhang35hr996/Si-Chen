@@ -140,15 +140,6 @@ import { ShopScreen } from "./screens/ShopScreen";
 
 type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian";
 
-/**
- * 可安全消费大选 prompt/报告的自由活动视图（地图 + 各宫房间）。pendingDaxuan 由引擎持久
- * 探测，永不丢失；故在非安全视图（事件/朝会/殿选/标题等阻断流程）按兵不动、待回到这些
- * 视图再补出是安全的，且避免覆盖在进行中的事件/朝会之上将其挤掉。
- */
-const DAXUAN_SAFE_VIEWS: readonly View[] = [
-  "location", "map", "wenzhaodian", "yuqing_gong", "fengxiandian", "cining_gong", "courtyard",
-];
-
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
   queue: string[];
@@ -219,6 +210,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
   const [giftItemId, setGiftItemId] = useState<string | null>(null);
   const [dianxuan, setDianxuan] = useState<{ candidates: Candidate[]; year: number } | null>(null);
+  // 殿选（四月）选择 prompt。pendingDaxuan（持久）经结算系统选中 grand_selection 时由消费 effect 置位；
+  // 既是当前 atomicFlow（防其它全局中断抢占），又驱动 ChengFengPromptScreen 渲染。
+  const [daxuanPrompt, setDaxuanPrompt] = useState<ChengFengPrompt | null>(null);
   const lastBoardRef = useRef<string>("palace");
   // 事件返回上下文 + 链预算（scene-ui-narrative-refactor §3.4）：玩家发起覆盖 target 并重置
   // chainDepth；自动续接继承 target、不重置；整链结束/弃场恢复一次并清空；新游戏/读档/驾崩清空。
@@ -256,28 +250,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       setSummonedConsortId(null);
     }
   }, [reactiveState.standing, summonedConsortId]);
-
-  // 大选日历事件消费（单点）：pendingDaxuan 由时间事务统一入口在任意推进路径置位，
-  // 与房间视图、具体行动路径均解耦。当前有反应/任一 prompt 占场时按兵不动——pendingDaxuan
-  // 持久，待清场后由本 effect 补出。announce 原子落 flag + 播报；dianxuan 弹选择 prompt
-  // （flag 留待玩家选定时写，见 onDaxuanChoose）。
-  useEffect(() => {
-    if (!content.ok) return;
-    const pd = reactiveState.pendingDaxuan;
-    if (!pd) return;
-    if (reaction || daxuanPrompt || dianxuan || prompt) return;
-    if (!DAXUAN_SAFE_VIEWS.includes(view)) return; // 待回到自由活动视图再消费（事件不丢失）
-    if (pd.kind === "announce") {
-      const beats = store.consumeDaxuanAnnounce(content.value);
-      doAutosave(); // 消费已改写状态（落 flag + 清/续 pending）→ 持久化，避免重载重播
-      if (beats.length) { setReaction(beats[0]!); setReactionQueue(beats.slice(1)); }
-    } else if (store.getState().flags[daxuanDianxuanFlagKey(pd.year)]) {
-      store.clearPendingDaxuan(); // 陈旧：该年殿选已决 → 调和清除，避免 sticky 永久阻塞下一大选年
-      doAutosave();
-    } else {
-      setDaxuanPrompt(daxuanDianxuanPromptFor(pd.year)); // 按 pending.year 构造（年份权威，不取当前日历年）
-    }
-  }, [reactiveState.pendingDaxuan, reaction, daxuanPrompt, dianxuan, prompt, view]);
 
   if (!content.ok || !manifest.success) {
     const errors = [
@@ -1040,20 +1012,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [morningAfterOpen, setMorningAfterOpen] = useState(false);
 
   // ── 时间推进后全局中断结算（§ post-time-advance settlement）────────────────
-  // 大选提示不再依赖 view==="location"：作为结算选择器的输入随状态派生（修复 view-gated 发现缺陷）。
-  const grandSelectionPrompt =
-    dianxuan || view === "dianxuan" ? null : buildDaxuanDianxuanPrompt(db, liveState);
-  // 场内原子过场（对话/反应/侍寝/初夜/封赏/场景/朝会/商铺/进贡/赏赐/生成式对话）须先结束，全局中断才呈现。
+  // 场内原子过场（对话/反应/侍寝/初夜/封赏/场景/朝会/商铺/进贡/赏赐/生成式对话/殿选 prompt）须先结束，全局中断才呈现。
   // 用状态而非 view 字符串判定：事件结束时 activeEventId 先置 null（view 可能仍是 "event"），避免结算死锁。
   const atomicFlowInProgress =
     reaction !== null || childReaction !== null || physicianReaction !== null ||
     firstNightPromptId !== null || namePetHeirId !== null ||
     bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
-    prompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
+    prompt !== null || daxuanPrompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
     activeEventId !== null || court !== null || dianxuan !== null ||
     shopId !== null || view === "shop" || dialogueInFlight ||
     view === "title" || view === "coronation"; // 标题/登基（开局前）不呈现全局中断
   // 同一时刻只呈现一个全局中断（确定性优先级）；场内过场进行中时一律不呈现。
+  // 大选由持久 pendingDaxuan 驱动（PR#24 架构）：作为最低优先级全局中断接入结算系统，授权窗口为 grand_selection。
   const activeGlobalInterrupt: GlobalInterruptKind | null = atomicFlowInProgress
     ? null
     : pickNextGlobalInterrupt({
@@ -1061,8 +1031,30 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         pregnancyDisclosureDue: jingshifangDue,
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
-        grandSelectionDue: grandSelectionPrompt !== null,
+        grandSelectionDue: liveState.pendingDaxuan !== undefined,
       });
+
+  // 大选消费（单点）：仅当结算系统在所有更高优先级全局中断之后选中 grand_selection 时消费 pendingDaxuan——
+  // 改用 PR#25 的「状态原子所有权 + 选中中断种类」门，**不**用旧的安全视图白名单（避免 activeEventId
+  // 已清而 view 仍为 "event" 时把 grand_selection 永久选中却拒绝消费的死锁）。announce 原子落 flag + 经反应所有权
+  // 路径播报（可链 dianxuan）；该年殿选已决的陈旧 pending 调和清除；否则按 pending.year 弹殿选 prompt（年份权威）。
+  // 一经置 daxuanPrompt / reaction，atomicFlow 即真、grand_selection 退出，杜绝重复消费。
+  useEffect(() => {
+    if (!content.ok) return;
+    if (activeGlobalInterrupt !== "grand_selection") return;
+    const pd = store.getState().pendingDaxuan;
+    if (!pd) return;
+    if (pd.kind === "announce") {
+      const beats = store.consumeDaxuanAnnounce(content.value);
+      doAutosave(); // 消费已改写状态（落 flag + 清/续 pending）→ 持久化，避免重载重播
+      if (beats.length) { setReaction(beats[0]!); setReactionQueue(beats.slice(1)); }
+    } else if (store.getState().flags[daxuanDianxuanFlagKey(pd.year)]) {
+      store.clearPendingDaxuan(); // 陈旧：该年殿选已决 → 调和清除，避免 sticky 永久阻塞下一大选年
+      doAutosave();
+    } else {
+      setDaxuanPrompt(daxuanDianxuanPromptFor(pd.year)); // 按 pending.year 构造（年份权威，不取当前日历年）
+    }
+  }, [activeGlobalInterrupt]);
 
   // 紫宸殿外部 busy 归属（§9）：atomicFlow 之外、本殿仍可触达的浮层/选择器/全局中断一并计入。
   // 复用权威 atomicFlowInProgress，不另立第二套原子流程定义。
@@ -1895,8 +1887,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       {prompt && !reaction && (
         <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={prompt} onChoose={resolvePromptAction} />
       )}
-      {activeGlobalInterrupt === "grand_selection" && grandSelectionPrompt && (
-        <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={grandSelectionPrompt} onChoose={onDaxuanChoose} />
+      {daxuanPrompt && !reaction && (
+        <ChengFengPromptScreen registry={registry} db={db} store={store} prompt={daxuanPrompt} onChoose={onDaxuanChoose} />
       )}
       {giftItemId && (
         <BestowModal db={db} store={store} itemId={giftItemId}

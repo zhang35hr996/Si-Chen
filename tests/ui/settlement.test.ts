@@ -109,12 +109,32 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     expect(appSrc).toMatch(/activeGlobalInterrupt === "pregnancy_disclosure"/);
     expect(appSrc).toMatch(/activeGlobalInterrupt === "successor"/);
     expect(appSrc).toMatch(/activeGlobalInterrupt === "centennial_heir"/);
-    expect(appSrc).toMatch(/activeGlobalInterrupt === "grand_selection"/);
+    // grand-selection consumption is authorized by the same selector kind (effect early-returns otherwise)
+    expect(appSrc).toMatch(/activeGlobalInterrupt !== "grand_selection"/);
   });
 
-  it("grand-selection discovery no longer depends on view === \"location\"", () => {
-    // the old view-gated daxuan effect is removed; grand-selection is a selector input now
-    expect(appSrc).not.toMatch(/view !== "location" \|\| daxuanPrompt/);
+  it("pendingDaxuan (PR#24) drives grand-selection through the settlement selector, not the old builder/whitelist", () => {
+    // grandSelectionDue is fed by persisted pendingDaxuan, NOT an immediate builder prompt
+    expect(appSrc).toMatch(/grandSelectionDue: liveState\.pendingDaxuan !== undefined/);
+    // old paths are gone
+    expect(appSrc).not.toContain("buildDaxuanAnnounce");
+    expect(appSrc).not.toContain("buildDaxuanDianxuanPrompt");
+    expect(appSrc).not.toContain("rollDaxuanAnnounce");
+    expect(appSrc).not.toContain("DAXUAN_SAFE_VIEWS");
+    expect(appSrc).not.toMatch(/store\.setFlag\(daxuanDianxuanFlagKey/);
+    // pendingDaxuan store API is used; daxuanPrompt is part of atomicFlow (Zichendian stays busy)
+    expect(appSrc).toMatch(/store\.consumeDaxuanAnnounce\(/);
+    expect(appSrc).toMatch(/store\.enterDaxuan\(/);
+    expect(appSrc).toMatch(/store\.resolveDaxuanDianxuan\(/);
+    expect(appSrc).toMatch(/daxuanPrompt !== null/); // atomicFlowInProgress includes the dianxuan prompt
+  });
+
+  it("grand-selection drains via state-based atomic ownership, not view === \"event\" (no settlement deadlock)", () => {
+    // pendingDaxuan must be able to drain after an event clears activeEventId even while view still reads
+    // "event"; the atomic gate keys on activeEventId (state), never on a "view === \"event\"" string.
+    const expr = appSrc.match(/const atomicFlowInProgress =([\s\S]*?);/)?.[1] ?? "";
+    expect(expr).toContain("activeEventId !== null"); // events gate by state, not view
+    expect(expr).not.toContain('view === "event"'); // never view-gated on event → no deadlock when activeEventId clears
   });
 
   it("rollover completers route through the settlement seam, and completion uses completeAutoCheckpoint", () => {
