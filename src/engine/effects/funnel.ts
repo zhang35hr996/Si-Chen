@@ -43,6 +43,9 @@ export function validateEffects(
   // 批内去重：validate 逐项读批前原始 state，故同批多条 record_physician_visit 对同一人都会过单条校验；
   // 用本集合在批内强制「每月每人一次」，使引擎（含未来事件/AI 生成 effects 的统一入口）真正兜底。
   const physicianVisitsInBatch = new Set<string>();
+  // 批内禁足去重：同一 batch 同一角色只允许一条 confine；confine+lift 矛盾批次一并拒绝。
+  const confineInBatch = new Set<string>();
+  const liftInBatch = new Set<string>();
 
   effects.forEach((effect, index) => {
     const parsed = eventEffectSchema.safeParse(effect);
@@ -93,6 +96,14 @@ export function validateEffects(
         } else if (isConfined(state, ch, e.startTurn)) {
           // 单一权威：不允许同一角色叠加第二条活跃禁足。
           bad(index, "BAD_EFFECT", `consort already confined: "${ch}"`, { char: ch });
+        } else if (confineInBatch.has(ch)) {
+          // 批内去重：同一 batch 不允许对同一角色多条 confine。
+          bad(index, "BAD_EFFECT", `duplicate confine in same batch: "${ch}"`, { char: ch });
+        } else if (liftInBatch.has(ch)) {
+          // 矛盾批次：同一 batch 内同一角色 confine + lift 互相矛盾，整批拒绝。
+          bad(index, "BAD_EFFECT", `contradictory confine+lift_confinement in same batch: "${ch}"`, { char: ch });
+        } else {
+          confineInBatch.add(ch);
         }
         break;
       }
@@ -101,6 +112,11 @@ export function validateEffects(
         const c = db.characters[ch] ?? state.generatedConsorts[ch];
         if (!c || c.kind !== "consort" || !state.standing[ch]) {
           bad(index, "BAD_EFFECT_TARGET", `lift_confinement needs a consort with standing: "${ch}"`, { char: ch });
+        } else if (confineInBatch.has(ch)) {
+          // 矛盾批次：同一 batch 内 lift 先于或后于 confine 均不合法。
+          bad(index, "BAD_EFFECT", `contradictory lift_confinement+confine in same batch: "${ch}"`, { char: ch });
+        } else {
+          liftInBatch.add(ch);
         }
         // 幂等：无活跃/到期记录时 apply 是 no-op，不在此报错。
         break;

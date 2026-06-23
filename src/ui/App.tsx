@@ -178,6 +178,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // 位分管理原子会话（charId + origin）。origin 决定结束后是否补跑被初夜搁置的转旬 checkpoint。
   const [rankAdmin, setRankAdmin] = useState<RankAdminSession>(null);
   const [punishCharId, setPunishCharId] = useState<string | null>(null);
+  // 禁足令在侍君宫殿内发布后需回主图：confinement 成功 + 人在该宫→ 反应播完后 goHome。
+  const [punishGoHome, setPunishGoHome] = useState(false);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
@@ -499,6 +501,17 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const result = store.applyImperialCommand(db, command);
     if (result.ok) {
       doAutosave();
+      // 禁足令：若在该侍君宫殿内，播完反应后需离宫（宫门已闭不能再留）。
+      if (command.type === "impose_confinement") {
+        const state = store.getState();
+        const charHome = state.standing[charId]?.residence ??
+          ((db.characters[charId] ?? state.generatedConsorts[charId])?.defaultLocation);
+        if (charHome && state.playerLocation === charHome) {
+          setPunishGoHome(true);
+        }
+        // 若禁足者正在被召至紫宸殿，立即清除（宫门已锁，无法应召）。
+        if (summonedConsortId === charId) setSummonedConsortId(null);
+      }
       setReaction({ speakerId: charId, lines: result.value.lines });
     } else {
       reopenConsortListIfReturning();
@@ -2076,7 +2089,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             // 封号管理（自列表进入）的反应播完 → 回到列表并定位回该侍君。
             // 仅列表入口会置 consortListReturnId，故不影响其它反应来源。
             reopenConsortListIfReturning();
-            if (postBirthPromoteId) {
+            if (punishGoHome) {
+              // 禁足令在侍君宫殿发布：宫门已闭，皇帝需离宫回主图。
+              setPunishGoHome(false);
+              goHome();
+            } else if (postBirthPromoteId) {
               const id = postBirthPromoteId;
               setPostBirthPromoteId(null);
               setRankAdmin({ charId: id, origin: "normal" }); // 产后晋升：普通来源，不因关闭补跑转旬

@@ -48,6 +48,7 @@ function consortGate(db: ContentDB, state: GameState, charId: string): string | 
   const st = state.standing[charId];
   if (!char || char.kind !== "consort" || !st) return "此人非可处置的侍君。";
   if (st.lifecycle === "deceased") return "斯人已逝，无从处置。";
+  if (st.rank === "fenghou") return "凤后不受此令。";
   return null;
 }
 
@@ -172,9 +173,11 @@ export function planImperialCommand(
     };
   }
 
-  // execute — 走统一死亡管线（consort_decease 效果），并附结构化赐死史。
+  // execute — 走统一死亡管线（consort_decease + enqueue_aftermath），并附结构化赐死史。
+  const aftermathId = `death:consort:${charId}:${now.dayIndex}`;
   const effects: EventEffect[] = [
     { type: "consort_decease", char: charId, at: now, cause: "imperial_execution" },
+    { type: "enqueue_aftermath", id: aftermathId, kind: "consort", subjectId: charId, at: now },
   ];
   const chronicle: Omit<CourtEvent, "id">[] = [
     {

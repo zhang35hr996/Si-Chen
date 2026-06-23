@@ -39,6 +39,7 @@ export function CharacterScene({
   onManage,
   onPunish,
   onRelocate,
+  onSummonPhysician,
 }: {
   db: ContentDB;
   state: GameState;
@@ -54,6 +55,8 @@ export function CharacterScene({
   onManage?: (charId: string) => void;
   onPunish?: (charId: string) => void;
   onRelocate?: (charId: string) => void;
+  /** 禁足宫门专用：奉旨传太医入内诊治。 */
+  onSummonPhysician?: () => void;
 }) {
   const chambered = hasChambers(location.id);
   const occupantOf = (id: ChamberId): CharacterContent | undefined =>
@@ -142,7 +145,7 @@ export function CharacterScene({
       )}
 
       <div className="char-scene__sprite-wrap" style={{ backgroundImage: `url("${background}")` }}>
-        {character ? (
+        {character && !confinement ? (
           <img
             className="char-scene__sprite"
             src={registry.portrait(servant ? servant.portraitSet : character.portraitSet, "neutral").url}
@@ -151,7 +154,7 @@ export function CharacterScene({
           />
         ) : (
           <div className="char-scene__empty" aria-hidden="true">
-            此宫室空置
+            {confinement ? "此宫宫门闭锁" : "此宫室空置"}
           </div>
         )}
       </div>
@@ -166,19 +169,38 @@ export function CharacterScene({
                 {location.name}
               </span>
             </div>
-            {awayLine ? (
+            {confinement ? (
+              // 禁足宫门：仅显示状态 + 解除 + 传太医，不显示立绘/对话/侍寝等普通操作。
+              <>
+                <p className="char-scene__line char-scene__line--confined">
+                  此宫正在禁足，宫门闭锁，未经诏令不得出入。
+                  <br />
+                  {describeActiveConfinement(confinement, state.calendar.eraName)}
+                </p>
+                <div className="action-dock">
+                  <div className="action-dock__primary">
+                    {onPunish && (
+                      <button
+                        type="button"
+                        className="action-btn"
+                        onClick={() => onPunish(character.id)}
+                      >
+                        解除禁足
+                      </button>
+                    )}
+                    {onSummonPhysician && (
+                      <button type="button" className="action-btn" onClick={onSummonPhysician}>
+                        奉旨传太医
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : awayLine ? (
               <p className="char-scene__line char-scene__line--absent">{awayLine}</p>
             ) : (
               <>
-                {confinement ? (
-                  <p className="char-scene__line char-scene__line--confined">
-                    此宫正在禁足，宫门闭锁，未经诏令不得出入。
-                    <br />
-                    {describeActiveConfinement(confinement, state.calendar.eraName)}
-                  </p>
-                ) : (
-                  <p className="char-scene__line">{greetingFor(character.id)}</p>
-                )}
+                <p className="char-scene__line">{greetingFor(character.id)}</p>
 
                 <div className="action-dock">
                   <div className="action-dock__primary">
@@ -190,7 +212,7 @@ export function CharacterScene({
                     <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
                       查看详情
                     </button>
-                    {(onManage || onRelocate || onPunish) && character.id !== "shen_zhibai" && (
+                    {(onManage || onRelocate || onPunish) && (
                       <div className="action-more">
                         <button
                           type="button"

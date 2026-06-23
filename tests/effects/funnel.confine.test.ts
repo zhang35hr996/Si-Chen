@@ -93,6 +93,56 @@ describe("lift_confinement effect", () => {
   });
 });
 
+describe("批内禁足去重（同一 batch 原子拒绝）", () => {
+  it("同一角色两条 confine 在同一批次 → 整批拒绝", () => {
+    const r = applyEffects(db, base, [confine(3), confine(9)]);
+    expect(r.ok).toBe(false);
+    // 确认第一条也未被写入
+    expect(confinementsOf(base, "lu_huaijin")).toHaveLength(0);
+  });
+
+  it("confine + lift_confinement 同一角色同一批 → 矛盾，整批拒绝", () => {
+    const r = applyEffects(db, base, [
+      confine(3),
+      { type: "lift_confinement", char: "lu_huaijin", at: now, reason: "lifted_by_emperor" },
+    ]);
+    expect(r.ok).toBe(false);
+  });
+
+  it("lift_confinement + confine 同一角色同一批（顺序颠倒）→ 矛盾，整批拒绝", () => {
+    // 先给角色禁足，然后在同一批试图解除+再禁
+    const confinedState = applyEffects(db, base, [confine(3)]);
+    expect(confinedState.ok).toBe(true);
+    if (!confinedState.ok) return;
+    const r = applyEffects(db, confinedState.value, [
+      { type: "lift_confinement", char: "lu_huaijin", at: now, reason: "lifted_by_emperor" },
+      confine(9),
+    ]);
+    expect(r.ok).toBe(false);
+  });
+
+  it("不同角色各自 confine 在同一批 → 互不干扰，全部通过", () => {
+    const otherChar = Object.values(db.characters).find(
+      (c) => c.kind === "consort" && c.id !== "lu_huaijin" && c.id !== "shen_zhibai",
+    );
+    if (!otherChar) return; // 无其他侍君则跳过
+    const r = applyEffects(db, base, [
+      confine(3),
+      {
+        type: "confine",
+        char: otherChar.id,
+        startTurn: start,
+        endTurnExclusive: start + 3,
+        imposedAt: now,
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(isConfined(r.value, "lu_huaijin")).toBe(true);
+    expect(isConfined(r.value, otherChar.id)).toBe(true);
+  });
+});
+
 describe("consort_decease 统一清理禁足", () => {
   it("赐死会作废活跃禁足（角色死后禁足不再生效）", () => {
     const confined = applyEffects(db, base, [confine(null)]);

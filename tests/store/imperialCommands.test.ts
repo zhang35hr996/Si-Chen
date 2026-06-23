@@ -13,6 +13,22 @@ function freshStore() {
   return store;
 }
 
+describe("consortGate 皇后例外", () => {
+  const state = createNewGameState(db);
+
+  it("禁足令对皇后（凤后位分）明确拒绝", () => {
+    const r = planImperialCommand(db, state, { type: "impose_confinement", targetId: "shen_zhibai", durationTurns: 3 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("凤后");
+  });
+
+  it("赐死令对皇后也明确拒绝", () => {
+    const r = planImperialCommand(db, state, { type: "execute", targetId: "shen_zhibai" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("凤后");
+  });
+});
+
 describe("planImperialCommand 校验与组装", () => {
   const state = createNewGameState(db);
 
@@ -35,6 +51,19 @@ describe("planImperialCommand 校验与组装", () => {
   it("解除禁足要求当前在禁足中", () => {
     const r = planImperialCommand(db, state, { type: "lift_confinement", targetId: "lu_huaijin" });
     expect(r.ok).toBe(false);
+  });
+
+  it("赐死组装 consort_decease + enqueue_aftermath（完整死亡管线）", () => {
+    const r = planImperialCommand(db, state, { type: "execute", targetId: "lu_huaijin" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.plan.effects.some((e) => e.type === "consort_decease")).toBe(true);
+    const aftermath = r.plan.effects.find((e) => e.type === "enqueue_aftermath");
+    expect(aftermath).toBeDefined();
+    if (aftermath?.type === "enqueue_aftermath") {
+      expect(aftermath.kind).toBe("consort");
+      expect(aftermath.subjectId).toBe("lu_huaijin");
+    }
   });
 
   it("非侍君 / 已故目标被拒", () => {
