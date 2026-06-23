@@ -17,11 +17,12 @@ export function pickSubLocationEvent(
   subLocationId: string,
 ): GameEventContent | null {
   const loc = db.locations[locationId];
+  // **不按 affordable 过滤**：进入子地点是玩家主动探索（类候见），事件「是否存在」与「是否可承担」须分离——
+  // 否则 AP 不足会被误表现为「此处无事」。可承担性由调用方据 event.apCost 单独判定（见 subLocationEventAffordable）。
   return getEligibleEvents(db, state, "location_enter")
     .filter((e) => {
       const p = e.event.presentation;
       return (
-        e.affordable &&
         resolveEntryMode(e.event, loc) === "exploration" &&
         p?.mode === "exploration" &&
         p.hostLocationId === locationId &&
@@ -30,4 +31,9 @@ export function pickSubLocationEvent(
     })
     .map((e) => e.event)
     .sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id))[0] ?? null;
+}
+
+/** 子地点探索事件此刻是否可承担（行动力）。事件存在但不可承担时，UI 应显「行动力不足」而非「普通游览」。 */
+export function subLocationEventAffordable(state: GameState, event: GameEventContent): boolean {
+  return event.apCost <= state.calendar.ap;
 }

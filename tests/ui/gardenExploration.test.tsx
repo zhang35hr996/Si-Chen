@@ -103,4 +103,33 @@ describe("GardenOverviewScreen — sub-area", () => {
     expect(screen.getByText("轩前海棠成荫。")).toBeInTheDocument();
     expect(screen.queryByText(/孤影|人影|动静/)).toBeNull();
   });
+
+  it("Blocker: a sub-area still lets you interact with present garden people (无事件≠无人)", () => {
+    render(
+      <GardenOverviewScreen
+        {...base}
+        activeSubArea={subAreas[0]}
+        presentBar={[{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔" }]}
+        selectedId="lu_huaijin"
+        focusedCharacter={{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔", isConsort: true, actionable: true, portraitSrc: "/p.png" }}
+        onConverse={() => {}}
+        onViewProfile={() => {}}
+      />,
+    );
+    // bar present in the sub-area, focused portrait + 叙话 reachable
+    expect(screen.getByRole("group", { name: "园中之人" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "陆怀瑾" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "叙话" })).toBeInTheDocument();
+  });
+
+  it("Blocker: a sub-area with an UNAFFORDABLE event shows the real reason, not 普通游览 silence", () => {
+    const unaffordable: GardenSubAreaView = {
+      ...subAreas[1]!,
+      hasEvent: true,
+      eventAffordable: false,
+      eventReason: "行动力不足（需 1 行动点）。",
+    };
+    render(<GardenOverviewScreen {...base} activeSubArea={unaffordable} />);
+    expect(screen.getByRole("note")).toHaveTextContent("行动力不足");
+  });
 });

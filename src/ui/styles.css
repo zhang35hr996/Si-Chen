@@ -3842,6 +3842,13 @@ button:active:enabled {
   color: var(--c-text);
   line-height: 1.7;
 }
+.garden-subarea__reason {
+  margin: 0.6rem 0 0;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--c-gold);
+  opacity: 0.9;
+}
 @media (max-width: 480px) {
   .garden-overview__areas {
     grid-template-columns: 1fr;

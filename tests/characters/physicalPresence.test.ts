@@ -84,6 +84,21 @@ describe("physical presence is single-authority (presentAt), garden ≠ bedchamb
     expect(presenceIndex(dead)).not.toContain("lu_huaijin");
   });
 
+  it("Blocker: garden→home transition — moving the player within the same slot does NOT teleport the NPC", () => {
+    // 找到陆怀瑾游走御花园的 (day, slot)，玩家在紫宸殿。
+    const { state } = findWanderingScenario("lu_huaijin");
+    const home = "zhongcui_gong";
+    // 同一 calendar slot，玩家零行动力移动到她的住处。
+    const movedHome: GameState = { ...state, playerLocation: home };
+    // 她必须仍在御花园，不能因玩家进她寝殿而被重算回宫。
+    expect(consortLocationAt(db, movedHome, "lu_huaijin", shichenSlot(movedHome.calendar))).toBe("yuhuayuan");
+    expect(presentAt(db, movedHome, home).map((c) => c.id)).not.toContain("lu_huaijin");
+    expect(presentAt(db, movedHome, "yuhuayuan").map((c) => c.id)).toContain("lu_huaijin");
+    // 全局唯一性仍成立。
+    const ids = presenceIndex(movedHome);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("7b. a 冷宫(changmengong) resident never wanders to the garden", () => {
     // wenya lives in changmengong (cold palace)
     for (let dayIndex = 0; dayIndex < 60; dayIndex++) {

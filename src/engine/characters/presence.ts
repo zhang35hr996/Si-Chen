@@ -89,8 +89,9 @@ export function consortLocationAt(
     if (isExcused(state, charId)) return home;
     return "kunninggong";
   }
-  // 皇帝此刻就在其宫中（临幸/对话留驻），侍君留在宫中陪驾，不外出游走。
-  if (state.playerLocation === home) return home;
+  // 物理位置只由 (rngSeed, dayIndex, slot, charId) 确定性决定——**绝不依赖 state.playerLocation**：
+  // 否则玩家同一时辰、零行动力移动到侍君住处会使其被重算回宫（御花园↔寝殿瞬移），破坏单一物理位置不变量。
+  // 「皇帝临幸时侍君陪驾」的体验由召见/翻牌子（不依赖物理位置）承担；走到空宫则由缺席禀报如实呈现。
   if (slot >= 1 && slot <= 3 && wanders(state.rngSeed, state.calendar.dayIndex, slot, charId, wanderChance(char))) {
     return "yuhuayuan";
   }
