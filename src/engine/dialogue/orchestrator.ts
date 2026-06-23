@@ -17,7 +17,7 @@ import { buildAudienceContext } from "./audience";
 import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
-import { buildMemoryContext, selectPromptEvents } from "./memoryContext";
+import { buildMemoryContext, selectPromptEventsByActivation } from "./memoryContext";
 import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
 import { mapProviderErrorToGameError } from "./providerError";
@@ -120,9 +120,13 @@ export function assembleDialogueRequest(
     privacy: options.privacy ?? "semi_private",
   });
 
-  // 2. Select prompt events BEFORE assembleClaims (pinned event always first)
-  const promptEvents = selectPromptEvents({
-    events: Array.from(memCtx.knownEventsAll),
+  // 2. Select prompt events BEFORE assembleClaims, ranked by unified activation
+  // (decayed salience × relevance + present − recent reaction); the reaction
+  // source event is always pinned first (PR-A item 9).
+  const promptEvents = selectPromptEventsByActivation({
+    state,
+    events: memCtx.knownEventsAll,
+    ctx: { now, topicTags, presentCharacterIds, audienceId: targetId, speakerId, locationId },
     pinnedEventId: builtReaction?.sourceEventId,
     limit: 3,
   });

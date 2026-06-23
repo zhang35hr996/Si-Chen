@@ -1,5 +1,5 @@
-import { effectiveStrength } from "./decay";
-import { recentMentionPenalty } from "./mention";
+import { effectiveStrength, MEMORY_CONFIG } from "./decay";
+import { recentMentionPenalty, MENTION_BOUNDS } from "./mention";
 import { effectiveConditionSeverity } from "../chronicle/conditions";
 import type { GameTime } from "../calendar/time";
 import type { CourtEvent, GameState, MemoryEntry } from "../state/types";
@@ -7,6 +7,11 @@ import type { CourtEvent, GameState, MemoryEntry } from "../state/types";
 const W = {
   BASE_RELEVANCE: 0.4, TOPIC_WEIGHT: 0.6,
   ANNIVERSARY_WEIGHT: 60, LOCATION_WEIGHT: 30, SUBJECT_WEIGHT: 35, UNRESOLVED_WEIGHT: 15, CONDITION_WEIGHT: 40,
+} as const;
+
+/** Event-activation weights — mirror the memory side so the two rankings agree. */
+const EV = {
+  BASE_RELEVANCE: 0.4, TOPIC_WEIGHT: 0.6, SUBJECT_WEIGHT: 35, REACTION_PENALTY: 40,
 } as const;
 
 /** Below this effective severity an emotional condition is treated as inactive. */
@@ -73,5 +78,48 @@ export function retrievalScore(state: GameState, memory: MemoryEntry, ctx: Activ
     + W.UNRESOLVED_WEIGHT * (memory.unresolved ? 1 : 0)
     + W.CONDITION_WEIGHT * conditionActivation
     - penalty
+  );
+}
+
+// ── Event activation (PR-A item 9) ───────────────────────────────────────────
+
+/** Effective public salience: permanent holds; fast/slow halve like memories. */
+function effectiveSalience(event: CourtEvent, now: GameTime): number {
+  if (event.retention === "permanent") return event.publicSalience;
+  const halfLife = MEMORY_CONFIG.halfLifeDays[event.retention];
+  const age = Math.max(0, now.dayIndex - event.occurredAt.dayIndex);
+  return event.publicSalience * Math.pow(0.5, age / halfLife);
+}
+
+/** Penalty for an event this speaker recently reacted to, so it stops re-surfacing. */
+function recentReactionPenalty(state: GameState, eventId: string, ctx: ActivationContext): number {
+  let penalty = 0;
+  for (const r of state.eventReactionLog) {
+    if (r.eventId !== eventId || r.speakerId !== ctx.speakerId) continue;
+    const age = ctx.now.dayIndex - r.reactedAt.dayIndex;
+    if (age < 0 || age > MENTION_BOUNDS.MENTION_LOOKBACK_DAYS) continue;
+    const recency = 1 - age / MENTION_BOUNDS.MENTION_LOOKBACK_DAYS;
+    const sameAudience = r.audienceId === ctx.audienceId ? 1 : 0.3;
+    penalty = Math.max(penalty, EV.REACTION_PENALTY * recency * sameAudience);
+  }
+  return penalty;
+}
+
+/**
+ * Unified activation score for a CourtEvent, mirroring retrievalScore for memories:
+ * decayed public salience scaled by topic relevance, plus a present-participant
+ * bonus, minus a recent-reaction penalty. Prompt-event selection ranks on this
+ * instead of raw publicSalience, so stale high-salience court history no longer
+ * crowds out events that matter to the current beat (PR-A item 9).
+ */
+export function eventActivationScore(state: GameState, event: CourtEvent, ctx: ActivationContext): number {
+  const eff = effectiveSalience(event, ctx.now);
+  const topicMatch = ctx.topicTags.length && event.tags.some((t) => ctx.topicTags.includes(t)) ? 1 : 0;
+  const subjectPresentMatch = event.participants.some((p) => ctx.presentCharacterIds.includes(p.charId)) ? 1 : 0;
+  const reactionPenalty = recentReactionPenalty(state, event.id, ctx);
+  return (
+    eff * (EV.BASE_RELEVANCE + EV.TOPIC_WEIGHT * topicMatch)
+    + EV.SUBJECT_WEIGHT * subjectPresentMatch
+    - reactionPenalty
   );
 }
