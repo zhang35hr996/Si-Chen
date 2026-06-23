@@ -12,7 +12,12 @@ import {
   ARISTOCRATIC_SURNAME_POOL,
   ARISTOCRATIC_MALE_GIVEN_NAME_POOL,
 } from "../engine/characters/shijunNames";
-import type { GameState, PendingDaxuan } from "../engine/state/types";
+import type { GameState, KinshipRelation, PendingDaxuan } from "../engine/state/types";
+import { getActiveSeatedOfficials } from "../engine/officials/selectors";
+import { validateOfficialWorld } from "../engine/officials/validation";
+import { isValidParentChildAge } from "../engine/officials/constraints";
+import { stateError, type GameError } from "../engine/infra/errors";
+import { err, ok, type Result } from "../engine/infra/result";
 import type { DecreeReaction } from "./empressDecree";
 import type { ChengFengPrompt } from "./prompt";
 
@@ -78,8 +83,9 @@ function pick<T>(pool: readonly T[], seed: string): T {
 /** 候选秀男（生成态，未落库）。 */
 export interface Candidate {
   content: CharacterContent;
-  fatherOfficialId?: string;
-  /** 父官品 gradeOrder，或平民。驱动皇后推荐位分。 */
+  /** 世家候选的生母官员 id（女尊：官员为母）。良家子则 undefined。 */
+  motherOfficialId?: string;
+  /** 母官品 gradeOrder，或平民。驱动皇后推荐位分。 */
   grade: number | "commoner";
   /** 礼官宣读词。 */
   announce: string;
@@ -89,28 +95,58 @@ export interface Candidate {
 export function generateCandidates(db: ContentDB, state: GameState, year: number): Candidate[] {
   const base = `daxuan:gen:${year}`;
   const count = 8 + (gestationRollRaw(`${base}:n`) % 5); // 8–12
-  const officialIds = Object.keys(state.officials);
+  // 世家候选只能出自「在任且有有效官职」的官员（避免从已故/告老者中抽人）。
+  const activeOfficials = getActiveSeatedOfficials(state, db);
   const out: Candidate[] = [];
+
+  // 候选 id 须避开所有人物命名空间（authored/官员/家族成员/已落库动态侍君 + 本批已用）。
+  const taken = new Set<string>([
+    ...Object.keys(db.characters),
+    ...Object.keys(state.officials),
+    ...Object.keys(state.familyMembers),
+    ...Object.keys(state.generatedConsorts),
+  ]);
+  let nextSeq = 0;
+  const nextCandidateId = (): string => {
+    let candId: string;
+    do {
+      candId = `xiunan_${year}_${nextSeq}`;
+      nextSeq += 1;
+    } while (taken.has(candId));
+    taken.add(candId);
+    return candId;
+  };
 
   for (let i = 0; i < count; i++) {
     const seed = `${base}:${i}`;
-    const isShijia = officialIds.length > 0 && gestationRollRaw(`${seed}:shijia`) % 100 < 60;
 
     let surname: string;
-    let fatherOfficialId: string | undefined;
+    let motherOfficialId: string | undefined;
+    let maternalClan: NonNullable<CharacterContent["maternalClan"]> | undefined;
     let grade: number | "commoner";
     let announce: string;
 
     const givenName = pick(ARISTOCRATIC_MALE_GIVEN_NAME_POOL, `${seed}:given`);
     const age = 14 + (gestationRollRaw(`${seed}:age`) % 9); // 14–22
 
+    // 生母必须年龄合规（officialAge − candidateAge ∈ [MIN_GAP, MAX_GAP]）且有有效在任官职，否则只能为良家子。
+    const eligibleMothers = activeOfficials.filter((o) => o.postId !== null && isValidParentChildAge(o.age, age));
+    const isShijia = eligibleMothers.length > 0 && gestationRollRaw(`${seed}:shijia`) % 100 < 60;
+
     if (isShijia) {
-      fatherOfficialId = officialIds[gestationRollRaw(`${seed}:father`) % officialIds.length]!;
-      const father = state.officials[fatherOfficialId]!;
-      surname = father.surname;
-      grade = db.officialPosts[father.postId]?.gradeOrder ?? "commoner";
-      const postName = db.officialPosts[father.postId]?.name ?? "官员";
-      announce = `${postName}之男 ${surname}${givenName}，年${chineseNumeral(age)}。`;
+      const mother = eligibleMothers[gestationRollRaw(`${seed}:mother`) % eligibleMothers.length]!;
+      motherOfficialId = mother.id;
+      surname = mother.surname;
+      const motherPost = db.officialPosts[mother.postId!]!; // eligibleMothers 已过滤有效在任官职
+      grade = motherPost.gradeOrder;
+      announce = `${motherPost.name}之男 ${surname}${givenName}，年${chineseNumeral(age)}。`;
+      // 完整母族来源持久化进 content.maternalClan（确定性嫡庶/排行），入宫后 familyText 不退化为平民。
+      maternalClan = {
+        familyId: mother.familyId,
+        postId: mother.postId!,
+        legitimate: gestationRollRaw(`${seed}:legit`) % 100 < 70,
+        birthOrder: 1 + (gestationRollRaw(`${seed}:order`) % 4),
+      };
     } else {
       surname = pick(ARISTOCRATIC_SURNAME_POOL, `${seed}:surname`);
       grade = "commoner";
@@ -130,7 +166,7 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
       .filter((v, idx, arr) => arr.indexOf(v) === idx);
 
     const content: CharacterContent = {
-      id: `xiunan_${year}_${i}`,
+      id: nextCandidateId(),
       kind: "consort",
       attributes: {
         appearance: 40 + (gestationRoll(`${seed}:app`) % 56), // 40–95
@@ -162,13 +198,14 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
       voice: { register: "formal", quirks: [], tabooTopics: [] },
       initialMemories: [],
       secrets: [],
+      ...(maternalClan ? { maternalClan } : {}),
     };
 
     const parsed = characterSchema.safeParse(content);
     if (!parsed.success) {
       throw new Error(`generateCandidates produced an invalid candidate ${content.id}: ${parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`);
     }
-    out.push({ content: parsed.data, fatherOfficialId, grade, announce });
+    out.push({ content: parsed.data, motherOfficialId, grade, announce });
   }
   return out;
 }
@@ -328,18 +365,112 @@ export function npcKeepOnLeave(remaining: Candidate[], _state: GameState, year: 
   return { candidate: cand, rank: recommendRank(cand.grade) };
 }
 
-/** 把一位殿选中选秀男落库：generatedConsorts + standing + memories + bedchamber（不可变）。
- *  favor 由调用方按位分算好传入（见 GameStore.commitDaxuanConsort）。 */
+/**
+ * 把一位殿选中选秀男落库：generatedConsorts + standing + memories + bedchamber（不可变）。
+ * favor 由调用方按位分算好传入。motherOfficialId 给出时（世家子弟），原子写入母族关联：
+ * standing.birthFamilyId + child→mother(mother) + mother→child(son) + 与同母已有子女的
+ * sibling 双向边。所有边去重。
+ *
+ * 返回 Result：身份冲突（重复 id 但家族/内容/位分不一致）拒绝，绝不覆盖旧 standing 而残留旧亲缘；
+ * 完全相同的重复提交幂等返回原 state；母族校验失败（mother 不存在 / maternalClan 不匹配 /
+ * 母子年龄非法）亦拒绝。
+ */
 export function addGeneratedConsort(
   state: GameState,
+  db: ContentDB,
   content: CharacterContent,
   rank: string,
   favor: number,
-): GameState {
+  motherOfficialId?: string,
+): Result<GameState, GameError> {
   const id = content.id;
   const now = toGameTime(state.calendar);
-  return {
+
+  const mother = motherOfficialId ? state.officials[motherOfficialId] : undefined;
+  const birthFamilyId = mother?.familyId;
+
+  // ── 重复 / 冲突提交（generatedConsorts 命名空间）──
+  const existing = state.generatedConsorts[id];
+  if (existing) {
+    const existingFamily = state.standing[id]?.birthFamilyId;
+    if (existingFamily !== birthFamilyId) {
+      return err(stateError("CONSORT_FAMILY_CONFLICT",
+        `侍君「${id}」二次落库母族冲突（${existingFamily ?? "无"} vs ${birthFamilyId ?? "无"}）`,
+        { context: { id, existingFamily, proposed: birthFamilyId } }));
+    }
+    if (state.standing[id]?.rank !== rank || JSON.stringify(existing) !== JSON.stringify(content)) {
+      return err(stateError("CONSORT_OVERWRITE_CONFLICT",
+        `侍君「${id}」二次落库与既有身份不一致（位分/内容）`, { context: { id } }));
+    }
+    return ok(state); // 完全相同的重复提交：幂等。
+  }
+
+  // ── 全局人物 id 冲突（其它命名空间一律拒绝，绝不静默覆盖）──
+  if (db.characters[id] || state.officials[id] || state.familyMembers[id]) {
+    return err(stateError("PERSON_ID_CONFLICT", `侍君 id「${id}」与既有人物冲突`, { context: { id } }));
+  }
+
+  // ── maternalClan 与 motherOfficialId 必须成对（世家：皆有；良家子：皆无）──
+  const hasClan = content.maternalClan !== undefined;
+  const hasMother = motherOfficialId !== undefined;
+  if (hasClan !== hasMother) {
+    return err(stateError("CONSORT_CLAN_PAIRING",
+      `侍君「${id}」maternalClan 与 motherOfficialId 必须成对出现`, { context: { id, hasClan, hasMother } }));
+  }
+
+  // ── 母族校验 ──
+  if (motherOfficialId) {
+    if (!mother) {
+      return err(stateError("OFFICIAL_NOT_FOUND", `母官员「${motherOfficialId}」不存在`, { context: { id, motherOfficialId } }));
+    }
+    if (mother.status !== "active") {
+      return err(stateError("OFFICIAL_NOT_ACTIVE", `母官员「${mother.id}」非在任（${mother.status}）`, { context: { id, motherOfficialId } }));
+    }
+    if (mother.postId === null) {
+      return err(stateError("OFFICIAL_NO_POST", `母官员「${mother.id}」无官职`, { context: { id, motherOfficialId } }));
+    }
+    if (!db.officialPosts[mother.postId]) {
+      return err(stateError("OFFICIAL_BAD_POST", `母官员「${mother.id}」官职「${mother.postId}」不存在`, { context: { id, motherOfficialId } }));
+    }
+    const mc = content.maternalClan!;
+    if (mc.familyId !== mother.familyId || mc.postId !== mother.postId) {
+      return err(stateError("CONSORT_CLAN_MISMATCH",
+        `侍君「${id}」maternalClan 与母官员不符（familyId/postId）`,
+        { context: { id, motherFamily: mother.familyId, motherPost: mother.postId, clan: mc } }));
+    }
+    if (!isValidParentChildAge(mother.age, content.profile.age)) {
+      return err(stateError("CONSORT_BAD_AGE",
+        `侍君「${id}」(${content.profile.age}) 与母官员「${mother.id}」(${mother.age}) 年龄关系不合理`,
+        { context: { id } }));
+    }
+  }
+
+  // 亲缘边（仅在确有有效母官员时）：去重累加。
+  const kinship = [...state.kinship];
+  if (mother) {
+    const seen = new Set(kinship.map((k) => `${k.fromPersonId}|${k.toPersonId}|${k.type}`));
+    const add = (from: string, to: string, type: KinshipRelation["type"]) => {
+      const key = `${from}|${to}|${type}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        kinship.push({ fromPersonId: from, toPersonId: to, type });
+      }
+    };
+    add(id, mother.id, "mother");
+    add(mother.id, id, "son");
+    // 与同母已有子女互为同胞（含开局已生成的子女与先前入宫的侍君）。
+    const siblings = state.kinship
+      .filter((k) => k.toPersonId === mother.id && k.type === "mother" && k.fromPersonId !== id)
+      .map((k) => k.fromPersonId);
+    for (const sib of siblings) {
+      add(id, sib, "sibling");
+      add(sib, id, "sibling");
+    }
+  }
+
+  const next: GameState = {
     ...state,
+    kinship,
     generatedConsorts: { ...state.generatedConsorts, [id]: content },
     standing: {
       ...state.standing,
@@ -354,6 +485,7 @@ export function addGeneratedConsort(
         healthStatus: "healthy",
         ageAtEntry: content.profile.age,
         enteredAtYear: state.calendar.year,
+        ...(birthFamilyId !== undefined ? { birthFamilyId } : {}),
       },
     },
     memories: {
@@ -378,4 +510,13 @@ export function addGeneratedConsort(
     },
     bedchamber: { ...state.bedchamber, [id]: { encounters: [] } },
   };
+
+  // 成功返回的 state 必须立即通过完整性校验，不依赖之后存档才发现损坏。
+  const integrity = validateOfficialWorld(next, db);
+  if (integrity.length > 0) {
+    const first = integrity[0]!;
+    return err(stateError("CONSORT_INTEGRITY", `落库后官员完整性失败（${first.code}）：${first.message}`, { context: { id, code: first.code } }));
+  }
+
+  return ok(next);
 }

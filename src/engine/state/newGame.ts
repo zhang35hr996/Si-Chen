@@ -6,7 +6,8 @@
 import { createCalendar, toGameTime } from "../calendar/time";
 import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
-import { generateOfficials } from "../officials/generate";
+import { generateOfficialWorld } from "../officials/worldgen";
+import { validateOfficialWorld } from "../officials/validation";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
 
 /** 新游戏私库种子（id 须存在于 content/items.json）。 */
@@ -51,11 +52,16 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   const memories: Record<string, CharacterMemoryStore> = {};
   const bedchamber: Record<string, BedchamberRecord> = {};
 
+  // 官员世界（官职席位/官员/家族/成员/亲缘/侍君母族关联）一次性确定性生成。
+  const officialWorld = generateOfficialWorld(db, rngSeed, startTime);
+
   for (const character of Object.values(db.characters)) {
     if (character.initialStanding) {
+      const birthFamilyId = officialWorld.consortBirthFamily[character.id];
       standing[character.id] = {
         ...character.initialStanding,
         ...consortStandingExtras(character, startTime),
+        ...(birthFamilyId !== undefined ? { birthFamilyId } : {}),
       };
     }
     memories[character.id] = {
@@ -81,7 +87,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     }
   }
 
-  return {
+  const newState: GameState = {
     calendar,
     playerLocation: db.world.startingLocation,
     taihou: { health: 70, healthStatus: "healthy" },
@@ -99,7 +105,10 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     flags: {},
     standing,
     generatedConsorts: {},
-    officials: generateOfficials(db, rngSeed),
+    officials: officialWorld.officials,
+    officialFamilies: officialWorld.officialFamilies,
+    familyMembers: officialWorld.familyMembers,
+    kinship: officialWorld.kinship,
     memories,
     bedchamber,
     eventLog: [],
@@ -113,4 +122,13 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     pendingAftermath: [],
     rngSeed,
   };
+
+  // 开局自检（fail-fast）：官员世界完整性。仅在建档时执行一次，数据量小，非重复扫描。
+  const integrity = validateOfficialWorld(newState, db);
+  if (integrity.length > 0) {
+    const first = integrity[0]!;
+    throw new Error(`createNewGameState: official world integrity failed (${first.code}): ${first.message}`);
+  }
+
+  return newState;
 }

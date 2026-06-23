@@ -9,7 +9,7 @@
  * All shipped content/** files are strict JSON (no comments, no trailing commas).
  */
 import { z } from "zod";
-import type { CharacterStanding } from "../state/types";
+import type { CharacterStanding, OfficialDepartment } from "../state/types";
 import { dialogueClaimSchema } from "../dialogue/claims";
 
 // ── shared primitives ─────────────────────────────────────────────────
@@ -79,6 +79,7 @@ export const characterStandingSchema = z.strictObject({
   ageAtEntry: z.number().int().min(0).optional(),
   enteredAtYear: z.number().int().min(1).optional(),
   deathRecord: deathRecordSchema.optional(),
+  birthFamilyId: idSchema.optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
@@ -424,6 +425,8 @@ export const characterSchema = z
     }).optional(),
     maternalClan: z
       .strictObject({
+        /** 显式稳定家族键（如 fam_shen_main）。绝不由姓名推断；worldgen 按此分组。 */
+        familyId: idSchema,
         postId: idSchema,
         legitimate: z.boolean(),
         birthOrder: z.number().int().min(1),
@@ -454,11 +457,20 @@ export type ItemDef = z.infer<typeof itemDefSchema>;
 export const itemsFileSchema = z.strictObject({ items: z.array(itemDefSchema) });
 
 // ── official posts (官职表 — world.json) ─────────────────────────────
+/** 官职所属部门（名册分组用；与品级无关）。 */
+export const officialDepartmentSchema = z.enum([
+  "chancellery", "personnel", "revenue", "rites", "military",
+  "justice", "works", "censorate", "academy", "provincial", "none",
+]) satisfies z.ZodType<OfficialDepartment>;
 export const officialPostSchema = z.strictObject({
   id: idSchema,
   name: nonEmpty,
   grade: nonEmpty,
   gradeOrder: z.number().int().min(0).max(18),
+  /** 所属部门。缺省 "chancellery"（仅最小测试内容省略时回退；真实 world.json 显式声明）。 */
+  department: officialDepartmentSchema.default("chancellery"),
+  /** 席位数（同一官职可容纳的在任人数）。缺省单席。 */
+  seatCount: z.number().int().min(1).default(1),
 });
 export type OfficialPost = z.infer<typeof officialPostSchema>;
 

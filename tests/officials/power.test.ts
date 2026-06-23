@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { powerOf } from "../../src/engine/officials/power";
 import type { OfficialPost } from "../../src/engine/content/schemas";
 
-const post = (gradeOrder: number): OfficialPost => ({ id: "p", name: "x", grade: "g", gradeOrder });
+const post = (gradeOrder: number): OfficialPost => ({ id: "p", name: "x", grade: "g", gradeOrder, department: "chancellery", seatCount: 1 });
 
 describe("powerOf", () => {
   it("rises monotonically with gradeOrder", () => {

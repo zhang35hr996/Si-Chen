@@ -11,6 +11,8 @@ import { listMemories, memoryAgeDays, memoryOriginLabel } from "../../engine/mem
 import type { GameState } from "../../engine/state/types";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { OfficialRoster } from "../officials/OfficialRoster";
+import { OfficialDetail } from "../officials/OfficialDetail";
 
 export interface DebugPanelProps {
   store: GameStore;
@@ -83,6 +85,22 @@ function MemoryBrowser({ db, state }: { db?: ContentDB; state: GameState }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** 官员名册浏览器（只读开发者入口）：名册 ⇄ 详情。生产 UI 化留待后续阶段，本阶段以
+ *  调试面板入口承载——底层 selector/数据已完备，promotion 到正式界面只需换挂载点。 */
+function OfficialsBrowser({ db, state }: { db: ContentDB; state: GameState }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  if (Object.keys(state.officials).length === 0) return null;
+  return (
+    <section className="debug-panel__officials">
+      {selected ? (
+        <OfficialDetail db={db} state={state} officialId={selected} onBack={() => setSelected(null)} />
+      ) : (
+        <OfficialRoster db={db} state={state} onSelect={setSelected} />
+      )}
     </section>
   );
 }
@@ -252,6 +270,7 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
       {logger && <Diagnostics logger={logger} />}
       {db && <ContentSummary db={db} />}
       {gameStarted && <MemoryBrowser db={db} state={state} />}
+      {db && <OfficialsBrowser db={db} state={state} />}
       <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
     </aside>
   );

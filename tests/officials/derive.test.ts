@@ -17,8 +17,9 @@ describe("maternal derivations", () => {
     expect(maternalLoyalty(state, xu)).toBe(head.loyalty);
     expect(maternalPower(db, state, xu)).toBeGreaterThan(0);
   });
-  it("a consort without maternalClan reads 平民之子 / 0", () => {
-    const fake = { ...xu, maternalClan: undefined, profile: { ...xu.profile, surname: undefined } };
+  it("a consort with no birth family reads 平民之子 / 0", () => {
+    // 良家子：id 不在 standing 中 → 无 birthFamilyId → 无母族当家官员。
+    const fake = { ...xu, id: "liangjia_zi_test", maternalClan: undefined, profile: { ...xu.profile, surname: undefined } };
     expect(familyText(db, state, fake)).toBe("平民之子");
     expect(maternalPower(db, state, fake)).toBe(0);
     expect(maternalLoyalty(state, fake)).toBe(0);
