@@ -77,14 +77,18 @@ describe("anthropicProvider — usage normalization", () => {
 // ── WORLD_RULES_TEXT snapshot ─────────────────────────────────────────────────
 
 describe("WORLD_RULES_TEXT", () => {
-  it("contains all 12 rule markers", () => {
-    for (let i = 1; i <= 12; i++) {
+  it("contains all 13 rule markers", () => {
+    for (let i = 1; i <= 13; i++) {
       expect(WORLD_RULES_TEXT).toContain(`${i}.`);
     }
   });
 
-  it("does not contain rule 13", () => {
-    expect(WORLD_RULES_TEXT).not.toContain("13.");
+  it("does not contain rule 14", () => {
+    expect(WORLD_RULES_TEXT).not.toContain("14.");
+  });
+
+  it("instructs the model to fill mentionedContextRefs for used context", () => {
+    expect(WORLD_RULES_TEXT).toContain("mentionedContextRefs");
   });
 
   it("contains key phrase 严禁替玩家发言", () => {
@@ -106,6 +110,25 @@ describe("WORLD_RULES_TEXT", () => {
   it("contains audience.privacy (not currentScene.audience.privacy)", () => {
     expect(WORLD_RULES_TEXT).toContain("audience.privacy");
     expect(WORLD_RULES_TEXT).not.toContain("currentScene.audience.privacy");
+  });
+});
+
+describe("anthropic tool contract carries mentionedContextRefs", () => {
+  const db = loadRealContent();
+  const state = createNewGameState(db);
+  function toolOf() {
+    const req = assembleDialogueRequest(db, state, "shen_zhibai", "zichendian");
+    if (!req.ok) throw new Error(req.error.message);
+    return buildAnthropicToolRequest(req.value, "claude-sonnet-4-6").tools[0]!;
+  }
+
+  it("tool description mentions referenced context (not only 台词+事实)", () => {
+    expect(toolOf().description).toContain("引用");
+  });
+
+  it("tool input_schema includes mentionedContextRefs", () => {
+    const schema = toolOf().input_schema as { properties: Record<string, unknown> };
+    expect(schema.properties).toHaveProperty("mentionedContextRefs");
   });
 });
 

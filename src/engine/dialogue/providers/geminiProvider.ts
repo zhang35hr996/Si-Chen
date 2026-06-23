@@ -18,7 +18,7 @@ import {
   type NormalizedUsage,
 } from "../providerContract";
 import type { DialogueProvider, DialogueGenerationOptions, DialogueRequest } from "../types";
-import { WORLD_RULES_TEXT, renderEtiquetteBlock } from "./anthropicProvider";
+import { WORLD_RULES_TEXT, TOOL_DESCRIPTION, renderEtiquetteBlock } from "./anthropicProvider";
 import { compilePromptPayload } from "../promptPayload";
 import { runWithDeadline } from "./withDeadline";
 
@@ -86,7 +86,7 @@ export function buildGeminiToolRequest(
     contents: JSON.stringify(payload),
     functionDeclaration: {
       name: TOOL_NAME,
-      description: "提交角色台词及其结构化事实。",
+      description: TOOL_DESCRIPTION,
       parametersJsonSchema: sanitizeJsonSchemaForGemini(dialogueToolOutputJsonSchema),
     },
   };
