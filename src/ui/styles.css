@@ -3936,3 +3936,36 @@ button:active:enabled {
 .court-result__row.is-loss .court-result__delta {
   color: #d98a8a;
 }
+
+/* ── 场景 UI 视觉权重四级（PR4 Task 4.3）──────────────────────────────────
+ * 统一语义层（不重写既有主题）：
+ *  1) 主操作  .action-btn--key   暗金实边、高对比，唯一主行动（升朝/宣进来/确认/侍寝）。
+ *  2) 次操作  .action-btn        弱边/暗板，返回/关闭/次级入口。
+ *  3) 危险    .action-btn--danger 朱红警示，不可逆（废黜/打入冷宫等），权重区别于主操作。
+ *  4) 信息区  细分隔线（.court-result__row / 既有面板）；降卡片感，不为每组文字套厚板。
+ * 触控目标 ≥44px、底部固定坞 safe-area 由 .scene-shell__actions 既有规则承担。 */
+.action-btn--danger {
+  color: var(--c-zhu, #c8553d);
+  background: transparent;
+  border-color: var(--c-zhu, #c8553d);
+  font-weight: 600;
+}
+.action-btn--danger:hover {
+  color: #fff;
+  background: var(--c-zhu, #c8553d);
+}
+.action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* 动作坞主行动按钮统一 44px 触控目标（桌面/移动一致）。 */
+.action-dock .action-btn,
+.scene-focus .action-btn {
+  min-height: 44px;
+}
+@media (max-width: 480px) {
+  /* 移动：动作坞纵向铺满，主立绘单显由各场景 stage 的单列布局承担。 */
+  .action-dock {
+    flex-wrap: wrap;
+  }
+}
