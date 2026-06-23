@@ -68,6 +68,7 @@ import {
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue/orchestrator";
+import { deriveConverseSceneContext, type ConverseSceneContext } from "./converseScene";
 import type { DialogueLine, DialogueProvider } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
@@ -228,6 +229,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const shopRollover = useRef(false);
   // Accumulated transcript across choice-driven turns within one converse() session.
   const converseTranscriptRef = useRef<{ speaker: string; text: string }[]>([]);
+  // Presence/privacy scene context derived once per converse() session, reused by
+  // the opening turn and every choice-driven continuation.
+  const converseSceneCtxRef = useRef<ConverseSceneContext | null>(null);
   // 续接（onConverseChoice）的 UI pending 也归 token 所有：choiceOpTokenRef=当前续接 op 的 token（同步 owner 判定），
   // choicePendingToken!==null 驱动 ReactionScreen 禁用选项。并发门只由 startDialogueOp（activeOp!=null 即拒）把守，
   // 不再用独立布尔。生命周期失效（invalidateDialogue）立即清两者；旧续接的 finally 仅在仍持有同一 token 时清。
@@ -391,6 +395,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setDialogueInFlight(false);
     choiceOpTokenRef.current = null;
     setChoicePendingToken(null);
+    // Lifecycle cleanup: drop any retained converse scene context so a new game,
+    // load, sovereign death, or return-to-title cannot leak the old conversation's
+    // presence/privacy into the next one.
+    converseSceneCtxRef.current = null;
   };
 
   /** 若管理/搬迁是从「查看侍君」列表进入的，操作结束后重开列表（定位到该侍君）。 */
@@ -1199,7 +1207,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // 若 await 期间发生新游戏/读档/驾崩（令牌自增），则丢弃本次完成，不串播、不结算。
     if (dialogueProvider) {
       const expectedState = store.getState();
-      const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation);
+      // Derive presence/privacy scene context once for this conversation; the same
+      // object feeds the opening turn and every choice-driven continuation.
+      const sceneContext = deriveConverseSceneContext(charId);
+      converseSceneCtxRef.current = sceneContext;
+      const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation, sceneContext);
       if (reqResult.ok) {
         const started = startDialogueOp(dialogueOpRef.current); // 唯一 token + 占用
         if (started.token !== null) {
@@ -1264,7 +1276,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
       // Re-snapshot state AFTER previous CAS was committed
       const expectedState = store.getState();
-      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { transcript });
+      // Reuse the conversation's scene context so presence/privacy stay stable across turns.
+      const sceneContext = converseSceneCtxRef.current ?? deriveConverseSceneContext(speakerId);
+      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { ...sceneContext, transcript });
       if (!reqResult.ok) {
         if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：失效后不得改界面
         // Assembly failed — strip generatedLine so normal onDone drains the queue/rollover

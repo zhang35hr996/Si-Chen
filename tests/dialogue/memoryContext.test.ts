@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMemoryContext, recallKnownEvents, selectPromptEvents } from "../../src/engine/dialogue/memoryContext";
+import { buildMemoryContext, recallKnownEvents, selectPromptEvents, selectPromptEventsByActivation } from "../../src/engine/dialogue/memoryContext";
 import { createInitialState } from "../../src/engine/state/initialState";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import type { CourtEvent, MemoryEntry } from "../../src/engine/state/types";
@@ -40,7 +40,7 @@ describe("buildMemoryContext (legacy)", () => {
       strength, retention: "slow", emotions: {}, triggerTags: ["t"], unresolved: false, createdAt: makeGameTime(1, 1, "early"),
     });
     s.memories["a"] = { nextSeq: 3, entries: [m("mem_a_1", 90), m("mem_a_2", 80)] };
-    const ctx = { now: makeGameTime(1, 2, "early"), topicTags: ["t"], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
+    const ctx = { now: makeGameTime(1, 2, "early"), topicTags: ["t"], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
     const out = buildMemoryContext(s, { speakerId: "a", topicTags: ["t"] }, ctx, 5);
     expect(out.activatedMemories.length).toBeGreaterThan(0);
     expect(out.activatedMemories[0]!.strength).toBeGreaterThanOrEqual(out.activatedMemories.at(-1)!.strength);
@@ -49,6 +49,30 @@ describe("buildMemoryContext (legacy)", () => {
 });
 
 // ── recallKnownEvents ─────────────────────────────────────────────────────────
+
+describe("buildMemoryContext memory/event quota (P1)", () => {
+  it("a relevant memory survives even when more than five events outscore it", () => {
+    const s = createInitialState({ calendar: { month: 3 } });
+    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.memories["a"] = {
+      nextSeq: 2,
+      entries: [mem({ id: "mem_relevant", ownerId: "a", strength: 50, triggerTags: ["t"], subjectIds: ["x"] })],
+    };
+    // 6 high-salience, recent events that all match the topic → they outscore the memory
+    for (let i = 0; i < 6; i++) {
+      s.chronicle.push(evt({
+        id: `evt_hi_${i}`,
+        tags: ["t"],
+        publicity: { scope: "palace", persistence: "institutional" },
+        occurredAt: makeGameTime(1, 2, "early"),
+        publicSalience: 70 + i * 5,
+      }));
+    }
+    const ctx = { now: makeGameTime(1, 3, "early"), topicTags: ["t"], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
+    const out = buildMemoryContext(s, { speakerId: "a", topicTags: ["t"] }, ctx, 5);
+    expect(out.activatedMemories.map((m) => m.id)).toContain("mem_relevant");
+  });
+});
 
 describe("recallKnownEvents", () => {
   it("returns all canKnowEvent events for the speaker", () => {
@@ -168,7 +192,7 @@ describe("buildMemoryContext extended", () => {
     const s = createInitialState({ calendar: { month: 2 } });
     s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     s.memories["a"] = { nextSeq: 2, entries: [mem({ id: "mem_a_1", ownerId: "a" })] };
-    const ctx = { now: makeGameTime(1, 2, "early"), topicTags: ["t"], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
+    const ctx = { now: makeGameTime(1, 2, "early"), topicTags: ["t"], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
     // 4-arg call — must still compile and return knownEventsAll
     const out = buildMemoryContext(s, { speakerId: "a", topicTags: ["t"] }, ctx, 5);
     expect(out).toHaveProperty("knownEventsAll");
@@ -187,7 +211,7 @@ describe("buildMemoryContext extended", () => {
         publicSalience: i * 10,
       }));
     }
-    const ctx = { now: makeGameTime(1, 6, "early"), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
+    const ctx = { now: makeGameTime(1, 6, "early"), topicTags: [], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
     // default topEvents=3
     const out3 = buildMemoryContext(s, { speakerId: "a" }, ctx, 5);
     expect(out3.knownEvents.length).toBeLessThanOrEqual(3);
@@ -207,11 +231,71 @@ describe("buildMemoryContext extended", () => {
         publicSalience: i * 5,
       }));
     }
-    const ctx = { now: makeGameTime(1, 6, "early"), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
+    const ctx = { now: makeGameTime(1, 6, "early"), topicTags: [], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
     const out = buildMemoryContext(s, { speakerId: "a" }, ctx, 5, { topEvents: 3 });
     // knownEventsAll must include all 10 events
     expect(out.knownEventsAll.length).toBe(10);
     // knownEvents capped at topEvents
     expect(out.knownEvents.length).toBeLessThanOrEqual(3);
+  });
+});
+
+// ── selectPromptEventsByActivation (PR-A item 9) ─────────────────────────────
+
+describe("selectPromptEventsByActivation", () => {
+  const actCtx = (over = {}) => ({
+    now: makeGameTime(5, 1, "early"),
+    topicTags: [] as string[],
+    subjectIds: [] as string[],
+    presentCharacterIds: [] as string[],
+    audienceId: "player",
+    speakerId: "a",
+    ...over,
+  });
+
+  it("a relevant, fresh event outranks an old high-salience irrelevant one", () => {
+    const s = createInitialState();
+    const oldHigh = evt({
+      id: "evt_old_high",
+      publicSalience: 95,
+      retention: "fast",
+      occurredAt: makeGameTime(1, 1, "early"),
+      tags: ["court_history"],
+    });
+    const freshRelevant = evt({
+      id: "evt_fresh_topic",
+      publicSalience: 50,
+      retention: "fast",
+      occurredAt: makeGameTime(5, 1, "early"),
+      tags: ["today"],
+    });
+    const out = selectPromptEventsByActivation({
+      state: s,
+      events: [oldHigh, freshRelevant],
+      ctx: actCtx({ topicTags: ["today"] }),
+      limit: 1,
+    });
+    expect(out.map((e) => e.id)).toEqual(["evt_fresh_topic"]);
+  });
+
+  it("pins the reaction source event first regardless of its activation score", () => {
+    const s = createInitialState();
+    const big = evt({ id: "evt_big", publicSalience: 99, occurredAt: makeGameTime(5, 1, "early") });
+    const tiny = evt({ id: "evt_tiny", publicSalience: 1, occurredAt: makeGameTime(1, 1, "early") });
+    const out = selectPromptEventsByActivation({
+      state: s,
+      events: [big, tiny],
+      ctx: actCtx(),
+      pinnedEventId: "evt_tiny",
+      limit: 2,
+    });
+    expect(out[0]!.id).toBe("evt_tiny");
+  });
+
+  it("respects the limit", () => {
+    const s = createInitialState();
+    const events = Array.from({ length: 5 }, (_, i) => evt({ id: `evt_${i}`, publicSalience: i * 10 }));
+    const out = selectPromptEventsByActivation({ state: s, events, ctx: actCtx(), limit: 3 });
+    expect(out.length).toBe(3);
   });
 });

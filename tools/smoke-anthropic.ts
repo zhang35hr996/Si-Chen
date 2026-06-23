@@ -58,6 +58,7 @@ async function main() {
       addressRules: [],
     },
     transcript: [],
+    topicTags: [],
     promptContext: {
       speakerDisplayName: "烟波",
       rankDisplay: { kind: "ranked", id: "貴人", name: "貴人", grade: "正六品", selfRefs: { toPlayer: ["臣妾"], formal: ["妾"] } },

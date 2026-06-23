@@ -7,6 +7,23 @@ describe("dialogueToolOutputSchema", () => {
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.proposedClaims).toEqual([]);
   });
+  it("mentionedContextRefs defaults to [] when omitted", () => {
+    const r = dialogueToolOutputSchema.safeParse({ text: "本宫累了。" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.mentionedContextRefs).toEqual([]);
+  });
+  it("accepts mentionedContextRefs (refs the model used without a claim)", () => {
+    const r = dialogueToolOutputSchema.safeParse({
+      text: "那日受辱，臣侍至今难忘。",
+      mentionedContextRefs: [{ kind: "memory", id: "mem_1" }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.mentionedContextRefs).toEqual([{ kind: "memory", id: "mem_1" }]);
+  });
+  it("caps mentionedContextRefs at 8", () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({ kind: "memory" as const, id: `m${i}` }));
+    expect(dialogueToolOutputSchema.safeParse({ text: "嗯。", mentionedContextRefs: many }).success).toBe(false);
+  });
   it("rejects empty text", () => {
     expect(dialogueToolOutputSchema.safeParse({ text: "" }).success).toBe(false);
   });

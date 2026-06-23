@@ -100,6 +100,8 @@ export interface DialogueRequest {
   };
   sceneDirective?: string;
   transcript: { speaker: string; text: string }[];
+  /** Topic tags for the current beat — surfaced to the LLM as currentScene.topicTags. */
+  topicTags: string[];
   /** Present for scripted nodes: the authored line the mock provider echoes. */
   scripted?: { text: string; expression?: string };
   /** LLM-2 prompt compiler boundary: structured context for the LLM. */
@@ -116,6 +118,14 @@ export interface DialogueAssemblyOptions {
   sceneDirective?: string;
   transcript?: { speaker: string; text: string }[];  // defaults to []
   scripted?: { text: string; expression?: string };
+  /** Topic tags for the current beat — drives recall, activation, and the prompt. */
+  topicTags?: string[];
+  /** Who the beat is actually about — drives recall + activation. Defaults to [speakerId]. */
+  subjectIds?: string[];
+  /** Who else is physically present — drives recall, activation, and audience. */
+  presentCharacterIds?: string[];
+  /** Scene privacy — drives audience gating. Defaults to "semi_private". */
+  privacy?: "public" | "semi_private" | "private";
 }
 
 export interface DialogueGenerationOptions {

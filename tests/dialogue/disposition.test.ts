@@ -2,26 +2,26 @@ import { describe, expect, it } from "vitest";
 import { deriveDisposition, DEFAULT_DISPOSITION } from "../../src/engine/dialogue/disposition";
 
 describe("deriveDisposition", () => {
-  it("无标签 → 中性基线 50/50/50", () => {
-    expect(deriveDisposition([]).disposition).toEqual(DEFAULT_DISPOSITION);
+  it("无 trait → 中性基线 50/50/50", () => {
+    expect(deriveDisposition([])).toEqual(DEFAULT_DISPOSITION);
   });
-  it("高傲：门第↑、同情↓（多轴）", () => {
-    const d = deriveDisposition(["高傲"]).disposition;
+  it("proud：门第↑、同情↓（多轴）", () => {
+    const d = deriveDisposition(["proud"]);
     expect(d.statusConsciousness).toBeGreaterThan(50);
     expect(d.compassion).toBeLessThan(50);
   });
-  it("多标签确定性叠加 + clamp", () => {
-    const d = deriveDisposition(["势利", "刻薄", "高傲"]).disposition;
-    expect(d.compassion).toBe(0); // 叠加后下溢 clamp 到 0
+  it("多 trait 确定性叠加 + clamp", () => {
+    const d = deriveDisposition(["proud", "cold", "calculating"]);
+    expect(d.compassion).toBeLessThan(50);
     expect(d.statusConsciousness).toBeLessThanOrEqual(100);
+    expect(d.discretion).toBeLessThanOrEqual(100);
   });
-  it("未映射标签忽略、不报错、不影响三轴，但进 diagnostics", () => {
-    const r = deriveDisposition(["才思敏捷", "仁厚"]);
-    expect(r.disposition.compassion).toBeGreaterThan(50); // 仁厚生效
-    expect(r.disposition.statusConsciousness).toBe(50);    // 才思敏捷不影响
-    expect(r.diagnostics).toContainEqual({ code: "unknown_personality_trait", trait: "才思敏捷" });
+  it("discreet + status_conscious → 高 discretion（机器字段直接映射）", () => {
+    const d = deriveDisposition(["discreet", "status_conscious"]);
+    // discreet (+25) + status_conscious (+10) over the 50 baseline
+    expect(d.discretion).toBe(85);
   });
   it("确定性：同输入同输出", () => {
-    expect(deriveDisposition(["谨慎", "圆滑"])).toEqual(deriveDisposition(["谨慎", "圆滑"]));
+    expect(deriveDisposition(["discreet", "calculating"])).toEqual(deriveDisposition(["discreet", "calculating"]));
   });
 });

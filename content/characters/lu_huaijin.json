@@ -10,6 +10,7 @@
     "role": "出身书香陆氏，通音律，近来渐被冷落",
     "appearance": "眉目清婉，体态纤秀，常着月白衣衫，鬓边一支素银簪。",
     "personalityTraits": ["敏感", "细腻", "倔强", "口不对心"],
+    "reactionTraits": ["compassionate", "proud", "discreet"],
     "coreFacts": ["入宫两年，初时颇得召幸，近来渐被冷落", "出身书香陆氏，通音律"],
     "goals": ["重得陛下垂顾", "不让旁人看出自己的失落"],
     "speechStyle": "语调轻软，温柔体贴；动情时声音发颤。"
@@ -38,7 +39,7 @@
   ],
   "secrets": [],
   "stances": [
-    { "charId": "shen_zhibai", "attitude": "敬畏凤后掌印之威，又暗怨其规矩繁苛" }
+    { "charId": "shen_zhibai", "stance": "competitive", "attitude": "敬畏凤后掌印之威，又暗怨其规矩繁苛" }
   ],
   "maternalClan": { "postId": "guozijian_jijiu", "legitimate": true, "birthOrder": 3 }
 }

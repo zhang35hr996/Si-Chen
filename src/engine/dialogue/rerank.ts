@@ -1,4 +1,4 @@
-import { retrievalScore, type ActivationContext } from "./retrievalScore";
+import { retrievalScore, eventActivationScore, type ActivationContext } from "./retrievalScore";
 import { MEMORY_CONFIG } from "./decay";
 import type { CourtEvent, GameState, MemoryEntry } from "../state/types";
 
@@ -15,7 +15,7 @@ export function rankCandidates(
   const mem: RecallCandidate[] = recalled.memories
     .map((memory) => ({ kind: "memory" as const, memory, score: retrievalScore(state, memory, ctx) }))
     .filter((c) => c.memory.retention === "permanent" || c.score >= MEMORY_CONFIG.minimumRetrievalSalience);
-  const evt: RecallCandidate[] = recalled.events.map((event) => ({ kind: "event" as const, event, score: event.publicSalience }));
+  const evt: RecallCandidate[] = recalled.events.map((event) => ({ kind: "event" as const, event, score: eventActivationScore(state, event, ctx) }));
   const idOf = (c: RecallCandidate) => (c.kind === "memory" ? c.memory.id : c.event.id);
   return [...mem, ...evt]
     .sort((a, b) => (b.score - a.score) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0))

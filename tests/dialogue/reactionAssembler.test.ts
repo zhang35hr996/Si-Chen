@@ -122,3 +122,86 @@ describe("buildReactionPlan", () => {
     expect(result1).toEqual(result2);
   });
 });
+
+// ── PR-A items 3+4+5: real disposition / relation / audience ─────────────────
+
+const SUBJECT = "consort_gu"; // the event's subject (participant role "subject")
+
+function heirBornEvent(id = "evt_birth"): CourtEvent {
+  return {
+    id,
+    type: "heir_born",
+    occurredAt: { year: 1, month: 1, period: "early" as const, dayIndex: 5 },
+    participants: [{ charId: SUBJECT, role: "adoptive_father" }],
+    payload: { heirId: "heir_1" },
+    publicity: { scope: "palace", persistence: "contemporaneous" },
+    publicSalience: 50,
+    retention: "fast",
+    tags: [],
+  };
+}
+
+describe("buildReactionPlan — item 4: disposition derived from personalityTraits", () => {
+  it("a cautious speaker (高 discretion) is less open than a blurt-prone one for the same event", () => {
+    const event = heirBornEvent();
+    const base = {
+      speakerId: SPEAKER,
+      audienceId: AUDIENCE,
+      knownEventsAll: [event],
+      chronicle: [] as readonly CourtEvent[],
+      state: makeState(),
+      currentDayIndex: CURRENT_DAY,
+    };
+    const cautious = buildReactionPlan({ ...base, reactionTraits: ["discreet"] });
+    const blurt = buildReactionPlan({ ...base, reactionTraits: ["impulsive"] });
+    expect(cautious!.plan.openness).toBeLessThan(blurt!.plan.openness);
+  });
+});
+
+describe("buildReactionPlan — item 5: relation from authored stances, not subject.standing.affection", () => {
+  it("a hostile authored stance toward the subject produces a resentment undertone", () => {
+    const event = heirBornEvent();
+    const hostile = buildReactionPlan({
+      speakerId: SPEAKER,
+      audienceId: AUDIENCE,
+      knownEventsAll: [event],
+      chronicle: [],
+      state: makeState(),
+      currentDayIndex: CURRENT_DAY,
+      stances: [{ charId: SUBJECT, stance: "hostile" as const, attitude: "仇恨" }],
+    });
+    expect(hostile!.plan.undertone?.type).toBe("resentment");
+  });
+
+  it("no authored stance → neutral reaction (no resentment undertone)", () => {
+    const event = heirBornEvent();
+    const neutral = buildReactionPlan({
+      speakerId: SPEAKER,
+      audienceId: AUDIENCE,
+      knownEventsAll: [event],
+      chronicle: [],
+      state: makeState(),
+      currentDayIndex: CURRENT_DAY,
+    });
+    expect(neutral!.plan.undertone).toBeUndefined();
+  });
+
+});
+
+describe("buildReactionPlan — item 3: real audience privacy", () => {
+  it("a private scene yields higher intensity than a semi-private one for the same reaction", () => {
+    const event = heirBornEvent();
+    const base = {
+      speakerId: SPEAKER,
+      audienceId: "consort_other", // non-sovereign so privacy is the dominant knob
+      knownEventsAll: [event],
+      chronicle: [] as readonly CourtEvent[],
+      state: makeState(),
+      currentDayIndex: CURRENT_DAY,
+      stances: [{ charId: SUBJECT, stance: "hostile" as const, attitude: "仇恨" }],
+    };
+    const priv = buildReactionPlan({ ...base, privacy: "private" as const });
+    const semi = buildReactionPlan({ ...base, privacy: "semi_private" as const });
+    expect(priv!.plan.intensity).toBeGreaterThan(semi!.plan.intensity);
+  });
+});

@@ -7,6 +7,7 @@
     "role": "陛下生父，退居慈宁宫颐养的尊长",
     "appearance": "鬓染微霜，眉目仍见当年风仪，常着石青常服，神色温然而自有威重。",
     "personalityTraits": ["慈和", "威重", "明察", "护礼法"],
+    "reactionTraits": ["compassionate", "status_conscious", "calculating"],
     "coreFacts": ["陛下生父，昔年正位中宫", "如今退居慈宁宫，不预朝政而重家法", "膝下儿孙是其晚岁牵挂"],
     "goals": ["盼皇嗣得善教养", "戒诸侍君恃宠骄纵，护后宫安宁"],
     "speechStyle": "言语温缓，话里有分量；训诫时不疾不徐，慈中带戒。"

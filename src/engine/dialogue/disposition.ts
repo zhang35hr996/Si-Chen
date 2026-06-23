@@ -1,4 +1,6 @@
-/** 长期性格三轴（spec 第 5 类，MVP）。中性基线 50，标签增量叠加，clamp 0–100。 */
+/** 长期性格三轴（spec 第 5 类，MVP）。中性基线 50，机器 trait 增量叠加，clamp 0–100。 */
+import type { CanonicalReactionTrait } from "../content/schemas";
+
 export interface SocialDisposition {
   statusConsciousness: number; // 门第/位分/礼序敏感度
   compassion: number;          // 同情/宽厚/顾念他人
@@ -10,51 +12,40 @@ export const DEFAULT_DISPOSITION: SocialDisposition = {
 
 type DispositionDelta = Partial<SocialDisposition>;
 
-/** 集中式标签→三轴增量表（一标签可影响多轴；幅度弱±5–10/中±15–20/强±25–30）。 */
-export const PERSONALITY_TRAIT_DELTAS: Record<string, DispositionDelta> = {
-  高傲: { statusConsciousness: 25, compassion: -10 },
-  重礼: { statusConsciousness: 20, discretion: 15 },
-  势利: { statusConsciousness: 30, compassion: -20 },
-  清高: { statusConsciousness: 15, discretion: 10 },
-  仁厚: { compassion: 30 },
-  温柔: { compassion: 20, discretion: 5 },
-  心软: { compassion: 25, discretion: -5 },
-  冷漠: { compassion: -30 },
-  刻薄: { compassion: -25, discretion: -10 },
-  谨慎: { discretion: 30 },
-  克制: { discretion: 25 },
-  圆滑: { discretion: 25, statusConsciousness: 10 },
-  直率: { discretion: -20 },
-  冲动: { discretion: -30 },
-  口无遮拦: { discretion: -35 },
+/**
+ * Canonical reaction-trait → three-axis deltas. Keyed by stable enum IDs (NOT
+ * display words), so the mapping never drifts with narrative copy. Content is
+ * Zod-validated against the enum, so there is no free-text guessing at runtime.
+ */
+export const REACTION_TRAIT_DELTAS: Record<CanonicalReactionTrait, DispositionDelta> = {
+  status_conscious: { statusConsciousness: 25, discretion: 10 },
+  compassionate: { compassion: 25 },
+  cold: { compassion: -20, discretion: 15 },
+  discreet: { discretion: 25 },
+  blunt: { discretion: -25 },
+  impulsive: { discretion: -30 },
+  calculating: { discretion: 20, statusConsciousness: 10 },
+  proud: { statusConsciousness: 20, compassion: -5 },
 };
 
 const clamp = (n: number): number => Math.min(100, Math.max(0, n));
 
-export interface DispositionDiagnostic { code: "unknown_personality_trait"; trait: string }
-
-export function deriveDisposition(traits: readonly string[]): {
-  disposition: SocialDisposition;
-  diagnostics: DispositionDiagnostic[];
-} {
+/**
+ * Derive a SocialDisposition from canonical reaction traits. Content has already
+ * passed the Zod enum, so unknown traits cannot reach here — there is no runtime
+ * free-text tolerance any more.
+ */
+export function deriveDisposition(traits: readonly CanonicalReactionTrait[]): SocialDisposition {
   const acc = { ...DEFAULT_DISPOSITION };
-  const diagnostics: DispositionDiagnostic[] = [];
   for (const trait of traits) {
-    const delta = PERSONALITY_TRAIT_DELTAS[trait];
-    if (!delta) {
-      diagnostics.push({ code: "unknown_personality_trait", trait });
-      continue; // 未映射标签忽略，不影响三轴、不致加载失败
-    }
+    const delta = REACTION_TRAIT_DELTAS[trait];
     acc.statusConsciousness += delta.statusConsciousness ?? 0;
     acc.compassion += delta.compassion ?? 0;
     acc.discretion += delta.discretion ?? 0;
   }
   return {
-    disposition: {
-      statusConsciousness: clamp(acc.statusConsciousness),
-      compassion: clamp(acc.compassion),
-      discretion: clamp(acc.discretion),
-    },
-    diagnostics,
+    statusConsciousness: clamp(acc.statusConsciousness),
+    compassion: clamp(acc.compassion),
+    discretion: clamp(acc.discretion),
   };
 }
