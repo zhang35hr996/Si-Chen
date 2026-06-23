@@ -68,6 +68,9 @@ export function planHaremAdminRankCommand(
 
   const fromRankId = state.standing[targetId]?.rank;
   const toRankId = request.kind === "set_rank" ? request.rank : fromRankId;
+  const fromTitle = state.standing[targetId]?.title;
+  const toTitle = request.kind === "set_title" ? request.title : request.kind === "remove_title" ? undefined : fromTitle;
+  const operation = request.kind;
 
   const chronicle: Omit<CourtEvent, "id">[] = [
     {
@@ -84,6 +87,9 @@ export function planHaremAdminRankCommand(
         targetId,
         fromRankId,
         toRankId,
+        fromTitle,
+        toTitle,
+        operation,
         direction: op.kind === "promote" || op.kind === "grant_title" ? "promotion" : "demotion",
       },
       publicity: { scope: "palace", persistence: "institutional" },

@@ -685,6 +685,22 @@ export const rankChangeReactionsSchema = z.strictObject({
   strip_title: rankReactionSchema,
 });
 
+/** 后宫行政处分（凤后/代理侍君）的反应模板，按 office 区分。 */
+export const administratorRankChangeReactionsSchema = z.strictObject({
+  empress: z.strictObject({
+    promote: rankReactionSchema,
+    demote: rankReactionSchema,
+    grant_title: rankReactionSchema,
+    strip_title: rankReactionSchema,
+  }),
+  acting_consort: z.strictObject({
+    promote: rankReactionSchema,
+    demote: rankReactionSchema,
+    grant_title: rankReactionSchema,
+    strip_title: rankReactionSchema,
+  }),
+});
+
 // ── world.json ────────────────────────────────────────────────────────
 export const worldSchema = z.strictObject({
   contentVersion: nonEmpty,
@@ -735,6 +751,8 @@ export const worldSchema = z.strictObject({
   mapPortals: z.array(mapPortalSchema).optional(),
   /** Templated consort reactions to 位分/封号 ops (rank/title system). */
   rankChangeReactions: rankChangeReactionsSchema.optional(),
+  /** 后宫行政处分（凤后 / 协理侍君）的反应模板，按 office 分组。 */
+  administratorRankChangeReactions: administratorRankChangeReactionsSchema.optional(),
   /** 侍寝/受孕调参（缺省走引擎内置 fallback）。 */
   bedchamber: z
     .strictObject({

@@ -392,11 +392,7 @@ export function validateEffects(
         const fenghousId = Object.keys(state.standing).find(
           (id) => state.standing[id]!.rank === "fenghou" && state.standing[id]!.lifecycle !== "deceased",
         );
-        const alreadyConfined = fenghousId
-          ? state.statusEffects.some(
-              (se) => se.kind === "confinement" && se.characterId === fenghousId && (se as { liftedTurn?: number }).liftedTurn === undefined,
-            )
-          : false;
+        const alreadyConfined = fenghousId ? isConfined(state, fenghousId) : false;
         const confinedinBatch = effects.some((be) => be.type === "confine" && (be as { char?: string }).char === fenghousId);
         const liftedInBatch = effects.some((be) => be.type === "lift_confinement" && (be as { char?: string }).char === fenghousId);
         const effectivelyConfined = (alreadyConfined && !liftedInBatch) || confinedinBatch;

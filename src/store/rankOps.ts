@@ -7,8 +7,7 @@
  * 当 authority 为 harem_administrator 时，记忆文案使用代理侍君姓名代替"陛下"。
  */
 import { effectiveOrder } from "../engine/characters/standing";
-import { resolveDisplayName } from "../engine/characters/standing";
-import { renderRankReaction, type RankOpKind } from "../engine/characters/rankReaction";
+import { renderRankReaction, type RankOpKind, type RankReactionAuthority } from "../engine/characters/rankReaction";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { RankOperationAuthority } from "../engine/characters/haremRankAuthority";
@@ -63,18 +62,17 @@ export function buildRankOp(
     effects.push({ type: "remove_title", char: charId, authority });
   }
 
-  const reaction = renderRankReaction(db, kind, postRank, postTitle);
+  // 台词/记忆文案：按 authority 选择对应模板（避免把行为归因于皇帝）。
+  const reactionAuthority: RankReactionAuthority =
+    authority.kind === "harem_administrator"
+      ? { kind: "harem_administrator", office: authority.office }
+      : { kind: "sovereign" };
+  const reaction = renderRankReaction(db, kind, postRank, postTitle, reactionAuthority);
 
-  // 记忆文案：代理侍君操作时用侍君姓名替换"陛下"。
   let memoryText = reaction.memory;
   let actorId: string = "player";
   if (authority.kind === "harem_administrator") {
     actorId = authority.actorId;
-    const actorChar = db.characters[actorId] ?? state.generatedConsorts[actorId];
-    const actorSt = state.standing[actorId];
-    const actorRankMeta = actorSt ? db.ranks[actorSt.rank] : undefined;
-    const actorName = actorChar ? resolveDisplayName(actorChar, actorSt, actorRankMeta) : actorId;
-    memoryText = memoryText.replace("陛下", actorName);
   }
 
   effects.push({

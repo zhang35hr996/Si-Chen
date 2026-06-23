@@ -51,8 +51,9 @@ export function HaremAdminRankModal({
   const actorRankMeta = actorSt ? db.ranks[actorSt.rank] : undefined;
   const actorName = actorChar ? resolveDisplayName(actorChar, actorSt, actorRankMeta) : actorId;
   const actorRankOrder = actorRankMeta?.order ?? 0;
+  const isEmpress = state.haremAdministration.mode === "empress";
 
-  // 合格处分目标：存活在宫侍君，位分 order 严格低于协理者。
+  // 合格处分目标：存活在宫侍君，位分 order 严格低于协理者（凤后无此限制，下同）。
   const allConsorts = Object.values(db.characters).filter((c) => c.kind === "consort");
   const targets = allConsorts.filter((c) => {
     if (c.id === actorId) return false;
@@ -63,13 +64,19 @@ export function HaremAdminRankModal({
     return rankOrder < actorRankOrder;
   });
 
+  const adminTitle = isEmpress ? "凤后主理六宫　管理侍君位分" : "奉旨协理六宫　管理低位侍君";
+  const adminSubtitle = isEmpress
+    ? `${actorName}主理六宫，可对以下侍君进行晋封或降位：`
+    : `${actorName}奉旨协理六宫，可对以下侍君进行晋封或降位：`;
+  const adminLabel = isEmpress ? "凤后" : "协理者";
+
   // ── 目标选择 ──────────────────────────────────────────────────────────
   if (step.kind === "target_select") {
     return (
       <Backdrop onClose={onClose}>
-        <h2>协理六宫　管理低位侍君</h2>
+        <h2>{adminTitle}</h2>
         <p className="harem-rank__subtitle">
-          {actorName}当前协理六宫，可对以下侍君进行晋封或降位：
+          {adminSubtitle}
         </p>
         {targets.length === 0 ? (
           <p className="harem-rank__notice">宫中目前无可处分的低位侍君。</p>
@@ -115,6 +122,7 @@ export function HaremAdminRankModal({
         state={state}
         targetId={step.targetId}
         actorName={actorName}
+        adminLabel={adminLabel}
         actorRankOrder={actorRankOrder}
         onConfirm={(request) => { setLastError(null); setStep({ kind: "confirm", targetId: step.targetId, request }); }}
         onBack={() => { setLastError(null); setStep({ kind: "target_select" }); }}
@@ -150,7 +158,7 @@ export function HaremAdminRankModal({
     return (
       <Backdrop onClose={onClose}>
         <h2>确认处分</h2>
-        <p className="harem-rank__confirm-row">协理者：{actorName}</p>
+        <p className="harem-rank__confirm-row">{adminLabel}：{actorName}</p>
         <p className="harem-rank__confirm-row">目标：{targetName}</p>
         <p className="harem-rank__confirm-row">{opLine}</p>
         {lastError && <p className="harem-rank__error" role="alert">{lastError}</p>}
@@ -186,6 +194,7 @@ function RankSelectStep({
   state,
   targetId,
   actorName,
+  adminLabel,
   actorRankOrder,
   onConfirm,
   onBack,
@@ -195,6 +204,7 @@ function RankSelectStep({
   state: GameState;
   targetId: string;
   actorName: string;
+  adminLabel: string;
   actorRankOrder: number;
   onConfirm: (request: HaremAdminRankCommand["request"]) => void;
   onBack: () => void;
@@ -218,7 +228,7 @@ function RankSelectStep({
   return (
     <Backdrop onClose={onClose}>
       <h2>{targetName}　晋降处分</h2>
-      <p className="harem-rank__subtitle">协理者：{actorName}</p>
+      <p className="harem-rank__subtitle">{adminLabel}：{actorName}</p>
 
       <section className="rank-modal__section">
         <label>调整位分：</label>
