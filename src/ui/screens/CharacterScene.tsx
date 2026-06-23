@@ -93,18 +93,24 @@ export function CharacterScene({
         <div className="char-scene__switch char-scene__switch--chambers">
           {CHAMBERS.map((ch) => {
             const occ = occupantOf(ch.id);
+            // 住客此刻是否在别处（御花园/坤宁宫请安…）：宫室槽显示姓名 + 「外出」状态，
+            // 不把外出住客当作在场可交互人物（其立绘/互动在主体区由缺席禀报取代）。
+            const occAway = occ ? absence?.[occ.id] !== undefined : false;
             return (
               <button
                 key={ch.id}
                 type="button"
-                className={`char-scene__chip char-scene__chip--chamber${ch.id === activeChamber ? " is-active" : ""}${occ ? "" : " is-empty"}`}
+                className={`char-scene__chip char-scene__chip--chamber${ch.id === activeChamber ? " is-active" : ""}${occ ? "" : " is-empty"}${occAway ? " is-away" : ""}`}
                 onClick={() => {
                   setActiveChamber(ch.id);
                   setMoreOpen(false);
                 }}
               >
                 <span className="char-scene__chip-room">{ch.name}</span>
-                <span className="char-scene__chip-occupant">{occ ? occ.profile.name : "空置"}</span>
+                <span className="char-scene__chip-occupant">
+                  {occ ? occ.profile.name : "空置"}
+                  {occAway && <span className="char-scene__chip-away"> · 外出</span>}
+                </span>
               </button>
             );
           })}

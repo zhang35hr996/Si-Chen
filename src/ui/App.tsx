@@ -131,6 +131,9 @@ import { pickCourtAffairs } from "../engine/court/affairs";
 import { DialogueScreen } from "./screens/DialogueScreen";
 import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
+import { GardenOverviewScreen, type GardenSubAreaView } from "./screens/GardenOverviewScreen";
+import { pickSubLocationEvent, subLocationEventAffordable } from "../engine/map/subLocations";
+import { presentBarItems, focusedCharacterView, reconcileSelection } from "./sceneView";
 import { MapScreen } from "./screens/MapScreen";
 import { ReactionScreen } from "./screens/ReactionScreen";
 import { SettingsMenu } from "./components/SettingsMenu";
@@ -139,7 +142,7 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -161,6 +164,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [court, setCourt] = useState<CourtSession | null>(null);
   const [freeViewId, setFreeViewId] = useState<string | null>(null);
+  // 御花园：当前进入的子地点（null = 总览）+ 园中在场人物选中态。
+  const [gardenSubLocationId, setGardenSubLocationId] = useState<string | null>(null);
+  const [gardenSelectedId, setGardenSelectedId] = useState<string | null>(null);
   // 位分管理原子会话（charId + origin）。origin 决定结束后是否补跑被初夜搁置的转旬 checkpoint。
   const [rankAdmin, setRankAdmin] = useState<RankAdminSession>(null);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
@@ -247,6 +253,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
   const reactiveState = useGameState(store);
 
+  // 御花园选中态调和写回：园中在场人物变化后，把陈旧 charId 真正从 state 清掉（取下一个在场者或清空），
+  // 不只是渲染期派生——杜绝她离场后旧 ID 残留、再次出现自动抢回焦点。
+  useEffect(() => {
+    if (view !== "garden") return;
+    const ids = presentBarItems(db, reactiveState, "yuhuayuan").map((i) => i.id);
+    setGardenSelectedId((prev) => (prev == null ? null : reconcileSelection(ids, prev)));
+  }, [view, reactiveState]);
+
   // 死者视图清理：被召见的侍君若在跨月健康 tick 中身故，清除召见态（不在死者宫中停留）。
   useEffect(() => {
     if (!summonedConsortId) return;
@@ -332,21 +346,49 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setView("zichendian");
   };
 
+  /** 进入御花园总览（或指定子地点）：清召见态/选中态，落 garden 视图。 */
+  const enterGardenView = (subId: string | null) => {
+    setSummonedConsortId(null);
+    setGardenSelectedId(null);
+    setGardenSubLocationId(subId);
+    setView("garden");
+  };
+
+  /**
+   * 普通/后宫地点直入：若有符合条件的 auto_on_enter 事件，直接开始（取代旧「是否处理」阻断弹窗）。
+   * 仅在「显式进入（非事件返回）」的无 checkpoint 路径调用，故不会与旅行结算的 checkpoint 重复启动。
+   * request_audience/exploration/manual/scheduled 不会被 pickAutoStartEvent 选中。
+   */
+  const autoStartOnEntry = (): boolean => {
+    const s = store.getState();
+    const loc = s.playerLocation;
+    const ev = pickAutoStartEvent(db, s, "location_enter", db.locations[loc]);
+    if (!ev) return false;
+    startEvent(ev.id, { kind: "location", locationId: loc }); // ev_chaohui 走 startEvent 内 beginCourt 特例
+    return true;
+  };
+
   /** Pick the right room view for the player's current location (specialized screens vs generic). */
   const enterCurrentLocation = () => {
     const loc = store.getState().playerLocation;
     if (loc === "zichendian") { enterZichendianView(); return; }
+    if (loc === "yuhuayuan") { enterGardenView(null); return; }
     if (loc === "cining_gong") {
       if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
       setView("cining_gong"); maybeShizhi(); return;
     }
-    setView(loc === "wenzhaodian" ? "wenzhaodian" : loc === "yuqing_gong" ? "yuqing_gong" : loc === "fengxiandian" ? "fengxiandian" : "location");
-    if (loc === "wenzhaodian") maybeAutumnHunt();
+    if (loc === "wenzhaodian") { setView("wenzhaodian"); maybeAutumnHunt(); return; }
+    if (loc === "yuqing_gong") { setView("yuqing_gong"); return; }
+    if (loc === "fengxiandian") { setView("fengxiandian"); return; }
+    // 普通/后宫地点：进入即直入符合条件的 auto_on_enter 事件（无弹窗）；否则停留场景。
+    setView("location");
+    autoStartOnEntry();
   };
 
   /** Set the room view for a given location id (no entry-time flavor rolls — used on event return). */
   const setLocationView = (locId: string) => {
     if (locId === "zichendian") { enterZichendianView(); return; } // 候见事件返回须落专用屏并对账
+    if (locId === "yuhuayuan") { enterGardenView(gardenSubLocationId); return; } // 御花园事件返回落回（子）地点
     if (locId === "cining_gong") {
       if (store.getState().taihou.deceased) { setNotice("太后已驾鹤西去。"); goHome(); return; }
       setView("cining_gong"); return;
@@ -366,7 +408,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       return;
     }
     if (nav.view === "xuanzhengdian") { goHome(); return; } // 宣政殿专用屏未建（PR4）→ 暂回主图
-    setLocationView(nav.locationId!); // location / zichendian（PR2）/ garden（PR3）→ 暂用对应 location 场景
+    if (nav.view === "garden") { enterGardenView(nav.subLocationId ?? null); return; } // 精确回到 garden 子地点
+    setLocationView(nav.locationId!); // location / zichendian（PR2）→ 对应专用/通用场景
   };
 
   /**
@@ -1518,7 +1561,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setSummonedConsortId(null);
             setSettingsOpen(true);
           }}
-          onStartEvent={(id) => startEvent(id, { kind: "location", locationId: store.getState().playerLocation })}
           onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
           onRelocate={(id) => setRelocateCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
@@ -1541,8 +1583,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
           onViewProfile={(id) => setProfileCharId(id)}
-          summonedConsortId={summonedConsortId}
-          onDismissSummon={() => setSummonedConsortId(null)}
           focusConsortId={focusConsortId}
           greetingAttendeeCount={greetingAttendees(db, store.getState()).length}
           onEnterGreeting={enterGreeting}
@@ -1657,6 +1697,78 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           </GameShell>
         );
       })()}
+      {view === "garden" && (() => {
+        // 御花园探索：总览（4 子地点 + 园中在场人物）/ 子地点普通游览。在场人物以 presentAt 为唯一权威。
+        const loc = db.locations["yuhuayuan"]!;
+        const bg = registry.resolveVariant(loc.backgroundKey, timeOfDay(liveState.calendar), "background");
+        const presentItems = presentBarItems(db, liveState, "yuhuayuan");
+        const presentIds = presentItems.map((i) => i.id);
+        const effSel = gardenSelectedId == null ? null : reconcileSelection(presentIds, gardenSelectedId);
+        const focused = effSel ? focusedCharacterView(db, liveState, registry, effSel) : undefined;
+        const subAreas: GardenSubAreaView[] = (loc.subLocations ?? []).map((sa) => {
+          const ev = pickSubLocationEvent(db, liveState, "yuhuayuan", sa.id);
+          const sbg = registry.resolveVariant(sa.backgroundKey, timeOfDay(liveState.calendar), "background");
+          const hint = ev?.presentation?.mode === "exploration" ? ev.presentation.eventHint : undefined;
+          const affordable = ev ? subLocationEventAffordable(liveState, ev) : undefined;
+          return {
+            id: sa.id,
+            name: sa.name,
+            description: sa.description,
+            background: sbg.url,
+            isFallbackBackground: sbg.isFallback,
+            backgroundPosition: sa.backgroundPosition,
+            hasEvent: ev !== null,
+            eventHint: hint,
+            eventAffordable: affordable,
+            eventReason: ev && affordable === false ? `行动力不足（需 ${ev.apCost} 行动点）。` : undefined,
+          };
+        });
+        const activeSub = gardenSubLocationId ? subAreas.find((s) => s.id === gardenSubLocationId) ?? null : null;
+        const leaveGarden = () => { setGardenSelectedId(null); setGardenSubLocationId(null); setMapAtRoot(false); setView("map"); };
+        const enterGardenSubArea = (subId: string) => {
+          // 子地点有可探索事件且可承担 → 进入即开始（返回上下文精确到该子地点）；
+          // 有事件但行动力不足 → 进入子地点，显「行动力不足」（不伪装成普通游览）；
+          // 无事件 → 普通游览（仍可与园中在场人物叙话）。
+          const ev = pickSubLocationEvent(db, store.getState(), "yuhuayuan", subId);
+          if (ev && subLocationEventAffordable(store.getState(), ev)) {
+            startEvent(ev.id, { kind: "garden", subLocationId: subId });
+            return;
+          }
+          setGardenSubLocationId(subId);
+        };
+        return (
+          <GameShell
+            calendar={liveState.calendar}
+            crumbs={breadcrumbFor(db, "yuhuayuan")}
+            pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
+            onBack={leaveGarden}
+            onOpenResources={() => setResourcePanelOpen(true)}
+            onOpenStorehouse={() => setStorehouseOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            className="location-shell scene-host-shell"
+          >
+            <GardenOverviewScreen
+              background={bg.url}
+              isFallbackBackground={bg.isFallback}
+              backgroundPosition={loc.backgroundPosition}
+              subAreas={subAreas}
+              activeSubArea={activeSub}
+              presentBar={presentItems}
+              selectedId={effSel}
+              focusedCharacter={focused}
+              onSelectCharacter={setGardenSelectedId}
+              onEnterSubArea={enterGardenSubArea}
+              onExitSubArea={() => setGardenSubLocationId(null)}
+              onBack={leaveGarden}
+              onConverse={(id) => void converse(id)}
+              onBedchamber={(id) => beginBedchamber(id)}
+              onViewProfile={(id) => setProfileCharId(id)}
+              onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
+              onRelocate={(id) => setRelocateCharId(id)}
+            />
+          </GameShell>
+        );
+      })()}
       {view === "map" && (
         <MapScreen
           db={db}
@@ -1673,8 +1785,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onOpenSettings={() => setSettingsOpen(true)}
           onClose={() => {
             setFocusConsortId(null);
-            // 关地图回房：紫宸殿落专用屏（并对账），其余维持既有 location 行为。
-            if (store.getState().playerLocation === "zichendian") enterZichendianView();
+            // 关地图回房：紫宸殿落专用屏（并对账），御花园落探索总览，其余维持既有 location 行为。
+            const here = store.getState().playerLocation;
+            if (here === "zichendian") enterZichendianView();
+            else if (here === "yuhuayuan") enterGardenView(null);
             else setView("location");
           }}
           onOpenResources={() => setResourcePanelOpen(true)}

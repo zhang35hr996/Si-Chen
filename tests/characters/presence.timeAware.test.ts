@@ -38,11 +38,15 @@ describe("consortLocationAt", () => {
     expect(consortLocationAt(db, base, "lu_huaijin", 5)).toBe(home);
   });
 
-  it("皇帝在其宫中（临幸/对话留驻）则白天不游走", () => {
-    const s = { ...base, playerLocation: home };
-    expect(consortLocationAt(db, s, "lu_huaijin", 1)).toBe(home);
-    expect(consortLocationAt(db, s, "lu_huaijin", 2)).toBe(home);
-    expect(consortLocationAt(db, s, "lu_huaijin", 3)).toBe(home);
+  it("同一时辰物理位置不因玩家所在地改变（单一物理位置不变量）", () => {
+    // 固定 dayIndex/slot，仅切换 playerLocation：位置必须稳定，绝不因玩家移动到其住处而被重算回宫。
+    for (const slot of [1, 2, 3]) {
+      const away = consortLocationAt(db, { ...base, playerLocation: "zichendian" }, "lu_huaijin", slot);
+      const atHer = consortLocationAt(db, { ...base, playerLocation: home }, "lu_huaijin", slot);
+      const elsewhere = consortLocationAt(db, { ...base, playerLocation: "yuhuayuan" }, "lu_huaijin", slot);
+      expect(atHer).toBe(away);
+      expect(elsewhere).toBe(away);
+    }
   });
 
   it("白天高概率必去御花园、零概率必在家", () => {

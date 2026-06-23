@@ -38,7 +38,7 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(73); // 65 + 慈恩寺/正觉殿/冷宫 背景 7 + 住持立绘 1 (portrait.zhuchi.neutral)
+    expect(result.entryCount).toBe(76); // 73 − bg.simiao（悬挂项已删）+ 御花园 4 子地点背景（绛雪轩/太液池/浮碧亭/堆秀山）
     expect(result.placeholderCount).toBe(0); // all consort portraits now have real art
   });
 
