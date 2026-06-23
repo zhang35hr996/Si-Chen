@@ -487,12 +487,16 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       outcome = "no_op";
     } else if (op.kind === "demote" || op.kind === "strip_title") {
       // 惩罚性降位/褫号 — 触发后果规划器并播放旁观者反应
-      const punishmentId = `rank:${charId}:${state.calendar.dayIndex}`;
-      const result = store.applyPunitiveRankChangeWithConsequences(db, charId, req, { punishmentId });
+      const result = store.applyPunitiveRankChangeWithConsequences(db, charId, req, {});
       if (result.ok) {
         doAutosave();
-        const { baseLine, reactionBeats } = result.value;
-        playReactions([{ speakerId: charId, lines: [baseLine] }, ...reactionBeats], null);
+        const { baseLines, reactionBeats } = result.value;
+        const beats: DecreeReaction[] = [
+          { speakerId: charId, lines: baseLines },
+          ...reactionBeats,
+        ];
+        // 初夜来源：不覆盖 deferred checkpoint；普通来源：清空旧 pending。
+        playReactions(beats, origin === "first_night" ? "preserve" : null);
         outcome = "reaction_created";
       } else {
         reopenConsortListIfReturning();
@@ -536,10 +540,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     setPunishCharId(null);
 
     if (command.type === "impose_confinement" || command.type === "execute") {
-      // 惩罚性命令 — 触发后果规划器（fear/loyalty/旁观者反应）
-      const state = store.getState();
-      const punishmentId = `${command.type}:${charId}:${state.calendar.dayIndex}`;
-      const result = store.applyImperialPunishmentWithConsequences(db, command, { punishmentId });
+      // 惩罚性命令 — 触发后果规划器（fear/loyalty/旁观者反应）；punishmentId 由 Store 内部生成
+      const result = store.applyImperialPunishmentWithConsequences(db, command, {});
       if (result.ok) {
         doAutosave();
         if (command.type === "impose_confinement") {
@@ -551,8 +553,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           }
           if (summonedConsortId === charId) setSummonedConsortId(null);
         }
-        const { baseLine, reactionBeats } = result.value;
-        playReactions([{ speakerId: charId, lines: [baseLine] }, ...reactionBeats], null);
+        const { baseLines, reactionBeats } = result.value;
+        playReactions([{ speakerId: charId, lines: baseLines }, ...reactionBeats], null);
       } else {
         reopenConsortListIfReturning();
       }
@@ -818,16 +820,23 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   };
 
   /**
-   * 串播一组反应节拍（行动自身台词 + 凤后懿旨）。`request` 非空=本段为转旬，反应结束后须按该请求结算；
-   * null=非转旬（覆盖清空任何旧待处理上下文，杜绝串台）。空队列：转旬即时进结算。
+   * 串播一组反应节拍（行动自身台词 + 凤后懿旨）。
+   * - `request` 非空 = 本段为转旬，反应结束后须按该请求结算；
+   * - null = 非转旬（覆盖清空任何旧待处理上下文，杜绝串台）；
+   * - "preserve" = 不修改 pendingReactionCheckpoint（用于初夜惩罚降位，避免清除已有 deferred checkpoint）。
+   * 空队列：转旬即时进结算；"preserve" 模式下空队列为空操作。
    */
-  const playReactions = (beats: DecreeReaction[], request: AutoCheckpointRequest | null) => {
+  const playReactions = (beats: DecreeReaction[], request: AutoCheckpointRequest | null | "preserve") => {
     if (beats.length === 0) {
-      pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
-      if (request) completeDeferredAutoCheckpoint(request);
+      if (request !== "preserve") {
+        pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
+        if (request) completeDeferredAutoCheckpoint(request);
+      }
       return;
     }
-    pendingReactionDispatch({ type: "begin", request }); // 非空登记请求；null 覆盖清空
+    if (request !== "preserve") {
+      pendingReactionDispatch({ type: "begin", request }); // 非空登记请求；null 覆盖清空
+    }
     setReaction(beats[0]!);
     setReactionQueue(beats.slice(1));
   };

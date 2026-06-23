@@ -40,12 +40,12 @@ describe("applyImperialPunishmentWithConsequences – impose_confinement", () =>
     const result = store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: 3 },
-      { punishmentId: "test_punish_001" },
+      {},
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(typeof result.value.baseLine).toBe("string");
-    expect(result.value.baseLine.length).toBeGreaterThan(0);
+    expect(typeof result.value.baseLines[0]).toBe("string");
+    expect((result.value.baseLines[0] ?? "").length).toBeGreaterThan(0);
     expect(Array.isArray(result.value.reactionBeats)).toBe(true);
   });
 
@@ -56,7 +56,7 @@ describe("applyImperialPunishmentWithConsequences – impose_confinement", () =>
     const result = store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: 3 },
-      { punishmentId: "test_punish_002" },
+      {},
     );
     expect(result.ok).toBe(true);
     const fearAfter = store.getState().standing[targetId]?.fear ?? 0;
@@ -71,12 +71,12 @@ describe("applyImperialPunishmentWithConsequences – impose_confinement", () =>
     store1.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: 3 },
-      { punishmentId: "compare_test" },
+      {},
     );
     store2.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: null },
-      { punishmentId: "compare_test" },
+      {},
     );
     const fearFinite = store1.getState().standing[targetId]?.fear ?? 0;
     const fearIndefinite = store2.getState().standing[targetId]?.fear ?? 0;
@@ -90,7 +90,7 @@ describe("applyImperialPunishmentWithConsequences – impose_confinement", () =>
     const result = store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: 2 },
-      { punishmentId: "mismatch_test" },
+      {},
     );
     expect(result.ok).toBe(true);
     // Standing should have a confinement status effect for targetId
@@ -105,7 +105,7 @@ describe("applyImperialPunishmentWithConsequences – impose_confinement", () =>
     const result = store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId: "char_nonexistent_99", durationTurns: 3 },
-      { punishmentId: "fail_test" },
+      {},
     );
     expect(result.ok).toBe(false);
     expect(JSON.stringify(store.getState().standing)).toBe(stateBefore);
@@ -118,7 +118,7 @@ describe("applyImperialPunishmentWithConsequences – impose_confinement", () =>
     store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: 3 },
-      { punishmentId: "dup_memory_test" },
+      {},
     );
     const entries = store.getState().memories[targetId]?.entries ?? [];
     const punishmentEntries = entries.slice(memoriesBefore).filter(
@@ -149,11 +149,11 @@ describe("applyPunitiveRankChangeWithConsequences – demotion", () => {
       db,
       targetId,
       { kind: "set_rank", rank: "cairen" }, // demote to cairen
-      { punishmentId: "demote_test_001" },
+      {},
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.baseLine.length).toBeGreaterThan(0);
+    expect((result.value.baseLines[0] ?? "").length).toBeGreaterThan(0);
   });
 
   it("rejects non-punitive rank change (promote)", () => {
@@ -182,7 +182,7 @@ describe("applyPunitiveRankChangeWithConsequences – demotion", () => {
       db,
       targetId,
       { kind: "set_rank", rank: higherRank.id },
-      { punishmentId: "promote_reject_test" },
+      {},
     );
     expect(result.ok).toBe(false);
   });
@@ -244,7 +244,7 @@ describe("generated consort as bystander — memory funnel transaction", () => {
     const result = store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: 3 },
-      { punishmentId: "gen_bystander_test" },
+      {},
     );
     expect(result.ok).toBe(true);
 
@@ -279,11 +279,48 @@ describe("generated consort as bystander — memory funnel transaction", () => {
     const result = store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId, durationTurns: 3 },
-      { punishmentId: "gen_atomic_test" },
+      {},
     );
     expect(result.ok).toBe(false);
     // Target state unchanged on rollback
     expect(JSON.stringify(store.getState().standing[targetId])).toBe(stateBefore);
+  });
+});
+
+// ── punishmentId returned and unique per call ────────────────────────────────
+
+describe("punishmentId returned by store, not caller", () => {
+  it("impose_confinement returns a non-empty punishmentId string", () => {
+    const store = makeStore();
+    const targetId = firstAliveConsortId(store);
+    const result = store.applyImperialPunishmentWithConsequences(
+      db,
+      { type: "impose_confinement", targetId, durationTurns: 3 },
+      {},
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(typeof result.value.punishmentId).toBe("string");
+    expect(result.value.punishmentId.length).toBeGreaterThan(0);
+  });
+
+  it("punishmentId encodes chronicle position — chronicle grows after punishment so next ID differs", () => {
+    const store = makeStore();
+    const targetId = firstAliveConsortId(store);
+    // Capture chronicle length before and after to verify the ID would advance.
+    const chronicleBefore = store.getState().chronicle.length;
+    const r1 = store.applyImperialPunishmentWithConsequences(
+      db,
+      { type: "impose_confinement", targetId, durationTurns: 3 },
+      {},
+    );
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    const chronicleAfter = store.getState().chronicle.length;
+    // punishmentId was generated from chronicleBefore
+    expect(r1.value.punishmentId).toContain(String(chronicleBefore));
+    // chronicle grew — a second punishment would get a different punishmentId
+    expect(chronicleAfter).toBeGreaterThan(chronicleBefore);
   });
 });
 

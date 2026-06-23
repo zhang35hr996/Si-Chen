@@ -332,6 +332,22 @@ describe("producer source contract (no jsdom)", () => {
     expect(src).not.toMatch(/setManageCharId/); // old independent state fully removed
   });
 
+  it("8b. punitive rank change in first_night passes 'preserve' to playReactions (no pending clear)", () => {
+    const src = read("../../src/ui/App.tsx");
+    // When origin === "first_night", playReactions must not receive null (which would clear the
+    // deferred auto-checkpoint). Locate the punitive demote/strip_title branch and assert it uses
+    // "preserve" for first_night instead of unconditional null.
+    const demoteMatch = src.match(/origin === "first_night"\s*\?\s*"preserve"\s*:\s*null/);
+    expect(demoteMatch).not.toBeNull();
+    // Also verify the general case (impose_confinement) still passes null (not a first_night context)
+    // by scanning from the function name to the closing brace of the surrounding if-block.
+    const confineStart = src.indexOf("applyImperialPunishmentWithConsequences");
+    const confineEnd = src.indexOf("} else {", confineStart + 1);
+    const confineBlock = src.slice(confineStart, confineEnd > confineStart ? confineEnd : confineStart + 800);
+    expect(confineBlock).toContain("playReactions(");
+    expect(confineBlock).toMatch(/playReactions\([^;]+,\s*null\)/s);
+  });
+
   it("9. new game / load / SettingsMenu load / death clear pending context AND rank-admin session", () => {
     const src = read("../../src/ui/App.tsx");
     // every nav clear site sits next to a pending clear and a rank-admin clear

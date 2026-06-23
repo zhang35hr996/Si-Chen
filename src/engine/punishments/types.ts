@@ -65,10 +65,10 @@ export interface PunishmentOutcomeContext {
 
 /**
  * Minimal caller-supplied metadata for the GameStore punitive entry points.
- * targetId / kind / severity / occurredAt are derived from the validated command.
+ * targetId / kind / severity / occurredAt / punishmentId are all derived
+ * internally — the caller must NOT supply punishmentId to ensure uniqueness.
  */
 export interface PunishmentMeta {
-  punishmentId: string;
   caseId?: string;
   publicity?: "secret" | "palace" | "public";
   sourceLocation?: string;

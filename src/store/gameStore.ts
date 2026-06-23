@@ -406,8 +406,9 @@ export class GameStore {
    * Punitive imperial command (confinement / execution) WITH consequence effects.
    * Both base command effects and consequence effects are committed atomically.
    *
-   * targetId / kind / severity / occurredAt are derived from the validated command —
-   * the caller supplies only PunishmentMeta to avoid caller/command drift.
+   * punishmentId is generated internally from (dayIndex:chronicle.length) to
+   * guarantee per-event uniqueness — callers must NOT supply it.
+   * kind / severity / occurredAt are also derived from the validated command.
    *
    * Ordinary non-punitive commands (lift_confinement) must use applyImperialCommand.
    */
@@ -415,7 +416,7 @@ export class GameStore {
     db: ContentDB,
     command: ImperialCommand & { type: "impose_confinement" | "execute" },
     meta: PunishmentMeta,
-  ): Result<{ reactionBeats: ReactionBeat[]; baseLine: string }, GameError[]> {
+  ): Result<{ punishmentId: string; reactionBeats: ReactionBeat[]; baseLines: string[] }, GameError[]> {
     const planned = planImperialCommand(db, this.state, command);
     if (!planned.ok) {
       const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
@@ -430,8 +431,10 @@ export class GameStore {
       : command.durationTurns === null
         ? "indefinite_confinement"
         : "finite_confinement";
+    // punishmentId is generated from (dayIndex:chronicle.length) — unique per event within a save.
+    const punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
     const ctx: PunishmentOutcomeContext = {
-      punishmentId: meta.punishmentId,
+      punishmentId,
       ...(meta.caseId ? { caseId: meta.caseId } : {}),
       targetId: command.targetId,
       actorId: "player",
@@ -450,22 +453,26 @@ export class GameStore {
       conseq.reactionBeats,
     );
     if (!txResult.ok) return txResult;
-    return ok({ reactionBeats: txResult.value.reactionBeats, baseLine: base.lines[0] ?? "" });
+    return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: base.lines });
   }
 
   /**
    * Punitive rank change (demotion / strip_title) WITH consequence effects.
    * Rejects any request that would not produce a demotion or strip_title op.
    *
+   * Design note: all sovereign-direct demotions and title strips are treated as
+   * inherently punitive (no "administrative demotion" path exists at this scope).
+   * This must be confirmed before PUNISH-3A adds automatic case creation.
+   *
    * Ordinary 册封/晋升 and harem-admin rank changes must NOT call this.
-   * kind / severity / occurredAt are derived from the validated op internally.
+   * punishmentId / kind / severity / occurredAt are derived internally.
    */
   applyPunitiveRankChangeWithConsequences(
     db: ContentDB,
     targetId: string,
     request: RankOpRequest,
     meta: PunishmentMeta,
-  ): Result<{ reactionBeats: ReactionBeat[]; baseLine: string }, GameError[]> {
+  ): Result<{ punishmentId: string; reactionBeats: ReactionBeat[]; baseLines: string[] }, GameError[]> {
     const op = buildRankOp(db, this.state, targetId, request, { kind: "sovereign", actorId: "player" });
     if (!op) {
       const error = stateError("RANK_OP_INVALID", "rank change is a no-op or target has no standing");
@@ -480,8 +487,11 @@ export class GameStore {
 
     const kind: PunishmentKind = op.kind === "strip_title" ? "strip_title" : "rank_demotion";
     const occurredAt = toGameTime(this.state.calendar);
+    // punishmentId from (dayIndex:chronicle.length) — unique because each prior punishment
+    // appends at least one chronicle entry before the next one is issued.
+    const punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
     const ctx: PunishmentOutcomeContext = {
-      punishmentId: meta.punishmentId,
+      punishmentId,
       ...(meta.caseId ? { caseId: meta.caseId } : {}),
       targetId,
       actorId: "player",
@@ -505,7 +515,7 @@ export class GameStore {
           decree: "imperial_punitive_rank_change",
           targetId,
           direction: op.kind,
-          punishmentId: meta.punishmentId,
+          punishmentId,
           ...(meta.caseId ? { caseId: meta.caseId } : {}),
         },
         publicity: { scope: "palace", persistence: "institutional" },
@@ -523,7 +533,7 @@ export class GameStore {
       conseq.reactionBeats,
     );
     if (!txResult.ok) return txResult;
-    return ok({ reactionBeats: txResult.value.reactionBeats, baseLine: op.lines[0] ?? "" });
+    return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: op.lines });
   }
 
   /**
