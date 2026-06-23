@@ -9,7 +9,7 @@
 import { useRef, useState } from "react";
 import { SceneShell } from "../components/SceneShell";
 import type { CourtAgendaItem } from "../../engine/court/agenda";
-import type { CourtHoldGate, CourtSummaryView } from "../xuanzhengView";
+import type { CourtHoldGate, CourtSummaryRow, CourtSummaryView } from "../xuanzhengView";
 
 export interface XuanzhengdianScreenProps {
   background: string;
@@ -27,6 +27,12 @@ export interface XuanzhengdianScreenProps {
 
 function deltaText(delta: number): string {
   return delta > 0 ? `+${delta}` : `${delta}`;
+}
+
+/** 着色按极性而非 delta 正负：中性(polarity 0)不着色；正向指标 delta*polarity>0 为 gain，<0 为 loss。 */
+function toneClass(r: CourtSummaryRow): string {
+  if (r.polarity === 0 || r.delta === 0) return "";
+  return r.delta * r.polarity > 0 ? " is-gain" : " is-loss";
 }
 
 export function XuanzhengdianScreen(props: XuanzhengdianScreenProps) {
@@ -53,7 +59,7 @@ export function XuanzhengdianScreen(props: XuanzhengdianScreenProps) {
                     <h2 className="court-result__group-title">国政</h2>
                     <ul className="court-result__list">
                       {s.resources.map((r) => (
-                        <li key={r.label} className={`court-result__row${r.delta >= 0 ? " is-gain" : " is-loss"}`}>
+                        <li key={r.id} className={`court-result__row${toneClass(r)}`}>
                           <span className="court-result__label">{r.label}</span>
                           <span className="court-result__delta">{deltaText(r.delta)}</span>
                         </li>
@@ -66,7 +72,7 @@ export function XuanzhengdianScreen(props: XuanzhengdianScreenProps) {
                     <h2 className="court-result__group-title">人心</h2>
                     <ul className="court-result__list">
                       {s.attitudes.map((r) => (
-                        <li key={r.label} className={`court-result__row${r.delta >= 0 ? " is-gain" : " is-loss"}`}>
+                        <li key={r.id} className={`court-result__row${toneClass(r)}`}>
                           <span className="court-result__label">{r.label}</span>
                           <span className="court-result__delta">{deltaText(r.delta)}</span>
                         </li>

@@ -61,8 +61,11 @@ describe("XuanzhengdianScreen — result mode", () => {
       <XuanzhengdianScreen
         {...base}
         summary={{
-          resources: [{ label: "国库", delta: 500 }, { label: "威望", delta: -3 }],
-          attitudes: [{ label: "陆怀瑾", delta: 7 }],
+          resources: [
+            { id: "nation.treasury", label: "国库", delta: 500, polarity: 1 },
+            { id: "sovereign.prestige", label: "威望", delta: -3, polarity: 1 },
+          ],
+          attitudes: [{ id: "lu_huaijin", label: "陆怀瑾", delta: 7, polarity: 1 }],
           empty: false,
         }}
       />,

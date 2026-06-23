@@ -22,31 +22,34 @@ export function courtHoldGate(state: GameState): CourtHoldGate {
   return { ok: true };
 }
 
-/** 资源命名空间键 → 中文标签（来自 SovereignState / NationState 字段语义）。 */
-const RESOURCE_LABELS: Record<string, string> = {
-  "sovereign.health": "健康",
-  "sovereign.diligence": "勤政",
-  "sovereign.prestige": "威望",
-  "sovereign.martial": "武力",
-  "sovereign.statecraft": "政略",
-  "sovereign.cruelty": "暴戾",
-  "sovereign.fatigue": "疲劳",
-  "sovereign.regimeSecurity": "皇权安全",
-  "nation.military": "军力",
-  "nation.treasury": "国库",
-  "nation.publicSupport": "民心",
-  "nation.productivity": "生产力",
-  "nation.governance": "朝政",
-  "nation.consortClanPower": "外戚权势",
-  "nation.ministerLoyalty": "大臣忠心",
-  "nation.corruption": "贪腐",
-  "nation.clanDiscontent": "宗室不满",
-  "nation.rumor": "谣言",
+/**
+ * 资源结果**公开白名单**（明面属性）：键 → { 标签, 极性 }。
+ *  - 极性 +1：值越高越好（gain 着色为正向）；
+ *  - 极性  0：中性（如外戚权势，升降取向暧昧，不做正负着色）。
+ * **暗属性绝不入表**（cruelty/fatigue/regimeSecurity/ministerLoyalty/corruption/clanDiscontent/rumor）：
+ * 引擎快照仍记录全量，但结果页只展示白名单内的公开指标，杜绝泄露后台属性（评审 PR4 阻塞）。
+ */
+const PUBLIC_RESOURCES: Record<string, { label: string; polarity: 1 | 0 }> = {
+  "sovereign.health": { label: "健康", polarity: 1 },
+  "sovereign.diligence": { label: "勤政", polarity: 1 },
+  "sovereign.prestige": { label: "威望", polarity: 1 },
+  "sovereign.martial": { label: "武力", polarity: 1 },
+  "sovereign.statecraft": { label: "政略", polarity: 1 },
+  "nation.military": { label: "军力", polarity: 1 },
+  "nation.treasury": { label: "国库", polarity: 1 },
+  "nation.publicSupport": { label: "民心", polarity: 1 },
+  "nation.productivity": { label: "生产力", polarity: 1 },
+  "nation.governance": { label: "朝政", polarity: 1 },
+  "nation.consortClanPower": { label: "外戚权势", polarity: 0 }, // 中性：不据 delta 正负着色
 };
 
 export interface CourtSummaryRow {
+  /** 稳定 React key：资源行用原始资源键，人物行用 charId（不用展示名，重名不冲突）。 */
+  id: string;
   label: string;
   delta: number;
+  /** +1=越高越好；0=中性（不正负着色）。 */
+  polarity: 1 | 0;
 }
 export interface CourtSummaryView {
   resources: CourtSummaryRow[];
@@ -54,15 +57,21 @@ export interface CourtSummaryView {
   empty: boolean;
 }
 
-/** 真实 diff → 朝议结果显示模型。资源标签查表（未知键回退原键）；态度用人物显示名。 */
+/**
+ * 真实 diff → 朝议结果显示模型。
+ *  - 资源：仅公开白名单内的键参与展示（暗属性丢弃）；标签/极性查表，行 id = 资源键。
+ *  - 态度：用人物显示名，行 id = charId；favor 越高越好（极性 +1）。
+ * 着色由极性决定（见组件），不再只按 delta 正负——避免「越低越好」类指标被误标为正向。
+ */
 export function buildCourtSummary(db: ContentDB, diff: CourtMetricsDiff): CourtSummaryView {
-  const resources: CourtSummaryRow[] = diff.resourceDeltas.map((d) => ({
-    label: RESOURCE_LABELS[d.key] ?? d.key,
-    delta: d.delta,
-  }));
+  const resources: CourtSummaryRow[] = diff.resourceDeltas
+    .filter((d) => d.key in PUBLIC_RESOURCES)
+    .map((d) => ({ id: d.key, label: PUBLIC_RESOURCES[d.key]!.label, delta: d.delta, polarity: PUBLIC_RESOURCES[d.key]!.polarity }));
   const attitudes: CourtSummaryRow[] = diff.attitudeDeltas.map((d) => ({
+    id: d.char,
     label: db.characters[d.char]?.profile.name ?? d.char,
     delta: d.delta,
+    polarity: 1,
   }));
   return { resources, attitudes, empty: resources.length === 0 && attitudes.length === 0 };
 }
