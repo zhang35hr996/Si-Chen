@@ -10,3 +10,6 @@ playwright/.cache/
 # agent worktree scratch
 .claude/worktrees/
 .worktrees/
+
+# knowledge index database
+*.db
