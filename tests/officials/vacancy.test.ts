@@ -42,7 +42,7 @@ describe("vacancy selectors", () => {
     const base = getPostOccupancy(s, db, multi.id);
     const movers = Object.values(s.officials).filter((o) => o.status === "active" && o.postId !== multi.id).slice(0, 2);
     for (const m of movers) {
-      const r = assignOfficialPost(s, db, m.id, multi.id);
+      const r = assignOfficialPost(s, db, m.id, multi.id, T);
       expect(r.ok).toBe(true);
       if (!r.ok) return;
       s = r.value;

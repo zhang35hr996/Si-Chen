@@ -3,6 +3,7 @@ import { buildOfficialYearlyTick } from "../../src/store/officialsLifecycleTick"
 import { GameStore } from "../../src/store/gameStore";
 import { getActiveSeatedOfficials } from "../../src/engine/officials/selectors";
 import { validateOfficialWorld, validateGeneratedAges } from "../../src/engine/officials/validation";
+import { gameStateSchema } from "../../src/engine/save/stateSchema";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadGameContent } from "../../src/engine/content/viteSource";
@@ -66,6 +67,37 @@ describe("buildOfficialYearlyTick — determinism & validity", () => {
     for (const p of s.pendingRetirements) {
       expect(s.officials[p.officialId]!.status).toBe("active"); // 请辞者仍在任
     }
+  });
+
+  it("age never exceeds 120 across 200 years; schema/validator/round-trip stay green (seeds 1..15)", () => {
+    for (let seed = 1; seed <= 15; seed++) {
+      let s = createNewGameState(db, seed);
+      for (let y = 2; y <= 201; y++) {
+        s = buildOfficialYearlyTick(s, db, tickTime(y));
+        for (const o of Object.values(s.officials)) expect(o.age).toBeLessThanOrEqual(120);
+        for (const m of Object.values(s.familyMembers)) expect(m.age).toBeLessThanOrEqual(120);
+      }
+      expect(validateOfficialWorld(s, db)).toEqual([]);
+      expect(gameStateSchema.safeParse(s).success).toBe(true);
+    }
+  });
+
+  it("a 119-yo survivor reaches 120 next tick and necessarily dies", () => {
+    const base = createNewGameState(db, 2);
+    const id = Object.keys(base.officials)[0]!;
+    const officials = { ...base.officials, [id]: { ...base.officials[id]!, age: 119 } };
+    const s = buildOfficialYearlyTick({ ...base, officials }, db, tickTime(2));
+    expect(s.officials[id]!.age).toBe(120);
+    expect(s.officials[id]!.status).toBe("dead");
+  });
+
+  it("a compat 120-yo survivor stays ≤120 and dies after a tick", () => {
+    const base = createNewGameState(db, 2);
+    const id = Object.keys(base.officials)[0]!;
+    const officials = { ...base.officials, [id]: { ...base.officials[id]!, age: 120 } };
+    const s = buildOfficialYearlyTick({ ...base, officials }, db, tickTime(2));
+    expect(s.officials[id]!.age).toBeLessThanOrEqual(120);
+    expect(s.officials[id]!.status).toBe("dead");
   });
 
   it("dead officials are excluded from the active-seated source", () => {

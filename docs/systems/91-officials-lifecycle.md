@@ -66,6 +66,35 @@ UI 留 PR2B。
 官员死亡 → dead → 释放席位 → 保留家族与亲缘 → 宫中侍君仍查得已故生母 → 不再被进献/殿选/任免源选中（getActiveSeatedOfficials）
 ```
 
+## 六之二、统一日历边界结算（review §1）
+
+所有「推进日历」的入口必须复用同一私有 helper `GameStore.settleCalendarAdvance(db, before, advanced)`，
+它按 before→advanced 的日历跨越统一执行：跨月健康 tick → sovereign death→gameOver → 跨入正月→
+官员年度 tick → pendingDaxuan 调和+catch-up → 到期禁足 sweep。
+
+- `advanceCandidate`（advanceTime / resolveTimedAction / travelAndAdvance 的共享核心）与
+  `GameStore.resolveEvent`（事件 apCost 推进日历）都经此 helper——**事件从十二月下旬滚入正月不再漏跑
+  增龄/死亡/告老**。事件流原子：effects → apCost 推进 → 边界结算 → eventLog/sceneHistory（引擎内）→
+  成功一次 commit+emit；任一步失败 state/AP/eventLog 全回滚、不 emit。
+- 裸时间命令收敛：`dispatch`/`dispatchBatch` 拒绝 `SPEND_AP`/`SKIP_REMAINDER`（`RAW_TIME_DISPATCH`，
+  记日志），强制走统一入口；移动批次（不含时间命令）不受影响。
+
+## 六之三、年龄上限与建档自检（review §2/§3）
+
+- 增龄硬上限 120：`nextAge = min(age+1, 120)`；`naturalDeathChance(age>=120)=100` → 119 岁次年到 120
+  必死、兼容的 120 岁经一次 tick 必转死亡，成功 state 中任何 Official/FamilyMember 年龄 ≤120。持久
+  校验保留 1–120（官员 + 家族成员同一规则）。连续推进 200 年、多 seed 始终过 schema/validator/round-trip。
+- 建档自检唯一入口 `assertGeneratedOfficialWorld(state, db)` = `validateOfficialWorld` + `validateGeneratedAges`，
+  由 `createNewGameState` fail-fast 调用；load/import 只跑 `validateOfficialWorld`（绝不把母子/配偶年龄差
+  放回读档校验）。
+
+## 六之四、appointedAt 语义（review §4）
+
+`appointedAt` = 最近一次被授官的时刻。`assignOfficialPost(state, db, officialId, newPostId, at)`：
+实际授官/调任（null→post、postA→postB）写 `appointedAt=at`；幂等（null→null、同一非空 post）不更新；
+**去职（post→null）保留上次任职时刻、不清除**（是否在任看 postId/status，非 appointedAt）。所有
+GameStore 调用方传 `toGameTime(state.calendar)`。
+
 ## 七、下一阶段（PR2B）
 
 空缺处理与基础任免 UI：名册按状态筛选、官位表按部门展示、免职/调任/恢复/准告老/挽留操作、高位空缺

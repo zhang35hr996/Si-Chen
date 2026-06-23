@@ -155,6 +155,10 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     if (ROLE_SEX[m.role] !== m.sex) {
       e("MEMBER_SEX_ROLE", `家族成员「${m.id}」身份「${m.role}」与性别「${m.sex}」不一致`, { memberId: m.id, role: m.role, sex: m.sex });
     }
+    // 运行期年龄合理性（与官员同一 1–120 规则，避免两套漂移）。
+    if (!(m.age >= 1 && m.age <= 120)) {
+      e("MEMBER_BAD_AGE", `家族成员「${m.id}」年龄不合理（${m.age}）`, { memberId: m.id, age: m.age });
+    }
   }
 
   // ── 家族 surname 一致：本族官员 + 非内卿母系成员同姓（内卿可异姓赘入） ──
@@ -289,4 +293,13 @@ export function validateGeneratedAges(state: GameState, db: ContentDB): GameErro
     }
   }
   return errors;
+}
+
+/**
+ * 开局建档的完整性断言 = 持久不变量（validateOfficialWorld）+ 生成期年龄合理性
+ * （validateGeneratedAges）。createNewGameState 的**唯一**自检入口（fail-fast）；load/import
+ * 路径只跑 validateOfficialWorld，绝不把母子/配偶年龄差放回读档校验。
+ */
+export function assertGeneratedOfficialWorld(state: GameState, db: ContentDB): GameError[] {
+  return [...validateOfficialWorld(state, db), ...validateGeneratedAges(state, db)];
 }

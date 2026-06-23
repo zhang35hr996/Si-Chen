@@ -5,14 +5,19 @@
  */
 import type { GameState } from "../state/types";
 
+/** 运行期年龄硬上限（与 validator 的 1–120 持久不变量一致；增龄绝不越界）。 */
+export const MAX_RUNTIME_AGE = 120;
+
+const nextAge = (age: number): number => Math.min(age + 1, MAX_RUNTIME_AGE);
+
 export function ageOfficialsOneYear(state: GameState): GameState {
   const officials: GameState["officials"] = {};
   for (const [id, o] of Object.entries(state.officials)) {
-    officials[id] = o.status === "dead" ? o : { ...o, age: o.age + 1 };
+    officials[id] = o.status === "dead" ? o : { ...o, age: nextAge(o.age) };
   }
   const familyMembers: GameState["familyMembers"] = {};
   for (const [id, m] of Object.entries(state.familyMembers)) {
-    familyMembers[id] = m.deceasedAt ? m : { ...m, age: m.age + 1 };
+    familyMembers[id] = m.deceasedAt ? m : { ...m, age: nextAge(m.age) };
   }
   return { ...state, officials, familyMembers };
 }

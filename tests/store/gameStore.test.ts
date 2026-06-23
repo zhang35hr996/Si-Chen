@@ -9,25 +9,26 @@ describe("GameStore", () => {
     let notifications = 0;
     store.subscribe(() => notifications++);
 
-    const r = store.dispatch({ type: "SPEND_AP", amount: 1 });
+    const r = store.dispatch({ type: "SET_FLAG", key: "x", value: true });
     expect(r.ok).toBe(true);
-    expect(store.getState().calendar.ap).toBe(5);
+    expect(store.getState().flags.x).toBe(true);
     expect(notifications).toBe(1);
   });
 
-  it("rejected dispatches change nothing, notify no one, and log the GameError", () => {
+  it("rejects raw time commands (must route through the unified time entry), logs, no change", () => {
     const logger = createLogger({ now: () => 0 });
     const store = createGameStore({ logger });
     let notifications = 0;
     store.subscribe(() => notifications++);
     const before = store.getState();
 
-    const r = store.dispatch({ type: "SPEND_AP", amount: 99 });
+    // 时间命令不得裸 dispatch（会绕过边界结算）；一律拒绝。
+    const r = store.dispatch({ type: "SPEND_AP", amount: 1 });
     expect(r.ok).toBe(false);
     expect(store.getState()).toBe(before); // same reference — nothing changed
     expect(notifications).toBe(0);
     expect(logger.entries()).toHaveLength(1);
-    expect(logger.entries()[0]?.message).toContain("AP_INSUFFICIENT");
+    expect(logger.entries()[0]?.message).toContain("RAW_TIME_DISPATCH");
   });
 
   it("dispatchBatch is atomic through the store", () => {
@@ -110,7 +111,7 @@ describe("GameStore.commitDialogueState", () => {
     const store = createGameStore();
     const snapshot = store.getState();
     // Simulate state change racing with async dialogue call
-    store.dispatch({ type: "SPEND_AP", amount: 1 });
+    store.dispatch({ type: "SET_FLAG", key: "raced", value: true });
     // Now try to commit with old snapshot
     const next: GameState = { ...snapshot, flags: { async_result: true } };
     const committed = store.commitDialogueState(snapshot, next);

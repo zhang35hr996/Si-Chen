@@ -90,7 +90,7 @@ describe("lifecycle services — restore + appoint", () => {
     expect(res.value.officials[id]!.postId).toBeNull();
     expect(res.value.officials[id]!.statusReason).toBeUndefined();
     // reuse assignOfficialPost (no parallel appoint system)
-    const ap = assignOfficialPost(res.value, db, id, "dianshi");
+    const ap = assignOfficialPost(res.value, db, id, "dianshi", T);
     expect(ap.ok).toBe(true);
   });
 

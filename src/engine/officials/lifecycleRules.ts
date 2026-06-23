@@ -4,8 +4,9 @@
  * seed（`official:lifecycle:<year>:<id>` / `official:retire:<year>:<id>`）驱动，绝不消耗其它随机流。
  */
 
-/** 年自然死亡几率（百分，0–100）。<50 极低；50–69 上升；70+ 明显上升。 */
+/** 年自然死亡几率（百分，0–100）。<50 极低；50–69 上升；70+ 明显上升；达 120 岁硬上限必死。 */
 export function naturalDeathChance(age: number): number {
+  if (age >= 120) return 100; // 年龄硬上限：保证不会产生 >120 的不可读档状态
   if (age < 50) return 1;
   if (age < 60) return 3;
   if (age < 70) return 8;
