@@ -251,7 +251,7 @@ export function compilePromptPayload(request: DialogueRequest): DialoguePromptPa
     currentScene: {
       location: request.locationId,
       ...(request.sceneDirective ? { directive: request.sceneDirective } : {}),
-      topicTags: [],
+      topicTags: request.topicTags,
       recentLines: request.transcript.slice(-6),
     },
   };

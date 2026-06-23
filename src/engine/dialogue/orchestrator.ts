@@ -80,13 +80,27 @@ export function assembleDialogueRequest(
     return err(aiError("BAD_SPEAKER", `speaker "${speakerId}" has no standing`));
   }
   const now = toGameTime(state.calendar);
+  // Real scene context (PR-A items 1+2): topic / subject / present / privacy flow
+  // from the caller into recall, activation, audience, and the compiled prompt.
+  const topicTags = options.topicTags ?? [];
+  const presentCharacterIds = options.presentCharacterIds ?? [];
+  // subjectIds always includes the speaker (self-memories stay reachable) plus
+  // whoever the beat is about, so a sub-threshold memory about them can be recalled.
+  const subjectIds = options.subjectIds
+    ? [...new Set([speakerId, ...options.subjectIds])]
+    : [speakerId];
   const memCtx = buildMemoryContext(
     state,
-    { speakerId, subjectIds: [speakerId] },
+    { speakerId, subjectIds, topicTags, presentCharacterIds },
     // audienceId, targetId, speakerId all use the resolved targetId — single source.
-    { now, topicTags: [], presentCharacterIds: [], audienceId: targetId, speakerId, locationId },
+    { now, topicTags, presentCharacterIds, audienceId: targetId, speakerId, locationId },
   );
-  const audience = buildAudienceContext(state, db, { speakerId, targetId });
+  const audience = buildAudienceContext(state, db, {
+    speakerId,
+    targetId,
+    ...(options.presentCharacterIds !== undefined ? { presentCharacterIds: options.presentCharacterIds } : {}),
+    ...(options.privacy !== undefined ? { privacy: options.privacy } : {}),
+  });
 
   // §5 assembly order: reaction → promptEvents → claims → promptContext
 
@@ -152,6 +166,7 @@ export function assembleDialogueRequest(
     },
     sceneDirective,
     transcript: transcript ?? [],
+    topicTags,
     ...(scripted !== undefined ? { scripted } : {}),
     promptContext,
   });

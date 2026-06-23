@@ -46,6 +46,7 @@ export function makeDialogueRequest(): DialogueRequest {
       addressRules: [],
     },
     transcript: [],
+    topicTags: [],
     promptContext: {
       speakerDisplayName: "烟波",
       rankDisplay: {
