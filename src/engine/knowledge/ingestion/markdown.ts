@@ -106,7 +106,7 @@ export function parseMarkdownLore(
     const text = section.text.trim();
     if (text.length < MIN_CHUNK_LENGTH) continue;
 
-    const headingKey = section.heading ?? "_intro";
+    const headingKey = section.headingPath ?? "_intro";
     const paragraphs = splitParagraphs(text);
 
     if (paragraphs.length === 0) continue;
@@ -124,8 +124,8 @@ export function parseMarkdownLore(
           : `${fm.id}#${headingKey}:${idx}`;
 
       const chunkTitle =
-        section.heading !== undefined
-          ? `${fm.title} — ${section.heading}`
+        section.headingTitle !== undefined
+          ? `${fm.title} — ${section.headingTitle}`
           : fm.title;
 
       inputs.push({
@@ -192,28 +192,51 @@ function splitFrontmatter(
 }
 
 interface Section {
-  heading: string | undefined; // undefined = intro
+  /** ID path component: "_intro" | H2text | "H2text/H3text" */
+  headingPath: string | undefined;
+  /** Display title component: undefined for intro, H2text, or "H2text — H3text" */
+  headingTitle: string | undefined;
   text: string;
 }
 
-/** Split Markdown body into sections by ## and ### headings. */
+/**
+ * Split Markdown body into sections by ## and ### headings.
+ *
+ * IDs use the heading hierarchy so two `### 职责` sections under different
+ * `## X` parents produce distinct IDs: `doc#中书省/职责` vs `doc#尚书省/职责`.
+ */
 function splitIntoSections(body: string): Section[] {
   const lines = body.split("\n");
   const sections: Section[] = [];
-  let currentHeading: string | undefined = undefined;
+  let currentH2: string | undefined = undefined;
+  let currentPath: string | undefined = undefined;
+  let currentTitle: string | undefined = undefined;
   let currentLines: string[] = [];
 
   const flush = (): void => {
-    sections.push({ heading: currentHeading, text: currentLines.join("\n") });
+    sections.push({
+      headingPath: currentPath,
+      headingTitle: currentTitle,
+      text: currentLines.join("\n"),
+    });
   };
 
   for (const line of lines) {
-    const h2 = /^## (.+)/.exec(line);
-    const h3 = /^### (.+)/.exec(line);
-    const heading = (h2 ?? h3)?.[1]?.trim();
-    if (heading !== undefined) {
+    const h2Match = /^## (.+)/.exec(line);
+    const h3Match = /^### (.+)/.exec(line);
+    if (h2Match) {
       flush();
-      currentHeading = heading;
+      currentH2 = h2Match[1]!.trim();
+      currentPath = currentH2;
+      currentTitle = currentH2;
+      currentLines = [];
+    } else if (h3Match) {
+      flush();
+      const h3Title = h3Match[1]!.trim();
+      // Include parent H2 in both ID path and display title so sibling H3s
+      // with identical text get unique IDs and meaningful titles.
+      currentPath = currentH2 !== undefined ? `${currentH2}/${h3Title}` : h3Title;
+      currentTitle = currentH2 !== undefined ? `${currentH2} — ${h3Title}` : h3Title;
       currentLines = [];
     } else {
       currentLines.push(line);
@@ -283,13 +306,36 @@ function parseFrontmatterYaml(
     if (line.trim() === "" || line.trim().startsWith("#")) continue;
 
     const colonIdx = line.indexOf(":");
-    if (colonIdx === -1) continue;
+    if (colonIdx === -1) {
+      return err(
+        contentError(
+          "INVALID_FRONTMATTER",
+          `[knowledge] ${sourcePath}: frontmatter line without colon: "${line.trim()}"`,
+        ),
+      );
+    }
 
     const key = line.slice(0, colonIdx).trim();
     const rest = line.slice(colonIdx + 1).trimEnd();
     const restTrimmed = rest.trim();
 
-    if (key === "") continue;
+    if (key === "") {
+      return err(
+        contentError(
+          "INVALID_FRONTMATTER",
+          `[knowledge] ${sourcePath}: frontmatter line has empty key`,
+        ),
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(result, key)) {
+      return err(
+        contentError(
+          "DUPLICATE_KEY",
+          `[knowledge] ${sourcePath}: duplicate frontmatter key: "${key}"`,
+        ),
+      );
+    }
 
     // Inline empty array
     if (restTrimmed === "[]") {
@@ -297,7 +343,7 @@ function parseFrontmatterYaml(
       continue;
     }
 
-    // Block array — next lines start with "  -"
+    // Block array — next lines start with "  -" or "- "
     if (restTrimmed === "") {
       const items: string[] = [];
       while (i < lines.length) {
@@ -311,7 +357,6 @@ function parseFrontmatterYaml(
         }
       }
       if (items.length > 0) {
-        // Try to parse as numbers; fall back to strings
         result[key] = items.map((v) => parseScalar(v));
       }
       continue;

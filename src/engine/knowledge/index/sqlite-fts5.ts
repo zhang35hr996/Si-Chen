@@ -69,8 +69,9 @@ export function chineseBigrams(text: string): string {
 
   const flushNonCjk = (): void => {
     if (nonCjkRun.length === 0) return;
-    // Preserve whole words — split on whitespace, emit each word as one token
-    for (const w of nonCjkRun.join("").split(/\s+/)) {
+    // Split on non-word characters; emit only alphanumeric sequences.
+    // This discards punctuation (including Chinese full-width punctuation like ，。！？).
+    for (const w of nonCjkRun.join("").split(/\W+/)) {
       if (w.length > 0) tokens.push(w);
     }
     nonCjkRun = [];
@@ -93,47 +94,65 @@ export function chineseBigrams(text: string): string {
 
 // ── FTS query normalization ───────────────────────────────────────────────────
 
+/** FTS5 boolean operators that corrupt query syntax when used as plain terms. */
+const FTS5_OPERATORS = new Set(["and", "or", "not"]);
+
 /**
  * Normalize a user query string for safe use in FTS5 MATCH.
  *
+ * Strategy: OR-based candidate retrieval — any token match returns a result;
+ * BM25 scoring ranks by relevance.  This makes natural-language sentences
+ * work: a long query retrieves chunks with any matching token and ranks the
+ * most-relevant chunk first.
+ *
  * Steps:
- *  1. Strip FTS5 special characters that could cause syntax errors.
- *  2. Split into whitespace-delimited terms.
- *  3. For each term that contains CJK characters, also emit its bigrams so
- *     that multi-character Chinese queries are token-decomposed correctly.
- *  4. Join with a space so FTS5 AND-matches all tokens.
+ *  1. Strip all non-letter, non-digit, non-whitespace characters (including
+ *     Unicode/Chinese punctuation like ，。！？、；：""'' and FTS5 special
+ *     chars).  The `u` flag enables \p{L}/\p{N} Unicode property escapes.
+ *  2. Split into whitespace-delimited user terms.
+ *  3. For each CJK term decompose into bigrams (each bigram = one OR candidate).
+ *     For non-CJK terms keep as-is, but drop FTS5 boolean keywords (AND/OR/NOT)
+ *     that would cause syntax errors.
+ *  4. Deduplicate and join with " OR ".
  *
  * Returns null for empty or whitespace-only input.
  */
 export function normalizeFtsQuery(raw: string): string | null {
-  // Strip FTS5 special chars to prevent syntax errors
-  const safe = raw.replace(/["""''*\-()^:]/g, " ").trim();
+  // Keep only Unicode letters, digits, and whitespace; everything else is a separator.
+  const safe = raw.replace(/[^\p{L}\p{N}\s]/gu, " ").trim();
   if (!safe) return null;
 
   const terms = safe.split(/\s+/).filter((t) => t.length > 0);
   if (terms.length === 0) return null;
 
-  const ftsTokens: string[] = [];
+  const candidates: string[] = [];
   for (const term of terms) {
     const hasCjk = [...term].some((ch) => CJK_RE.test(ch));
     if (hasCjk) {
-      // Decompose into bigrams for proper Chinese token matching
-      const bigrams = chineseBigrams(term);
-      if (bigrams.trim()) ftsTokens.push(...bigrams.split(" ").filter((t) => t.length > 0));
+      // Decompose each CJK term into bigrams; each bigram is one OR candidate
+      const bigrams = chineseBigrams(term).split(/\s+/).filter((t) => t.length > 0);
+      candidates.push(...bigrams);
     } else {
-      ftsTokens.push(term);
+      // Skip FTS5 boolean keywords to prevent syntax errors when the user
+      // types "AND", "OR", "NOT" as ordinary search words.
+      if (!FTS5_OPERATORS.has(term.toLowerCase())) {
+        candidates.push(term);
+      }
     }
   }
 
-  if (ftsTokens.length === 0) return null;
-  // Deduplicate tokens while preserving order
+  if (candidates.length === 0) return null;
+
+  // Deduplicate while preserving first-seen order
   const seen = new Set<string>();
-  const unique = ftsTokens.filter((t) => {
+  const unique = candidates.filter((t) => {
     if (seen.has(t)) return false;
     seen.add(t);
     return true;
   });
-  return unique.join(" ");
+
+  // OR join: any candidate match earns a result; BM25 ranks by match quality.
+  return unique.join(" OR ");
 }
 
 // ── Database row type ─────────────────────────────────────────────────────────
@@ -359,10 +378,12 @@ export class SqliteKeywordIndex implements KnowledgeKeywordIndex {
       ? "AND " + conditions.join(" AND ")
       : "";
 
-    // FTS5 column weights: title=2.0, body=1.0, bigrams=0.5
+    // FTS5 column weights — 4 columns: chunk_id(UNINDEXED) title body bigrams.
+    // bm25() takes one weight per column in declaration order; chunk_id is
+    // UNINDEXED so its weight is irrelevant but the slot must be present (0.0).
     // f.chunk_id is aliased to 'id' so rowToChunk can read it by name.
     const sql = `
-      SELECT f.chunk_id AS id, bm25(knowledge_fts, 2.0, 1.0, 0.5) AS raw_rank,
+      SELECT f.chunk_id AS id, bm25(knowledge_fts, 0.0, 2.0, 1.0, 0.5) AS raw_rank,
              c.source_type, c.title, c.text, c.visibility,
              c.valid_from_day, c.valid_until_day, c.source_path,
              c.tags_json, c.entity_ids_json, c.location_ids_json
@@ -380,9 +401,13 @@ export class SqliteKeywordIndex implements KnowledgeKeywordIndex {
     let rows: SearchRow[];
     try {
       rows = this.db.prepare(sql).all(...allParams) as SearchRow[];
-    } catch {
-      // Malformed FTS query → return empty results, do not throw
-      return [];
+    } catch (e) {
+      // Only swallow FTS5 query-syntax errors caused by malformed user input.
+      // All other errors (I/O, schema mismatch, corruption) must propagate.
+      if (e instanceof Error && /fts5: syntax error/i.test(e.message)) {
+        return [];
+      }
+      throw e;
     }
 
     return rows.map((row) => ({

@@ -114,8 +114,9 @@ export function normalizeChunks(
     valid.push(chunk);
   }
 
-  // Deterministic output order
-  valid.sort((a, b) => a.id.localeCompare(b.id));
+  // Deterministic output order — explicit code-point comparator avoids
+  // locale-sensitive localeCompare, which varies by Node/ICU build.
+  valid.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return valid;
 }
 

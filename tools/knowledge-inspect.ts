@@ -11,23 +11,93 @@ import { resolve } from "node:path";
 import { SqliteKeywordIndex } from "../src/engine/knowledge/index/sqlite-fts5";
 import type { KnowledgeVisibility } from "../src/engine/knowledge/model";
 
-const args = process.argv.slice(2);
+const VALID_VISIBILITIES = new Set<string>(["public", "restricted", "imperial"]);
+const KNOWN_FLAGS = new Set(["--db", "--limit", "--visibility"]);
 
-function getFlag(name: string, defaultVal: string): string {
-  const idx = args.indexOf(name);
-  return idx !== -1 ? args[idx + 1] ?? defaultVal : defaultVal;
+export interface InspectArgs {
+  query: string;
+  db: string;
+  limit: number;
+  visibility: KnowledgeVisibility;
 }
 
-const query = args.filter((a) => !a.startsWith("--") && args.indexOf(a) - 1 !== args.findIndex((x) => x === "--db") && args.indexOf(a) - 1 !== args.findIndex((x) => x === "--limit") && args.indexOf(a) - 1 !== args.findIndex((x) => x === "--visibility")).join(" ").trim();
+/**
+ * Parse CLI arguments for knowledge:inspect.
+ *
+ * Returns a parsed InspectArgs on success.
+ * Returns null and prints an error message on invalid input (caller should exit 1).
+ */
+export function parseInspectArgs(rawArgs: string[], defaultDb: string): InspectArgs | null {
+  const flags: Record<string, string> = {};
+  const positional: string[] = [];
 
-if (!query) {
-  console.error("Usage: npm run knowledge:inspect -- <query> [--limit N] [--db PATH] [--visibility public|restricted|imperial]");
-  process.exit(1);
+  let i = 0;
+  while (i < rawArgs.length) {
+    const a = rawArgs[i]!;
+    if (KNOWN_FLAGS.has(a)) {
+      const val = rawArgs[i + 1];
+      if (val === undefined || val.startsWith("--")) {
+        console.error(`[knowledge:inspect] ${a} requires a value`);
+        return null;
+      }
+      flags[a.slice(2)] = val;
+      i += 2;
+    } else if (a.startsWith("--")) {
+      console.error(`[knowledge:inspect] unknown flag: ${a}`);
+      return null;
+    } else {
+      positional.push(a);
+      i++;
+    }
+  }
+
+  const query = positional.join(" ").trim();
+  if (!query) {
+    console.error(
+      "Usage: npm run knowledge:inspect -- <query> [--limit N] [--db PATH] [--visibility public|restricted|imperial]",
+    );
+    return null;
+  }
+
+  const limitRaw = flags["limit"] ?? "10";
+  const limit = parseInt(limitRaw, 10);
+  if (isNaN(limit) || limit < 1) {
+    console.error(`[knowledge:inspect] --limit must be a positive integer, got "${limitRaw}"`);
+    return null;
+  }
+
+  const visibilityRaw = flags["visibility"] ?? "public";
+  if (!VALID_VISIBILITIES.has(visibilityRaw)) {
+    console.error(
+      `[knowledge:inspect] --visibility must be public|restricted|imperial, got "${visibilityRaw}"`,
+    );
+    return null;
+  }
+
+  return {
+    query,
+    db: flags["db"] ?? defaultDb,
+    limit,
+    visibility: visibilityRaw as KnowledgeVisibility,
+  };
 }
 
-const dbPath = getFlag("--db", resolve(".knowledge.db"));
-const limit = parseInt(getFlag("--limit", "10"), 10);
-const visibility = getFlag("--visibility", "public") as KnowledgeVisibility;
+// ── CLI entrypoint ────────────────────────────────────────────────────────────
+// Guard prevents CLI execution when this module is imported (e.g. in tests).
+
+import { fileURLToPath } from "node:url";
+
+const isMain = process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === fileURLToPath(new URL(process.argv[1], "file:"));
+
+if (!isMain) {
+  // Imported as a module — do not run CLI code
+} else {
+
+const parsed = parseInspectArgs(process.argv.slice(2), resolve(".knowledge.db"));
+if (!parsed) process.exit(1);
+
+const { query, db: dbPath, limit, visibility } = parsed;
 
 const index = new SqliteKeywordIndex(dbPath);
 try {
@@ -53,3 +123,5 @@ try {
 } finally {
   index.close();
 }
+
+} // end isMain

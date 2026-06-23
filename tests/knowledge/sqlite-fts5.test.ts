@@ -39,18 +39,20 @@ describe("normalizeFtsQuery", () => {
   });
 
   it("decomposes Chinese query into bigrams", () => {
-    const result = normalizeFtsQuery("承养");
-    expect(result).toBe("承养"); // 2 chars → single bigram = same token
+    // 2-char CJK → single bigram = token itself, no OR needed
+    expect(normalizeFtsQuery("承养")).toBe("承养");
   });
 
-  it("decomposes 3+ char Chinese into bigrams", () => {
+  it("decomposes 3+ char Chinese into OR-joined bigrams", () => {
     const result = normalizeFtsQuery("禁足期间");
+    // Result: "禁足 OR 足期 OR 期间"
     expect(result).toContain("禁足");
     expect(result).toContain("足期");
     expect(result).toContain("期间");
+    expect(result).toContain("OR");
   });
 
-  it("strips FTS5 special characters", () => {
+  it("strips FTS5 special characters and ASCII punctuation", () => {
     const result = normalizeFtsQuery('test "quoted" -minus (paren)');
     expect(result).not.toContain('"');
     expect(result).not.toContain("-");
@@ -58,9 +60,34 @@ describe("normalizeFtsQuery", () => {
     expect(result).not.toBeNull();
   });
 
+  it("strips Unicode/Chinese punctuation — treated as separators", () => {
+    // ，。！？ should split, not become tokens
+    const result = normalizeFtsQuery("禁足，请安");
+    expect(result).not.toContain("，");
+    expect(result).toContain("禁足");
+    expect(result).toContain("请安");
+  });
+
+  it("slash and other delimiters split terms", () => {
+    const result = normalizeFtsQuery("宣政殿/紫宸殿");
+    expect(result).not.toContain("/");
+    expect(result).toContain("宣政");
+    expect(result).toContain("紫宸");
+  });
+
+  it("AND and OR as plain text do not cause syntax errors", () => {
+    // FTS5 boolean keywords are dropped; remaining terms are used
+    const result = normalizeFtsQuery("AND OR NOT 内容");
+    // "AND", "OR", "NOT" are dropped; "内容" → bigram "内容"
+    expect(result).not.toBeNull();
+    expect(result).toContain("内容");
+    expect(result).not.toMatch(/\bAND\b/);
+    expect(result).not.toMatch(/\bOR\b/);
+    expect(result).not.toMatch(/\bNOT\b/);
+  });
+
   it("deduplicates tokens", () => {
-    const result = normalizeFtsQuery("test test test");
-    expect(result).toBe("test");
+    expect(normalizeFtsQuery("test test test")).toBe("test");
   });
 });
 
@@ -120,17 +147,20 @@ describe("SqliteKeywordIndex — rebuild and basic search", () => {
     expect(hits).toHaveLength(0);
   });
 
-  it("rebuild is atomic — failure does not leave partial state", () => {
-    index.rebuild([makeChunk({ id: "c1", title: "第一批", text: "初始内容" })]);
+  it("rebuild is atomic — old chunk IDs are absent after rebuild with new chunks", () => {
+    index.rebuild([makeChunk({ id: "first", title: "第一批", text: "龙纹礼制规范" })]);
 
-    // Force a failure by closing db mid-operation is tricky; instead verify
-    // that a second normal rebuild completely replaces the first
-    index.rebuild([makeChunk({ id: "c2", title: "第二批", text: "替换内容" })]);
+    // Second rebuild completely replaces the first
+    index.rebuild([makeChunk({ id: "second", title: "第二批", text: "凤鸣规则制度" })]);
 
-    const h1 = index.search({ text: "初始内容", limit: 10 });
-    const h2 = index.search({ text: "替换内容", limit: 10 });
-    expect(h1).toHaveLength(0);
-    expect(h2).toHaveLength(1);
+    // With OR-based retrieval, use the unique 3-char term that only one chunk had
+    // "龙纹" bigram only exists in "first" chunk, which was deleted by rebuild
+    const fromFirst = index.search({ text: "龙纹", limit: 10 });
+    const fromSecond = index.search({ text: "凤鸣", limit: 10 });
+    // "first" chunk is gone; its unique bigrams should return no results
+    expect(fromFirst.map((h) => h.chunk.id)).not.toContain("first");
+    // "second" chunk is present
+    expect(fromSecond.map((h) => h.chunk.id)).toContain("second");
   });
 });
 
@@ -436,5 +466,86 @@ describe("SqliteKeywordIndex — SQL injection safety", () => {
     // Table still intact
     const after = index.search({ text: "禁足", limit: 10 });
     expect(after.length).toBeGreaterThan(0);
+  });
+});
+
+describe("SqliteKeywordIndex — natural language queries", () => {
+  beforeEach(() => {
+    index.rebuild([
+      makeChunk({
+        id: "confinement",
+        title: "禁足礼制",
+        text: "受禁足处分的侍君不得离开所居宫殿，也不参加日常晨省请安。禁足令由皇帝亲颁。",
+      }),
+      makeChunk({
+        id: "adoption",
+        title: "承养制度",
+        text: "承养须满足条件：皇帝亲颁旨；承养人须有位分；承养人本人不得有孕。",
+      }),
+      makeChunk({
+        id: "location",
+        title: "宣政殿",
+        text: "宣政殿是皇帝主持朝会的正殿。紫宸殿为内廷议事之所。",
+        sourceType: "location",
+        locationIds: ["xuanzhengdian"],
+        tags: [],
+        entityIds: [],
+        visibility: "public",
+        sourcePath: "test.md",
+      }),
+    ]);
+  });
+
+  it("natural language sentence retrieves relevant chunks", () => {
+    // Long query: many bigrams; any match earns a result; best-match ranks first
+    const hits = index.search({
+      text: "皇后向皇帝解释凤后主持晨省的礼制，以及被禁足侍君是否仍需请安",
+      limit: 10,
+    });
+    expect(hits.length).toBeGreaterThan(0);
+    // confinement matches "禁足", "请安", "侍君", "皇帝" bigrams
+    expect(hits[0]!.chunk.id).toBe("confinement");
+  });
+
+  it("Chinese comma in query is treated as separator, not a token", () => {
+    const hits = index.search({ text: "禁足，请安", limit: 10 });
+    expect(hits.some((h) => h.chunk.id === "confinement")).toBe(true);
+  });
+
+  it("slash in query splits into two terms", () => {
+    const hits = index.search({ text: "宣政殿/紫宸殿", limit: 10 });
+    const ids = hits.map((h) => h.chunk.id);
+    expect(ids).toContain("location");
+  });
+
+  it("chunk matching more query terms ranks above chunks matching fewer", () => {
+    // all three chunks have some bigrams from "禁足 请安"; confinement has both
+    const hits = index.search({ text: "禁足 请安", limit: 10 });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.chunk.id).toBe("confinement");
+  });
+
+  it("AND and OR as plain text do not cause errors and do not exclude other terms", () => {
+    expect(() =>
+      index.search({ text: "AND OR 禁足", limit: 10 }),
+    ).not.toThrow();
+    const hits = index.search({ text: "AND OR 禁足", limit: 10 });
+    expect(hits.some((h) => h.chunk.id === "confinement")).toBe(true);
+  });
+});
+
+describe("SqliteKeywordIndex — BM25 column weight ordering", () => {
+  it("title match scores higher than body-only match for same term", () => {
+    index.rebuild([
+      // "承养" appears ONLY in title (FTS title column, weight 2.0)
+      makeChunk({ id: "in-title", title: "承养", text: "此处内容与主题无直接关联。" }),
+      // "承养" appears ONLY in text body (FTS body→bigrams column, weight 1.0/0.5)
+      makeChunk({ id: "in-body", title: "其他标题", text: "承养制度的详细规定如下所述。" }),
+    ]);
+    const hits = index.search({ text: "承养", limit: 10 });
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    const titleIdx = hits.findIndex((h) => h.chunk.id === "in-title");
+    const bodyIdx = hits.findIndex((h) => h.chunk.id === "in-body");
+    expect(titleIdx).toBeLessThan(bodyIdx);
   });
 });

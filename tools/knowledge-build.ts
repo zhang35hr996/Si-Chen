@@ -3,6 +3,10 @@
  * knowledge:build — ingest all Markdown lore documents and location JSON files
  * into the SQLite FTS5 knowledge index.
  *
+ * Fail-closed: if any source file cannot be read, parsed, or validated,
+ * the build exits 1 WITHOUT opening or modifying the target database.
+ * An existing valid database is always preserved when the build fails.
+ *
  * Usage:
  *   npm run knowledge:build
  *   npm run knowledge:build -- --db ./custom-path.db
@@ -12,7 +16,7 @@
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ingestSources, type KnowledgeSource } from "../src/engine/knowledge/ingestion/pipeline";
+import { ingestSourcesStrict, type KnowledgeSource } from "../src/engine/knowledge/ingestion/pipeline";
 import { SqliteKeywordIndex } from "../src/engine/knowledge/index/sqlite-fts5";
 
 const args = process.argv.slice(2);
@@ -26,30 +30,35 @@ const LORE_DIRS: string[] = [
 ];
 const LOCATION_DIR = join(PROJECT_ROOT, "content", "locations");
 
-const sources: KnowledgeSource[] = [];
+// ── Collect sources ───────────────────────────────────────────────────────────
 
-// ── Markdown lore documents ───────────────────────────────────────────────────
+const sources: KnowledgeSource[] = [];
+const collectionErrors: string[] = [];
+
 for (const dir of LORE_DIRS) {
   let entries: string[];
   try {
     entries = readdirSync(dir);
   } catch {
-    // Directory may not exist in early stages
+    // Directory does not yet exist — skip silently
     continue;
   }
   const mdFiles = entries.filter((f) => f.endsWith(".md")).sort();
   for (const file of mdFiles) {
     const fullPath = join(dir, file);
     const relPath = `content/knowledge/${file}`;
-    sources.push({
-      kind: "markdown",
-      content: readFileSync(fullPath, "utf-8"),
-      sourcePath: relPath,
-    });
+    try {
+      sources.push({
+        kind: "markdown",
+        content: readFileSync(fullPath, "utf-8"),
+        sourcePath: relPath,
+      });
+    } catch (e) {
+      collectionErrors.push(`${relPath}: cannot read file: ${String(e)}`);
+    }
   }
 }
 
-// ── Location JSON files ───────────────────────────────────────────────────────
 let locationFiles: string[];
 try {
   locationFiles = readdirSync(LOCATION_DIR).filter((f) => f.endsWith(".json")).sort();
@@ -63,32 +72,39 @@ for (const file of locationFiles) {
     const data = JSON.parse(readFileSync(fullPath, "utf-8")) as unknown;
     sources.push({ kind: "json", data, sourcePath: relPath });
   } catch (e) {
-    console.error(`[knowledge:build] Failed to parse ${relPath}:`, e);
+    collectionErrors.push(`${relPath}: cannot parse JSON: ${String(e)}`);
   }
 }
 
-// ── Ingest ────────────────────────────────────────────────────────────────────
-const errors: Parameters<typeof ingestSources>[1] = [];
-const chunks = ingestSources(sources, errors);
+// Fail before opening the database if any source is unreadable/unparseable.
+if (collectionErrors.length > 0) {
+  console.error(`[knowledge:build] ${collectionErrors.length} source collection error(s):`);
+  for (const msg of collectionErrors) {
+    console.error(`  ${msg}`);
+  }
+  process.exit(1);
+}
 
-if (errors.length > 0) {
-  console.error(`[knowledge:build] ${errors.length} ingestion error(s):`);
-  for (const e of errors) {
+// ── Strict ingestion ──────────────────────────────────────────────────────────
+// ingestSourcesStrict fails if any source has a validation or schema error.
+// The database is NOT opened until ingestion succeeds.
+
+const result = ingestSourcesStrict(sources);
+if (!result.ok) {
+  console.error(`[knowledge:build] ${result.error.length} ingestion error(s):`);
+  for (const e of result.error) {
     console.error(`  ${e.code}: ${e.message}`);
   }
+  process.exit(1);
 }
 
 // ── Index ─────────────────────────────────────────────────────────────────────
 const index = new SqliteKeywordIndex(dbPath);
 try {
-  index.rebuild(chunks);
+  index.rebuild(result.value);
   console.log(
-    `[knowledge:build] Indexed ${chunks.length} chunks → ${dbPath}`,
+    `[knowledge:build] Indexed ${result.value.length} chunks → ${dbPath}`,
   );
-  if (errors.length > 0) {
-    console.warn(`[knowledge:build] ${errors.length} source(s) had errors and were skipped.`);
-    process.exit(1);
-  }
 } finally {
   index.close();
 }

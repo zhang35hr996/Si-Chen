@@ -74,6 +74,6 @@ export const knowledgeFrontmatterSchema = z.object({
   validUntilMonth: z.number().int().min(1).max(12).optional(),
   validUntilPeriod: z.enum(["early", "mid", "late"]).optional(),
   visibility: knowledgeVisibilitySchema,
-});
+}).strict(); // unknown keys (e.g. typos like validUntillYear) are caught immediately
 
 export type KnowledgeFrontmatter = z.infer<typeof knowledgeFrontmatterSchema>;
