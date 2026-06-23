@@ -5,11 +5,12 @@
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import { applyEffects } from "../engine/effects/funnel";
+import { TraceCollector, TraceHistory, diffGameState, type DebugTraceMode, type TraceSource, type TraceTransaction } from "../engine/trace";
 import { resolveEvent, type EventResolution } from "../engine/events/resolve";
 import { stateError, type GameError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import { err, ok, type Result } from "../engine/infra/result";
-import { fromTurnIndex, monthOrdinal, toGameTime } from "../engine/calendar/time";
+import { formatGameTime, fromTurnIndex, monthOrdinal, toGameTime } from "../engine/calendar/time";
 import { expiredUnrecordedConfinements } from "../engine/characters/confinement";
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
@@ -52,16 +53,97 @@ export interface TimedOutcome {
 export interface GameStoreOptions {
   logger?: RingBufferLogger;
   initial?: InitialStateOverrides;
+  /** Override trace mode. Defaults to "record" in dev builds, "off" in production. */
+  traceMode?: DebugTraceMode;
+  /** Override trace history capacity. Defaults to 200. */
+  traceHistoryLimit?: number;
 }
 
 export class GameStore {
   private state: GameState;
   private readonly listeners = new Set<() => void>();
   private readonly logger: RingBufferLogger | undefined;
+  private readonly traceMode: DebugTraceMode;
+  private readonly traceHistory: TraceHistory;
 
   constructor(options: GameStoreOptions = {}) {
     this.logger = options.logger;
     this.state = createInitialState(options.initial);
+    const defaultMode: DebugTraceMode = typeof import.meta !== "undefined" && (import.meta as { env?: { DEV?: boolean } }).env?.DEV ? "record" : "off";
+    this.traceMode = options.traceMode ?? defaultMode;
+    this.traceHistory = new TraceHistory(options.traceHistoryLimit);
+  }
+
+  /** Dev-only: access the trace history ring buffer. Returns an empty history in production. */
+  getTraceHistory(): TraceHistory {
+    return this.traceHistory;
+  }
+
+  /**
+   * Build and push a TraceTransaction from a completed (or rolled back) store operation.
+   * Never throws — trace errors must not interrupt game logic.
+   */
+  private commitTrace(
+    beforeState: GameState,
+    afterState: GameState,
+    source: TraceSource,
+    collector: TraceCollector,
+    outcome: "committed" | "rolled_back",
+    error?: string,
+  ): void {
+    try {
+      const collectedMutations = [...collector.getMutations()];
+      const warnings = [...collector.getWarnings()];
+
+      // Boundary diff: find mutations not attributed to any collector-recorded path.
+      const diff = diffGameState(beforeState, afterState);
+      const trackedPaths = new Set(collectedMutations.map((m) => m.path));
+      const allMutations = [...collectedMutations];
+      for (const d of diff) {
+        if (!trackedPaths.has(d.path)) {
+          allMutations.push({
+            path: d.path,
+            before: d.before,
+            after: d.after,
+            delta: typeof d.before === "number" && typeof d.after === "number" ? d.after - d.before : undefined,
+            classification: "untracked",
+            phase: collector.currentPhase,
+          });
+        }
+      }
+
+      // strict: throw on fully unattributed committed mutations
+      const untracked = allMutations.filter((m) => m.classification === "untracked");
+      if (this.traceMode === "strict" && outcome === "committed" && untracked.length > 0) {
+        throw new Error(
+          `[strict] Untracked state mutations: ${untracked.map((m) => m.path).join(", ")}`,
+        );
+      }
+
+      const directCount = allMutations.filter((m) => m.classification === "direct" || m.classification === "derived" || m.classification === "scheduled").length;
+      const tx: TraceTransaction = {
+        id: this.traceHistory.nextId(),
+        timestamp: Date.now(),
+        source,
+        mutations: allMutations,
+        warnings,
+        outcome,
+        error,
+        gameTime: formatGameTime(afterState.calendar),
+        directCount,
+        untrackedCount: untracked.length,
+      };
+      this.traceHistory.push(tx);
+    } catch (e) {
+      // In strict mode, re-throw; otherwise swallow trace errors silently.
+      if (this.traceMode === "strict") throw e;
+      this.logger?.warn(`[trace] commitTrace error: ${String(e)}`);
+    }
+  }
+
+  /** Create a TraceCollector if tracing is active, otherwise undefined. */
+  private makeCollector(): TraceCollector | undefined {
+    return this.traceMode !== "off" ? new TraceCollector() : undefined;
   }
 
   getState = (): GameState => this.state;
@@ -309,14 +391,20 @@ export class GameStore {
    * untouched, notifies no one, and logs every collected error once.
    */
   applyEffects(db: ContentDB, effects: readonly EventEffect[]): Result<GameState, GameError[]> {
-    const result = applyEffects(db, this.state, effects);
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "action", label: "applyEffects" };
+    const result = applyEffects(db, this.state, effects, collector ? { collector } : {});
     if (result.ok) {
       this.state = result.value;
       this.lastEffectReport = { effects, outcome: "applied", errors: [] };
+      if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
       this.emit();
     } else {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
+      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
+        result.error.map((e) => e.message).join("; "));
     }
     return result;
   }
@@ -334,6 +422,9 @@ export class GameStore {
     db: ContentDB,
     command: ImperialCommand,
   ): Result<ImperialCommandPlan, GameError[]> {
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "imperial_command", sourceId: command.type, label: `imperial: ${command.type}` };
     const planned = planImperialCommand(db, this.state, command);
     if (!planned.ok) {
       const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
@@ -341,10 +432,12 @@ export class GameStore {
       return err([error]);
     }
     const plan = planned.plan;
-    const applied = applyEffects(db, this.state, plan.effects);
+    const applied = applyEffects(db, this.state, plan.effects, collector ? { collector } : {});
     if (!applied.ok) {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: plan.effects, outcome: "rejected", errors: applied.error };
+      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
+        applied.error.map((e) => e.message).join("; "));
       return err(applied.error);
     }
     let candidate = applied.value;
@@ -352,12 +445,15 @@ export class GameStore {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
+        if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
+          ap.error.map((e) => e.message).join("; "));
         return err(ap.error); // this.state untouched — atomic
       }
       candidate = ap.value.state;
     }
     this.state = candidate;
     this.lastEffectReport = { effects: plan.effects, outcome: "applied", errors: [] };
+    if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
     this.emit();
     return ok(plan);
   }
@@ -370,6 +466,9 @@ export class GameStore {
     db: ContentDB,
     command: HaremAdminRankCommand,
   ): Result<HaremAdminCommandPlan, GameError[]> {
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "harem_admin", sourceId: command.type, label: `harem admin: ${command.type}` };
     const planned = planHaremAdminRankCommand(db, this.state, command);
     if (!planned.ok) {
       const error = stateError("HAREM_ADMIN_RANK_REJECTED", planned.reason);
@@ -377,10 +476,12 @@ export class GameStore {
       return err([error]);
     }
     const plan = planned.plan;
-    const applied = applyEffects(db, this.state, plan.effects);
+    const applied = applyEffects(db, this.state, plan.effects, collector ? { collector } : {});
     if (!applied.ok) {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: plan.effects, outcome: "rejected", errors: applied.error };
+      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
+        applied.error.map((e) => e.message).join("; "));
       return err(applied.error);
     }
     let candidate = applied.value;
@@ -388,12 +489,15 @@ export class GameStore {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
+        if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
+          ap.error.map((e) => e.message).join("; "));
         return err(ap.error); // this.state untouched — atomic
       }
       candidate = ap.value.state;
     }
     this.state = candidate;
     this.lastEffectReport = { effects: plan.effects, outcome: "applied", errors: [] };
+    if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
     this.emit();
     return ok(plan);
   }
@@ -408,14 +512,20 @@ export class GameStore {
     eventId: string,
     effects: readonly EventEffect[],
   ): Result<EventResolution, GameError[]> {
-    const result = resolveEvent(db, this.state, eventId, effects);
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "event", sourceId: eventId, label: `event: ${eventId}` };
+    const result = resolveEvent(db, this.state, eventId, effects, collector ? { collector } : undefined);
     if (result.ok) {
       this.state = result.value.state;
       this.lastEffectReport = { effects, outcome: "applied", errors: [] };
+      if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
       this.emit();
     } else {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
+      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
+        result.error.map((e) => e.message).join("; "));
     }
     return result;
   }
@@ -438,14 +548,27 @@ export class GameStore {
     actionEffects: readonly EventEffect[],
     command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
   ): Result<TimedOutcome, GameError[]> {
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "time_advance", sourceId: command.type, label: `time advance: ${command.type}` };
     // 1) action effects on a local candidate (subject still alive)
     let candidate = this.state;
     if (actionEffects.length > 0) {
-      const a = applyEffects(db, candidate, actionEffects);
-      if (!a.ok) return err(a.error);
+      const a = applyEffects(db, candidate, actionEffects, collector ? { collector } : {});
+      if (!a.ok) {
+        if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
+          a.error.map((e) => e.message).join("; "));
+        return err(a.error);
+      }
       candidate = a.value;
     }
-    return this.advanceCandidate(db, candidate, command);
+    const result = this.advanceCandidate(db, candidate, command, collector);
+    if (collector) {
+      this.commitTrace(beforeState, this.state, source, collector,
+        result.ok ? "committed" : "rolled_back",
+        result.ok ? undefined : result.error.map((e) => e.message).join("; "));
+    }
+    return result;
   }
 
   /**
@@ -461,6 +584,9 @@ export class GameStore {
     moveCommands: readonly GameCommand[],
     advanceCommand: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
   ): Result<TimedOutcome, GameError[]> {
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "time_advance", sourceId: "travel", label: "travel + advance" };
     // 1) MOVE on a local candidate (no time advances yet — subject still where they were)
     let candidate = this.state;
     if (moveCommands.length > 0) {
@@ -468,7 +594,13 @@ export class GameStore {
       if (!m.ok) return err([m.error]);
       candidate = m.value.state;
     }
-    return this.advanceCandidate(db, candidate, advanceCommand);
+    const result = this.advanceCandidate(db, candidate, advanceCommand, collector);
+    if (collector) {
+      this.commitTrace(beforeState, this.state, source, collector,
+        result.ok ? "committed" : "rolled_back",
+        result.ok ? undefined : result.error.map((e) => e.message).join("; "));
+    }
+    return result;
   }
 
   /**
@@ -480,6 +612,7 @@ export class GameStore {
     db: ContentDB,
     candidateIn: GameState,
     command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+    collector?: TraceCollector,
   ): Result<TimedOutcome, GameError[]> {
     let candidate = candidateIn;
     // 2) advance the calendar (pure reducer) on the candidate
@@ -496,7 +629,9 @@ export class GameStore {
       } catch (e) {
         return err([stateError("HEALTH_TICK_FAILED", String(e))]);
       }
-      const h = applyEffects(db, candidate, healthOutcome.effects);
+      const h = collector
+        ? collector.withPhase("monthly_health_tick", () => applyEffects(db, candidate, healthOutcome!.effects, { collector }))
+        : applyEffects(db, candidate, healthOutcome.effects);
       if (!h.ok) return err(h.error);
       candidate = h.value;
       // 4) emperor death → gameOver in the SAME transaction (App must not write it)
@@ -515,7 +650,9 @@ export class GameStore {
       if (pd) candidate = { ...candidate, pendingDaxuan: pd };
     }
     // 6) 有期限禁足自动到期：在新旬开始时（早于一切候选生成）结案并记一次史。
-    const swept = this.sweepExpiredConfinements(db, candidate);
+    const swept = collector
+      ? collector.withPhase("sweep_expired_confinements", () => this.sweepExpiredConfinements(db, candidate, collector))
+      : this.sweepExpiredConfinements(db, candidate);
     if (!swept.ok) return err(swept.error);
     candidate = swept.value;
     // single commit + single notify — only after every step succeeded
@@ -532,6 +669,7 @@ export class GameStore {
   private sweepExpiredConfinements(
     db: ContentDB,
     state: GameState,
+    collector?: TraceCollector,
   ): Result<GameState, GameError[]> {
     const expired = expiredUnrecordedConfinements(state);
     if (expired.length === 0) return ok(state);
@@ -541,6 +679,7 @@ export class GameStore {
       db,
       state,
       chars.map((char) => ({ type: "lift_confinement" as const, char, at, reason: "term_expired" as const })),
+      collector ? { collector } : {},
     );
     if (!applied.ok) return err(applied.error);
     let cur = applied.value;
