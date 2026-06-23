@@ -193,28 +193,102 @@ Query `"承养"` is decomposed to its bigram `"承养"`, which appears as a dist
 
 ---
 
-## PR2 Extension Points
+## Embedding and Vector Search (PR2)
 
-The following interfaces are clean extension points for embedding/hybrid retrieval:
+### Architecture
 
-```ts
-// New in PR2:
-interface KnowledgeVectorIndex {
-  rebuild(chunks: readonly KnowledgeChunk[]): Promise<void>;
-  search(query: KnowledgeVectorQuery): Promise<KnowledgeVectorHit[]>;
-}
-
-interface EmbeddingProvider {
-  embed(texts: string[]): Promise<number[][]>;
-}
-
-// PR3 wires these into the prompt compiler and sourceRefs:
-interface KnowledgeHybridRetriever {
-  retrieve(query: HybridQuery, context: RuntimeContext): KnowledgeChunk[];
-}
+```
+EmbeddingProvider (openai | gemini)
+  ↓ embed texts
+SqliteVectorIndex (same .knowledge.db)
+  knowledge_embedding_cache   — (model_key, content_hash) → Float32 BLOB vector
+  knowledge_chunk_embeddings  — (chunk_id, model_key)     → content_hash
+  ↓ cosine search in Node
+KnowledgeHybridRetriever
+  ↓ keyword hits + vector hits
+  Reciprocal Rank Fusion
+  ↓ ranked KnowledgeHybridHit[]
 ```
 
-The chunk ingestion pipeline, normalization, and `KnowledgeChunk` type are shared across all three PRs without modification.
+### Embedding Cache Design
+
+- **Cache key**: `(model_key, content_hash)` where `model_key = "${providerId}:${model}"` and `content_hash = SHA-256(embeddingText)`.
+- **Embedding text** is compiled from: title, sourceType, tags (sorted), entityIds (sorted), locationIds (sorted), text.  `sourcePath`, chunk `id`, and temporal bounds are **excluded** so a chunk's vector is stable across filesystem moves and time-bound edits that don't change content.
+- **Cache hit**: if a chunk's content hash is already in the cache, no provider call is made.  Two chunks with identical content hash share one cache entry.
+
+### Syncing Embeddings
+
+```bash
+# First, build the keyword index
+npm run knowledge:build
+
+# Then embed (reads chunks from .knowledge.db, writes vectors to same file)
+OPENAI_API_KEY=sk-... npm run knowledge:embed -- --provider openai --model text-embedding-3-small
+GEMINI_API_KEY=...    npm run knowledge:embed -- --provider gemini  --model text-embedding-004
+
+# Custom batch size and DB path
+OPENAI_API_KEY=... npm run knowledge:embed -- --provider openai --model text-embedding-3-small --batch-size 50 --db ./custom.db
+```
+
+`syncEmbeddings` contract:
+1. Compile embedding text + SHA-256 per chunk.
+2. Cache-check without holding a SQLite transaction.
+3. Provider is called **only for cache misses** (deduplicated by hash).
+4. All batch results are validated before any DB write.
+5. Cache writes + chunk mappings + stale-mapping pruning happen in **one atomic transaction**.
+
+### Hybrid Keyword + Vector Search
+
+```bash
+# Interactive hybrid search (embeds query inline)
+OPENAI_API_KEY=... npm run knowledge:hybrid-inspect -- "宫廷礼仪" --provider openai --model text-embedding-3-small
+OPENAI_API_KEY=... npm run knowledge:hybrid-inspect -- "禁足" --provider openai --model text-embedding-3-small --limit 5 --visibility imperial
+```
+
+Output per hit: fused rank, hybrid score, keyword rank + BM25, vector rank + cosine, chunk metadata.
+
+### Reciprocal Rank Fusion
+
+```
+hybridScore = kwWeight / (k + kwRank) + vecWeight / (k + vecRank)
+```
+
+Defaults: `k = 60`, `kwWeight = 1`, `vecWeight = 1`.  
+All three are overridable in `KnowledgeHybridQuery`.
+
+Tie-break order (deterministic):
+1. hybridScore descending
+2. best component rank ascending (min of kwRank, vecRank)
+3. chunk ID code-point ascending
+
+### `vectorFailureMode`
+
+| Value | Behaviour |
+|-------|-----------|
+| `"fail"` | Throw on vector error (default — explicit contract) |
+| `"keyword_only"` | Swallow vector errors; return keyword results only |
+
+### Vector Codec
+
+Vectors are stored as little-endian IEEE 754 Float32 BLOBs (4 bytes/dimension).
+A 1536-dim OpenAI embedding = 6144 bytes.  Float32 precision is adequate for all current embedding models.
+
+### API Key Security
+
+- Keys are read from `OPENAI_API_KEY` / `GEMINI_API_KEY` environment variables **only**.
+- Keys are **never** logged, printed, or included in error messages.
+- Tools exit 1 with a clear error if a required key is absent.
+- Never commit real keys to code, fixtures, snapshots, or test logs.
+
+---
+
+## Smoke Tests
+
+```bash
+# Live provider round-trip (require valid API keys; not run in CI)
+OPENAI_API_KEY=... npm run smoke:knowledge:openai
+GEMINI_API_KEY=... npm run smoke:knowledge:gemini
+```
 
 ---
 
