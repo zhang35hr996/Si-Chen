@@ -1801,6 +1801,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onTravelled={onTravelledSettle}
           onEnterCurrent={enterCurrentLocation}
           onOpenView={(locationId) => {
+            // 宣政殿（free-view 节点）改走朝议专用屏（议程 + 升朝 + 结果），不再用通用 free-view「上朝」入口。
+            if (locationId === "xuanzhengdian") { setCourtResult(null); enterXuanzhengdianView(); return; }
             setFreeViewId(locationId);
             setView("freeview");
           }}
