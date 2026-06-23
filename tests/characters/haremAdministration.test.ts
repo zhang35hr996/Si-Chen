@@ -416,8 +416,8 @@ describe("save round-trip", () => {
 
 describe("v9 → v10 migration", () => {
   // T29: save format version 已升到 10，v9 存档补上 haremAdministration。
-  it("T29: SAVE_FORMAT_VERSION 为 10（v9→v10 已实施）", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(10);
+  it("T29: SAVE_FORMAT_VERSION ≥ 10（v9→v10 haremAdministration 已实施）", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(10);
   });
 
   it("T29b: createInitialState 包含 haremAdministration: { mode: 'empress' }", () => {

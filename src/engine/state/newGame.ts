@@ -109,6 +109,8 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     officialFamilies: officialWorld.officialFamilies,
     familyMembers: officialWorld.familyMembers,
     kinship: officialWorld.kinship,
+    pendingRetirements: [],
+    officialHistory: [],
     memories,
     bedchamber,
     eventLog: [],

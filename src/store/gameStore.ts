@@ -22,6 +22,8 @@ import { applyBatch, applyCommand, type CommandResult } from "../engine/state/re
 import type { GameState, PendingDaxuan } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { assignOfficialPost } from "../engine/officials/assign";
+import { retireOfficial } from "../engine/officials/lifecycle";
+import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
@@ -112,6 +114,31 @@ export class GameStore {
     const result = assignOfficialPost(this.state, db, officialId, newPostId);
     if (!result.ok) return result;
     this.state = result.value;
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 准其告老：消费一条未决告老请求 → retireOfficial（状态 retired、释放席位、写历史）。 */
+  approveRetirement(officialId: string): Result<void, GameError> {
+    if (!this.state.pendingRetirements.some((p) => p.officialId === officialId)) {
+      return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
+    }
+    const result = retireOfficial(this.state, officialId, toGameTime(this.state.calendar));
+    if (!result.ok) return result;
+    this.state = result.value; // retireOfficial 内部已撤回该 pending
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 挽留一年：撤回该未决告老请求（来年可再请）。官员保持在任。 */
+  retainRetirement(officialId: string): Result<void, GameError> {
+    if (!this.state.pendingRetirements.some((p) => p.officialId === officialId)) {
+      return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
+    }
+    this.state = {
+      ...this.state,
+      pendingRetirements: this.state.pendingRetirements.filter((p) => p.officialId !== officialId),
+    };
     this.emit();
     return ok(undefined);
   }
@@ -503,6 +530,10 @@ export class GameStore {
       if (healthOutcome.sovereignDied) {
         candidate = { ...candidate, gameOver: { cause: "sovereign_death", at: toGameTime(candidate.calendar) } };
       }
+    }
+    // 4b) 年度官员生命周期：跨入正月（新年第一月）时统一执行一次（增龄/死亡/告老请求）。
+    if (monthChanged && candidate.calendar.month === 1) {
+      candidate = buildOfficialYearlyTick(candidate, db, toGameTime(candidate.calendar));
     }
     // 5) 统一探测/调和大选日历事件，使触发与具体行动路径（SPEND_AP / SKIP_REMAINDER /
     //    travel / resolveTimedAction）解耦。先调和陈旧（对应 flag 已置）以免 sticky 永久

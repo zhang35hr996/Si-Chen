@@ -19,7 +19,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 10;
+export const SAVE_FORMAT_VERSION = 11;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -168,6 +168,20 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return {
       ...env,
       formatVersion: 10,
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
+    };
+  },
+  // v10 → v11: 官员生命周期（pendingRetirements / officialHistory + Official 状态原因/时刻
+  // 可选字段）。旧档补空数组即可（官员既有字段形状不变；新增 official 字段均 optional）。
+  10: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!Array.isArray(state.pendingRetirements)) state.pendingRetirements = [];
+    if (!Array.isArray(state.officialHistory)) state.officialHistory = [];
+    return {
+      ...env,
+      formatVersion: 11,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };
