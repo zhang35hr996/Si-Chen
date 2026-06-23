@@ -6,5 +6,6 @@
   "condition": { "atLocation": "xuanzhengdian" },
   "priority": 10,
   "once": false,
-  "apCost": 1
+  "apCost": 1,
+  "presentation": { "mode": "manual" }
 }

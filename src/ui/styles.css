@@ -2653,30 +2653,6 @@ button:active:enabled {
   color: var(--gold);
   border-color: var(--line-gold);
 }
-/* ── 御书房·召见侍君卡 ─────────────────────────────────────────── */
-.summoned-consort {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.6rem;
-  border: 1px solid var(--gold);
-  border-radius: 3px;
-  background: rgba(217, 184, 124, 0.05);
-  box-shadow: 0 0 16px rgba(217, 184, 124, 0.12);
-}
-.summoned-consort__dismiss {
-  font: inherit;
-  padding: 0.35rem 1rem;
-  color: var(--cream-dim);
-  background: var(--ink-600);
-  border: 1px solid var(--line-strong);
-  cursor: pointer;
-}
-.summoned-consort__dismiss:hover {
-  color: var(--gold);
-  border-color: var(--line-gold);
-}
-
 /* ════════════════════════════════════════════════════════════════════
    三层导航重构 — 共享外壳 / 覆盖层原语
    全部从 --c-* 令牌派生；金色仅边框/数字/选中，朱红仅事件/当前。
@@ -3852,5 +3828,127 @@ button:active:enabled {
 @media (max-width: 480px) {
   .garden-overview__areas {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ── 宣政殿议程 + 朝议结果（PR4）── */
+.court-agenda,
+.court-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.2rem 1.3rem;
+  min-height: 0;
+}
+.court-agenda__title,
+.court-result__title {
+  margin: 0;
+  font-family: var(--font-title);
+  letter-spacing: 0.18em;
+  color: var(--c-gold);
+}
+.court-agenda__hint {
+  margin: 0;
+  color: var(--c-text-dim);
+  font-size: 0.9rem;
+}
+.court-agenda__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.court-agenda__item {
+  padding: 0.6rem 0.9rem;
+  font-family: var(--font-body);
+  color: var(--c-text);
+  background: rgba(20, 14, 11, 0.7);
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+}
+.court-agenda__empty,
+.court-result__empty {
+  margin: 0;
+  color: var(--c-text-dim);
+  font-family: var(--font-body);
+}
+.court-agenda__reason {
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+}
+.court-result__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.court-result__group-title {
+  margin: 0.3rem 0 0;
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  color: var(--c-text-dim);
+}
+.court-result__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.court-result__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0.8rem;
+  border-bottom: 1px solid var(--c-line);
+  font-family: var(--font-body);
+}
+.court-result__label {
+  color: var(--c-text);
+}
+.court-result__delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.court-result__row.is-gain .court-result__delta {
+  color: #7fc99a;
+}
+.court-result__row.is-loss .court-result__delta {
+  color: #d98a8a;
+}
+
+/* ── 场景 UI 视觉权重四级（PR4 Task 4.3）──────────────────────────────────
+ * 统一语义层（不重写既有主题）：
+ *  1) 主操作  .action-btn--key   暗金实边、高对比，唯一主行动（升朝/宣进来/确认/侍寝）。
+ *  2) 次操作  .action-btn        弱边/暗板，返回/关闭/次级入口。
+ *  3) 危险    .action-btn--danger 朱红警示，不可逆（废黜/打入冷宫等），权重区别于主操作。
+ *  4) 信息区  细分隔线（.court-result__row / 既有面板）；降卡片感，不为每组文字套厚板。
+ * 触控目标 ≥44px、底部固定坞 safe-area 由 .scene-shell__actions 既有规则承担。 */
+.action-btn--danger {
+  color: var(--c-zhu, #c8553d);
+  background: transparent;
+  border-color: var(--c-zhu, #c8553d);
+  font-weight: 600;
+}
+.action-btn--danger:hover {
+  color: #fff;
+  background: var(--c-zhu, #c8553d);
+}
+.action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* 动作坞主行动按钮统一 44px 触控目标（桌面/移动一致）。 */
+.action-dock .action-btn,
+.scene-focus .action-btn {
+  min-height: 44px;
+}
+@media (max-width: 480px) {
+  /* 移动：动作坞纵向铺满，主立绘单显由各场景 stage 的单列布局承担。 */
+  .action-dock {
+    flex-wrap: wrap;
   }
 }
