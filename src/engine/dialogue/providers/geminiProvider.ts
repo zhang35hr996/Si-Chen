@@ -147,6 +147,7 @@ function parseGeminiCall(
     text: parsed.data.text,
     choices: [],
     proposedClaims: parsed.data.proposedClaims,
+    mentionedContextRefs: parsed.data.mentionedContextRefs,
     ...(usage ? { usage } : {}),
     providerMeta: { provider: "google", model, ...(res.requestId ? { requestId: res.requestId } : {}) },
   });

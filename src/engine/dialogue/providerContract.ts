@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { proposedClaimSchema, type ProposedClaim } from "./claims";
+import { proposedClaimSchema, contextRefSchema, type ProposedClaim, type ContextRef } from "./claims";
 import type { Result } from "../infra/result";
 
 export interface RenderedDialogueChoice {
@@ -12,6 +12,10 @@ export interface RenderedDialogueChoice {
 export const dialogueToolOutputSchema = z.strictObject({
   text: z.string().min(1).max(300),
   proposedClaims: z.array(proposedClaimSchema).max(8).default([]),
+  // Context the model actually drew on this turn (memories/events), independent of
+  // factual claims. Drives the mention cooldown so a trauma referenced without a
+  // claim still cools down instead of repeating every turn (PR-A item 6).
+  mentionedContextRefs: z.array(contextRefSchema).max(8).default([]),
 });
 export type DialogueToolOutput = z.infer<typeof dialogueToolOutputSchema>;
 export const dialogueToolOutputJsonSchema = z.toJSONSchema(dialogueToolOutputSchema);
@@ -101,6 +105,8 @@ export interface DialogueProviderResult {
   expression?: string;                 // scripted authored; Anthropic omits → neutral fallback
   choices: RenderedDialogueChoice[];    // engine-authored; v1 adapter sets []
   proposedClaims: ProposedClaim[];
+  /** Context items (memories/events) the model referenced; drives mention cooldown. */
+  mentionedContextRefs?: ContextRef[];
   usage?: NormalizedUsage;
   providerMeta?: { provider: string; model: string; requestId?: string };
 }

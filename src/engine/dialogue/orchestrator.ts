@@ -454,11 +454,15 @@ async function produceDialogueLineWithPolicy(
   if (!outcome.ok) return err(outcome.error);
 
   // ── memory write-back ─────────────────────────────────────────────
+  // Mention cooldown is driven by BOTH accepted-claim sources AND the model's
+  // mentionedContextRefs, so a trauma referenced without a factual claim still
+  // cools down (PR-A item 6).
   let nextState = recordMentionedContext(
     state,
     outcome.diagnostics.acceptedClaims,
     { speakerId: request.speakerId, audienceId: request.targetId, now: policy.now },
     policy.offeredRefKeys,
+    raw.value.mentionedContextRefs ?? [],
   );
 
   // ── event reaction write-back (T10) ───────────────────────────────

@@ -144,6 +144,7 @@ function parseOpenAIToolCall(
     text: parsed.data.text,
     choices: [],
     proposedClaims: parsed.data.proposedClaims,
+    mentionedContextRefs: parsed.data.mentionedContextRefs,
     ...(usage ? { usage } : {}),
     providerMeta: { provider: "openai", model, ...(res.requestId ? { requestId: res.requestId } : {}) },
   });
