@@ -9,6 +9,7 @@
     "role": "TODO 一句话身份，如「初入宫的承徽」",
     "appearance": "TODO 外貌一两句。",
     "personalityTraits": ["TODO 性格特征"],
+    "reactionTraits": [],
     "coreFacts": ["TODO 关键背景事实"],
     "goals": ["TODO 角色目标"],
     "speechStyle": "TODO 说话风格，如「克制而有礼」。"

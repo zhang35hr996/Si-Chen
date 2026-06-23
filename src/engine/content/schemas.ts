@@ -17,6 +17,22 @@ export const idSchema = z
   .string()
   .regex(/^[a-z][a-z0-9_]*$/, "ids are lowercase snake_case ascii");
 
+/**
+ * Canonical engine vocabulary (stable enum IDs, NOT display words). The narrative
+ * `personalityTraits` / `attitude` strings stay free-text for authoring and the LLM;
+ * these machine fields are what the ReactionPlanner derives from, so the engine
+ * contract never drifts with copy wording.
+ */
+export const canonicalReactionTraitSchema = z.enum([
+  "status_conscious", "compassionate", "cold", "discreet", "blunt", "impulsive", "calculating", "proud",
+]);
+export type CanonicalReactionTrait = z.infer<typeof canonicalReactionTraitSchema>;
+
+export const relationStanceSchema = z.enum([
+  "devoted", "friendly", "neutral", "competitive", "contemptuous", "hostile",
+]);
+export type RelationStance = z.infer<typeof relationStanceSchema>;
+
 const percent = z.number().int().min(0).max(100);
 /** Content-declared deltas are bounded ±10 per effect (plan §6). */
 const delta = z.number().int().min(-10).max(10);
@@ -336,6 +352,9 @@ export const characterSchema = z
       role: nonEmpty,
       appearance: nonEmpty,
       personalityTraits: z.array(nonEmpty).min(1).max(6),
+      /** Canonical engine traits the ReactionPlanner derives disposition from
+       *  (narrative personalityTraits are NOT parsed). [] for non-reaction roles. */
+      reactionTraits: z.array(canonicalReactionTraitSchema).max(6).default([]),
       coreFacts: z.array(nonEmpty).min(1),
       goals: z.array(nonEmpty).min(1),
       speechStyle: nonEmpty,
@@ -353,7 +372,12 @@ export const characterSchema = z
     selfRefs: selfRefsSchema.optional(),
     initialMemories: z.array(initialMemoryDraftSchema),
     secrets: z.array(z.never()).max(0), // schema present, empty in the skeleton (plan §4)
-    stances: z.array(z.strictObject({ charId: idSchema, attitude: nonEmpty })).optional(),
+    stances: z.array(z.strictObject({
+      charId: idSchema,
+      /** Engine-used relation category. The narrative `attitude` is for authors/LLM only. */
+      stance: relationStanceSchema,
+      attitude: nonEmpty,
+    })).optional(),
     dialoguePolicy: z.strictObject({
       forbiddenClaims: z.array(dialogueClaimSchema).max(16),
     }).optional(),

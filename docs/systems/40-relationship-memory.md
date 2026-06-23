@@ -90,10 +90,12 @@ and the speaker is in `subjectIds` (self-memories stay reachable).
 
 ## Reaction, claims & cooldown (implemented)
 
-- **ReactionPlan** (`reactionAssembler.ts` + `planReaction.ts`) — disposition from authored
-  `personalityTraits` (`deriveDisposition`), speaker→subject relation from authored
-  `stances` (`deriveSubjectRelation`), and the real scene audience (present + privacy).
-  Only `rank_changed`/`residence_changed`/`heir_born`/`heir_died` currently yield reactions.
+- **ReactionPlan** (`reactionAssembler.ts` + `planReaction.ts`) — disposition from the
+  speaker's canonical `profile.reactionTraits` (`deriveDisposition`), speaker→subject
+  relation from the authored structured `stances[].stance` (`deriveSubjectRelation`), and
+  the real scene audience (present + privacy). These are stable machine enums — the
+  narrative `personalityTraits`/`attitude` strings are never parsed. Only
+  `rank_changed`/`residence_changed`/`heir_born`/`heir_died` currently yield reactions.
 - **Structured claims** (`claims.ts`, `claimAssembler.ts`, `claimGate.ts`) — the LLM may only
   assert facts it is authorized to, gated against the belief projection, audience, offered
   refs, and `forbiddenClaims`. Constraint is on declared `proposedClaims`, never parsed text.

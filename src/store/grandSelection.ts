@@ -3,7 +3,7 @@
  * 纯逻辑集中于此；殿选界面与 App 接线只调用本模块。确定性随机走 gestationRoll。
  */
 import type { ContentDB } from "../engine/content/loader";
-import type { CharacterRank, CharacterContent, EventEffect } from "../engine/content/schemas";
+import type { CharacterRank, CharacterContent, EventEffect, CanonicalReactionTrait } from "../engine/content/schemas";
 import { characterSchema } from "../engine/content/schemas";
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
 import { chineseNumeral, dayIndexOf, MORNING_SLOT, shichenSlot, monthOrdinal, toGameTime } from "../engine/calendar/time";
@@ -54,7 +54,20 @@ export function pickableRanks(db: ContentDB): CharacterRank[] {
 
 // ── 生成池（确定性取样） ──────────────────────────────────────────────
 const SPECIALTY_POOL = ["古筝", "琵琶", "书法", "丹青", "刺绣", "烹茶", "棋艺", "舞乐", "诗赋", "骑射"];
-const TRAIT_POOL = ["温婉", "活泼", "沉静", "孤傲", "机敏", "腼腆", "爽利", "细腻", "执拗", "娴雅"];
+// Each pool entry carries the narrative display word AND its canonical reaction
+// traits, so generated consorts never need free-text trait inference.
+const TRAIT_POOL = [
+  { display: "温婉", reactionTraits: ["compassionate", "discreet"] },
+  { display: "活泼", reactionTraits: ["blunt"] },
+  { display: "沉静", reactionTraits: ["discreet"] },
+  { display: "孤傲", reactionTraits: ["proud", "cold"] },
+  { display: "机敏", reactionTraits: ["calculating"] },
+  { display: "腼腆", reactionTraits: ["discreet"] },
+  { display: "爽利", reactionTraits: ["blunt"] },
+  { display: "细腻", reactionTraits: ["compassionate"] },
+  { display: "执拗", reactionTraits: ["proud"] },
+  { display: "娴雅", reactionTraits: ["status_conscious", "discreet"] },
+] as const satisfies readonly { display: string; reactionTraits: readonly CanonicalReactionTrait[] }[];
 const LIKES_POOL = ["玉器", "香料", "古籍", "骏马", "茶饮", "花木", "字画", "珠玉", "琴谱", "棋具"];
 const PORTRAIT_SETS = ["consort1", "consort2", "consort3", "consort4", "consort5", "consort6"];
 
@@ -105,11 +118,13 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
     }
 
     const traitCount = 2 + (gestationRollRaw(`${seed}:tc`) % 2); // 2–3
-    const traits: string[] = [];
+    const picked: (typeof TRAIT_POOL)[number][] = [];
     for (let t = 0; t < traitCount; t++) {
       const tr = pick(TRAIT_POOL, `${seed}:trait:${t}`);
-      if (!traits.includes(tr)) traits.push(tr);
+      if (!picked.includes(tr)) picked.push(tr);
     }
+    const traits = picked.map((p) => p.display);
+    const reactionTraits = [...new Set(picked.flatMap((p) => p.reactionTraits))];
     const specialty = pick(SPECIALTY_POOL, `${seed}:spec`);
     const likes = [pick(LIKES_POOL, `${seed}:like0`), pick(LIKES_POOL, `${seed}:like1`)]
       .filter((v, idx, arr) => arr.indexOf(v) === idx);
@@ -136,6 +151,7 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
         role: isShijia ? "殿选新晋，世家出身" : "殿选新晋，良家子",
         appearance: "眉目清秀，举止拘谨，初入宫闱，难掩怯意。",
         personalityTraits: traits,
+        reactionTraits,
         coreFacts: [isShijia ? "经三年大选入宫，初居储秀宫" : "良家子，经大选入宫，初居储秀宫"],
         goals: ["在宫中站稳脚跟", "得陛下垂顾"],
         speechStyle: "语气谨慎，言辞守礼。",

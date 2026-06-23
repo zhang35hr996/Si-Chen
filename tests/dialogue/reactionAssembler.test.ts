@@ -152,8 +152,8 @@ describe("buildReactionPlan — item 4: disposition derived from personalityTrai
       state: makeState(),
       currentDayIndex: CURRENT_DAY,
     };
-    const cautious = buildReactionPlan({ ...base, personalityTraits: ["谨慎"] });
-    const blurt = buildReactionPlan({ ...base, personalityTraits: ["口无遮拦"] });
+    const cautious = buildReactionPlan({ ...base, reactionTraits: ["discreet"] });
+    const blurt = buildReactionPlan({ ...base, reactionTraits: ["impulsive"] });
     expect(cautious!.plan.openness).toBeLessThan(blurt!.plan.openness);
   });
 });
@@ -168,7 +168,7 @@ describe("buildReactionPlan — item 5: relation from authored stances, not subj
       chronicle: [],
       state: makeState(),
       currentDayIndex: CURRENT_DAY,
-      stances: [{ charId: SUBJECT, attitude: "仇恨" }],
+      stances: [{ charId: SUBJECT, stance: "hostile" as const, attitude: "仇恨" }],
     });
     expect(hostile!.plan.undertone?.type).toBe("resentment");
   });
@@ -198,7 +198,7 @@ describe("buildReactionPlan — item 3: real audience privacy", () => {
       chronicle: [] as readonly CourtEvent[],
       state: makeState(),
       currentDayIndex: CURRENT_DAY,
-      stances: [{ charId: SUBJECT, attitude: "仇恨" }],
+      stances: [{ charId: SUBJECT, stance: "hostile" as const, attitude: "仇恨" }],
     };
     const priv = buildReactionPlan({ ...base, privacy: "private" as const });
     const semi = buildReactionPlan({ ...base, privacy: "semi_private" as const });

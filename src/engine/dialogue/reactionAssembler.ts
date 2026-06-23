@@ -13,6 +13,7 @@
  *   6. Return BuiltReaction { plan, sourceEventId }
  */
 import type { CourtEvent, GameState } from "../state/types";
+import type { CanonicalReactionTrait, RelationStance } from "../content/schemas";
 import type { ReactionPlan } from "./reactionTypes";
 import { eventToReactionContext } from "./eventReaction";
 import { selectReactionEvent } from "./eventReaction";
@@ -72,10 +73,10 @@ export function buildReactionPlan(args: {
   state: GameState;
   currentDayIndex: number;
   sceneDirective?: string;
-  /** Speaker's authored personality traits → social disposition. */
-  personalityTraits?: readonly string[];
-  /** Speaker's authored stances → relation to the event subject. */
-  stances?: readonly { charId: string; attitude: string }[];
+  /** Speaker's canonical reaction traits → social disposition. */
+  reactionTraits?: readonly CanonicalReactionTrait[];
+  /** Speaker's authored stances (structured `stance`) → relation to the event subject. */
+  stances?: readonly { charId: string; stance: RelationStance; attitude: string }[];
   /** Real scene cast; defaults to [audienceId]. */
   presentCharacterIds?: readonly string[];
   /** Real scene privacy; defaults to "semi_private". */
@@ -100,17 +101,17 @@ export function buildReactionPlan(args: {
   const reactionCtx = eventToReactionContext(event);
   if (reactionCtx === undefined) return undefined; // guard — should not happen after selectReactionEvent
 
-  // 3. Derive SubjectRelation from the speaker's authored stance toward the subject.
+  // 3. Derive SubjectRelation from the speaker's authored structured stance toward the subject.
   const subjectId = reactionCtx.subjectId;
-  const authoredAttitude = args.stances?.find((s) => s.charId === subjectId)?.attitude;
+  const authoredStance = args.stances?.find((s) => s.charId === subjectId)?.stance;
   const { relation } = deriveSubjectRelation({
     charId: subjectId,
-    ...(authoredAttitude !== undefined ? { authoredAttitude } : {}),
+    ...(authoredStance !== undefined ? { authoredStance } : {}),
   });
 
-  // 4. Derive disposition from the speaker's personality traits (fallback to default).
-  const disposition = args.personalityTraits
-    ? deriveDisposition(args.personalityTraits).disposition
+  // 4. Derive disposition from the speaker's canonical reaction traits (fallback to default).
+  const disposition = args.reactionTraits && args.reactionTraits.length > 0
+    ? deriveDisposition(args.reactionTraits)
     : DEFAULT_DISPOSITION;
 
   // 5. Build AudienceContext from the real scene (planReaction uses AudienceContext).

@@ -120,8 +120,8 @@ export function assembleDialogueRequest(
     state,
     currentDayIndex: now.dayIndex,
     sceneDirective: options.sceneDirective,
-    // Real disposition / relation / audience (PR-A items 3+4+5)
-    personalityTraits: character.profile.personalityTraits,
+    // Real disposition / relation / audience (PR-A items 3+4+5) — canonical machine fields
+    reactionTraits: character.profile.reactionTraits,
     stances: character.stances ?? [],
     presentCharacterIds: scenePresentIds,
     privacy: options.privacy ?? "semi_private",
