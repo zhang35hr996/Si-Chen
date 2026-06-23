@@ -1,4 +1,4 @@
-import type { MutationClassification, MutationRecord, TraceWarning } from "./types";
+import type { MutationClassification, MutationRecord, StateDiffEntry, TraceWarning } from "./types";
 
 /**
  * Collects per-effect mutation records during a single trace transaction.
@@ -28,7 +28,35 @@ export class TraceCollector {
     }
   }
 
-  /** Record a single field mutation. Call before AND after the mutation, passing before/after values. */
+  /**
+   * Record expected side-effects of a known phase as `scheduled` mutations.
+   * Diffs are provided by the caller (typically from `diffGameState`).
+   * Paths already recorded (by funnel) are skipped to avoid duplicates.
+   */
+  capturePhaseScheduled(phase: string, diffs: readonly StateDiffEntry[]): void {
+    const trackedPaths = new Set(this._mutations.map((m) => m.path));
+    for (const d of diffs) {
+      if (trackedPaths.has(d.path)) continue;
+      const delta =
+        typeof d.before === "number" && typeof d.after === "number"
+          ? d.after - d.before
+          : undefined;
+      this._mutations.push({
+        path: d.path,
+        before: d.before,
+        after: d.after,
+        delta,
+        classification: "scheduled",
+        phase,
+      });
+      trackedPaths.add(d.path);
+    }
+  }
+
+  /**
+   * Record a single field mutation. Call before AND after the mutation, passing
+   * before/after values. Skips semantic no-ops (equal values).
+   */
   record(mut: {
     effectType?: string;
     effectIndex?: number;
@@ -39,8 +67,7 @@ export class TraceCollector {
     reason?: string;
     classification?: MutationClassification;
   }): void {
-    // Skip no-ops — value didn't actually change (e.g. capped to same value).
-    if (mut.before === mut.after) return;
+    if (semanticEq(mut.before, mut.after)) return;
     this._mutations.push({
       effectType: mut.effectType,
       effectIndex: mut.effectIndex,
@@ -65,4 +92,13 @@ export class TraceCollector {
   getWarnings(): readonly TraceWarning[] {
     return this._warnings;
   }
+}
+
+/** Semantic equality: reference equality for primitives, JSON-compare for objects. */
+function semanticEq(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object") return false;
+  if (a === null || b === null) return false;
+  try { return JSON.stringify(a) === JSON.stringify(b); }
+  catch { return false; }
 }

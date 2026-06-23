@@ -2,7 +2,7 @@
  * Dev state inspector (skeleton-plan §12 PR 2: "raw state JSON dump panel").
  * Toggle with ` (backtick). Grows tabs (characters/memory/events) in later PRs.
  */
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { formatAp, formatGameTime, toGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import { formatErrorTag } from "../../engine/infra/errors";
@@ -174,16 +174,7 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
   const [lastRejection, setLastRejection] = useState<string | null>(null);
   const [, bumpReport] = useState(0);
   const [activeTab, setActiveTab] = useState<PanelTab>("state");
-  const [traceTick, setTraceTick] = useState(0);
   const traceHistory = store.getTraceHistory();
-
-  // Bump traceTick after every store action so the trace tab re-renders with fresh data
-  const prevSeqRef = useRef(traceHistory.size);
-  if (traceHistory.size !== prevSeqRef.current) {
-    prevSeqRef.current = traceHistory.size;
-    // queue microtask to avoid setState-during-render
-    void Promise.resolve().then(() => setTraceTick((n) => n + 1));
-  }
 
   const spendAp = (amount: number) => {
     if (db) {
@@ -260,7 +251,7 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
       </div>
 
       {activeTab === "trace" ? (
-        <TraceTab history={traceHistory} tick={traceTick} />
+        <TraceTab history={traceHistory} />
       ) : (
         <>
           <div className="debug-panel__actions">

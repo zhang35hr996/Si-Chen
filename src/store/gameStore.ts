@@ -80,70 +80,92 @@ export class GameStore {
   }
 
   /**
-   * Build and push a TraceTransaction from a completed (or rolled back) store operation.
-   * Never throws — trace errors must not interrupt game logic.
+   * Build a TraceTransaction from a completed (or rolled back) store operation.
+   *
+   * In strict mode, throws BEFORE any state commit if untracked mutations are
+   * found — callers must validate before writing `this.state = candidate`.
+   * In record mode, catches internal errors and logs them silently.
    */
-  private commitTrace(
+  private buildTrace(
     beforeState: GameState,
     afterState: GameState,
     source: TraceSource,
     collector: TraceCollector,
     outcome: "committed" | "rolled_back",
     error?: string,
-  ): void {
-    try {
-      const collectedMutations = [...collector.getMutations()];
-      const warnings = [...collector.getWarnings()];
+  ): TraceTransaction {
+    const collectedMutations = [...collector.getMutations()];
+    const warnings = [...collector.getWarnings()];
 
-      // Boundary diff: find mutations not attributed to any collector-recorded path.
-      const diff = diffGameState(beforeState, afterState);
-      const trackedPaths = new Set(collectedMutations.map((m) => m.path));
-      const allMutations = [...collectedMutations];
-      for (const d of diff) {
-        if (!trackedPaths.has(d.path)) {
-          allMutations.push({
-            path: d.path,
-            before: d.before,
-            after: d.after,
-            delta: typeof d.before === "number" && typeof d.after === "number" ? d.after - d.before : undefined,
-            classification: "untracked",
-            phase: collector.currentPhase,
-          });
-        }
+    // Final boundary diff: catches any mutation not already captured by the
+    // collector (funnel instrumentation or phase-local capturePhaseScheduled).
+    const diff = diffGameState(beforeState, afterState);
+    const trackedPaths = new Set(collectedMutations.map((m) => m.path));
+    const allMutations: typeof collectedMutations = [...collectedMutations];
+    for (const d of diff) {
+      if (!trackedPaths.has(d.path)) {
+        allMutations.push({
+          path: d.path,
+          before: d.before,
+          after: d.after,
+          delta:
+            typeof d.before === "number" && typeof d.after === "number"
+              ? d.after - d.before
+              : undefined,
+          classification: "untracked",
+          phase: "effects",
+        });
       }
-
-      // strict: throw on fully unattributed committed mutations
-      const untracked = allMutations.filter((m) => m.classification === "untracked");
-      if (this.traceMode === "strict" && outcome === "committed" && untracked.length > 0) {
-        throw new Error(
-          `[strict] Untracked state mutations: ${untracked.map((m) => m.path).join(", ")}`,
-        );
-      }
-
-      const directCount = allMutations.filter((m) => m.classification === "direct" || m.classification === "derived" || m.classification === "scheduled").length;
-      const tx: TraceTransaction = {
-        id: this.traceHistory.nextId(),
-        timestamp: Date.now(),
-        source,
-        mutations: allMutations,
-        warnings,
-        outcome,
-        error,
-        gameTime: formatGameTime(afterState.calendar),
-        directCount,
-        untrackedCount: untracked.length,
-      };
-      this.traceHistory.push(tx);
-    } catch (e) {
-      // In strict mode, re-throw; otherwise swallow trace errors silently.
-      if (this.traceMode === "strict") throw e;
-      this.logger?.warn(`[trace] commitTrace error: ${String(e)}`);
     }
+
+    // strict: reject committed operations with genuinely unattributed mutations
+    // (classification "untracked" = no phase, no funnel record).
+    const untracked = allMutations.filter((m) => m.classification === "untracked");
+    if (this.traceMode === "strict" && outcome === "committed" && untracked.length > 0) {
+      throw new Error(
+        `[strict] Untracked state mutations: ${untracked.map((m) => m.path).join(", ")}`,
+      );
+    }
+
+    const directCount = allMutations.filter(
+      (m) => m.classification === "direct" || m.classification === "derived",
+    ).length;
+    return {
+      id: this.traceHistory.nextId(),
+      timestamp: Date.now(),
+      source,
+      mutations: allMutations,
+      warnings,
+      outcome,
+      error,
+      gameTime: formatGameTime(afterState.calendar),
+      directCount,
+      untrackedCount: untracked.length,
+    };
   }
 
   /** Create a TraceCollector if tracing is active, otherwise undefined. */
   private makeCollector(): TraceCollector | undefined {
     return this.traceMode !== "off" ? new TraceCollector() : undefined;
+  }
+
+  /**
+   * Wrap a simple direct-state-set with boundary-diff tracing.
+   * All mutations are labeled "scheduled" since no funnel is involved.
+   * Used for store methods that bypass the effect funnel (setFlag, setEraName, etc.).
+   */
+  private tracedSet(nextState: GameState, source: TraceSource): void {
+    if (this.traceMode !== "off") {
+      const collector = new TraceCollector();
+      const beforeState = this.state;
+      collector.capturePhaseScheduled("direct_mutation", diffGameState(beforeState, nextState));
+      const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
+      this.state = nextState;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = nextState;
+    }
+    this.emit();
   }
 
   getState = (): GameState => this.state;
@@ -154,15 +176,42 @@ export class GameStore {
   };
 
   dispatch(command: GameCommand): CommandResult {
-    return this.commit(applyCommand(this.state, command));
+    if (this.traceMode === "off") return this.commit(applyCommand(this.state, command));
+    const beforeState = this.state;
+    const result = applyCommand(this.state, command);
+    const source: TraceSource = { kind: "action", sourceId: command.type, label: `dispatch: ${command.type}` };
+    const collector = new TraceCollector();
+    const nextState = result.ok ? result.value.state : beforeState;
+    collector.capturePhaseScheduled("command_dispatch", diffGameState(beforeState, nextState));
+    const tx = this.buildTrace(beforeState, nextState, source, collector,
+      result.ok ? "committed" : "rolled_back",
+      result.ok ? undefined : result.error.message);
+    if (result.ok) { this.state = nextState; this.emit(); }
+    else { this.logger?.logGameError(result.error); }
+    this.traceHistory.push(tx);
+    return result;
   }
 
   dispatchBatch(commands: readonly GameCommand[]): CommandResult {
-    return this.commit(applyBatch(this.state, commands));
+    if (this.traceMode === "off") return this.commit(applyBatch(this.state, commands));
+    const beforeState = this.state;
+    const result = applyBatch(this.state, commands);
+    const source: TraceSource = { kind: "action", label: `dispatchBatch (${commands.length})` };
+    const collector = new TraceCollector();
+    const nextState = result.ok ? result.value.state : beforeState;
+    collector.capturePhaseScheduled("command_dispatch", diffGameState(beforeState, nextState));
+    const tx = this.buildTrace(beforeState, nextState, source, collector,
+      result.ok ? "committed" : "rolled_back",
+      result.ok ? undefined : result.error.message);
+    if (result.ok) { this.state = nextState; this.emit(); }
+    else { this.logger?.logGameError(result.error); }
+    this.traceHistory.push(tx);
+    return result;
   }
 
   reset(overrides: InitialStateOverrides = {}): void {
     this.state = createInitialState(overrides);
+    this.traceHistory.clear();
     this.emit();
   }
 
@@ -170,6 +219,7 @@ export class GameStore {
   newGame(db: ContentDB): void {
     this.state = createNewGameState(db);
     this.lastEffectReport = null;
+    this.traceHistory.clear();
     this.emit();
   }
 
@@ -177,13 +227,16 @@ export class GameStore {
   loadState(state: GameState): void {
     this.state = state;
     this.lastEffectReport = null;
+    this.traceHistory.clear();
     this.emit();
   }
 
   /** 登基设定年号（写入 calendar.eraName）。 */
   setEraName(name: string): void {
-    this.state = { ...this.state, calendar: { ...this.state.calendar, eraName: name } };
-    this.emit();
+    this.tracedSet(
+      { ...this.state, calendar: { ...this.state.calendar, eraName: name } },
+      { kind: "action", sourceId: "setEraName", label: "setEraName" },
+    );
   }
 
   /**
@@ -193,30 +246,31 @@ export class GameStore {
   assignOfficialPost(db: ContentDB, officialId: string, newPostId: string | null): Result<void, GameError> {
     const result = assignOfficialPost(this.state, db, officialId, newPostId);
     if (!result.ok) return result;
-    this.state = result.value;
-    this.emit();
+    this.tracedSet(result.value, { kind: "action", sourceId: "assignOfficialPost", label: `assignOfficialPost: ${officialId}` });
     return ok(undefined);
   }
 
   /** 赏赐：扣库存并提升目标恩宠/好感（不耗行动点）。 */
   applyBestow(db: ContentDB, itemId: string, recipient: { kind: RecipientKind; id: string }): BestowResult {
     const result = bestow(this.state, db, itemId, recipient);
-    if (result.ok) { this.state = result.state; this.emit(); }
+    if (result.ok) {
+      this.tracedSet(result.state, { kind: "action", sourceId: "applyBestow", label: `bestow: ${itemId}` });
+    }
     return result;
   }
 
   /** 直接入库指定物品。 */
   applyGrantItem(itemId: string, count = 1): void {
-    this.state = grantItem(this.state, itemId, count);
-    this.emit();
+    this.tracedSet(grantItem(this.state, itemId, count),
+      { kind: "action", sourceId: "applyGrantItem", label: `grantItem: ${itemId}` });
   }
 
   /** 扣钱后入库；钱不足返回 false，state 不变。 */
   buyItem(itemId: string, price: number): boolean {
     const paid = spendCoins(this.state, price);
     if (!paid.ok) return false;
-    this.state = grantItem(paid.state, itemId, 1);
-    this.emit();
+    this.tracedSet(grantItem(paid.state, itemId, 1),
+      { kind: "action", sourceId: "buyItem", label: `buyItem: ${itemId}` });
     return true;
   }
 
@@ -226,22 +280,25 @@ export class GameStore {
     let next = this.state;
     for (const id of furs) next = grantItem(next, id, 1);
     next = { ...next, flags: { ...next.flags, [autumnHuntFlagKey(next.calendar.year)]: true } };
-    this.state = next;
-    this.emit();
+    this.tracedSet(next, { kind: "action", sourceId: "applyAutumnHunt", label: "autumnHunt" });
     return furs;
   }
 
   /** 拒绝秋猎，仅设年度 flag。 */
   declineAutumnHunt(): void {
     const year = this.state.calendar.year;
-    this.state = { ...this.state, flags: { ...this.state.flags, [autumnHuntFlagKey(year)]: true } };
-    this.emit();
+    this.tracedSet(
+      { ...this.state, flags: { ...this.state.flags, [autumnHuntFlagKey(year)]: true } },
+      { kind: "action", sourceId: "declineAutumnHunt", label: "declineAutumnHunt" },
+    );
   }
 
   /** 设/清一个布尔 flag（大选一次性标记）。 */
   setFlag(key: string, value: boolean): void {
-    this.state = { ...this.state, flags: { ...this.state.flags, [key]: value } };
-    this.emit();
+    this.tracedSet(
+      { ...this.state, flags: { ...this.state.flags, [key]: value } },
+      { kind: "action", sourceId: `setFlag:${key}`, label: `setFlag: ${key}` },
+    );
   }
 
   /**
@@ -396,15 +453,25 @@ export class GameStore {
     const source: TraceSource = { kind: "action", label: "applyEffects" };
     const result = applyEffects(db, this.state, effects, collector ? { collector } : {});
     if (result.ok) {
-      this.state = result.value;
+      const candidateState = result.value;
+      if (collector) {
+        // Build trace BEFORE committing state — strict mode may throw here.
+        const tx = this.buildTrace(beforeState, candidateState, source, collector, "committed");
+        this.state = candidateState;
+        this.traceHistory.push(tx);
+      } else {
+        this.state = candidateState;
+      }
       this.lastEffectReport = { effects, outcome: "applied", errors: [] };
-      if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
       this.emit();
     } else {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
-      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
-        result.error.map((e) => e.message).join("; "));
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          result.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
     }
     return result;
   }
@@ -429,6 +496,10 @@ export class GameStore {
     if (!planned.ok) {
       const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
       this.logger?.logGameError(error);
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back", planned.reason);
+        this.traceHistory.push(tx);
+      }
       return err([error]);
     }
     const plan = planned.plan;
@@ -436,8 +507,11 @@ export class GameStore {
     if (!applied.ok) {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: plan.effects, outcome: "rejected", errors: applied.error };
-      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
-        applied.error.map((e) => e.message).join("; "));
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          applied.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
       return err(applied.error);
     }
     let candidate = applied.value;
@@ -445,15 +519,24 @@ export class GameStore {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
-        if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
-          ap.error.map((e) => e.message).join("; "));
+        if (collector) {
+          const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+            ap.error.map((e) => e.message).join("; "));
+          this.traceHistory.push(tx);
+        }
         return err(ap.error); // this.state untouched — atomic
       }
       candidate = ap.value.state;
     }
-    this.state = candidate;
+    if (collector) {
+      // Build trace BEFORE committing state — strict mode may throw here.
+      const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
+      this.state = candidate;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = candidate;
+    }
     this.lastEffectReport = { effects: plan.effects, outcome: "applied", errors: [] };
-    if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
     this.emit();
     return ok(plan);
   }
@@ -473,6 +556,10 @@ export class GameStore {
     if (!planned.ok) {
       const error = stateError("HAREM_ADMIN_RANK_REJECTED", planned.reason);
       this.logger?.logGameError(error);
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back", planned.reason);
+        this.traceHistory.push(tx);
+      }
       return err([error]);
     }
     const plan = planned.plan;
@@ -480,8 +567,11 @@ export class GameStore {
     if (!applied.ok) {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: plan.effects, outcome: "rejected", errors: applied.error };
-      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
-        applied.error.map((e) => e.message).join("; "));
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          applied.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
       return err(applied.error);
     }
     let candidate = applied.value;
@@ -489,15 +579,23 @@ export class GameStore {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
-        if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
-          ap.error.map((e) => e.message).join("; "));
+        if (collector) {
+          const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+            ap.error.map((e) => e.message).join("; "));
+          this.traceHistory.push(tx);
+        }
         return err(ap.error); // this.state untouched — atomic
       }
       candidate = ap.value.state;
     }
-    this.state = candidate;
+    if (collector) {
+      const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
+      this.state = candidate;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = candidate;
+    }
     this.lastEffectReport = { effects: plan.effects, outcome: "applied", errors: [] };
-    if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
     this.emit();
     return ok(plan);
   }
@@ -517,15 +615,24 @@ export class GameStore {
     const source: TraceSource = { kind: "event", sourceId: eventId, label: `event: ${eventId}` };
     const result = resolveEvent(db, this.state, eventId, effects, collector ? { collector } : undefined);
     if (result.ok) {
-      this.state = result.value.state;
+      const candidateState = result.value.state;
+      if (collector) {
+        const tx = this.buildTrace(beforeState, candidateState, source, collector, "committed");
+        this.state = candidateState;
+        this.traceHistory.push(tx);
+      } else {
+        this.state = candidateState;
+      }
       this.lastEffectReport = { effects, outcome: "applied", errors: [] };
-      if (collector) this.commitTrace(beforeState, this.state, source, collector, "committed");
       this.emit();
     } else {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
-      if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
-        result.error.map((e) => e.message).join("; "));
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          result.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
     }
     return result;
   }
@@ -556,19 +663,35 @@ export class GameStore {
     if (actionEffects.length > 0) {
       const a = applyEffects(db, candidate, actionEffects, collector ? { collector } : {});
       if (!a.ok) {
-        if (collector) this.commitTrace(beforeState, beforeState, source, collector, "rolled_back",
-          a.error.map((e) => e.message).join("; "));
+        if (collector) {
+          const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+            a.error.map((e) => e.message).join("; "));
+          this.traceHistory.push(tx);
+        }
         return err(a.error);
       }
       candidate = a.value;
     }
-    const result = this.advanceCandidate(db, candidate, command, collector);
-    if (collector) {
-      this.commitTrace(beforeState, this.state, source, collector,
-        result.ok ? "committed" : "rolled_back",
-        result.ok ? undefined : result.error.map((e) => e.message).join("; "));
+    const advance = this.advanceCandidate(db, candidate, command, collector);
+    if (!advance.ok) {
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          advance.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
+      return err(advance.error);
     }
-    return result;
+    const { rolledOver, monthChanged, healthOutcome, nextState } = advance.value;
+    if (collector) {
+      // Build and validate trace BEFORE committing — strict mode may throw here.
+      const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
+      this.state = nextState;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = nextState;
+    }
+    this.emit();
+    return ok({ rolledOver, monthChanged, healthOutcome });
   }
 
   /**
@@ -590,38 +713,62 @@ export class GameStore {
     // 1) MOVE on a local candidate (no time advances yet — subject still where they were)
     let candidate = this.state;
     if (moveCommands.length > 0) {
+      const beforeMove = candidate;
       const m = applyBatch(candidate, moveCommands);
       if (!m.ok) return err([m.error]);
       candidate = m.value.state;
+      // Capture travel location change as a scheduled phase mutation.
+      collector?.capturePhaseScheduled("travel_move", diffGameState(beforeMove, candidate));
     }
-    const result = this.advanceCandidate(db, candidate, advanceCommand, collector);
+    const advance = this.advanceCandidate(db, candidate, advanceCommand, collector);
+    if (!advance.ok) {
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          advance.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
+      return err(advance.error);
+    }
+    const { rolledOver, monthChanged, healthOutcome, nextState } = advance.value;
     if (collector) {
-      this.commitTrace(beforeState, this.state, source, collector,
-        result.ok ? "committed" : "rolled_back",
-        result.ok ? undefined : result.error.map((e) => e.message).join("; "));
+      const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
+      this.state = nextState;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = nextState;
     }
-    return result;
+    this.emit();
+    return ok({ rolledOver, monthChanged, healthOutcome });
   }
 
   /**
-   * Shared core: advance the calendar on `candidate`, run the cross-month health
-   * tick, write gameOver on sovereign death, then commit ONCE. Atomic: any
-   * failure returns err and leaves `this.state` untouched.
+   * Shared core: advance the calendar on `candidate`, run cross-month health tick,
+   * write gameOver on sovereign death. Returns the final candidate state without
+   * committing — callers are responsible for `this.state = nextState; this.emit()`.
+   *
+   * Phase-local diffs are captured into `collector` (as "scheduled") so the trace
+   * panel can attribute calendar/daxuan/gameOver mutations to their correct phase
+   * instead of labelling them "untracked".
    */
   private advanceCandidate(
     db: ContentDB,
     candidateIn: GameState,
     command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
     collector?: TraceCollector,
-  ): Result<TimedOutcome, GameError[]> {
+  ): Result<{ rolledOver: boolean; monthChanged: boolean; healthOutcome: MonthlyTickResult | null; nextState: GameState }, GameError[]> {
     let candidate = candidateIn;
-    // 2) advance the calendar (pure reducer) on the candidate
+
+    // 2) Calendar advance (pure reducer).
     const before = monthOrdinal(candidate.calendar);
+    const beforeCalendar = candidate;
     const cmd = applyCommand(candidate, command);
     if (!cmd.ok) return err([cmd.error]);
     candidate = cmd.value.state;
+    collector?.capturePhaseScheduled("calendar_advance", diffGameState(beforeCalendar, candidate));
+
     const monthChanged = monthOrdinal(candidate.calendar) !== before;
-    // 3) cross-month health tick (the tick may throw on an unresolvable subject)
+
+    // 3) Cross-month health tick.
     let healthOutcome: MonthlyTickResult | null = null;
     if (monthChanged) {
       try {
@@ -629,19 +776,27 @@ export class GameStore {
       } catch (e) {
         return err([stateError("HEALTH_TICK_FAILED", String(e))]);
       }
+      const beforeTick = candidate;
       const h = collector
-        ? collector.withPhase("monthly_health_tick", () => applyEffects(db, candidate, healthOutcome!.effects, { collector }))
+        ? collector.withPhase("monthly_health_tick", () =>
+            applyEffects(db, candidate, healthOutcome!.effects, { collector }),
+          )
         : applyEffects(db, candidate, healthOutcome.effects);
       if (!h.ok) return err(h.error);
       candidate = h.value;
-      // 4) emperor death → gameOver in the SAME transaction (App must not write it)
+      // Capture anything the funnel may have missed (e.g. lifecycle from health to deceased).
+      collector?.capturePhaseScheduled("monthly_health_tick", diffGameState(beforeTick, candidate));
+
+      // 4) Sovereign death → gameOver.
       if (healthOutcome.sovereignDied) {
+        const beforeGameOver = candidate;
         candidate = { ...candidate, gameOver: { cause: "sovereign_death", at: toGameTime(candidate.calendar) } };
+        collector?.capturePhaseScheduled("game_over_resolution", diffGameState(beforeGameOver, candidate));
       }
     }
-    // 5) 统一探测/调和大选日历事件，使触发与具体行动路径（SPEND_AP / SKIP_REMAINDER /
-    //    travel / resolveTimedAction）解耦。先调和陈旧（对应 flag 已置）以免 sticky 永久
-    //    阻塞下一大选年；再于无待消费态时按到点（catch-up）置位。sticky：未决则保留。
+
+    // 5) Daxuan calendar event detection.
+    const beforeDaxuan = candidate;
     if (candidate.pendingDaxuan && isPendingDaxuanResolved(candidate, candidate.pendingDaxuan)) {
       candidate = { ...candidate, pendingDaxuan: undefined };
     }
@@ -649,16 +804,20 @@ export class GameStore {
       const pd = nextPendingDaxuan(candidate);
       if (pd) candidate = { ...candidate, pendingDaxuan: pd };
     }
-    // 6) 有期限禁足自动到期：在新旬开始时（早于一切候选生成）结案并记一次史。
+    collector?.capturePhaseScheduled("daxuan_detection", diffGameState(beforeDaxuan, candidate));
+
+    // 6) Expire confinements.
+    const beforeSweep = candidate;
     const swept = collector
-      ? collector.withPhase("sweep_expired_confinements", () => this.sweepExpiredConfinements(db, candidate, collector))
+      ? collector.withPhase("sweep_expired_confinements", () =>
+          this.sweepExpiredConfinements(db, candidate, collector),
+        )
       : this.sweepExpiredConfinements(db, candidate);
     if (!swept.ok) return err(swept.error);
     candidate = swept.value;
-    // single commit + single notify — only after every step succeeded
-    this.state = candidate;
-    this.emit();
-    return ok({ rolledOver: cmd.value.rolledOver, monthChanged, healthOutcome });
+    collector?.capturePhaseScheduled("sweep_expired_confinements", diffGameState(beforeSweep, candidate));
+
+    return ok({ rolledOver: cmd.value.rolledOver, monthChanged, healthOutcome, nextState: candidate });
   }
 
   /**

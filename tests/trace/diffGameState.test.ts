@@ -23,7 +23,7 @@ describe("diffGameState", () => {
     const before = makeStarted();
     const firstChar = Object.keys(before.standing)[0]!;
     const result = applyEffects(db, before, [{ type: "favor", char: firstChar, delta: 5 }]);
-    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
     const after = result.value;
     const diffs = diffGameState(before, after);
     const favorDiff = diffs.find((d) => d.path === `standing.${firstChar}.favor`);
@@ -47,7 +47,7 @@ describe("diffGameState", () => {
   it("detects flag changes", () => {
     const before = makeStarted();
     const result = applyEffects(db, before, [{ type: "flag", key: "test_flag", value: 1 }]);
-    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
     const diffs = diffGameState(before, result.value);
     const flagDiff = diffs.find((d) => d.path === "flags.test_flag");
     expect(flagDiff).toBeDefined();
@@ -58,7 +58,7 @@ describe("diffGameState", () => {
   it("detects resource sovereign changes", () => {
     const before = makeStarted();
     const result = applyEffects(db, before, [{ type: "resource", pillar: "sovereign", field: "prestige", delta: 3 }]);
-    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
     const diffs = diffGameState(before, result.value);
     const diff = diffs.find((d) => d.path === "resources.sovereign.prestige");
     expect(diff).toBeDefined();

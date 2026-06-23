@@ -10,8 +10,16 @@ const CLASS_MAP: Record<string, string> = {
 function fmt(value: unknown): string {
   if (value === undefined) return "—";
   if (value === null) return "null";
-  if (typeof value === "string") return `"${value}"`;
-  return String(value);
+  if (typeof value === "string") {
+    return value.length > 40 ? `"${value.slice(0, 40)}…"` : `"${value}"`;
+  }
+  if (typeof value !== "object") return String(value);
+  try {
+    const json = JSON.stringify(value);
+    return json.length > 80 ? `${json.slice(0, 80)}…` : json;
+  } catch {
+    return "[circular]";
+  }
 }
 
 export function TraceMutationRow({ mut }: { mut: MutationRecord }) {

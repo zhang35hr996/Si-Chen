@@ -986,17 +986,17 @@ export function applyEffects(
         break;
       }
       case "confine": {
-        const beforeLen = next.statusEffects.length;
-        next.statusEffects.push({
+        const newSe = {
           id: nextStatusEffectId(next, effect.char),
-          kind: "confinement",
+          kind: "confinement" as const,
           characterId: effect.char,
           startTurn: effect.startTurn,
           endTurnExclusive: effect.endTurnExclusive,
           imposedAt: effect.imposedAt,
-          imposedBy: "emperor",
+          imposedBy: "emperor" as const,
           ...(effect.sourceLocation !== undefined ? { sourceLocation: effect.sourceLocation } : {}),
-        });
+        };
+        next.statusEffects.push(newSe);
         // 取消与禁足冲突的留宿/免请安计划（角色被锁在本宫）。
         if (next.overnightWith?.charId === effect.char) delete next.overnightWith;
         if (next.excusedFromGreeting?.charIds.includes(effect.char)) {
@@ -1005,17 +1005,17 @@ export function applyEffects(
             charIds: next.excusedFromGreeting.charIds.filter((id) => id !== effect.char),
           };
         }
+        // Canonical path: statusEffects.<id> — matches ID-aligned boundary diff.
         collector?.record({
           effectType: "confine", effectIndex,
-          path: "statusEffects",
-          before: beforeLen, after: next.statusEffects.length, delta: 1,
+          path: `statusEffects.${newSe.id}`,
+          before: undefined, after: newSe,
           reason: `confine ${effect.char}${effect.endTurnExclusive !== null ? `, until turn ${effect.endTurnExclusive}` : " (indefinite)"}`,
         });
         break;
       }
       case "lift_confinement": {
         const turn = effect.at.dayIndex;
-        let lifted = false;
         for (const se of next.statusEffects) {
           if (se.kind !== "confinement" || se.characterId !== effect.char || se.liftedTurn !== undefined) continue;
           if (effect.reason === "term_expired") {
@@ -1024,14 +1024,23 @@ export function applyEffects(
               se.liftedTurn = se.endTurnExclusive;
               se.liftedAt = effect.at;
               se.liftReason = "term_expired";
-              lifted = true;
+              // Canonical path: statusEffects.<id>.liftedTurn — matches ID-aligned boundary diff.
+              collector?.record({
+                effectType: "lift_confinement", effectIndex,
+                path: `statusEffects.${se.id}.liftedTurn`,
+                before: undefined, after: se.liftedTurn, reason: "term_expired",
+              });
             }
           } else if (turn >= se.startTurn && (se.endTurnExclusive === null || turn < se.endTurnExclusive)) {
             // 皇帝下旨解除：收掉当旬活跃记录，当旬立即失效。
             se.liftedTurn = turn;
             se.liftedAt = effect.at;
             se.liftReason = "lifted_by_emperor";
-            lifted = true;
+            collector?.record({
+              effectType: "lift_confinement", effectIndex,
+              path: `statusEffects.${se.id}.liftedTurn`,
+              before: undefined, after: se.liftedTurn, reason: "lifted_by_emperor",
+            });
           }
         }
         // 凤后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
@@ -1039,11 +1048,6 @@ export function applyEffects(
         if (next.standing[effect.char]?.rank === "fenghou" && next.haremAdministration.mode !== "empress") {
           next.haremAdministration = { mode: "empress" };
         }
-        if (lifted) collector?.record({
-          effectType: "lift_confinement", effectIndex,
-          path: `statusEffects[confinement:${effect.char}].liftedTurn`,
-          before: undefined, after: turn, reason: effect.reason,
-        });
         if (beforeAdminMode !== next.haremAdministration.mode) collector?.record({
           effectType: "lift_confinement", effectIndex,
           path: "haremAdministration.mode",
@@ -1144,9 +1148,8 @@ export function applyEffects(
       }
       case "memory": {
         const store = next.memories[effect.char]!;
-        const beforeCount = store.entries.length;
         const d = effect.entry;
-        store.entries.push({
+        const newEntry = {
           id: memoryEntryId(effect.char, store.nextSeq),
           ownerId: effect.char,
           kind: d.kind,
@@ -1160,12 +1163,14 @@ export function applyEffects(
           triggerTags: [...d.triggerTags],
           unresolved: d.unresolved,
           createdAt: now,
-        });
+        };
+        store.entries.push(newEntry);
         store.nextSeq += 1;
+        // Record with full entry payload so the trace panel can inspect memory content.
         collector?.record({
           effectType: "memory", effectIndex,
-          path: `memories.${effect.char}.entries`,
-          before: beforeCount, after: store.entries.length, delta: 1,
+          path: `memories.${effect.char}.entries.${newEntry.id}`,
+          before: undefined, after: newEntry,
           reason: d.summary.length > 60 ? d.summary.slice(0, 60) + "…" : d.summary,
         });
         break;
