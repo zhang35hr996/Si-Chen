@@ -293,3 +293,28 @@ describe("ChengfengDispatch", () => {
     expect(container.querySelector(".modal-backdrop")).toBeNull();
   });
 });
+
+describe("ChengfengDispatch — true modal focus containment (Blocker 2)", () => {
+  it("Tab and Shift+Tab cycle within the dialog; outside buttons are unreachable", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">outside-before</button>
+        <ChengfengDispatch interruptible {...handlers} />
+        <button type="button">outside-after</button>
+      </>,
+    );
+    const before = screen.getByRole("button", { name: "outside-before" });
+    const after = screen.getByRole("button", { name: "outside-after" });
+    for (let i = 0; i < 10; i++) {
+      await user.tab();
+      expect(before).not.toHaveFocus();
+      expect(after).not.toHaveFocus();
+    }
+    for (let i = 0; i < 10; i++) {
+      await user.tab({ shift: true });
+      expect(before).not.toHaveFocus();
+      expect(after).not.toHaveFocus();
+    }
+  });
+});

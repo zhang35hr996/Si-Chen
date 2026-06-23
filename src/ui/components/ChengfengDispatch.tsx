@@ -12,6 +12,7 @@
  * 业务面板（册封/搬迁/赏赐等）自行接管焦点，乘风不抢回旧触发点。
  */
 import { useEffect, useId, useRef, useState } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 export interface ChengfengDispatchProps {
   /** 当前场景是否可被打断而传令；false（关键事件/原子操作）→ 五道谕令禁用并显 disabledReason。 */
@@ -46,6 +47,7 @@ export function ChengfengDispatch({
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const prevFocusRef = useRef<Element | null>(null);
+  useFocusTrap(dialogRef); // 真模态：Tab/Shift+Tab 循环锁在面板内，焦点不抵达背景控件
   const restoreFocusOnUnmountRef = useRef(true); // 取消路径还焦；选定谕令的业务交接路径不还焦
   const titleId = useId();
   // 五道谕令：不可中断 或 已派发 即禁用；「作罢」仅在已派发（终结动作已用）后禁用——

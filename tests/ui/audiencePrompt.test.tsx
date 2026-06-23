@@ -163,3 +163,29 @@ describe("AudiencePrompt — identity-aware initial focus (Blocker 2)", () => {
     expect(screen.getByRole("button", { name: "记入待宣" })).toHaveFocus(); // refocus on the new prompt's enabled target
   });
 });
+
+describe("AudiencePrompt — intentionally non-modal (Blocker 2: no focus trap)", () => {
+  it("does not trap Tab — focus can leave the prompt to an outside button", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <AudiencePrompt {...base} />
+        <button type="button">outside-after</button>
+      </>,
+    );
+    const after = screen.getByRole("button", { name: "outside-after" });
+    expect(screen.getByRole("button", { name: "宣进来" })).toHaveFocus(); // initial focus
+    // tabbing through 宣进来 → 记入待宣 → out to the background button (non-modal: no wrap)
+    for (let i = 0; i < 4 && document.activeElement !== after; i++) {
+      await user.tab();
+    }
+    expect(after).toHaveFocus();
+  });
+
+  it("has no full-screen modal layer (stays in the scene narrative slot)", () => {
+    const { container } = render(<AudiencePrompt {...base} />);
+    expect(container.querySelector(".pending-drawer-layer")).toBeNull();
+    expect(container.querySelector(".chengfeng-dispatch-layer")).toBeNull();
+    expect(container.querySelector(".modal-backdrop")).toBeNull();
+  });
+});

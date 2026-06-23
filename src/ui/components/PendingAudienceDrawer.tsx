@@ -4,10 +4,12 @@
  * 不直接启动事件——直接渲染 props.items，动作只经回调输出。视图模型由 ZichendianScreen（或其容器）从
  * 引擎 AudienceItem 映射而来。
  *
- * 前景 sheet/drawer：自持 role="dialog"+aria-modal、初始焦点（关闭按钮，busy 时为对话容器）、Escape=关闭、
- * 抽屉级同步去重（一次开启会话至多一个终结动作）、卸载时把焦点还给开启它的元素。
+ * 真模态 sheet/drawer：全屏层 .pending-drawer-layer（fixed/inset:0）拦截背景指针；面板自持 role="dialog"
+ * +aria-modal、初始焦点（关闭按钮，busy 时为对话容器）、Tab/Shift+Tab 焦点限制、Escape=关闭、抽屉级同步去重
+ * （一次开启会话至多一个终结动作）、卸载时把焦点还给开启它的元素。不在背景层点击时关闭。
  */
 import { useEffect, useId, useRef, useState } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 export interface PendingAudienceViewItem {
   eventId: string;
@@ -38,6 +40,7 @@ export function PendingAudienceDrawer({ items, busy = false, onAdmit, onClose }:
   const prevFocusRef = useRef<Element | null>(null);
   const titleId = useId();
   const locked = busy || dispatched;
+  useFocusTrap(dialogRef); // 真模态：Tab/Shift+Tab 循环锁在抽屉内，焦点不抵达背景控件
 
   const claim = (): boolean => {
     if (dispatchedRef.current || busy) return false;
@@ -85,7 +88,9 @@ export function PendingAudienceDrawer({ items, busy = false, onAdmit, onClose }:
   }, []);
 
   return (
-    <div className="pending-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={dialogRef} tabIndex={-1}>
+    // 全屏模态层：遮挡并拦截背景指针；不承担 dialog 语义，仅含唯一 landmark。不在背景点击时关闭。
+    <div className="pending-drawer-layer">
+      <div className="pending-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={dialogRef} tabIndex={-1}>
       <header className="pending-drawer__header">
         <h2 id={titleId} className="pending-drawer__title">待宣事务</h2>
         <button ref={closeBtnRef} type="button" className="action-btn" onClick={close} disabled={locked}>
@@ -127,6 +132,7 @@ export function PendingAudienceDrawer({ items, busy = false, onAdmit, onClose }:
             ))}
           </ul>
         )}
+      </div>
       </div>
     </div>
   );

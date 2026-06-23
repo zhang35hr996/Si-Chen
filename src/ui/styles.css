@@ -3423,20 +3423,23 @@ button:active:enabled {
 @media (prefers-reduced-motion: reduce) { .audience-prompt { animation: none; } }
 
 /* ── 待宣事务抽屉（宽屏右侧 drawer / 窄屏底部 sheet）─────────────────────── */
-.pending-drawer {
+/* 全屏模态层：fixed/inset:0 拦截背景指针并压暗；宽屏把面板靠右、窄屏靠底。不在背景点击时关闭。 */
+.pending-drawer-layer {
   position: fixed;
+  inset: 0;
   z-index: 60;
   display: flex;
+  justify-content: flex-end; /* 宽屏：右侧抽屉 */
+  align-items: stretch;
+  background: rgba(8, 6, 4, 0.55);
+}
+.pending-drawer {
+  display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--ink-750), var(--ink-850));
-  border: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-deep);
-  /* 宽屏：右侧抽屉 */
-  top: 0;
-  right: 0;
-  bottom: 0;
   width: min(420px, 92vw);
-  border-right: none;
+  background: linear-gradient(180deg, var(--ink-750), var(--ink-850));
+  border-left: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-deep);
   animation: slide-in-right 0.28s ease both;
 }
 .pending-drawer__header {
@@ -3489,12 +3492,11 @@ button:active:enabled {
 .pending-drawer__reason { color: var(--cinnabar-soft); font-size: 0.8rem; }
 @media (max-width: 560px) {
   /* 窄屏：底部 sheet */
+  .pending-drawer-layer { justify-content: stretch; align-items: flex-end; }
   .pending-drawer {
-    top: auto;
-    left: 0;
-    right: 0;
-    width: auto;
+    width: 100%;
     max-height: 82dvh;
+    border-left: none;
     border-radius: 12px 12px 0 0;
     animation: slide-in-up 0.28s ease both;
   }

@@ -179,3 +179,64 @@ describe("PendingAudienceDrawer", () => {
     expect(frozen).toHaveLength(3);
   });
 });
+
+describe("PendingAudienceDrawer — true modal containment (Blocker 2)", () => {
+  it("1. outside buttons before/after the drawer cannot be reached by Tab or Shift+Tab", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">outside-before</button>
+        <PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />
+        <button type="button">outside-after</button>
+      </>,
+    );
+    const before = screen.getByRole("button", { name: "outside-before" });
+    const after = screen.getByRole("button", { name: "outside-after" });
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus(); // initial focus inside
+    for (let i = 0; i < 8; i++) {
+      await user.tab();
+      expect(before).not.toHaveFocus();
+      expect(after).not.toHaveFocus();
+    }
+    for (let i = 0; i < 8; i++) {
+      await user.tab({ shift: true });
+      expect(before).not.toHaveFocus();
+      expect(after).not.toHaveFocus();
+    }
+  });
+
+  it("disabled admit (陆参) is excluded from the focus cycle", async () => {
+    const user = userEvent.setup();
+    render(<PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />);
+    const disabled = admitFor("陆参");
+    for (let i = 0; i < 6; i++) {
+      await user.tab();
+      expect(disabled).not.toHaveFocus(); // disabled element never receives focus
+    }
+  });
+
+  it("2. clicking the backdrop layer invokes no underlying action and does not close", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onAdmit = vi.fn();
+    const underlying = vi.fn();
+    const { container } = render(
+      <>
+        <button type="button" onClick={underlying}>background action</button>
+        <PendingAudienceDrawer items={items} onAdmit={onAdmit} onClose={onClose} />
+      </>,
+    );
+    const layer = container.querySelector(".pending-drawer-layer")!;
+    await user.click(layer);
+    expect(onClose).not.toHaveBeenCalled(); // no close on backdrop click
+    expect(onAdmit).not.toHaveBeenCalled();
+    expect(underlying).not.toHaveBeenCalled(); // layer does not pass the click through
+  });
+
+  it("structure: a full-screen layer wraps the single dialog (no nested dialog)", () => {
+    const { container } = render(<PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />);
+    expect(container.querySelectorAll(".pending-drawer-layer")).toHaveLength(1);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(container.querySelector(".pending-drawer-layer")).not.toHaveAttribute("role", "dialog");
+  });
+});
