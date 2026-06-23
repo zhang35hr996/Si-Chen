@@ -13,6 +13,13 @@ import type {
   KnowledgeVisibility,
 } from "../model";
 
+export class NoEmbeddingsForModelError extends Error {
+  constructor(modelKey: string) {
+    super(`[vector-index] no embeddings found for modelKey="${modelKey}" — run knowledge:embed first`);
+    this.name = "NoEmbeddingsForModelError";
+  }
+}
+
 export interface KnowledgeVectorQuery {
   /** Pre-computed query embedding vector. */
   readonly vector: readonly number[];
@@ -56,11 +63,22 @@ export interface EmbeddingSyncStats {
   readonly dimensions: number;
 }
 
+/** Cache metadata returned when an entry exists; null when absent. */
+export interface EmbeddingCacheMeta {
+  readonly dimensions: number;
+}
+
 /** Vector search and embedding persistence interface. */
 export interface KnowledgeVectorIndex {
   /**
-   * Returns true when the embedding cache already contains a vector for the
-   * given (modelKey, contentHash) pair.
+   * Returns cache metadata (at minimum: dimensions) for the given
+   * (modelKey, contentHash) pair, or null if no entry exists.
+   */
+  getCachedEmbeddingMeta(modelKey: string, contentHash: string): EmbeddingCacheMeta | null;
+
+  /**
+   * Returns true when the embedding cache contains an entry for (modelKey, contentHash).
+   * Convenience wrapper around getCachedEmbeddingMeta.
    */
   hasCachedEmbedding(modelKey: string, contentHash: string): boolean;
 
@@ -98,8 +116,11 @@ export interface KnowledgeVectorIndex {
    * for the requested modelKey, then computes cosine similarity in Node and
    * returns the top-k sorted by score descending.
    *
-   * Throws (does not swallow) when the query vector dimension does not match
-   * the stored dimension, or when the modelKey has no embeddings.
+   * Throws `NoEmbeddingsForModelError` when the modelKey has no embeddings at
+   * all (not indexed yet).  Returns `[]` (empty, not an error) when embeddings
+   * exist but no chunks survive the metadata filters.
+   *
+   * Throws on query vector dimension mismatch with stored vectors.
    */
   search(query: KnowledgeVectorQuery): KnowledgeVectorHit[];
 

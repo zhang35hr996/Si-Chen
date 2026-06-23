@@ -50,6 +50,19 @@ export function reciprocalRankFusion(hits: readonly RrfInput[], opts: RrfOptions
   const kwW = opts.keywordWeight ?? 1;
   const vecW = opts.vectorWeight ?? 1;
 
+  if (!isFinite(k) || k <= 0) {
+    throw new RangeError(`[reciprocalRankFusion] k must be finite and > 0, got ${k}`);
+  }
+  if (!isFinite(kwW) || kwW < 0) {
+    throw new RangeError(`[reciprocalRankFusion] keywordWeight must be finite and ≥ 0, got ${kwW}`);
+  }
+  if (!isFinite(vecW) || vecW < 0) {
+    throw new RangeError(`[reciprocalRankFusion] vectorWeight must be finite and ≥ 0, got ${vecW}`);
+  }
+  if (kwW === 0 && vecW === 0) {
+    throw new RangeError(`[reciprocalRankFusion] at least one weight must be > 0`);
+  }
+
   const scored: RrfOutput[] = hits.map((hit) => {
     const kwScore = hit.keywordRank !== null ? kwW / (k + hit.keywordRank) : 0;
     const vScore = hit.vectorRank !== null ? vecW / (k + hit.vectorRank) : 0;

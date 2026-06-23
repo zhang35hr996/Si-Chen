@@ -32,16 +32,18 @@ import Database from "better-sqlite3";
 import type { KnowledgeChunk, KnowledgeSourceType } from "../model";
 import { visibilitiesAtOrBelow } from "../model";
 import type { EmbeddingProvider } from "../embedding/provider";
-import { validateEmbeddingResult } from "../embedding/validation";
+import { validateEmbeddingResult, EmbeddingValidationError } from "../embedding/validation";
 import { contentHash, compileKnowledgeEmbeddingText } from "../embedding/document-text";
 import { cosineSimilarity } from "./cosine";
 import { decodeVector, encodeVector } from "./vector-codec";
 import type {
+  EmbeddingCacheMeta,
   EmbeddingSyncStats,
   KnowledgeVectorHit,
   KnowledgeVectorIndex,
   KnowledgeVectorQuery,
 } from "./vector-index";
+import { NoEmbeddingsForModelError } from "./vector-index";
 import { fromTurnIndex } from "../../calendar/time";
 
 // ── Database row type ─────────────────────────────────────────────────────────
@@ -95,13 +97,17 @@ export class SqliteVectorIndex implements KnowledgeVectorIndex {
     `);
   }
 
-  hasCachedEmbedding(modelKey: string, hash: string): boolean {
+  getCachedEmbeddingMeta(modelKey: string, hash: string): EmbeddingCacheMeta | null {
     const row = this.db
       .prepare(
-        "SELECT 1 FROM knowledge_embedding_cache WHERE model_key = ? AND content_hash = ?",
+        "SELECT dimensions FROM knowledge_embedding_cache WHERE model_key = ? AND content_hash = ?",
       )
-      .get(modelKey, hash);
-    return row !== undefined;
+      .get(modelKey, hash) as { dimensions: number } | undefined;
+    return row ? { dimensions: row.dimensions } : null;
+  }
+
+  hasCachedEmbedding(modelKey: string, hash: string): boolean {
+    return this.getCachedEmbeddingMeta(modelKey, hash) !== null;
   }
 
   persistEmbeddings(
@@ -131,7 +137,6 @@ export class SqliteVectorIndex implements KnowledgeVectorIndex {
     const tx = this.db.transaction(() => {
       for (const entry of entries) {
         if (entry.vector !== undefined) {
-          // New embedding — write cache entry then mapping
           upsertCache.run(
             modelKey,
             entry.contentHash,
@@ -139,7 +144,6 @@ export class SqliteVectorIndex implements KnowledgeVectorIndex {
             encodeVector(entry.vector),
           );
         }
-        // Always write / refresh the chunk→cache mapping
         upsertMapping.run(entry.chunkId, modelKey, entry.contentHash);
       }
 
@@ -161,6 +165,14 @@ export class SqliteVectorIndex implements KnowledgeVectorIndex {
   }
 
   search(query: KnowledgeVectorQuery): KnowledgeVectorHit[] {
+    // Throw when the model has no embeddings at all (not just filtered-out).
+    const modelCount = this.db
+      .prepare("SELECT COUNT(*) AS cnt FROM knowledge_chunk_embeddings WHERE model_key = ?")
+      .get(query.modelKey) as { cnt: number };
+    if (modelCount.cnt === 0) {
+      throw new NoEmbeddingsForModelError(query.modelKey);
+    }
+
     const limit = Math.max(1, Math.min(query.limit, 10000));
     const ceiling = query.visibilityCeiling ?? "public";
     const allowedVisibilities = visibilitiesAtOrBelow(ceiling);
@@ -226,12 +238,10 @@ export class SqliteVectorIndex implements KnowledgeVectorIndex {
       params.push(...query.sourceTypes);
     }
 
-    // Visibility ceiling
     const visPh = allowedVisibilities.map(() => "?").join(",");
     conditions.push(`c.visibility IN (${visPh})`);
     params.push(...allowedVisibilities);
 
-    // Temporal filter
     if (query.currentTime !== undefined) {
       const day = query.currentTime.dayIndex;
       conditions.push("(c.valid_from_day IS NULL OR c.valid_from_day <= ?)");
@@ -268,9 +278,9 @@ export class SqliteVectorIndex implements KnowledgeVectorIndex {
     const allParams: (string | number | null)[] = [query.modelKey, ...params];
     const rows = this.db.prepare(sql).all(...allParams) as CandidateRow[];
 
+    // Empty result after filtering is valid (not an error).
     if (rows.length === 0) return [];
 
-    // Validate dimension consistency using first row
     const firstRow = rows[0]!;
     if (firstRow.dimensions !== query.vector.length) {
       throw new Error(
@@ -330,7 +340,10 @@ export interface SyncEmbeddingsOptions {
   chunks: readonly KnowledgeChunk[];
   provider: EmbeddingProvider;
   vectorIndex: SqliteVectorIndex;
-  /** Number of chunks per provider batch call. Default 100, max 2048. */
+  /**
+   * Number of chunks per provider batch call.
+   * Must be an integer in [1, 2048].  Default 100.
+   */
   batchSize?: number;
   signal?: AbortSignal;
 }
@@ -339,17 +352,30 @@ export interface SyncEmbeddingsOptions {
  * Syncs embeddings for all supplied chunks against the provider's model.
  *
  * Contract:
- *  1. Compiles deterministic embedding text + SHA-256 hash per chunk.
- *  2. Cache-checks (model_key, content_hash) without a held transaction.
- *  3. Provider is called ONLY for cache misses; calls are batched.
- *  4. All batch results are validated before any DB write.
- *  5. All cache writes, mapping writes, and stale-mapping pruning happen in a
+ *  1. `batchSize` must be an integer in [1, 2048]; throws immediately otherwise.
+ *  2. Compiles deterministic embedding text + SHA-256 hash per chunk.
+ *  3. Cache-checks (model_key, content_hash) without a held transaction.
+ *     Deduplicates by hash: identical chunks count as one miss.
+ *  4. Provider is called ONLY for cache misses; calls are batched.
+ *  5. Dimensions are validated to be CONSISTENT ACROSS ALL BATCHES.
+ *     A second batch returning a different dimension count is a hard error;
+ *     the DB is not written (no partial state committed).
+ *  6. All batch results are validated before any DB write.
+ *  7. All cache writes, mapping writes, and stale-mapping pruning happen in a
  *     SINGLE atomic transaction.  A batch failure leaves existing state intact.
  */
 export async function syncEmbeddings(opts: SyncEmbeddingsOptions): Promise<EmbeddingSyncStats> {
   const { chunks, provider, vectorIndex, signal } = opts;
-  const batchSize = Math.min(opts.batchSize ?? 100, 2048);
   const modelKey = provider.modelKey;
+
+  // 0. Validate batchSize before doing any work.
+  const bs = opts.batchSize ?? 100;
+  if (!Number.isInteger(bs) || bs < 1 || bs > 2048) {
+    throw new RangeError(
+      `[syncEmbeddings] batchSize must be an integer in [1, 2048], got ${bs}`,
+    );
+  }
+  const batchSize = bs;
 
   if (chunks.length === 0) {
     return { totalChunks: 0, cacheHits: 0, embeddedChunks: 0, batches: 0, modelKey, dimensions: 0 };
@@ -363,15 +389,15 @@ export async function syncEmbeddings(opts: SyncEmbeddingsOptions): Promise<Embed
   });
 
   // 2. Separate cache hits from misses (no DB transaction held).
-  //    Dedup by content hash so identical chunks don't trigger multiple provider calls.
+  //    Dedup by content hash: identical-content chunks count as one miss.
   const seenHashes = new Set<string>();
-  const misses: typeof items = []; // first occurrence of each unique uncached hash
+  const misses: typeof items = [];
   let cacheHits = 0;
   for (const item of items) {
     if (vectorIndex.hasCachedEmbedding(modelKey, item.hash)) {
       cacheHits++;
     } else if (seenHashes.has(item.hash)) {
-      cacheHits++; // same content, will be covered by the first occurrence
+      cacheHits++; // same content, covered by the first occurrence
     } else {
       seenHashes.add(item.hash);
       misses.push(item);
@@ -379,8 +405,11 @@ export async function syncEmbeddings(opts: SyncEmbeddingsOptions): Promise<Embed
   }
 
   // 3. Batch-call provider for misses; accumulate results before writing.
+  //    Track a single expected dimension across all batches — any deviation
+  //    is a hard error (prevents silently committing a corrupted cache).
   const newVectors = new Map<string, { vector: readonly number[]; dimensions: number }>();
   const batchCount = Math.ceil(misses.length / batchSize);
+  let expectedDimensions: number | undefined;
 
   for (let b = 0; b < batchCount; b++) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -392,8 +421,18 @@ export async function syncEmbeddings(opts: SyncEmbeddingsOptions): Promise<Embed
       signal,
     });
 
-    // 4. Validate before touching the DB
+    // 4a. Per-result validation (cardinality, dims, finite, non-zero)
     validateEmbeddingResult(result, batch.length);
+
+    // 4b. Cross-batch dimension consistency
+    if (expectedDimensions === undefined) {
+      expectedDimensions = result.dimensions;
+    } else if (result.dimensions !== expectedDimensions) {
+      throw new EmbeddingValidationError(
+        `[syncEmbeddings] cross-batch dimension mismatch: batch ${b} returned ` +
+          `${result.dimensions} dims but prior batches returned ${expectedDimensions}`,
+      );
+    }
 
     for (let i = 0; i < batch.length; i++) {
       const item = batch[i]!;
@@ -401,23 +440,36 @@ export async function syncEmbeddings(opts: SyncEmbeddingsOptions): Promise<Embed
     }
   }
 
-  // Determine final dimensions
+  // Determine final dimensions.
+  // When newVectors.size > 0, use the validated expectedDimensions.
+  // When all items were DB cache hits, look up dimensions from the cache.
+  // (DB cache hits + in-batch dedup: items[0].hash is guaranteed to be in
+  // the cache because hasCachedEmbedding(items[0].hash) returned true.)
   let dimensions = 0;
-  if (newVectors.size > 0) {
-    dimensions = [...newVectors.values()][0]!.dimensions;
+  if (expectedDimensions !== undefined) {
+    dimensions = expectedDimensions;
+
+    // Also validate that cache-hit entries share the same dimension.
+    // This protects against mixing models where a wrong modelKey was reused.
+    if (cacheHits > 0) {
+      const firstCacheHit = items.find((it) => !seenHashes.has(it.hash) || vectorIndex.hasCachedEmbedding(modelKey, it.hash));
+      if (firstCacheHit) {
+        const meta = vectorIndex.getCachedEmbeddingMeta(modelKey, firstCacheHit.hash);
+        if (meta && meta.dimensions !== dimensions) {
+          throw new EmbeddingValidationError(
+            `[syncEmbeddings] dimension mismatch between cached entries (${meta.dimensions}) ` +
+              `and new embeddings (${dimensions}) for modelKey="${modelKey}"`,
+          );
+        }
+      }
+    }
   } else if (cacheHits > 0) {
-    // All items are DB cache hits or in-batch duplicates of DB cache hits, so
-    // items[0].hash is guaranteed to exist in the cache for this modelKey.
-    const firstHash = items[0]!.hash;
-    const cached = vectorIndex.db
-      .prepare(
-        "SELECT dimensions FROM knowledge_embedding_cache WHERE model_key = ? AND content_hash = ?",
-      )
-      .get(modelKey, firstHash) as { dimensions: number } | undefined;
-    dimensions = cached?.dimensions ?? 0;
+    // All items are DB cache hits or in-batch duplicates of DB cache hits.
+    const meta = vectorIndex.getCachedEmbeddingMeta(modelKey, items[0]!.hash);
+    dimensions = meta?.dimensions ?? 0;
   }
 
-  // 5. Build the full entries list and write in ONE transaction
+  // 5. Build the full entries list and write in ONE transaction.
   const allEntries = items.map((item) => {
     const newEntry = newVectors.get(item.hash);
     return {

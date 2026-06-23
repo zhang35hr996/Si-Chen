@@ -6,6 +6,7 @@ import type { KnowledgeChunk } from "../../../src/engine/knowledge/model";
 import { SqliteKeywordIndex } from "../../../src/engine/knowledge/index/sqlite-fts5";
 import { SqliteVectorIndex, syncEmbeddings } from "../../../src/engine/knowledge/vector/sqlite-vector-index";
 import { FakeEmbeddingProvider, sequentialVectorFactory } from "../embedding/fake-provider";
+import type { EmbeddingProvider } from "../../../src/engine/knowledge/embedding/provider";
 import { makeGameTime } from "../../../src/engine/calendar/time";
 
 const DIMS = 4;
@@ -166,6 +167,86 @@ describe("syncEmbeddings", () => {
     expect(stats.batches).toBe(3); // 2+2+1
     expect(stats.embeddedChunks).toBe(5);
   });
+
+  // ── batchSize validation ───────────────────────────────────────────────────
+
+  it("throws RangeError for batchSize = 0", async () => {
+    const chunk = makeChunk({ id: "c1", text: "text" });
+    kwIndex.rebuild([chunk]);
+    await expect(
+      syncEmbeddings({ chunks: [chunk], provider: makeProvider(), vectorIndex: vecIndex, batchSize: 0 }),
+    ).rejects.toThrow(/batchSize/i);
+  });
+
+  it("throws RangeError for negative batchSize", async () => {
+    const chunk = makeChunk({ id: "c1", text: "text" });
+    kwIndex.rebuild([chunk]);
+    await expect(
+      syncEmbeddings({ chunks: [chunk], provider: makeProvider(), vectorIndex: vecIndex, batchSize: -5 }),
+    ).rejects.toThrow(/batchSize/i);
+  });
+
+  it("throws RangeError for fractional batchSize", async () => {
+    const chunk = makeChunk({ id: "c1", text: "text" });
+    kwIndex.rebuild([chunk]);
+    await expect(
+      syncEmbeddings({ chunks: [chunk], provider: makeProvider(), vectorIndex: vecIndex, batchSize: 1.5 }),
+    ).rejects.toThrow(/batchSize/i);
+  });
+
+  it("throws RangeError for batchSize > 2048", async () => {
+    const chunk = makeChunk({ id: "c1", text: "text" });
+    kwIndex.rebuild([chunk]);
+    await expect(
+      syncEmbeddings({ chunks: [chunk], provider: makeProvider(), vectorIndex: vecIndex, batchSize: 2049 }),
+    ).rejects.toThrow(/batchSize/i);
+  });
+
+  it("accepts batchSize = 1", async () => {
+    const chunk = makeChunk({ id: "c1", text: "text" });
+    kwIndex.rebuild([chunk]);
+    const stats = await syncEmbeddings({
+      chunks: [chunk], provider: makeProvider(), vectorIndex: vecIndex, batchSize: 1,
+    });
+    expect(stats.batches).toBe(1);
+  });
+
+  it("accepts batchSize = 2048", async () => {
+    const chunk = makeChunk({ id: "c1", text: "text" });
+    kwIndex.rebuild([chunk]);
+    const stats = await syncEmbeddings({
+      chunks: [chunk], provider: makeProvider(), vectorIndex: vecIndex, batchSize: 2048,
+    });
+    expect(stats.batches).toBe(1);
+  });
+
+  // ── cross-batch dimension consistency ────────────────────────────────────────
+
+  it("throws EmbeddingValidationError when second batch returns different dimensions", async () => {
+    // Provider alternates between 4-dim and 2-dim responses across batches.
+    let batchCalls = 0;
+    const fakeDimShift: EmbeddingProvider = {
+      providerId: "openai",
+      model: "dim-shift",
+      modelKey: "openai:dim-shift",
+      async embed(req) {
+        const dims = batchCalls++ === 0 ? 4 : 2; // first batch=4, second batch=2
+        return {
+          vectors: req.texts.map(() => Array.from({ length: dims }, (_, j) => j === 0 ? 1 : 0) as readonly number[]),
+          provider: "openai" as const,
+          model: "dim-shift",
+          dimensions: dims,
+        };
+      },
+    };
+
+    const chunks = [makeChunk({ id: "c1", text: "text1" }), makeChunk({ id: "c2", text: "text2" })];
+    kwIndex.rebuild(chunks);
+
+    await expect(
+      syncEmbeddings({ chunks, provider: fakeDimShift, vectorIndex: vecIndex, batchSize: 1 }),
+    ).rejects.toThrow(/dimension/i);
+  });
 });
 
 // ── search ────────────────────────────────────────────────────────────────────
@@ -176,9 +257,10 @@ describe("SqliteVectorIndex.search", () => {
     await syncEmbeddings({ chunks, provider, vectorIndex: vecIndex });
   }
 
-  it("returns empty array when no embeddings for modelKey", () => {
-    const hits = vecIndex.search({ vector: [1, 0, 0, 0], modelKey: "openai:none", limit: 5, visibilityCeiling: "imperial" });
-    expect(hits).toHaveLength(0);
+  it("throws NoEmbeddingsForModelError when no embeddings exist for modelKey", () => {
+    expect(() =>
+      vecIndex.search({ vector: [1, 0, 0, 0], modelKey: "openai:none", limit: 5, visibilityCeiling: "imperial" }),
+    ).toThrow(/no embeddings found/i);
   });
 
   it("returns hits ranked by cosine similarity", async () => {

@@ -4,13 +4,13 @@
  * fused results with per-hit score breakdown.
  *
  * Requires embeddings to have been synced first (npm run knowledge:embed).
- * Embeds the query inline using the configured provider.
+ * The retriever embeds the query inline using the configured provider.
  *
  * API keys are read from environment variables.  This tool NEVER prints them.
  *
  * Usage:
  *   OPENAI_API_KEY=sk-... npm run knowledge:hybrid-inspect -- "宫廷礼仪" --provider openai --model text-embedding-3-small
- *   GEMINI_API_KEY=...    npm run knowledge:hybrid-inspect -- "请安规矩" --provider gemini --model text-embedding-004
+ *   GEMINI_API_KEY=...    npm run knowledge:hybrid-inspect -- "请安规矩" --provider gemini --model gemini-embedding-2
  *   npm run knowledge:hybrid-inspect -- "禁足" --provider openai --model text-embedding-3-small --limit 5 --visibility imperial
  */
 import { resolve } from "node:path";
@@ -126,23 +126,23 @@ if (isMain) {
 
   const kwIndex = new SqliteKeywordIndex(dbPath);
   const vecIndex = new SqliteVectorIndex(dbPath);
-  const retriever = new KnowledgeHybridRetriever(kwIndex, vecIndex);
+  const retriever = new KnowledgeHybridRetriever(kwIndex, vecIndex, embeddingProvider);
 
   try {
-    // Embed the query
-    const embedResult = await embeddingProvider.embed({ texts: [query], purpose: "query" });
-    const queryVector = embedResult.vectors[0];
-    if (!queryVector) throw new Error("Provider returned no vectors for query");
-
-    const hits = retriever.retrieve({
+    const result = await retriever.retrieve({
       text: query,
-      modelKey: embeddingProvider.modelKey,
-      queryVector,
       limit,
       visibilityCeiling: visibility,
       vectorFailureMode: vectorFailure,
     });
 
+    if (result.vectorDegradation) {
+      console.warn(
+        `[warning] vector channel degraded (${result.vectorDegradation.reason}): ${result.vectorDegradation.message}`,
+      );
+    }
+
+    const { hits } = result;
     if (hits.length === 0) {
       console.log(`No results for "${query}".`);
     } else {

@@ -34,8 +34,8 @@
     "knowledge:inspect": "tsx tools/knowledge-inspect.ts",
     "knowledge:embed": "tsx tools/knowledge-embed.ts",
     "knowledge:hybrid-inspect": "tsx tools/knowledge-hybrid-inspect.ts",
-    "smoke:knowledge:openai": "OPENAI_API_KEY=${OPENAI_API_KEY} tsx tools/knowledge-embed.ts --provider openai --model text-embedding-3-small",
-    "smoke:knowledge:gemini": "GEMINI_API_KEY=${GEMINI_API_KEY} tsx tools/knowledge-embed.ts --provider gemini --model text-embedding-004"
+    "smoke:knowledge:openai": "tsx tools/knowledge-embed.ts --provider openai --model text-embedding-3-small",
+    "smoke:knowledge:gemini": "tsx tools/knowledge-embed.ts --provider gemini --model gemini-embedding-2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

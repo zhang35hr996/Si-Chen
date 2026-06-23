@@ -5,17 +5,15 @@ import type { GameTime } from "../../calendar/time";
 import type { KnowledgeChunk, KnowledgeMetadataFilter, KnowledgeSourceType, KnowledgeVisibility } from "../model";
 
 /**
- * Input to the hybrid retriever.  Metadata filter semantics are identical to
- * KnowledgeKeywordQuery / KnowledgeVectorQuery so all three channels apply the
- * same access-control checks independently.
+ * Input to the hybrid retriever.
+ *
+ * The retriever owns query embedding — callers provide only the text.
+ * The model key is derived from the EmbeddingProvider supplied to the
+ * retriever constructor.
  */
 export interface KnowledgeHybridQuery {
-  /** Natural-language query string.  Used for both keyword tokenisation and embedding. */
+  /** Natural-language query string. Used for both keyword tokenisation and embedding. */
   readonly text: string;
-  /** Model/cache key for the pre-embedded query vector. */
-  readonly modelKey: string;
-  /** Pre-embedded query vector (caller embeds before calling retrieve). */
-  readonly queryVector: readonly number[];
   /** Maximum number of results to return after fusion. */
   readonly limit: number;
 
@@ -27,18 +25,25 @@ export interface KnowledgeHybridQuery {
   readonly currentTime?: GameTime;
 
   /**
-   * Behaviour when the vector index is unavailable or has no embeddings for
-   * this modelKey:
-   *  "fail"         — throw an error (default)
-   *  "keyword_only" — silently return keyword results only
+   * AbortSignal forwarded to the embedding provider call.
+   * Has no effect on the (synchronous) keyword and vector index searches.
+   */
+  readonly signal?: AbortSignal;
+
+  /**
+   * Behaviour when the vector channel fails for ANY reason — including provider
+   * errors, query-embedding failures, invalid cardinality/dimensions, and
+   * missing model embeddings:
+   *  "fail"         — propagate the original error (default)
+   *  "keyword_only" — return keyword-only hits plus a VectorDegradation record
    */
   readonly vectorFailureMode?: "fail" | "keyword_only";
 
-  /** RRF constant k.  Higher values reduce the influence of rank gaps. Default 60. */
+  /** RRF constant k.  Must be finite and > 0.  Default 60. */
   readonly rrfK?: number;
-  /** Weight applied to the keyword rank term.  Default 1. */
+  /** Weight applied to the keyword rank term.  Must be finite and ≥ 0.  Default 1. */
   readonly keywordWeight?: number;
-  /** Weight applied to the vector rank term.  Default 1. */
+  /** Weight applied to the vector rank term.  Must be finite and ≥ 0.  Default 1. */
   readonly vectorWeight?: number;
 }
 
@@ -50,10 +55,33 @@ export interface KnowledgeHybridHit {
   readonly rank: number;
   /** 1-based keyword rank, or null if not in keyword results. */
   readonly keywordRank: number | null;
-  /** BM25 score from keyword search (negated, so higher = more relevant), or null. */
+  /** BM25 score from keyword search (normalised, higher = more relevant), or null. */
   readonly keywordScore: number | null;
   /** 1-based vector rank, or null if not in vector results. */
   readonly vectorRank: number | null;
   /** Cosine similarity score, or null if not in vector results. */
   readonly cosineScore: number | null;
+}
+
+/** Describes why the vector channel was degraded in keyword_only mode. */
+export interface VectorDegradation {
+  /** Machine-readable reason category. */
+  readonly reason:
+    | "provider_error"      // embedding provider threw
+    | "no_embeddings"       // modelKey not yet indexed
+    | "invalid_embedding"   // cardinality / dimension / value error
+    | "search_error";       // vector index search threw for another reason
+  /** Human-readable description of the error. */
+  readonly message: string;
+}
+
+/** Return value of KnowledgeHybridRetriever.retrieve(). */
+export interface KnowledgeHybridResult {
+  readonly hits: KnowledgeHybridHit[];
+  /**
+   * Present when `vectorFailureMode="keyword_only"` and the vector channel
+   * failed.  Absent in `fail` mode (the error is re-thrown instead) and when
+   * the vector channel succeeded.
+   */
+  readonly vectorDegradation?: VectorDegradation;
 }
