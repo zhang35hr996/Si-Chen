@@ -1068,11 +1068,15 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   /** 大选·四月 prompt 选择：进殿选（扣 1AP）或委托太后皇后（不扣 AP）。 */
   const onDaxuanChoose = (action: PromptAction) => {
     if (action.type === "daxuanEnter") {
-      // 先扣 1AP（殿选原子流程，advanceTime 不掷随机节拍）。扣点失败（行动点不足）则
-      // 保留 prompt + pending、不写 flag，提示原因——殿选不丢失，可改委托或养足精神再去。
+      // store 校验完整性不变量后再扣 1AP（殿选原子流程，advanceTime 不掷随机节拍）。
       const enter = store.enterDaxuan(db, action.year);
       if (!enter.ok) {
-        setNotice("行动点不足，无法移驾体元殿。可改由太后皇后决定，或养足精神再去。");
+        // 行动点不足：保留 prompt + pending、不写 flag，提示原因（可改委托或养足精神再去）。
+        if (enter.error.some((e) => e.code === "AP_INSUFFICIENT")) {
+          setNotice("行动点不足，无法移驾体元殿。可改由太后皇后决定，或养足精神再去。");
+          return;
+        }
+        setDaxuanPrompt(null); // 无匹配 pending（陈旧/重复点击等）：静默收起，不重复执行
         return;
       }
       setDaxuanPrompt(null); // 扣点成功后才关 prompt；flag + pending 已由 enterDaxuan 原子落定
@@ -1082,8 +1086,10 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       setView("dianxuan");
       doAutosave(); // 殿选已决落盘（避免重载重弹 prompt）
     } else if (action.type === "daxuanDelegate") {
+      // 仅当真正消费了「该年未决」pending 才执行委托业务，杜绝陈旧/重复点击二次留牌/重播。
+      const resolved = store.resolveDaxuanDianxuan(action.year);
       setDaxuanPrompt(null);
-      store.resolveDaxuanDianxuan(action.year); // 原子置该年 flag + 清 pending（委托不扣点）
+      if (!resolved) return;
       const kept = npcKeepOnDelegate(db, store.getState(), action.year);
       if (kept.length > 0) store.commitDaxuanKept(db, kept);
       const beats: DecreeReaction[] = kept.length > 0

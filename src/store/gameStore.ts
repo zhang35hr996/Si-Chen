@@ -21,8 +21,8 @@ import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } 
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
   addGeneratedConsort, daxuanAnnounceBeats, daxuanAnnounceFlagKey, daxuanDianxuanDueForYear,
-  daxuanDianxuanFlagKey, initialFavorForRank, isPendingDaxuanResolved, nextPendingDaxuan,
-  type Candidate, type KeptConsort,
+  daxuanDianxuanFlagKey, initialFavorForRank, isPendingDaxuanResolved, matchesPendingDianxuan,
+  nextPendingDaxuan, type Candidate, type KeptConsort,
 } from "./grandSelection";
 import type { DecreeReaction } from "./empressDecree";
 import { excuseFromGreeting, dismissOvernight, recordOvernight } from "./greeting";
@@ -175,28 +175,37 @@ export class GameStore {
   }
 
   /**
-   * 原子解决殿选 pending（enter 扣点成功后 / delegate 直接调用）：置该年 dianxuan flag +
-   * 清除匹配的 pending（单次 emit），而非分两次 setFlag/clearPendingDaxuan。
+   * 原子解决殿选 pending（enter 扣点成功后 / delegate 直接调用）。完整性不变量：仅当确有
+   * 「该 year、未决」的 dianxuan 待消费事件时才置该年 flag + 清 pending + emit，返回 true；
+   * 否则（无 pending / announce pending / 错年 / 已决）**不改 state、不 emit**，返回 false。
+   * 据此拒绝陈旧/重复/错年点击，杜绝委托业务二次执行。
    */
-  resolveDaxuanDianxuan(year: number): void {
-    const pd = this.state.pendingDaxuan;
+  resolveDaxuanDianxuan(year: number): boolean {
+    if (!matchesPendingDianxuan(this.state, year)) return false; // 无/announce/错年/已决(陈旧) → 不动、不 emit
     this.state = {
       ...this.state,
       flags: { ...this.state.flags, [daxuanDianxuanFlagKey(year)]: true },
-      pendingDaxuan: pd?.kind === "dianxuan" && pd.year === year ? undefined : pd,
+      pendingDaxuan: undefined,
     };
     this.emit();
+    return true;
   }
 
   /**
-   * 殿选「前往」事务：先扣 1AP——失败（如行动点不足）则 state 原子不变，pending 与 flag 全部
-   * 保留，殿选不丢失；成功后再原子置该年 dianxuan flag + 清 pending。返回扣点结果（含跨月
-   * tick / 崩逝）供 UI 决定是否生成候选 / 进殿选 / 收场。
+   * 殿选「前往」事务。先校验完整性不变量（确有该年未决 dianxuan pending）——不满足（陈旧/
+   * 重复/错年）则返回 NO_PENDING_DAXUAN 错误且**不扣点、state 不变**，杜绝重复扣点。满足则
+   * 扣 1AP（失败如行动点不足亦原子不变）；扣点成功后解决同一 pending（同步、经 advanceCandidate
+   * sticky 保留，必成功；万一消失视为不变量破坏返回错误，绝不静默进殿选）。返回扣点结果。
    */
   enterDaxuan(db: ContentDB, year: number): Result<TimedOutcome, GameError[]> {
+    if (!matchesPendingDianxuan(this.state, year)) {
+      return err([stateError("NO_PENDING_DAXUAN", `no unresolved dianxuan pending for year ${year}`)]);
+    }
     const spend = this.advanceTime(db, { type: "SPEND_AP", amount: 1 });
     if (!spend.ok) return spend;
-    this.resolveDaxuanDianxuan(year);
+    if (!this.resolveDaxuanDianxuan(year)) {
+      return err([stateError("DAXUAN_RESOLVE_FAILED", `dianxuan pending for year ${year} vanished after AP spend`)]);
+    }
     return spend;
   }
 

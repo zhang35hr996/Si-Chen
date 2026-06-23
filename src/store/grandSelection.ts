@@ -212,6 +212,16 @@ export function isPendingDaxuanResolved(state: GameState, pending: PendingDaxuan
 }
 
 /**
+ * 殿选解决的完整性不变量：当前确有「该 year、未决」的 dianxuan 待消费事件。
+ * 殿选 enter/delegate 据此拒绝陈旧/重复/错年点击——store 才是真正的去重边界（React 移除
+ * prompt 不足为凭：按钮无同步一次性锁，双击/滞留动作可能重复触发）。
+ */
+export function matchesPendingDianxuan(state: GameState, year: number): boolean {
+  const pd = state.pendingDaxuan;
+  return pd?.kind === "dianxuan" && pd.year === year && !state.flags[daxuanDianxuanFlagKey(year)];
+}
+
+/**
  * 当前应入队的大选日历事件（announce 优先于 dianxuan；皆未到点则 null）。
  * 由时间事务统一入口（advanceCandidate）调用，使触发与具体行动路径解耦。
  */

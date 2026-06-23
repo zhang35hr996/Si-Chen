@@ -198,6 +198,81 @@ describe("陈旧 pending 调和（不 sticky 阻塞下一大选年）", () => {
   });
 });
 
+describe("殿选解决的完整性不变量（拒绝陈旧/重复/错年点击）", () => {
+  it("enterDaxuan 无 pending → 错误；不扣点、state 引用不变", () => {
+    const store = storeWith({ month: 4, period: "late", flags: { [ANNOUNCE]: true } }); // 无 pending
+    const before = store.getState();
+    const r = store.enterDaxuan(db, 1);
+    expect(r.ok).toBe(false);
+    expect(store.getState()).toBe(before); // 未扣点、未改 state（引用一致）
+    expect(store.getState().flags[DIANXUAN]).toBeFalsy();
+  });
+
+  it("enterDaxuan 遇 announce pending → 错误；AP 不变、announce pending 保留", () => {
+    const store = storeWith({ month: 2, period: "early", pending: { kind: "announce", year: 1 } });
+    const before = store.getState();
+    expect(store.enterDaxuan(db, 1).ok).toBe(false);
+    expect(store.getState()).toBe(before);
+    expect(store.getState().pendingDaxuan).toEqual({ kind: "announce", year: 1 });
+  });
+
+  it("enterDaxuan 错年（pending 为另一年）→ 错误；两年 dianxuan flag 均不写、AP 不变", () => {
+    const store = storeWith({ year: 4, month: 4, period: "late", flags: { [daxuanAnnounceFlagKey(4)]: true }, pending: { kind: "dianxuan", year: 4 } });
+    const before = store.getState();
+    expect(store.enterDaxuan(db, 1).ok).toBe(false); // 错误年份
+    expect(store.getState()).toBe(before);
+    expect(store.getState().flags[daxuanDianxuanFlagKey(1)]).toBeFalsy();
+    expect(store.getState().flags[daxuanDianxuanFlagKey(4)]).toBeFalsy();
+  });
+
+  it("enterDaxuan 双击（>=2AP）：仅首次扣点成功，合计只扣 1AP", () => {
+    const store = storeWith({ month: 4, period: "late", ap: 4, flags: { [ANNOUNCE]: true }, pending: { kind: "dianxuan", year: 1 } });
+    const ap0 = store.getState().calendar.ap;
+    const r1 = store.enterDaxuan(db, 1);
+    const r2 = store.enterDaxuan(db, 1);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(false); // pending 已清 → 第二次无匹配，不再扣点
+    expect(store.getState().calendar.ap).toBe(ap0 - 1);
+    expect(store.getState().flags[DIANXUAN]).toBe(true);
+  });
+
+  it("resolveDaxuanDianxuan 无/不匹配 pending → false；state 引用不变、无无关 flag", () => {
+    const store = storeWith({ month: 4, period: "late", flags: { [ANNOUNCE]: true } });
+    const before = store.getState();
+    expect(store.resolveDaxuanDianxuan(1)).toBe(false);
+    expect(store.getState()).toBe(before);
+    expect(store.getState().flags[DIANXUAN]).toBeFalsy();
+  });
+
+  it("resolveDaxuanDianxuan 双击：首次 true，再次 false 且无二次副作用（引用不变）", () => {
+    const store = storeWith({ month: 4, period: "late", flags: { [ANNOUNCE]: true }, pending: { kind: "dianxuan", year: 1 } });
+    expect(store.resolveDaxuanDianxuan(1)).toBe(true);
+    const after = store.getState();
+    expect(store.resolveDaxuanDianxuan(1)).toBe(false);
+    expect(store.getState()).toBe(after);
+  });
+
+  it("错年 resolve：pending 为年1，resolve(年2) → false；不写任何 flag、引用不变", () => {
+    const store = storeWith({ month: 4, period: "late", flags: { [ANNOUNCE]: true }, pending: { kind: "dianxuan", year: 1 } });
+    const before = store.getState();
+    expect(store.resolveDaxuanDianxuan(2)).toBe(false);
+    expect(store.getState()).toBe(before);
+    expect(store.getState().flags[daxuanDianxuanFlagKey(1)]).toBeFalsy();
+    expect(store.getState().flags[daxuanDianxuanFlagKey(2)]).toBeFalsy();
+  });
+
+  it("匹配年 pending 但该年 flag 已置（陈旧未调和）→ resolve/enter 均拒绝、引用不变", () => {
+    // pending 与 flag 同时存在的边界（陈旧 pending 尚未经时间事务调和）：不变量含未决判定，
+    // 不得二次置 flag/扣点；陈旧 pending 留待 advanceCandidate 统一调和。
+    const store = storeWith({ month: 4, period: "late", ap: 4, flags: { [ANNOUNCE]: true, [DIANXUAN]: true }, pending: { kind: "dianxuan", year: 1 } });
+    const before = store.getState();
+    expect(store.resolveDaxuanDianxuan(1)).toBe(false);
+    expect(store.getState()).toBe(before);
+    expect(store.enterDaxuan(db, 1).ok).toBe(false); // 不扣点
+    expect(store.getState()).toBe(before);
+  });
+});
+
 /** 满行动点（卯时）：新游戏默认 apMax，从而 slot=0 起步。 */
 function store0apMax(): number {
   const s = new GameStore();
