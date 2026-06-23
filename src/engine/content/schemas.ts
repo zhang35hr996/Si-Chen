@@ -55,7 +55,7 @@ export const gameTimeShape = z.strictObject({
 
 export const deathRecordSchema = z.strictObject({
   diedAt: gameTimeShape,
-  cause: z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted"]),
+  cause: z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted", "imperial_execution"]),
   originalRankId: idSchema,
   originalTitle: nonEmpty.optional(),
   posthumousRankId: idSchema.optional(),
@@ -70,7 +70,6 @@ export const characterStandingSchema = z.strictObject({
   recoverUntilMonth: z.number().int().min(1).optional(),
   residence: idSchema.optional(),
   chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
-  confined: z.boolean().optional(),
   affection: percent.optional(),
   palaceEnteredAt: gameTimeShape.optional(),
   availableFromMonth: z.number().int().min(1).optional(),
@@ -153,7 +152,7 @@ export const triggerConditionSchema: z.ZodType<TriggerCondition> = z.lazy(() =>
 
 // ── effects (the single funnel — plan §6, fully discriminated) ────────
 
-const deathCauseSchema = z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted"]);
+const deathCauseSchema = z.enum(["illness", "critical_sudden", "pregnancy", "childbirth", "scripted", "imperial_execution"]);
 
 export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("favor"), char: idSchema, delta }),
@@ -280,6 +279,20 @@ export const eventEffectSchema = z.union([
     char: idSchema,
     posthumousRankId: idSchema.optional(),
     posthumousEpithet: z.string().min(1).max(2).optional(),
+  }),
+  z.strictObject({
+    type: z.literal("confine"),
+    char: idSchema,
+    startTurn: z.number().int().min(0),
+    endTurnExclusive: z.union([z.number().int().min(0), z.null()]),
+    imposedAt: gameTimeShape,
+    sourceLocation: idSchema.optional(),
+  }),
+  z.strictObject({
+    type: z.literal("lift_confinement"),
+    char: idSchema,
+    at: gameTimeShape,
+    reason: z.enum(["lifted_by_emperor", "term_expired"]),
   }),
   z.strictObject({ type: z.literal("consort_decease"), char: idSchema, at: gameTimeShape, cause: deathCauseSchema }),
   z.strictObject({ type: z.literal("heir_decease"), heirId: nonEmpty, at: gameTimeShape, cause: deathCauseSchema }),

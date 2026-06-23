@@ -1,5 +1,6 @@
 /** 太后系统纯逻辑（侍疾/敲打），种子化确定性。*/
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
+import { isConfined } from "../engine/characters/confinement";
 import { isIll } from "../engine/characters/health";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
@@ -25,6 +26,7 @@ function attendantPool(db: ContentDB, state: GameState): string[] {
     .filter((c) => {
       if (c.kind !== "consort") return false;
       if (c.defaultLocation === "changmengong") return false;
+      if (isConfined(state, c.id)) return false; // 禁足者不往慈宁宫侍疾
       return state.standing[c.id]?.lifecycle !== "deceased";
     })
     .map((c) => c.id);
@@ -84,6 +86,7 @@ function rebukePool(db: ContentDB, state: GameState): { id: string; favor: numbe
     .filter((c) => {
       if (c.kind !== "consort" || c.id === "shen_zhibai") return false;
       if (c.defaultLocation === "changmengong") return false;
+      if (isConfined(state, c.id)) return false; // 禁足者不被太后召见训诫
       return state.standing[c.id]?.lifecycle !== "deceased";
     })
     .map((c) => ({ id: c.id, favor: state.standing[c.id]?.favor ?? 0 }));

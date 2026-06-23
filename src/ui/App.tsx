@@ -117,6 +117,8 @@ import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
+import { PunishmentModal } from "./components/PunishmentModal";
+import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
 import { MorningAfterOverlay } from "./components/MorningAfterOverlay";
@@ -175,6 +177,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [gardenSelectedId, setGardenSelectedId] = useState<string | null>(null);
   // 位分管理原子会话（charId + origin）。origin 决定结束后是否补跑被初夜搁置的转旬 checkpoint。
   const [rankAdmin, setRankAdmin] = useState<RankAdminSession>(null);
+  const [punishCharId, setPunishCharId] = useState<string | null>(null);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
@@ -488,6 +491,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // 初夜来源：无反应（无变化/失败）须先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬；
     // 生成反应（reaction_created）则交其 onDone 补跑。统一经纯决策收尾。
     applyFirstNightRankDrain(origin, outcome);
+  };
+
+  /** 惩罚命令（禁足/解除/赐死）统一入口；紫宸殿与侍君宫殿共用。 */
+  const applyImperialCommand = (charId: string, command: ImperialCommand) => {
+    setPunishCharId(null);
+    const result = store.applyImperialCommand(db, command);
+    if (result.ok) {
+      doAutosave();
+      setReaction({ speakerId: charId, lines: result.value.lines });
+    } else {
+      reopenConsortListIfReturning();
+    }
   };
 
   const applyRelocate = (charId: string, location: string, chamber: ChamberId) => {
@@ -1580,6 +1595,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setSettingsOpen(true);
           }}
           onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
+          onPunish={(id) => setPunishCharId(id)}
           onRelocate={(id) => setRelocateCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
           onConverse={converse}
@@ -2014,6 +2030,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           }}
         />
       )}
+      {punishCharId && (db.characters[punishCharId] ?? liveState.generatedConsorts[punishCharId]) && liveState.standing[punishCharId] && (
+        <PunishmentModal
+          db={db}
+          state={liveState}
+          character={(db.characters[punishCharId] ?? liveState.generatedConsorts[punishCharId])!}
+          onCommand={(command) => applyImperialCommand(punishCharId, command)}
+          onClose={() => {
+            setPunishCharId(null);
+            reopenConsortListIfReturning(); // 取消也回到列表
+          }}
+        />
+      )}
       {relocateCharId && db.characters[relocateCharId] && store.getState().standing[relocateCharId] && (
         <RelocateModal
           db={db}
@@ -2092,6 +2120,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             setConsortListReturnId(id); // 操作后回到列表并定位回此侍君
             setConsortListOpen(false); // 先关列表，避免与封号管理弹窗叠层互相遮挡
             setRankAdmin({ charId: id, origin: "normal" });
+          }}
+          onPunish={(id) => {
+            setConsortListReturnId(id);
+            setConsortListOpen(false);
+            setPunishCharId(id);
           }}
           onRelocate={(id) => {
             setConsortListReturnId(id);

@@ -10,6 +10,7 @@ import type { LocationContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import { consortGestationDisplay } from "../format/gestationDisplay";
 import { getPresentAt } from "../../engine/characters/presence";
+import { isConfined } from "../../engine/characters/confinement";
 import { CHAMBERED_PALACE_ORDER } from "../../engine/characters/chambers";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 
@@ -33,7 +34,7 @@ function statusesOf(state: GameState, charId: string): Status[] {
   const preg = consortGestationDisplay(state, charId);
   if (preg) out.push({ icon: "孕", label: preg.label, tone: "warn" });
   if (standing?.healthStatus && standing.healthStatus !== "healthy") out.push({ icon: "病", label: "凤体违和", tone: "warn" });
-  if (standing?.confined) out.push({ icon: "禁", label: "禁足", tone: "dim" });
+  if (isConfined(state, charId)) out.push({ icon: "禁", label: "禁足", tone: "dim" });
   return out;
 }
 

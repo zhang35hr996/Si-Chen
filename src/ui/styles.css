@@ -1834,6 +1834,125 @@ button:active:enabled {
   cursor: default;
 }
 
+/* ── 惩罚弹窗（禁足/赐死）── */
+
+.punish-modal {
+  position: relative;
+  animation: rise 0.3s ease both;
+  box-shadow: var(--shadow-deep);
+  background: linear-gradient(170deg, var(--ink-700), var(--ink-750));
+  border: 1px solid var(--line-gold);
+  border-radius: 6px;
+  padding: 1.3rem 1.6rem;
+  min-width: 22rem;
+  max-width: min(34rem, 92vw);
+  color: var(--cream);
+}
+
+.punish-modal h2 {
+  margin: 0 0 0.8rem;
+}
+
+.punish-modal__menu,
+.punish-modal__durations,
+.punish-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+}
+
+.punish-modal__actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.punish-modal__status,
+.punish-modal__confirm,
+.punish-modal__detail {
+  color: #cdbfa6;
+  line-height: 1.7;
+  margin: 0.4rem 0 0.9rem;
+}
+
+.punish-btn {
+  cursor: pointer;
+  font: inherit;
+  color: var(--cream);
+  background: var(--ink-600);
+  border: 1px solid var(--line-strong);
+  padding: 0.4rem 1rem;
+  border-radius: 3px;
+}
+
+.punish-btn:hover:enabled {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+
+.punish-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.punish-btn--danger,
+.punish-btn--execute {
+  border-color: #8a3b3b;
+  color: #e8b4b4;
+}
+
+.punish-btn--execute:hover:enabled {
+  border-color: #c44;
+  color: #ffd9d9;
+  background: #3a1c1c;
+}
+
+.punish-btn--minor {
+  opacity: 0.8;
+}
+
+/* 赐死高危确认：视觉上明显区别于普通确认。 */
+.punish-modal__danger {
+  border: 1px solid #8a3b3b;
+  background: linear-gradient(170deg, #2a1414, #1c0e0e);
+  border-radius: 5px;
+  padding: 1rem 1.1rem;
+}
+
+.punish-modal__danger-title {
+  color: #ff9b9b;
+}
+
+.punish-modal__name-confirm {
+  display: block;
+  margin: 0.8rem 0;
+  color: #d8c4c4;
+}
+
+.punish-modal__name-confirm input {
+  display: block;
+  margin-top: 0.4rem;
+  width: 100%;
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  background: var(--ink-750);
+  color: var(--cream);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+}
+
+.char-card__confined,
+.char-scene__line--confined,
+.consort-detail__field--confined {
+  color: #d9b48a;
+  font-style: italic;
+}
+
+.char-card__punish,
+.consort-detail__punish {
+  color: #e8b4b4;
+}
+
 /* ── 搬迁侍君弹窗 ── */
 
 .relocate-modal {

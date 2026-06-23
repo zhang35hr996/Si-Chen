@@ -3,6 +3,7 @@
  * 表示对象不是侍君。效果走正常漏斗；台词经对话缝隙重放（与 rankOps 同构）。
  */
 import { conceives } from "../engine/characters/conception";
+import { isConfined } from "../engine/characters/confinement";
 import { DEFAULT_TIERS, type BedchamberThresholds } from "../engine/characters/favorTier";
 import { renderSelfRef, resolveDisplayName } from "../engine/characters/standing";
 import { monthOrdinal } from "../engine/calendar/time";
@@ -68,10 +69,11 @@ export function passionAllowed(state: GameState, charId: string): boolean {
   return true;
 }
 
-/** 可召侍寝：非已故、且已过侍寝解禁月。 */
+/** 可召侍寝：非已故、未禁足、且已过侍寝解禁月。 */
 export function canSummon(state: GameState, charId: string): boolean {
   const st = state.standing[charId];
   if (!st || st.lifecycle === "deceased") return false;
+  if (isConfined(state, charId)) return false; // 禁足：不得前往紫宸殿侍寝/普通召见
   if (st.availableFromMonth !== undefined && monthOrdinal(state.calendar) < st.availableFromMonth) return false;
   return true;
 }

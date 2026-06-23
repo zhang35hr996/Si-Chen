@@ -52,8 +52,8 @@ function makeV7Envelope(stripField = true) {
 // migration chain.
 
 describe("save schema v8", () => {
-  it("SAVE_FORMAT_VERSION is now 8", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(8);
+  it("SAVE_FORMAT_VERSION is at least 8 (v7→v8 migration still present)", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(8);
   });
 
   it("fresh v8 save round-trips successfully", () => {

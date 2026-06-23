@@ -104,6 +104,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     bedchamber,
     eventLog: [],
     chronicle: [],
+    statusEffects: [],
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],

@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 8;
+export const SAVE_FORMAT_VERSION = 9;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -127,6 +127,27 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return {
       ...env,
       formatVersion: 8,
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
+    };
+  },
+  // v8 → v9: 引入 statusEffects（禁足等持续状态）。旧档补空数组；清除遗留的 standing.confined
+  // 占位布尔（已由 statusEffects 取代，strictObject 会拒绝未知键）。
+  8: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!Array.isArray(state.statusEffects)) {
+      state.statusEffects = [];
+    }
+    const standing = state.standing as unknown as Record<string, Record<string, unknown>> | undefined;
+    if (standing) {
+      for (const st of Object.values(standing)) {
+        if (st && typeof st === "object" && "confined" in st) delete st.confined;
+      }
+    }
+    return {
+      ...env,
+      formatVersion: 9,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };

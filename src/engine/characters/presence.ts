@@ -10,6 +10,7 @@ import type { GameState } from "../state/types";
 import { effectiveOrder } from "./standing";
 import { shichenSlot, MAO_SLOT } from "../calendar/time";
 import { isExcused, wanderChance, wanders } from "./greeting";
+import { isConfined } from "./confinement";
 
 export function getCharacterLocation(
   db: ContentDB,
@@ -80,6 +81,8 @@ export function consortLocationAt(
   if (!char || char.kind !== "consort") return home;
   const st = state.standing[charId];
   if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") return home;
+  // 禁足：闭锁本宫，不请安、不游走、不外出（统一行动许可层）。
+  if (isConfined(state, charId)) return home;
   // 冷宫 / 待选(储秀宫) / 凤后(坤宁宫常驻) 不请安不游走。
   if (home === "changmengong" || home === "chuxiu_gong" || home === "kunninggong") return home;
 

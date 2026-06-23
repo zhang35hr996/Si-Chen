@@ -98,6 +98,36 @@ export function makeGameTime(year: number, month: number, period: MonthPeriod): 
   return { year, month, period, dayIndex: dayIndexOf(year, month, period) };
 }
 
+// ── Absolute 旬 (action-day) index helpers ────────────────────────────
+// `dayIndex` IS the absolute 旬 序号 (元年一月上旬 = 0). These thin wrappers give
+// the duration math (禁足/守丧/…) a single, named vocabulary so callers never
+// re-derive turn arithmetic by hand. 36 旬 = 1 year (12 months × 3 periods).
+export const TURNS_PER_YEAR = 36;
+
+const PERIOD_BY_ORDINAL: readonly MonthPeriod[] = ["early", "mid", "late"];
+
+/** Absolute 旬 index of a timestamp (= its dayIndex). */
+export function toTurnIndex(time: Pick<GameTime, "dayIndex">): number {
+  return time.dayIndex;
+}
+
+/** Invert a 旬 index back into a full GameTime. Throws on negatives. */
+export function fromTurnIndex(index: number): GameTime {
+  if (!Number.isInteger(index) || index < 0) {
+    throw new RangeError(`fromTurnIndex needs a non-negative integer, got ${index}`);
+  }
+  const year = Math.floor(index / TURNS_PER_YEAR) + 1;
+  const withinYear = index % TURNS_PER_YEAR;
+  const month = Math.floor(withinYear / 3) + 1;
+  const period = PERIOD_BY_ORDINAL[withinYear % 3]!;
+  return makeGameTime(year, month, period);
+}
+
+/** Add (or subtract) whole 旬 to a timestamp; returns a fresh GameTime. */
+export function addTurns(time: Pick<GameTime, "dayIndex">, turns: number): GameTime {
+  return fromTurnIndex(time.dayIndex + turns);
+}
+
 /** Strip AP bookkeeping — what gets written onto records. */
 export function toGameTime(calendar: CalendarState): GameTime {
   return {

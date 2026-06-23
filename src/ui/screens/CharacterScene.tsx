@@ -12,6 +12,8 @@ import type { CharacterContent, LocationContent } from "../../engine/content/sch
 import type { ChamberId, GameState } from "../../engine/state/types";
 import { CHAMBERS, chamberOf, hasChambers } from "../../engine/characters/chambers";
 import { canSummon } from "../../store/bedchamber";
+import { activeConfinement } from "../../engine/characters/confinement";
+import { describeActiveConfinement } from "../format/confinement";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import { reportingAttendant } from "../../engine/characters/gongli";
 
@@ -35,6 +37,7 @@ export function CharacterScene({
   onBedchamber,
   onViewProfile,
   onManage,
+  onPunish,
   onRelocate,
 }: {
   db: ContentDB;
@@ -49,6 +52,7 @@ export function CharacterScene({
   onBedchamber?: (charId: string) => void;
   onViewProfile: (charId: string) => void;
   onManage?: (charId: string) => void;
+  onPunish?: (charId: string) => void;
   onRelocate?: (charId: string) => void;
 }) {
   const chambered = hasChambers(location.id);
@@ -72,6 +76,8 @@ export function CharacterScene({
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background").url;
   // 对话/侍寝 与卡片同一门槛：有行动点且本旬可侍寝。
   const actionable = !!character && state.calendar.ap >= 1 && canSummon(state, character.id);
+  // 禁足：宫门闭锁，普通往来不可，仅留管理/解除与奉旨传太医（后者经紫宸殿）。
+  const confinement = character ? activeConfinement(state, character.id) : undefined;
 
   const awayTo = character ? absence?.[character.id] : undefined;
   const awayName = character && standing ? resolveDisplayName(character, standing, rank) : "";
@@ -164,7 +170,15 @@ export function CharacterScene({
               <p className="char-scene__line char-scene__line--absent">{awayLine}</p>
             ) : (
               <>
-                <p className="char-scene__line">{greetingFor(character.id)}</p>
+                {confinement ? (
+                  <p className="char-scene__line char-scene__line--confined">
+                    此宫正在禁足，宫门闭锁，未经诏令不得出入。
+                    <br />
+                    {describeActiveConfinement(confinement, state.calendar.eraName)}
+                  </p>
+                ) : (
+                  <p className="char-scene__line">{greetingFor(character.id)}</p>
+                )}
 
                 <div className="action-dock">
                   <div className="action-dock__primary">
@@ -176,7 +190,7 @@ export function CharacterScene({
                     <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
                       查看详情
                     </button>
-                    {(onManage || onRelocate) && character.id !== "shen_zhibai" && (
+                    {(onManage || onRelocate || onPunish) && character.id !== "shen_zhibai" && (
                       <div className="action-more">
                         <button
                           type="button"
@@ -208,6 +222,17 @@ export function CharacterScene({
                                 }}
                               >
                                 搬迁
+                              </button>
+                            )}
+                            {onPunish && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreOpen(false);
+                                  onPunish(character.id);
+                                }}
+                              >
+                                惩罚
                               </button>
                             )}
                           </div>

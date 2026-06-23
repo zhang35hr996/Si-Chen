@@ -57,6 +57,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     bedchamber: {},
     eventLog: [],
     chronicle: [],
+    statusEffects: [],
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],

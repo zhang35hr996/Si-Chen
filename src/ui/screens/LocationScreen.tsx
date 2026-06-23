@@ -21,6 +21,7 @@ export function LocationScreen({
   onOpenMap,
   onOpenSettings,
   onManage,
+  onPunish,
   onRelocate,
   onBedchamber,
   onConverse,
@@ -39,6 +40,7 @@ export function LocationScreen({
   onOpenMap: () => void;
   onOpenSettings: () => void;
   onManage?: (charId: string) => void;
+  onPunish?: (charId: string) => void;
   onRelocate?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
   onConverse?: (charId: string) => void;
@@ -118,6 +120,7 @@ export function LocationScreen({
           onBedchamber={onBedchamber}
           onViewProfile={onViewProfile}
           onManage={onManage}
+          onPunish={onPunish}
           onRelocate={onRelocate}
         />
       ) : (

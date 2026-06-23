@@ -75,6 +75,21 @@ const officialSchema = z.strictObject({
 
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
 
+/** 角色持续状态（禁足等）。活跃判定见 characters/confinement.ts，不存「剩余月份」。 */
+const statusEffectSchema = z.strictObject({
+  id: z.string().min(1),
+  kind: z.literal("confinement"),
+  characterId: idSchema,
+  startTurn: z.number().int().min(0),
+  endTurnExclusive: z.union([z.number().int().min(0), z.null()]),
+  imposedAt: gameTimeSchema,
+  imposedBy: z.literal("emperor"),
+  sourceLocation: idSchema.optional(),
+  liftedAt: gameTimeSchema.optional(),
+  liftedTurn: z.number().int().min(0).optional(),
+  liftReason: z.enum(["lifted_by_emperor", "term_expired"]).optional(),
+});
+
 export const gameStateSchema = z.strictObject({
   calendar: calendarStateSchema,
   playerLocation: z.string(),
@@ -218,6 +233,7 @@ export const gameStateSchema = z.strictObject({
       tags: z.array(z.string()),
     }),
   ),
+  statusEffects: z.array(statusEffectSchema).default([]),
   emotionalConditions: z.array(
     z.strictObject({
       id: z.string().min(1),

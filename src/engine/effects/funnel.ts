@@ -16,6 +16,7 @@
  */
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
+import { isConfined, nextStatusEffectId } from "../characters/confinement";
 import { nextHeirId } from "../characters/heirs";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
@@ -77,6 +78,31 @@ export function validateEffects(
         const c = db.characters[ch] ?? state.generatedConsorts[ch];
         if (!c || c.kind !== "consort" || !state.standing[ch]) bad(index, "BAD_EFFECT_TARGET", `effect needs a consort with standing: "${ch}"`, { char: ch });
         else if (state.standing[ch]!.lifecycle === "deceased" && effect.type === "set_consort_health") bad(index, "BAD_EFFECT_TARGET", `set_consort_health on deceased consort: "${ch}"`, { char: ch });
+        break;
+      }
+      case "confine": {
+        const ch = e.char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        const st = state.standing[ch];
+        if (!c || c.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `confine needs a consort with standing: "${ch}"`, { char: ch });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot confine a deceased consort: "${ch}"`, { char: ch });
+        } else if (e.endTurnExclusive !== null && e.endTurnExclusive <= e.startTurn) {
+          bad(index, "BAD_EFFECT", `confine endTurnExclusive must be > startTurn`, { char: ch });
+        } else if (isConfined(state, ch, e.startTurn)) {
+          // 单一权威：不允许同一角色叠加第二条活跃禁足。
+          bad(index, "BAD_EFFECT", `consort already confined: "${ch}"`, { char: ch });
+        }
+        break;
+      }
+      case "lift_confinement": {
+        const ch = e.char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        if (!c || c.kind !== "consort" || !state.standing[ch]) {
+          bad(index, "BAD_EFFECT_TARGET", `lift_confinement needs a consort with standing: "${ch}"`, { char: ch });
+        }
+        // 幂等：无活跃/到期记录时 apply 是 no-op，不在此报错。
         break;
       }
       case "set_consort_posthumous": {
@@ -623,6 +649,47 @@ export function applyEffects(
         }
         break;
       }
+      case "confine": {
+        next.statusEffects.push({
+          id: nextStatusEffectId(next, effect.char),
+          kind: "confinement",
+          characterId: effect.char,
+          startTurn: effect.startTurn,
+          endTurnExclusive: effect.endTurnExclusive,
+          imposedAt: effect.imposedAt,
+          imposedBy: "emperor",
+          ...(effect.sourceLocation !== undefined ? { sourceLocation: effect.sourceLocation } : {}),
+        });
+        // 取消与禁足冲突的留宿/免请安计划（角色被锁在本宫）。
+        if (next.overnightWith?.charId === effect.char) delete next.overnightWith;
+        if (next.excusedFromGreeting?.charIds.includes(effect.char)) {
+          next.excusedFromGreeting = {
+            ...next.excusedFromGreeting,
+            charIds: next.excusedFromGreeting.charIds.filter((id) => id !== effect.char),
+          };
+        }
+        break;
+      }
+      case "lift_confinement": {
+        const turn = effect.at.dayIndex;
+        for (const se of next.statusEffects) {
+          if (se.kind !== "confinement" || se.characterId !== effect.char || se.liftedTurn !== undefined) continue;
+          if (effect.reason === "term_expired") {
+            // 期满结案：只收掉到期记录，liftedTurn = 自动到期旬（独占上界）。
+            if (se.endTurnExclusive !== null && turn >= se.endTurnExclusive) {
+              se.liftedTurn = se.endTurnExclusive;
+              se.liftedAt = effect.at;
+              se.liftReason = "term_expired";
+            }
+          } else if (turn >= se.startTurn && (se.endTurnExclusive === null || turn < se.endTurnExclusive)) {
+            // 皇帝下旨解除：收掉当旬活跃记录，当旬立即失效。
+            se.liftedTurn = turn;
+            se.liftedAt = effect.at;
+            se.liftReason = "lifted_by_emperor";
+          }
+        }
+        break;
+      }
       case "consort_decease": {
         const st = next.standing[effect.char];
         if (st && st.lifecycle !== "deceased") {       // idempotent: skip if already dead
@@ -636,6 +703,20 @@ export function applyEffects(
           };
         }
         next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter((g) => g.carrier !== effect.char); // 断胎
+        // 统一死亡清理：作废活跃禁足等持续状态、清留宿与免请安计划。
+        for (const se of next.statusEffects) {
+          if (se.kind === "confinement" && se.characterId === effect.char && se.liftedTurn === undefined) {
+            se.liftedTurn = effect.at.dayIndex;
+            se.liftedAt = effect.at;
+          }
+        }
+        if (next.overnightWith?.charId === effect.char) delete next.overnightWith;
+        if (next.excusedFromGreeting?.charIds.includes(effect.char)) {
+          next.excusedFromGreeting = {
+            ...next.excusedFromGreeting,
+            charIds: next.excusedFromGreeting.charIds.filter((id) => id !== effect.char),
+          };
+        }
         break;
       }
       case "heir_decease": {
