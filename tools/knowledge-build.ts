@@ -70,7 +70,7 @@ for (const file of locationFiles) {
   const relPath = `content/locations/${file}`;
   try {
     const data = JSON.parse(readFileSync(fullPath, "utf-8")) as unknown;
-    sources.push({ kind: "json", data, sourcePath: relPath });
+    sources.push({ kind: "location_json", data, sourcePath: relPath });
   } catch (e) {
     collectionErrors.push(`${relPath}: cannot parse JSON: ${String(e)}`);
   }

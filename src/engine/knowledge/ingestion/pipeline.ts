@@ -17,13 +17,13 @@ export interface MarkdownSource {
   sourcePath: string;
 }
 
-export interface JsonSource {
-  kind: "json";
+export interface LocationJsonSource {
+  kind: "location_json";
   data: unknown;
   sourcePath: string;
 }
 
-export type KnowledgeSource = MarkdownSource | JsonSource;
+export type KnowledgeSource = MarkdownSource | LocationJsonSource;
 
 /**
  * Ingest a set of sources into a normalized, deduplicated KnowledgeChunk[].
@@ -46,11 +46,13 @@ export function ingestSources(
         errors.push(...result.error);
       }
     } else {
-      // JSON: try registered adapters in stable order
-      if (locationAdapter.canHandle(source.data, source.sourcePath)) {
-        inputs.push(...locationAdapter.extract(source.data, source.sourcePath));
+      // location_json: validate strictly — missing or blank required fields are an error
+      const result = locationAdapter.extractStrict(source.data, source.sourcePath);
+      if (!result.ok) {
+        errors.push(...result.error);
+      } else {
+        inputs.push(...result.value);
       }
-      // Unknown JSON types are silently skipped (no recursive scanning)
     }
   }
 

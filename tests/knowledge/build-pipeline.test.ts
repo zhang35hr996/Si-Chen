@@ -146,3 +146,97 @@ visibility: public
     expect(result.error.some((e) => e.code === "DUPLICATE_ID")).toBe(true);
   });
 });
+
+describe("ingestSourcesStrict — location_json fail-closed contract", () => {
+  const validLocation = {
+    id: "xuanzhengdian",
+    name: "宣政殿",
+    description: "晴日里，金瓦映着白光，整座殿宇如同悬在天际。丹陛巍巍，百官列班。",
+  };
+
+  it("succeeds on valid location JSON", () => {
+    const result = ingestSourcesStrict([
+      { kind: "location_json", data: validLocation, sourcePath: "loc.json" },
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns INVALID_LOCATION_SOURCE when description is missing", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { id: "xuanzhengdian", name: "宣政殿" },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when description is blank (whitespace only)", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { ...validLocation, description: "   " },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when required field 'name' is missing", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { id: "xuanzhengdian", description: "描述文字。" },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("returns error when required field 'id' is missing", () => {
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { name: "宣政殿", description: "描述文字。" },
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.code === "INVALID_LOCATION_SOURCE")).toBe(true);
+  });
+
+  it("existing DB is untouched when a location_json source is invalid", () => {
+    const db = new SqliteKeywordIndex(dbPath);
+    db.rebuild([makeChunk("seed.chunk", "承养制度的规定内容。")]);
+    db.close();
+
+    const before = new SqliteKeywordIndex(dbPath);
+    const initialIds = before.search({ text: "承养", limit: 10 }).map((h) => h.chunk.id);
+    before.close();
+    expect(initialIds).toContain("seed.chunk");
+
+    // Build fails because location JSON is missing description
+    const result = ingestSourcesStrict([
+      {
+        kind: "location_json",
+        data: { id: "xuanzhengdian", name: "宣政殿" }, // no description
+        sourcePath: "loc.json",
+      },
+    ]);
+    expect(result.ok).toBe(false);
+
+    // DB is not opened or modified when ingestSourcesStrict returns an error
+    const after = new SqliteKeywordIndex(dbPath);
+    const afterIds = after.search({ text: "承养", limit: 10 }).map((h) => h.chunk.id);
+    after.close();
+    expect(afterIds).toEqual(initialIds);
+  });
+});

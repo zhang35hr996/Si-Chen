@@ -87,8 +87,11 @@ export function parseInspectArgs(rawArgs: string[], defaultDb: string): InspectA
 
 import { fileURLToPath } from "node:url";
 
-const isMain = process.argv[1] !== undefined &&
-  fileURLToPath(import.meta.url) === fileURLToPath(new URL(process.argv[1], "file:"));
+// resolve(process.argv[1]) handles Windows native paths safely;
+// new URL(nativePath, "file:") would misparse "C:\..." as a "c:" scheme.
+const isMain =
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
 if (!isMain) {
   // Imported as a module — do not run CLI code
