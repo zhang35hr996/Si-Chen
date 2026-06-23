@@ -201,6 +201,21 @@ export function rankAdminContinuation(
 }
 
 /**
+ * 初夜位分会话收尾动作（纯决策）。在 rankAdminContinuation 之上叠加「排队反应」考量：
+ * flush_pending（初夜 close/no_op/failed）时——有排队反应（凤后懿旨等）→ `play_queue`（先播队列，末条
+ * onDone 再补跑结算，绝不抢跑/遗留）；无队列 → `flush_now`（直接补跑）。reaction_created → `none`
+ * （交其反应 onDone 补跑）；normal 来源 → `none`（关闭不补跑）。
+ */
+export function firstNightRankDrainAction(
+  origin: RankAdminOrigin,
+  outcome: RankAdminOutcome,
+  queuedReactions: number,
+): "play_queue" | "flush_now" | "none" {
+  if (rankAdminContinuation(origin, outcome) !== "flush_pending") return "none";
+  return queuedReactions > 0 ? "play_queue" : "flush_now";
+}
+
+/**
  * runCheckpoints 自动启动事件时的返回上下文。**board ID 由发起动作（出宫 exitPalace 的目标板）
  * 显式传入**，不读异步镜像的父级 currentBoard——避免子组件先于 onBoardChange 生效就卸载导致捕获
  * 旧板（常为 "palace"）的时序耦合。board ID 在场 → 恢复该嵌套板；缺省 → 回事件所在地点。

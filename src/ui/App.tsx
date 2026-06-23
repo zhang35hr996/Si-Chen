@@ -3,8 +3,11 @@ import {
   type EventReturnTarget,
   MAX_EVENT_CHAIN,
   type RankAdminSession,
+  type RankAdminOrigin,
+  type RankAdminOutcome,
   canChain,
   checkpointReturnTarget,
+  firstNightRankDrainAction,
   initialNavState,
   navReducer,
   type AutoCheckpointRequest,
@@ -12,7 +15,6 @@ import {
   deferredAutoCheckpointMode,
   eventSceneCompletionPlan,
   pendingReactionReducer,
-  rankAdminContinuation,
   resolveReturnNavigation,
 } from "./eventReturn";
 import {
@@ -428,8 +430,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         outcome = "failed";
       }
     }
-    // 初夜来源：无反应（无变化/失败）须立即补跑被搁置的转旬 checkpoint；生成反应则交其 onDone 补跑。
-    if (rankAdminContinuation(origin, outcome) === "flush_pending") flushPendingReactionCheckpoint();
+    // 初夜来源：无反应（无变化/失败）须先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬；
+    // 生成反应（reaction_created）则交其 onDone 补跑。统一经纯决策收尾。
+    applyFirstNightRankDrain(origin, outcome);
   };
 
   const applyRelocate = (charId: string, location: string, chamber: ChamberId) => {
@@ -485,6 +488,21 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     pendingReactionDispatch({ type: "consume" });
     // 反应队列结束后续接：arrival 即时完成（仅 location_enter，不排空全局中断）；转旬进结算排空。
     if (pending) completeDeferredAutoCheckpoint(pending.request);
+  };
+
+  /**
+   * 初夜位分会话结束（close/no_op/failed/reaction_created）的统一收尾。纯决策 firstNightRankDrainAction
+   * 决定动作：有排队反应（凤后懿旨等）→ 先播队列（末条 onDone 再补跑结算，绝不抢跑/遗留）；无队列 → 直接
+   * flush；reaction_created/normal → 交由反应 onDone 或不补跑。
+   */
+  const applyFirstNightRankDrain = (origin: RankAdminOrigin, outcome: RankAdminOutcome) => {
+    const action = firstNightRankDrainAction(origin, outcome, reactionQueue.length);
+    if (action === "flush_now") { flushPendingReactionCheckpoint(); return; }
+    if (action === "play_queue") {
+      const [next, ...rest] = reactionQueue;
+      setReactionQueue(rest);
+      setReaction(next!); // 反应 onDone 续播剩余队列并在末条补跑 pending（见 ReactionScreen onDone）
+    }
   };
 
   /** 为本次行动消耗的每个行动点掷骰凤后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
@@ -1217,8 +1235,16 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     if (!dialogueProvider || !reaction?.generatedLine) return;
     // Single-flight guard: prevent concurrent choice requests (double-tap, etc.)
     if (choiceInFlightRef.current) return;
+    // 续接也是一次 provider request：纳入对话操作所有权。首轮 converse 的 op 已收尾，此处重新认领唯一 token；
+    // 若 await 期间发生新游戏/读档/驾崩（invalidateDialogueOps 自增纪元），token 不再 current → 丢弃本次完成：
+    // 不提交 state、不设置反应、不清新 operation 的忙碌位。杜绝旧 choice 让新会话长期保持忙碌。
+    const started = startDialogueOp(dialogueOpRef.current);
+    if (started.token === null) return; // 已有活动对话操作：拒绝并发
+    dialogueOpRef.current = started.state;
+    const opToken = started.token;
     choiceInFlightRef.current = true;
     setChoicePending(true);
+    setDialogueInFlight(true);
 
     const currentLine = reaction.generatedLine;
     const speakerId = reaction.speakerId;
@@ -1236,12 +1262,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       const expectedState = store.getState();
       const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { transcript });
       if (!reqResult.ok) {
+        if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：失效后不得改界面
         // Assembly failed — strip generatedLine so normal onDone drains the queue/rollover
         setReaction({ speakerId, lines: ["（对话暂时中断）"] });
         return;
       }
 
       const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+      if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略本次完成
       if (!turnResult.ok) {
         // Turn failed — same graceful path
         setReaction({ speakerId, lines: ["（对话暂时中断）"] });
@@ -1260,6 +1288,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       // Update reaction state with the new generated line; carry decree beats from the queue
       setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
     } finally {
+      // 仅当 token 仍是当前操作才释放忙碌位（旧操作绝不清新操作的 in-flight）；choiceInFlight 始终复位。
+      dialogueOpRef.current = finishDialogueOp(dialogueOpRef.current, opToken);
+      if (dialogueOpRef.current.activeOp === null) setDialogueInFlight(false);
       choiceInFlightRef.current = false;
       setChoicePending(false);
     }
@@ -1795,8 +1826,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onClose={() => {
             const origin = rankAdmin.origin;
             setRankAdmin(null);
-            // 初夜来源关闭（未应用）：补跑被搁置的转旬 checkpoint，杜绝丢失；普通来源不因关闭补跑。
-            if (rankAdminContinuation(origin, "close") === "flush_pending") flushPendingReactionCheckpoint();
+            // 初夜来源关闭（未应用）：先播完排队反应（懿旨），末条 onDone 再补跑被搁置的转旬，杜绝遗留/抢跑；
+            // 普通来源不因关闭补跑。
+            applyFirstNightRankDrain(origin, "close");
             reopenConsortListIfReturning(); // 取消也回到列表
           }}
         />

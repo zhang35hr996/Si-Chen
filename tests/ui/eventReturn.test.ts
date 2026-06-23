@@ -17,6 +17,7 @@ import {
   navReducer,
   pendingReactionReducer,
   rankAdminContinuation,
+  firstNightRankDrainAction,
   resolveReturnNavigation,
 } from "../../src/ui/eventReturn";
 
@@ -279,6 +280,30 @@ describe("first-night rank-admin checkpoint handoff", () => {
     // all those paths now dispatch begin with their actual rolledOver; non-rollover ⇒ null
     expect(begin(false, { request: req })).toBeNull();
     expect(begin(true, { request: req })).toEqual({ request: req }); // rollover keeps a fresh ctx
+  });
+});
+
+describe("firstNightRankDrainAction — queued decree reactions play before settlement flush", () => {
+  // first-night close/no_op/failed with a non-empty reaction queue must play the queue first
+  // (last reaction onDone flushes); an empty queue flushes immediately. reaction_created / normal defer.
+  for (const outcome of ["close", "no_op", "failed"] as const) {
+    it(`first_night + ${outcome}: queued reactions → play_queue (no premature flush)`, () => {
+      expect(firstNightRankDrainAction("first_night", outcome, 2)).toBe("play_queue");
+    });
+    it(`first_night + ${outcome}: empty queue → flush_now`, () => {
+      expect(firstNightRankDrainAction("first_night", outcome, 0)).toBe("flush_now");
+    });
+  }
+
+  it("first_night + reaction_created → none (its reaction onDone flushes, regardless of queue)", () => {
+    expect(firstNightRankDrainAction("first_night", "reaction_created", 2)).toBe("none");
+    expect(firstNightRankDrainAction("first_night", "reaction_created", 0)).toBe("none");
+  });
+
+  it("normal origin → none on every outcome, even with a queue", () => {
+    for (const outcome of ["close", "no_op", "failed", "reaction_created"] as const) {
+      expect(firstNightRankDrainAction("normal", outcome, 3)).toBe("none");
+    }
   });
 });
 

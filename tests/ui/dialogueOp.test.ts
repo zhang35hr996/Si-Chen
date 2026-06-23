@@ -56,3 +56,46 @@ describe("dialogue op ownership", () => {
     expect(dup.token).toBeNull(); // duplicate click → no second provider call
   });
 });
+
+/**
+ * 续接（onConverseChoice）所有权协议建模。首轮 converse 的 op 已收尾后，选择续接也是一次 provider request，
+ * App 现以同一套原语认领新 token、await 后用 isCurrentDialogueOp 把关、owner-only finish 收尾。
+ * 本组用状态机精确复刻该调用点的步骤，覆盖评审要求 1–5（仓库无 <App> 渲染基座，App 判断抽原语单测）。
+ */
+describe("continuation turn ownership (onConverseChoice protocol)", () => {
+  it("1+3+4. a continuation invalidated mid-flight is stale → must not commit/react", () => {
+    // first turn ran and released its op
+    const first = startDialogueOp(initialDialogueOpState);
+    let s = finishDialogueOp(first.state, first.token!);
+    // continuation acquires its own token (op pending)
+    const cont = startDialogueOp(s);
+    s = cont.state;
+    expect(cont.token).toBe(2);
+    // lifecycle switch during the await (load / new game / death)
+    s = invalidateDialogueOps(s);
+    // old promise resolves → gate rejects: no commitDialogueState, no setReaction
+    expect(isCurrentDialogueOp(s, cont.token!)).toBe(false);
+  });
+
+  it("4. a stale continuation's finish does not clear a newer session's busy state", () => {
+    const first = startDialogueOp(initialDialogueOpState);
+    let s = finishDialogueOp(first.state, first.token!);
+    const cont = startDialogueOp(s); // token 2 (the stale continuation)
+    s = invalidateDialogueOps(cont.state); // lifecycle switch
+    const fresh = startDialogueOp(s); // a brand-new session takes over (token 4)
+    s = fresh.state;
+    // the stale continuation's finally runs finishDialogueOp with its old token
+    const afterStaleFinish = finishDialogueOp(s, cont.token!);
+    expect(afterStaleFinish.activeOp).toBe(fresh.token); // new session's busy untouched
+  });
+
+  it("5. after a stale continuation, a fresh session can still start (no permanent lock)", () => {
+    // models that choiceInFlightRef is always cleared in finally, so the op machine is the only gate
+    const first = startDialogueOp(initialDialogueOpState);
+    let s = finishDialogueOp(first.state, first.token!);
+    const cont = startDialogueOp(s);
+    s = invalidateDialogueOps(cont.state); // stale; activeOp cleared by invalidation
+    const next = startDialogueOp(s);
+    expect(next.token).not.toBeNull(); // a new conversation is not blocked by the orphaned old one
+  });
+});
