@@ -161,6 +161,39 @@ const courtEvent = (over: Partial<CourtEvent> = {}): CourtEvent => ({
   ...over,
 });
 
+describe("retrievalScore emotional-condition activation fades (item 8)", () => {
+  const sourceEventId = "evt_grief";
+  const griefMem = () => trauma({ sourceEventId, triggerTags: ["death", "heir"] }); // no "anniversary"
+  const withCondition = (recoveryProfile: "fast" | "stuck"): GameState => ({
+    ...createInitialState(),
+    emotionalConditions: [
+      {
+        id: "cond_a_000001",
+        ownerId: "a",
+        type: "acute_grief" as const,
+        sourceEventId,
+        severity: 100,
+        startedAt: makeGameTime(1, 1, "early"),
+        recoveryProfile,
+      },
+    ],
+  });
+
+  it("an acute (fast) condition contributes less as years pass (no permanent +40)", () => {
+    const s = withCondition("fast");
+    const soon = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(1, 2, "early") }));
+    const yearsLater = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(6, 1, "early") }));
+    expect(yearsLater).toBeLessThan(soon);
+  });
+
+  it("a 'stuck' condition keeps contributing across the years", () => {
+    const s = withCondition("stuck");
+    const soon = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(1, 2, "early") }));
+    const yearsLater = retrievalScore(s, griefMem(), ctx({ now: makeGameTime(6, 1, "early") }));
+    expect(yearsLater).toBe(soon);
+  });
+});
+
 describe("retrievalScore location match (item 7)", () => {
   it("location bonus applies only when current location matches the source event's location", () => {
     const s = stateWith([courtEvent({ locationId: "lengong" })]);
