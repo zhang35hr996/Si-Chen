@@ -86,17 +86,21 @@ export function assembleDialogueRequest(
   // The conversation target is always physically present, so memories/events ABOUT
   // the target surface in recall/activation even when the caller supplies no extra
   // cast. `options.presentCharacterIds` are additional confirmed-present bystanders.
-  // The speaker is intentionally NOT in this set: they are trivially always present,
-  // so a "present-bystander" bonus on events/memories about themselves would be
-  // meaningless (those are reached via subjectIds), and audience already drops them.
-  const scenePresentIds = [...new Set([targetId, ...(options.presentCharacterIds ?? [])])];
-  // subjectIds always includes the speaker (self-memories stay reachable) plus
-  // whoever the beat is about, so a sub-threshold memory about them can be recalled.
-  const subjectIds = [...new Set([speakerId, ...(options.subjectIds ?? [])])];
+  // The speaker is filtered out defensively (even if a caller passes it): they are
+  // trivially always present, so a "present-bystander" bonus on events/memories about
+  // themselves would be meaningless, and audience already drops them.
+  const scenePresentIds = [...new Set([targetId, ...(options.presentCharacterIds ?? [])])].filter((id) => id !== speakerId);
+  // Beat subjects = who the beat is explicitly ABOUT. They drive BOTH recall and
+  // activation (a memory/event about them surfaces even if that person is absent).
+  // The speaker is NOT a beat subject (self-memories stay recallable via recallSubjectIds
+  // but must not get an automatic activation bonus).
+  const beatSubjectIds = options.subjectIds ?? [];
+  // Recall net also includes the speaker so self-memories remain reachable.
+  const recallSubjectIds = [...new Set([speakerId, ...beatSubjectIds])];
   const memCtx = buildMemoryContext(
     state,
-    { speakerId, subjectIds, topicTags, presentCharacterIds: scenePresentIds },
-    { now, topicTags, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
+    { speakerId, subjectIds: recallSubjectIds, topicTags, presentCharacterIds: scenePresentIds },
+    { now, topicTags, subjectIds: beatSubjectIds, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
   );
   const audience = buildAudienceContext(state, db, {
     speakerId,
@@ -129,7 +133,7 @@ export function assembleDialogueRequest(
   const promptEvents = selectPromptEventsByActivation({
     state,
     events: memCtx.knownEventsAll,
-    ctx: { now, topicTags, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
+    ctx: { now, topicTags, subjectIds: beatSubjectIds, presentCharacterIds: scenePresentIds, audienceId: targetId, speakerId, locationId },
     pinnedEventId: builtReaction?.sourceEventId,
     limit: 3,
   });

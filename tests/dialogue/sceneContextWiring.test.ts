@@ -80,6 +80,58 @@ describe("target/player participates in recall + activation (P0a)", () => {
   });
 });
 
+/** A memory about an ABSENT third party — the "talking about someone not in the room" case. */
+const absentSubjectMemory: MemoryEntry = {
+  id: "mem_shen_absent",
+  ownerId: SPEAKER,
+  kind: "impression",
+  subjectIds: ["absent_consort"],
+  perspective: "witness",
+  summary: "对那位的旧事，臣侍略有耳闻。",
+  strength: 60,
+  retention: "slow",
+  emotions: {},
+  triggerTags: [],
+  unresolved: false, // resolved, no topic, not present — only subjectIds can surface it
+  createdAt: makeGameTime(1, 1, "early"),
+};
+
+describe("subjectIds drives activation, not just recall (P1)", () => {
+  it("a resolved, sub-threshold memory about an absent subject is activated when that subject is the beat", () => {
+    const state = withMemory(baseState, absentSubjectMemory);
+    expect(memoryIds(state, { subjectIds: ["absent_consort"] })).toContain(absentSubjectMemory.id);
+  });
+
+  it("without the subject in context it stays inactive (recall alone is not enough)", () => {
+    const state = withMemory(baseState, absentSubjectMemory);
+    expect(memoryIds(state)).not.toContain(absentSubjectMemory.id);
+  });
+});
+
+/** A self-memory used to prove the speaker is excluded from the present-bonus set. */
+const selfMemory: MemoryEntry = {
+  id: "mem_shen_self",
+  ownerId: SPEAKER,
+  kind: "impression",
+  subjectIds: [SPEAKER],
+  perspective: "actor",
+  summary: "臣侍素来谨慎。",
+  strength: 60,
+  retention: "slow",
+  emotions: {},
+  triggerTags: [],
+  unresolved: false,
+  createdAt: makeGameTime(1, 1, "early"),
+};
+
+describe("speaker is excluded from the present-bonus set even if passed explicitly (P2)", () => {
+  it("passing the speaker in presentCharacterIds does not grant a self-present bonus", () => {
+    const state = withMemory(baseState, selfMemory);
+    // speaker filtered out of the scene-present set → self-memory gets no present bonus → stays inactive
+    expect(memoryIds(state, { presentCharacterIds: [SPEAKER] })).not.toContain(selfMemory.id);
+  });
+});
+
 describe("scene topic threading → recall + activation", () => {
   it("a sub-threshold memory about the subject stays UNrecalled without topic context", () => {
     const state = withMemory(baseState, subjectMemory);

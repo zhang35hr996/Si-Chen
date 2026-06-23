@@ -10,7 +10,7 @@ const trauma = (over: Partial<MemoryEntry> = {}): MemoryEntry => ({
   summary: "夭折", strength: 100, retention: "permanent", emotions: { grief: 95 },
   triggerTags: ["death", "heir", "anniversary"], unresolved: true, createdAt: makeGameTime(1, 5, "mid"), ...over,
 });
-const ctx = (over = {}) => ({ now: makeGameTime(3, 1, "early"), topicTags: [], presentCharacterIds: [], audienceId: "player", speakerId: "a", ...over });
+const ctx = (over = {}) => ({ now: makeGameTime(3, 1, "early"), topicTags: [], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a", ...over });
 
 describe("retrievalScore 乘加混合", () => {
   it("permanent 创伤：日常问安（无任何 match）得低分；忌辰得高分（加项独立抬分，不被 topic=0 清零）", () => {
@@ -30,6 +30,12 @@ describe("retrievalScore 乘加混合", () => {
     const base = retrievalScore(s, trauma(), ctx());
     const present = retrievalScore(s, trauma(), ctx({ presentCharacterIds: ["heir_7"] }));
     expect(present).toBeGreaterThan(base);
+  });
+  it("正在谈论的当事人（subjectIds）即便不在场也加分", () => {
+    const s = createInitialState();
+    const base = retrievalScore(s, trauma(), ctx());
+    const onSubject = retrievalScore(s, trauma(), ctx({ subjectIds: ["heir_7"] }));
+    expect(onSubject).toBeGreaterThan(base);
   });
   it("确定性", () => {
     const s = createInitialState();

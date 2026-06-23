@@ -6,19 +6,23 @@ import type { CourtEvent, GameState, MemoryEntry } from "../state/types";
 
 const W = {
   BASE_RELEVANCE: 0.4, TOPIC_WEIGHT: 0.6,
-  ANNIVERSARY_WEIGHT: 60, LOCATION_WEIGHT: 30, SUBJECT_WEIGHT: 35, UNRESOLVED_WEIGHT: 15, CONDITION_WEIGHT: 40,
+  ANNIVERSARY_WEIGHT: 60, LOCATION_WEIGHT: 30, SUBJECT_WEIGHT: 35, BEAT_SUBJECT_WEIGHT: 35, UNRESOLVED_WEIGHT: 15, CONDITION_WEIGHT: 40,
 } as const;
 
 /** Event-activation weights — mirror the memory side so the two rankings agree. */
 const EV = {
-  BASE_RELEVANCE: 0.4, TOPIC_WEIGHT: 0.6, SUBJECT_WEIGHT: 35, REACTION_PENALTY: 40,
+  BASE_RELEVANCE: 0.4, TOPIC_WEIGHT: 0.6, SUBJECT_WEIGHT: 35, BEAT_SUBJECT_WEIGHT: 35, REACTION_PENALTY: 40,
 } as const;
 
 /** Below this effective severity an emotional condition is treated as inactive. */
 const CONDITION_ACTIVE_THRESHOLD = 10;
 
 export interface ActivationContext {
-  now: GameTime; topicTags: string[]; presentCharacterIds: string[];
+  now: GameTime; topicTags: string[];
+  /** Who the beat is ABOUT (drives recall AND activation): a memory/event concerning
+   *  one of these gets a relevance bonus even if that person is absent. */
+  subjectIds: string[];
+  presentCharacterIds: string[];
   locationId?: string; audienceId: string; speakerId: string;
 }
 
@@ -68,6 +72,7 @@ export function retrievalScore(state: GameState, memory: MemoryEntry, ctx: Activ
   const anniversaryMatch = memory.triggerTags.includes("anniversary") && isAnniversary(memory.createdAt, ctx.now) ? 1 : 0;
   const locationMatch = ctx.locationId && locationMatches(state.chronicle, memory, ctx.locationId) ? 1 : 0;
   const subjectPresentMatch = memory.subjectIds.some((s) => ctx.presentCharacterIds.includes(s)) ? 1 : 0;
+  const beatSubjectMatch = memory.subjectIds.some((s) => ctx.subjectIds.includes(s)) ? 1 : 0;
   // Condition activation scales with the CURRENT (decayed) severity of any matching
   // condition, not a flat permanent bonus — an acute_grief fades instead of pinning
   // its memory at the top forever (PR-A item 8).
@@ -78,6 +83,7 @@ export function retrievalScore(state: GameState, memory: MemoryEntry, ctx: Activ
     + W.ANNIVERSARY_WEIGHT * anniversaryMatch
     + W.LOCATION_WEIGHT * locationMatch
     + W.SUBJECT_WEIGHT * subjectPresentMatch
+    + W.BEAT_SUBJECT_WEIGHT * beatSubjectMatch
     + W.UNRESOLVED_WEIGHT * (memory.unresolved ? 1 : 0)
     + W.CONDITION_WEIGHT * conditionActivation
     - penalty
@@ -119,10 +125,12 @@ export function eventActivationScore(state: GameState, event: CourtEvent, ctx: A
   const eff = effectiveSalience(event, ctx.now);
   const topicMatch = ctx.topicTags.length && event.tags.some((t) => ctx.topicTags.includes(t)) ? 1 : 0;
   const subjectPresentMatch = event.participants.some((p) => ctx.presentCharacterIds.includes(p.charId)) ? 1 : 0;
+  const beatSubjectMatch = event.participants.some((p) => ctx.subjectIds.includes(p.charId)) ? 1 : 0;
   const reactionPenalty = recentReactionPenalty(state, event.id, ctx);
   return (
     eff * (EV.BASE_RELEVANCE + EV.TOPIC_WEIGHT * topicMatch)
     + EV.SUBJECT_WEIGHT * subjectPresentMatch
+    + EV.BEAT_SUBJECT_WEIGHT * beatSubjectMatch
     - reactionPenalty
   );
 }

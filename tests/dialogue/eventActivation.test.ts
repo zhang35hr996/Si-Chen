@@ -27,6 +27,7 @@ const evt = (over: Partial<CourtEvent> = {}): CourtEvent => ({
 const ctx = (over = {}) => ({
   now: makeGameTime(5, 1, "early"),
   topicTags: [] as string[],
+  subjectIds: [] as string[],
   presentCharacterIds: [] as string[],
   audienceId: "player",
   speakerId: "a",
