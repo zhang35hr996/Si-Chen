@@ -72,7 +72,8 @@ export type DeathCause =
   | "critical_sudden"
   | "pregnancy"
   | "childbirth"
-  | "scripted";
+  | "scripted"
+  | "imperial_execution";
 
 export interface PregnancyState {
   /** none=未孕/已传嗣后(健康); pending=已受孕未告知; carrying=帝王自孕中 */
@@ -233,8 +234,6 @@ export interface CharacterStanding {
   residence?: string;
   /** 所居宫室（缺省 "main" 主殿）。 */
   chamber?: ChamberId;
-  /** 禁足。 */
-  confined?: boolean;
   /** 好感/情意 0–100（仅侍君；缺省回退 authored hidden.affection）。 */
   affection?: number;
   /** 入宫时刻（知情资格用）；非常住者 undefined。所有入宫流程必须写此字段。 */
@@ -357,6 +356,37 @@ export interface PendingAftermath {
   resolved: boolean;
 }
 
+// ── 角色持续状态（可复用：禁足 / 后续冷宫·下狱·守丧·卧病）─────────────────
+// 单一权威的「持续效果」时间线：append-mostly，解除时就地标记 lifted 而非物理删除，
+// 以保留历史。活跃判定只依据 startTurn/endTurnExclusive/liftedTurn，不存「剩余月份」。
+export type StatusEffectKind = "confinement";
+
+/** 禁足解除原因：皇帝下旨 / 期满自动到期。 */
+export type ConfinementLiftReason = "lifted_by_emperor" | "term_expired";
+
+export interface ConfinementEffect {
+  /** "status_<charId>_000001" 单调。 */
+  id: string;
+  kind: "confinement";
+  characterId: string;
+  /** 下旨当旬（含；当前旬即第一旬）。 */
+  startTurn: number;
+  /** 自动到期旬（独占上界）；null = 无诏不得出，不自动到期。 */
+  endTurnExclusive: number | null;
+  imposedAt: GameTime;
+  imposedBy: "emperor";
+  /** 下旨发生地（紫宸殿 / 侍君宫殿）。 */
+  sourceLocation?: string;
+  /** 解除时刻（手动或到期）；未解除则 undefined。 */
+  liftedAt?: GameTime;
+  /** 解除生效旬；未解除则 undefined。手动解除 = 当旬；到期 = endTurnExclusive。 */
+  liftedTurn?: number;
+  liftReason?: ConfinementLiftReason;
+}
+
+/** 角色持续状态的判别联合（目前仅禁足；冷宫/下狱/守丧待扩展）。 */
+export type CharacterStatusEffect = ConfinementEffect;
+
 // ── 太后（尊长）状态 ──────────────────────────────────────────────────
 export interface TaihouState {
   /** 运行时数值健康 0–100（初始 70）。 */
@@ -433,6 +463,26 @@ export interface CourtEvent {
   tags: string[];
 }
 
+/**
+ * 后宫主理权运行态。
+ *   empress        — 凤后正常掌宫（默认）。
+ *   acting_consort — 凤后禁足期间由某位侍君奉旨协理。
+ *   neiwu_proxy    — 凤后禁足且无合格侍君，内务府暂代宫务。
+ */
+export type HaremAdministrationState =
+  | { mode: "empress" }
+  | {
+      mode: "acting_consort";
+      charId: string;
+      appointedAt: GameTime;
+      reason: "empress_confined";
+    }
+  | {
+      mode: "neiwu_proxy";
+      appointedAt: GameTime;
+      reason: "no_eligible_consort";
+    };
+
 export interface GameState {
   calendar: CalendarState;
   playerLocation: string;
@@ -449,6 +499,8 @@ export interface GameState {
   eventLog: EventLogEntry[];
   /** 客观事件编年史（append-only，剧情事实；与 eventLog 的触发记账分离）。 */
   chronicle: CourtEvent[];
+  /** 角色持续状态（禁足等）。单一权威时间线，活跃判定见 characters/confinement.ts。 */
+  statusEffects: CharacterStatusEffect[];
   /** 角色情绪状态（与永久创伤记忆分离；PR2c 只存储，自动恢复留待后续）。 */
   emotionalConditions: EmotionalCondition[];
   /** 记忆提及日志（PR4：冷却惩罚）。 */
@@ -469,6 +521,8 @@ export interface GameState {
   pendingDaxuan?: PendingDaxuan;
   /** 终局：皇帝崩逝由时间事务在同批写入；置位后 title「继续」禁用（Task 5/8）。 */
   gameOver?: { cause: "sovereign_death"; at: GameTime };
+  /** 后宫主理权运行态（六宫主理）。凤后正常时为 empress；禁足期间由侍君/内务府代理。 */
+  haremAdministration: HaremAdministrationState;
   rngSeed: number;
 }
 

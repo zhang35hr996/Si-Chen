@@ -5,6 +5,8 @@ import { toGameTime } from "../../engine/calendar/time";
 import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/favorTier";
 import { listHeirsBySex } from "../../engine/characters/heirs";
 import { inPalaceConsorts } from "../../engine/characters/presence";
+import { activeConfinement } from "../../engine/characters/confinement";
+import { describeActiveConfinement } from "../format/confinement";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
@@ -23,6 +25,7 @@ export function ConsortListModal({
   sovereignPregnant,
   initialSelectedId,
   onManage,
+  onPunish,
   onRelocate,
   onSummon,
   onAddCandidate,
@@ -36,6 +39,7 @@ export function ConsortListModal({
   /** 重开列表时直接展开该侍君的详情（封号管理/搬迁返回后定位回原处）；null=从列表根开始。 */
   initialSelectedId?: string | null;
   onManage: (charId: string) => void;
+  onPunish?: (charId: string) => void;
   onRelocate: (charId: string) => void;
   onSummon: (charId: string) => void;
   onAddCandidate: (charId: string) => void;
@@ -87,6 +91,7 @@ export function ConsortListModal({
     const raised = heirs.filter((h) => h.fatherId === c.id || h.adoptiveFatherId === c.id);
     const isEmpress = c.id === "shen_zhibai";
     const lc = st.lifecycle;
+    const confinement = activeConfinement(state, c.id);
     return (
       <div className="consort-detail">
         <img
@@ -139,6 +144,11 @@ export function ConsortListModal({
               ? "无"
               : raised.map((h) => heirNameById.get(h.id) ?? h.id).join("、")}
           </p>
+          {confinement && (
+            <p className="consort-detail__field consort-detail__field--confined">
+              禁足中：{describeActiveConfinement(confinement, state.calendar.eraName)}
+            </p>
+          )}
           <div className="consort-detail__actions">
             <button type="button" disabled={!canSummon(state, c.id)} onClick={() => onSummon(c.id)}>
               召见
@@ -151,6 +161,11 @@ export function ConsortListModal({
             {!isEmpress && (
               <button type="button" onClick={() => onRelocate(c.id)}>
                 搬迁
+              </button>
+            )}
+            {!isEmpress && st.lifecycle !== "deceased" && onPunish && (
+              <button type="button" className="consort-detail__punish" onClick={() => onPunish(c.id)}>
+                惩罚
               </button>
             )}
             {sovereignPregnant && lc === "candidate" && (

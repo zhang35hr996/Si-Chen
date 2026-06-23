@@ -69,7 +69,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
   const summary = dir === "promote" ? `凤后下旨晋我为${targetName}` : `凤后下旨贬我为${targetName}`;
 
   const effects: EventEffect[] = [
-    { type: "set_rank", char: pick.id, rank: targetId },
+    { type: "set_rank", char: pick.id, rank: targetId, authority: { kind: "harem_administrator", actorId: "shen_zhibai", office: "empress" as const } },
     {
       type: "memory",
       char: pick.id,

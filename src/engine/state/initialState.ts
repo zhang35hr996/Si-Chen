@@ -57,6 +57,8 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     bedchamber: {},
     eventLog: [],
     chronicle: [],
+    statusEffects: [],
+    haremAdministration: { mode: "empress" },
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],
