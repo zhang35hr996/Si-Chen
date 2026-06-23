@@ -74,6 +74,31 @@ describe("pickSubLocationEvent", () => {
     expect(pickSubLocationEvent(withEvents(ev), at("yuhuayuan"), "yuhuayuan", "jiangxuexuan")).toBeNull();
   });
 
+  it("P1: high-priority unaffordable + low-priority affordable → picks the affordable one (priority desc among affordable)", () => {
+    const hiUnaffordable = exploration("ev_hi", "taiyechi", { priority: 9, apCost: 2 });
+    const loAffordable = exploration("ev_lo", "taiyechi", { priority: 1, apCost: 1 });
+    const s = { ...at("yuhuayuan"), calendar: { ...at("yuhuayuan").calendar, ap: 1 } }; // AP=1
+    const picked = pickSubLocationEvent(withEvents(hiUnaffordable, loAffordable), s, "yuhuayuan", "taiyechi");
+    expect(picked?.id).toBe("ev_lo"); // 取可承担者，而非抢占的高优先级不可承担者
+    expect(subLocationEventAffordable(s, picked!)).toBe(true);
+  });
+
+  it("P1: two affordable candidates → highest priority wins (affordability does not override priority among affordable)", () => {
+    const hi = exploration("ev_a", "taiyechi", { priority: 9, apCost: 1 });
+    const lo = exploration("ev_z", "taiyechi", { priority: 1, apCost: 1 });
+    const s = { ...at("yuhuayuan"), calendar: { ...at("yuhuayuan").calendar, ap: 5 } };
+    expect(pickSubLocationEvent(withEvents(lo, hi), s, "yuhuayuan", "taiyechi")?.id).toBe("ev_a");
+  });
+
+  it("P1: all candidates unaffordable → returns highest-priority one so UI can show the reason", () => {
+    const hi = exploration("ev_a", "taiyechi", { priority: 9, apCost: 9 });
+    const lo = exploration("ev_z", "taiyechi", { priority: 1, apCost: 9 });
+    const s = { ...at("yuhuayuan"), calendar: { ...at("yuhuayuan").calendar, ap: 1 } };
+    const picked = pickSubLocationEvent(withEvents(hi, lo), s, "yuhuayuan", "taiyechi");
+    expect(picked?.id).toBe("ev_a");
+    expect(subLocationEventAffordable(s, picked!)).toBe(false);
+  });
+
   it("an unaffordable exploration event is STILL returned (exists), but reported as unaffordable", () => {
     const ev = exploration("ev_a", "taiyechi", { apCost: 99 });
     const picked = pickSubLocationEvent(withEvents(ev), at("yuhuayuan"), "yuhuayuan", "taiyechi");
