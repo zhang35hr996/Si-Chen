@@ -177,7 +177,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     audioController.play(trackFor({ view, board: currentBoard, zone: bgmZone }));
   }, [view, currentBoard, bgmZone]);
 
-  // 大选·四月 prompt：进入房间且到节点时声明式弹出（reactiveState 订阅日历驱动重算）。
+  // 殿选 prompt 由 AP 推进层（rollActionBeats → maybeDaxuanPrompt）统一入队，
+  // 与二月报告同源，不再依赖房间视图 useEffect（详见 maybeDaxuanPrompt）。
   const reactiveState = useGameState(store);
 
   // 死者视图清理：被召见的侍君若在跨月健康 tick 中身故，清除召见态（不在死者宫中停留）。
@@ -187,12 +188,6 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       setSummonedConsortId(null);
     }
   }, [reactiveState.standing, summonedConsortId]);
-  useEffect(() => {
-    if (!content.ok) return;
-    if (view !== "location" || daxuanPrompt || dianxuan) return;
-    const p = buildDaxuanDianxuanPrompt(content.value, store.getState());
-    if (p) setDaxuanPrompt(p);
-  }, [reactiveState.calendar.dayIndex, reactiveState.calendar.ap, view, daxuanPrompt, dianxuan]);
 
   if (!content.ok || !manifest.success) {
     const errors = [
@@ -504,7 +499,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
    * + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果、台词、皇帝是否崩逝。
    * 皇帝崩逝时不再掷后续节拍（落在已 gameOver 的局上无意义），交调用方 short-circuit 回 title。
    */
-  /** 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报 + 大选报告。 */
+  /**
+   * 殿选 prompt 入队：到点（四月下旬辰时起，大选年内未决）即挂起，由覆盖层消费。
+   * 与二月报告同源于 AP 推进层（rollActionBeats），不依赖房间视图 useEffect；
+   * catch-up 窗口保证错过单槽也能在后续普通行动补出。已显示/进行中则不重复入队。
+   */
+  const maybeDaxuanPrompt = (): void => {
+    if (daxuanPrompt || dianxuan) return;
+    const p = buildDaxuanDianxuanPrompt(db, store.getState());
+    if (p) setDaxuanPrompt(p);
+  };
+
+  /** 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报 + 大选报告 + 殿选 prompt。 */
   const rollActionBeats = (
     before: { apMax: number; ap: number; dayIndex: number },
     amount: number,
@@ -514,6 +520,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     const tributeShown = rollTribute(before, amount);
     if (!tributeShown) beats = [...beats, ...rollChengFeng(before, amount)];
     beats = [...beats, ...rollDaxuanAnnounce()];
+    if (!tributeShown) maybeDaxuanPrompt(); // 不与进贡 prompt 叠加；catch-up 保证下次补出
     return beats;
   };
 

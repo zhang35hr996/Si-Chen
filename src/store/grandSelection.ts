@@ -170,16 +170,21 @@ export function describeTalent(content: CharacterContent): string {
   return `秀男恭敬回道：小男儿自幼习${specialty}，略通一二，让陛下见笑了。`;
 }
 
-/** 二月上旬辰时、大选年、未报过 → 凤后遣人禀告大选已备妥（设 flag + 节拍）。否则 null。 */
+/**
+ * 大选年、未报过、且已到/已过「二月上旬辰时」→ 凤后遣人禀告大选已备妥（设 flag + 节拍）。
+ * 与殿选 prompt 同构用「到点即补触发」而非单槽相等：玩家若在该时辰未经普通行动而错过窗口，
+ * 报告仍会在大选年内的后续行动补出，不会永久丢失，也不会因 flag 已设而重复。
+ */
 export function buildDaxuanAnnounce(
   _db: ContentDB,
   state: GameState,
 ): { effects: EventEffect[]; beats: DecreeReaction[] } | null {
   const cal = state.calendar;
   if (!isDaxuanYear(cal.year)) return null;
-  if (cal.month !== 2 || cal.period !== "early") return null;
-  if (shichenSlot(cal) !== MORNING_SLOT) return null;
   if (state.flags[daxuanAnnounceFlagKey(cal.year)]) return null;
+  const dueDayIndex = dayIndexOf(cal.year, 2, "early");
+  if (cal.dayIndex < dueDayIndex) return null;
+  if (cal.dayIndex === dueDayIndex && shichenSlot(cal) < MORNING_SLOT) return null;
   return {
     effects: [{ type: "flag", key: daxuanAnnounceFlagKey(cal.year), value: true }],
     beats: [

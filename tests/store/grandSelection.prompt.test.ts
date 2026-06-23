@@ -17,8 +17,14 @@ function at(s = createNewGameState(db), month: number, period: "early" | "mid" |
   };
 }
 
-describe("二月报告 buildDaxuanAnnounce", () => {
-  it("大选年二月上旬辰时出报告；非大选年/已报过 → null", () => {
+/** 指定年份的新游戏状态（用于跨年/非大选年断言）。 */
+function withYear(year: number) {
+  const s = createNewGameState(db);
+  return { ...s, calendar: { ...s.calendar, year } };
+}
+
+describe("二月报告 buildDaxuanAnnounce（到点补触发）", () => {
+  it("大选年二月上旬辰时出报告；已报过/非大选年 → null", () => {
     const s = at(createNewGameState(db), 2, "early", MORNING_SLOT); // 元年=大选年
     const r = buildDaxuanAnnounce(db, s);
     expect(r).not.toBeNull();
@@ -30,9 +36,37 @@ describe("二月报告 buildDaxuanAnnounce", () => {
 
     const notYear = { ...s, calendar: { ...s.calendar, year: 2 } };
     expect(buildDaxuanAnnounce(db, notYear)).toBeNull();
+  });
 
-    const wrongMonth = at(createNewGameState(db), 3, "early", MORNING_SLOT);
-    expect(buildDaxuanAnnounce(db, wrongMonth)).toBeNull();
+  it("二月上旬辰时之前 → null（卯时尚早 / 更早月份）", () => {
+    const maoSameDay = at(createNewGameState(db), 2, "early", 0); // 卯时，早于辰时
+    expect(buildDaxuanAnnounce(db, maoSameDay)).toBeNull();
+    const earlierMonth = at(createNewGameState(db), 1, "late", MORNING_SLOT);
+    expect(buildDaxuanAnnounce(db, earlierMonth)).toBeNull();
+  });
+
+  it("错过辰时窗口后仍在大选年内 → 补触发（不永久丢失）", () => {
+    const sameDayLater = at(createNewGameState(db), 2, "early", MORNING_SLOT + 1); // 同日更晚时辰
+    expect(buildDaxuanAnnounce(db, sameDayLater)).not.toBeNull();
+    const laterPeriod = at(createNewGameState(db), 2, "mid", 0); // 后续旬
+    expect(buildDaxuanAnnounce(db, laterPeriod)).not.toBeNull();
+    const laterMonth = at(createNewGameState(db), 3, "early", MORNING_SLOT); // 后续月
+    expect(buildDaxuanAnnounce(db, laterMonth)).not.toBeNull();
+    // 已报则不再补触发（不重复）。
+    const reported = { ...laterMonth, flags: { ...laterMonth.flags, "daxuan:announce:1": true } };
+    expect(buildDaxuanAnnounce(db, reported)).toBeNull();
+  });
+
+  it("大选年结束后不残留（次年非大选年，纵在二月之后亦 null）", () => {
+    const nextYear = at(withYear(2), 5, "early", MORNING_SLOT);
+    expect(buildDaxuanAnnounce(db, nextYear)).toBeNull();
+  });
+
+  it("正常时序：二月报告早于四月殿选 prompt 到点", () => {
+    // 三月：报告已到点（补触发），殿选尚未到点 → null。
+    const march = at(createNewGameState(db), 3, "early", MORNING_SLOT);
+    expect(buildDaxuanAnnounce(db, march)).not.toBeNull();
+    expect(buildDaxuanDianxuanPrompt(db, march)).toBeNull();
   });
 });
 
