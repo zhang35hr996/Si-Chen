@@ -18,5 +18,11 @@
   ],
   "travelCost": {
     "ap": 0
-  }
+  },
+  "subLocations": [
+    { "id": "jiangxuexuan", "name": "绛雪轩", "backgroundKey": "bg.jiangxuexuan", "description": "轩前海棠成荫，朱栏曲折，阶下苔痕半绿。" },
+    { "id": "taiyechi", "name": "太液池", "backgroundKey": "bg.taiyechi", "description": "池水开阔，映着宫墙与垂柳，水榭临波。" },
+    { "id": "fubiting", "name": "浮碧亭", "backgroundKey": "bg.fubiting", "description": "亭立水心，四面通透，檐角风铃轻响。" },
+    { "id": "tuixiushan", "name": "堆秀山", "backgroundKey": "bg.tuixiushan", "description": "叠石为山，磴道盘曲，山巅御景亭可望宫苑。" }
+  ]
 }

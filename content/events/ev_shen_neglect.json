@@ -9,5 +9,10 @@
   "priority": 50,
   "once": true,
   "apCost": 1,
-  "presentation": { "mode": "auto_on_enter" }
+  "presentation": {
+    "mode": "exploration",
+    "hostLocationId": "yuhuayuan",
+    "subLocationId": "taiyechi",
+    "eventHint": "太液池畔，似有一道孤影久立。"
+  }
 }
