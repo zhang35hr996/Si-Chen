@@ -259,19 +259,22 @@ describe("ChengfengDispatch", () => {
     expect(opener).not.toHaveFocus(); // business surface owns focus now
   });
 
-  it("handoff path: the next business surface keeps focus without Chengfeng stealing it back on unmount", async () => {
+  it("handoff path: after Chengfeng unmounts, the next business surface keeps focus (no trap interference, no opener-restore)", async () => {
     const user = userEvent.setup();
     render(<button data-testid="opener">opener</button>);
     screen.getByTestId("opener").focus();
-    const { unmount } = render(<ChengfengDispatch interruptible {...handlers} />);
+    const onSummonConsort = vi.fn();
+    const { unmount } = render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} />);
     await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
-    // simulate the next existing business surface (册封/搬迁/赏赐…) taking focus
+    expect(onSummonConsort).toHaveBeenCalledTimes(1);
+    // real handoff: the parent unmounts Chengfeng (foreground → none) BEFORE the business modal opens.
+    unmount();
+    // now the next existing business surface (册封/搬迁/赏赐…) takes focus — the unmounted Chengfeng's
+    // focus trap (isConnected===false) must not pull it back, and the opener must not be restored.
     render(<button data-testid="next-surface">next</button>);
     const next = screen.getByTestId("next-surface");
     next.focus();
     expect(next).toHaveFocus();
-    unmount();
-    expect(next).toHaveFocus(); // not stolen back
     expect(screen.getByTestId("opener")).not.toHaveFocus();
   });
 
@@ -316,5 +319,34 @@ describe("ChengfengDispatch — true modal focus containment (Blocker 2)", () =>
       expect(before).not.toHaveFocus();
       expect(after).not.toHaveFocus();
     }
+  });
+});
+
+describe("ChengfengDispatch — focus recovery after escape (Blocker 2 / re-review P1)", () => {
+  it("focusing an outside element is immediately returned inside the dialog", () => {
+    render(
+      <>
+        <button type="button">outside</button>
+        <ChengfengDispatch interruptible {...handlers} />
+      </>,
+    );
+    const outside = screen.getByRole("button", { name: "outside" });
+    outside.focus();
+    expect(outside).not.toHaveFocus();
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+  });
+
+  it("after focus escapes, Tab keeps focus inside the dialog", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">outside</button>
+        <ChengfengDispatch interruptible {...handlers} />
+      </>,
+    );
+    screen.getByRole("button", { name: "outside" }).focus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "outside" })).not.toHaveFocus();
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
   });
 });

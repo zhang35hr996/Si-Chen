@@ -240,3 +240,46 @@ describe("PendingAudienceDrawer — true modal containment (Blocker 2)", () => {
     expect(container.querySelector(".pending-drawer-layer")).not.toHaveAttribute("role", "dialog");
   });
 });
+
+describe("PendingAudienceDrawer — focus recovery after escape (Blocker 2 / re-review P1)", () => {
+  it("1. programmatically focusing an outside element is immediately returned inside (focusin)", () => {
+    render(
+      <>
+        <button type="button">outside</button>
+        <PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />
+      </>,
+    );
+    const outside = screen.getByRole("button", { name: "outside" });
+    outside.focus();
+    expect(outside).not.toHaveFocus(); // pulled back
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+  });
+
+  it("2. after focus escapes to an outside element, Tab keeps focus inside", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">outside</button>
+        <PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />
+      </>,
+    );
+    const outside = screen.getByRole("button", { name: "outside" });
+    outside.focus(); // focusin returns it inside
+    await user.tab();
+    expect(outside).not.toHaveFocus();
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+  });
+
+  it("3. Shift+Tab after an escape returns to the last enabled control", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">outside</button>
+        <PendingAudienceDrawer items={items} onAdmit={noop} onClose={noop} />
+      </>,
+    );
+    screen.getByRole("button", { name: "outside" }).focus(); // → 关闭 (first focusable)
+    await user.tab({ shift: true }); // from first → wraps to last enabled
+    expect(admitFor("沈砚")).toHaveFocus(); // 沈砚 is the last enabled admit (陆参 is disabled)
+  });
+});

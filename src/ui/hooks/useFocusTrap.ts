@@ -1,11 +1,13 @@
 /**
- * 真模态焦点限制（focus containment）。把 Tab / Shift+Tab 循环约束在容器内：从最后一个可聚焦元素 Tab
- * 回到第一个，从第一个 Shift+Tab 回到最后一个；禁用元素被排除；焦点一旦逸出容器即拉回。据此焦点永不抵达
- * GameShell 顶栏/面包屑/设置/国情/国库等背景控件。仅用于真模态面（PendingAudienceDrawer / ChengfengDispatch）；
- * 非模态的 AudiencePrompt 不用。
+ * 真模态焦点限制（focus containment）。把 Tab / Shift+Tab 循环约束在容器内，并在焦点已逸出（如点击不可聚焦
+ * 背景后落到 body）时立即拉回——故焦点永不抵达 GameShell 顶栏/面包屑/设置/国情/国库等背景控件。禁用元素被排除。
  *
- * 仅拦截「边界处」的 Tab（preventDefault + 手动聚焦环绕端）；容器内部的 Tab 放行（由浏览器/user-event 按
- * DOM 顺序移动）。监听挂在容器上：焦点在容器内时 keydown 冒泡至此。
+ * 实现：在 **document 捕获阶段** 同时挂 `keydown`（边界环绕 + 逸出后按方向拉回首/末）与 `focusin`（任何外部得焦
+ * 立即拉回容器内）。容器级监听做不到这点：焦点真正离开容器后，事件从外部元素派发、不再冒泡经容器。
+ *
+ * 业务交接安全：乘风选定谕令时容器随即卸载；卸载后焦点落 body 触发 focusin，但此时 container.isConnected 已为
+ * false → 守卫直接返回，绝不把焦点从下一个业务模态抢回。仅用于真模态面（PendingAudienceDrawer / ChengfengDispatch）；
+ * 非模态的 AudiencePrompt 不用。
  */
 import { useEffect, type RefObject } from "react";
 
@@ -30,30 +32,46 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
     const container = containerRef.current;
     if (!container) return;
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const focusables = focusableWithin(container);
-      if (focusables.length === 0) {
-        e.preventDefault();
-        container.focus(); // 无可聚焦项：焦点留在对话容器，绝不外逸
-        return;
-      }
-      const first = focusables[0]!;
-      const last = focusables[focusables.length - 1]!;
-      const activeEl = document.activeElement;
-      const outside = !container.contains(activeEl);
-      if (e.shiftKey) {
-        if (activeEl === first || outside) {
-          e.preventDefault();
-          last.focus(); // 从首元素 Shift+Tab → 环绕到末元素
-        }
-      } else if (activeEl === last || outside) {
-        e.preventDefault();
-        first.focus(); // 从末元素 Tab → 环绕到首元素
+    const onFocusIn = (event: FocusEvent) => {
+      if (!container.isConnected) return; // 容器正在卸载（业务交接）：不抢下一个模态的焦点
+      if (!container.contains(event.target as Node)) {
+        const items = focusableWithin(container);
+        (items[0] ?? container).focus(); // 外部得焦 → 立即拉回容器内
       }
     };
 
-    container.addEventListener("keydown", onKeyDown);
-    return () => container.removeEventListener("keydown", onKeyDown);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      if (!container.isConnected) return;
+      const items = focusableWithin(container);
+      if (items.length === 0) {
+        event.preventDefault();
+        container.focus();
+        return;
+      }
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const current = document.activeElement;
+      if (!container.contains(current)) {
+        // 焦点已在容器外：Tab → 首项，Shift+Tab → 末项
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
+      if (event.shiftKey && current === first) {
+        event.preventDefault();
+        last.focus(); // 从首项 Shift+Tab → 环绕到末项
+      } else if (!event.shiftKey && current === last) {
+        event.preventDefault();
+        first.focus(); // 从末项 Tab → 环绕到首项
+      }
+    };
+
+    document.addEventListener("focusin", onFocusIn, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
   }, [containerRef, active]);
 }
