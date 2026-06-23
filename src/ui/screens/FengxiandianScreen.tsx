@@ -8,6 +8,7 @@ import { eligibleAdoptiveFathers } from "../../store/adoption";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
@@ -35,6 +36,7 @@ export function FengxiandianScreen({
     <GameShell
       calendar={state.calendar}
       crumbs={breadcrumbFor(db, location.id)}
+      pregnancyMonth={sovereignGestationDisplay(state)?.month ?? undefined}
       onBack={onOpenMap}
       onOpenSettings={onOpenSettings}
     >

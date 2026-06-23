@@ -7,6 +7,7 @@ import { buildTravelBatch, checkTravel } from "../../engine/map/travel";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { GameShell } from "../components/GameShell";
+import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { HaremGrid } from "./HaremGrid";
 
 /** Boards rendered as a symmetric grid (§四) instead of absolute nodes on art. */
@@ -218,7 +219,7 @@ export function MapScreen({
       calendar={state.calendar}
       crumbs={crumbs}
       locationName={playerLocName}
-      pregnant={state.resources.bloodline.gestations.some((g) => g.carrier === "sovereign")}
+      pregnancyMonth={sovereignGestationDisplay(state)?.month ?? undefined}
       onBack={goBack}
       onCrumb={jumpToCrumb}
       onOpenResources={onOpenResources}

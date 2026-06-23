@@ -53,6 +53,7 @@ import {
 } from "../engine/events/audience";
 import { GameShell } from "./components/GameShell";
 import { breadcrumbFor } from "./components/breadcrumb";
+import { sovereignGestationDisplay } from "./format/gestationDisplay";
 import { ZichendianScreen } from "./screens/ZichendianScreen";
 import {
   audienceItemToPendingView,
@@ -1552,7 +1553,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           <GameShell
             calendar={liveState.calendar}
             crumbs={breadcrumbFor(db, "zichendian")}
-            pregnant={liveState.resources.bloodline.gestations.some((g) => g.carrier === "sovereign")}
+            pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
             onBack={leaveZichendian}
             onOpenResources={() => setResourcePanelOpen(true)}
             onOpenStorehouse={() => setStorehouseOpen(true)}

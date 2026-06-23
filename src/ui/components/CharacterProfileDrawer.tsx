@@ -11,6 +11,8 @@ import { getCharacterLocation } from "../../engine/characters/presence";
 import { familyText, maternalLoyalty, maternalPower } from "../../engine/officials/derive";
 import { Drawer } from "./Drawer";
 import { DescriptorStat } from "./DescriptorStat";
+import { PregnancyStatusChip } from "./PregnancyStatusChip";
+import { consortGestationDisplay } from "../format/gestationDisplay";
 
 type Tab = "overview" | "attrs" | "history" | "children" | "relations";
 
@@ -51,6 +53,7 @@ export function CharacterProfileDrawer({
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const standing = state.standing[character.id];
+  const pregnancy = consortGestationDisplay(state, character.id); // 孕情：唯一权威孕月来源
   const rank = standing ? db.ranks[standing.rank] : undefined;
   const attrs = character.attributes;
   const homeId = getCharacterLocation(db, state, character.id);
@@ -90,6 +93,7 @@ export function CharacterProfileDrawer({
             {standing?.title && <Field label="封号" value={standing.title} />}
             {home && <Field label="住处" value={home} />}
             <Field label="身份" value={character.profile.role} />
+            {pregnancy && <Field label="孕育" value={pregnancy.label} />}
           </dl>
           <h3 className="profile-h">性情</h3>
           <div className="profile-tags">
@@ -115,6 +119,12 @@ export function CharacterProfileDrawer({
               </dl>
               <h3 className="profile-h">身体</h3>
               <DescriptorStat label="健康" scale="health" value={attrs.health} />
+              {pregnancy && (
+                <p className="profile-field profile-field--pregnancy">
+                  <span className="profile-field__label">孕育</span>
+                  <PregnancyStatusChip label={pregnancy.label} />
+                </p>
+              )}
             </>
           ) : (
             <p className="profile-empty">此人无养成属性。</p>

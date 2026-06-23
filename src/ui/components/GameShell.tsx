@@ -12,7 +12,7 @@ export function GameShell({
   calendar,
   crumbs,
   locationName,
-  pregnant,
+  pregnancyMonth,
   onBack,
   onCrumb,
   onOpenResources,
@@ -27,7 +27,8 @@ export function GameShell({
    *  tracks something other than the player's physical location (e.g. the map's
    *  board path). */
   locationName?: string;
-  pregnant?: boolean;
+  /** 帝王当前孕月（受孕月=1）；透传给 TopStatusBar 统一呈现。 */
+  pregnancyMonth?: number;
   onBack?: () => void;
   onCrumb?: (index: number) => void;
   onOpenResources?: () => void;
@@ -42,7 +43,7 @@ export function GameShell({
       <TopStatusBar
         calendar={calendar}
         locationName={topLocation}
-        pregnant={pregnant}
+        pregnancyMonth={pregnancyMonth}
         onOpenResources={onOpenResources}
         onOpenSettings={onOpenSettings}
         onOpenStorehouse={onOpenStorehouse}

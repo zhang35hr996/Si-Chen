@@ -3313,6 +3313,18 @@ button:active:enabled {
 .health-chip[data-status="healthy"] { color: #8fd18f; }
 .health-chip[data-status="sick"] { color: #d6c07a; }
 .health-chip[data-status="critical"] { color: #d98a8a; }
+/* 孕情 chip：与健康 chip 视觉分离（朱砂金调），紧凑可入卡片/列表详情，仅展示无交互。 */
+.pregnancy-chip {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 0.6rem;
+  font-size: 0.85em;
+  color: var(--cinnabar-soft);
+  border: 1px solid var(--line-gold);
+}
+.char-card__pregnancy { margin: 0.2rem 0 0; }
+.profile-field--pregnancy { display: flex; align-items: center; gap: 0.5rem; margin: 0.3rem 0 0; }
 
 /* ── SceneShell 统一场景外壳（scene-ui-narrative-refactor §4）─────────────── */
 .scene-shell {

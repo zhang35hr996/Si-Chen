@@ -12,6 +12,7 @@ import { hasChambers } from "../../engine/characters/chambers";
 import { CharacterCard } from "../components/CharacterCard";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
+import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { CharacterScene } from "./CharacterScene";
 
 export function LocationScreen({
@@ -104,13 +105,12 @@ export function LocationScreen({
   const showScene = sceneConsorts.length > 0 || hasChambers(location.id);
 
   const crumbs = breadcrumbFor(db, location.id);
-  const pregnant = state.resources.bloodline.gestations.some((g) => g.carrier === "sovereign");
 
   return (
     <GameShell
       calendar={state.calendar}
       crumbs={crumbs}
-      pregnant={pregnant}
+      pregnancyMonth={sovereignGestationDisplay(state)?.month ?? undefined}
       onBack={onLeavePalace ?? onOpenMap}
       onOpenResources={onOpenResources}
       onOpenStorehouse={onOpenStorehouse}
