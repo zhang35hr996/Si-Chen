@@ -187,6 +187,8 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `pregnancy_transfer needs a consort with standing: "${e.carrierId}"`, { char: e.carrierId });
         } else if (st.lifecycle === "deceased") {
           bad(index, "BAD_EFFECT_TARGET", `cannot transfer to a deceased consort: "${e.carrierId}"`, { char: e.carrierId });
+        } else if (state.resources.bloodline.gestations.some((g) => g.carrier === e.carrierId)) {
+          bad(index, "BAD_EFFECT_TARGET", `cannot transfer to an already-pregnant consort: "${e.carrierId}"`, { char: e.carrierId });
         } else if (preg.status !== "carrying" || sov === undefined) {
           bad(index, "BAD_EFFECT", `pregnancy_transfer requires sovereign self-pregnancy`, { status: preg.status });
         }

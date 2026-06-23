@@ -6,7 +6,7 @@ import type { ContentDB } from "../engine/content/loader";
 import type { CharacterRank, CharacterContent, EventEffect } from "../engine/content/schemas";
 import { characterSchema } from "../engine/content/schemas";
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
-import { chineseNumeral, MORNING_SLOT, shichenSlot, monthOrdinal, toGameTime } from "../engine/calendar/time";
+import { chineseNumeral, dayIndexOf, MORNING_SLOT, shichenSlot, monthOrdinal, toGameTime } from "../engine/calendar/time";
 import { memoryEntryId } from "../engine/state/newGame";
 import {
   ARISTOCRATIC_SURNAME_POOL,
@@ -193,13 +193,18 @@ export function buildDaxuanAnnounce(
   };
 }
 
-/** 四月下旬辰时、大选年、未决 → 殿选 prompt（前往 / 委托）。否则 null。 */
+/**
+ * 大选年、未决、且已到/已过「四月下旬辰时」→ 殿选 prompt（前往 / 委托）。否则 null。
+ * 用「到点即补触发」（与生产 gestationDue 同构）而非单槽相等：玩家若在该时辰未处于
+ * 房间视图而错过窗口，殿选仍会在大选年内的后续时机补出，不会永久丢失。
+ */
 export function buildDaxuanDianxuanPrompt(_db: ContentDB, state: GameState): ChengFengPrompt | null {
   const cal = state.calendar;
   if (!isDaxuanYear(cal.year)) return null;
-  if (cal.month !== 4 || cal.period !== "late") return null;
-  if (shichenSlot(cal) !== MORNING_SLOT) return null;
   if (state.flags[daxuanDianxuanFlagKey(cal.year)]) return null;
+  const dueDayIndex = dayIndexOf(cal.year, 4, "late");
+  if (cal.dayIndex < dueDayIndex) return null;
+  if (cal.dayIndex === dueDayIndex && shichenSlot(cal) < MORNING_SLOT) return null;
   return {
     speakerId: "cheng_feng",
     line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
