@@ -26,9 +26,16 @@ export type ImperialCommand =
       durationTurns: number | null;
       /** 凤后禁足时必须携带，指定接管六宫主理的人选；普通侍君禁足时不需要。 */
       administrator?: HaremAdministratorChoice;
+      /** 当目标为当前协理者且存在其他合格候选时，须指定接任者。 */
+      administratorReplacement?: HaremAdministratorChoice;
     }
   | { type: "lift_confinement"; targetId: string }
-  | { type: "execute"; targetId: string };
+  | {
+      type: "execute";
+      targetId: string;
+      /** 当目标为当前协理者且存在其他合格候选时，须指定接任者。 */
+      administratorReplacement?: HaremAdministratorChoice;
+    };
 
 export interface ImperialCommandPlan {
   command: ImperialCommand;
@@ -52,6 +59,54 @@ function targetName(db: ContentDB, state: GameState, charId: string): string {
   const st = state.standing[charId];
   if (!char) return charId;
   return resolveDisplayName(char, st, st ? db.ranks[st.rank] : undefined);
+}
+
+/**
+ * 当目标是当前协理者时，校验并组装接任效果。
+ *   - 若不存在其他合格候选 → 自动切内务府（无需玩家选择，直接返回效果）。
+ *   - 若存在合格候选 → 必须提供 replacement，否则校验失败。
+ */
+function resolveActingAdminReplacement(
+  db: ContentDB,
+  state: GameState,
+  charId: string,
+  replacement: HaremAdministratorChoice | undefined,
+  now: ReturnType<typeof toGameTime>,
+): { ok: true; effect: import("../engine/content/schemas").EventEffect | null; note: string } | { ok: false; reason: string } {
+  const admin = state.haremAdministration;
+  if (admin.mode !== "acting_consort" || admin.charId !== charId) {
+    return { ok: true, effect: null, note: "" };
+  }
+  // 合格接任候选（排除即将失格的当前协理者本身）。
+  const eligible = eligibleHaremAdministrators(db, state).filter((c) => c.id !== charId);
+  if (eligible.length === 0) {
+    // 无候选 → 自动切内务府，无需玩家选。
+    return {
+      ok: true,
+      effect: { type: "set_harem_administration", state: { mode: "neiwu_proxy", appointedAt: now, reason: "no_eligible_consort" } },
+      note: "内务府总管暂代宫务。",
+    };
+  }
+  // 有候选 → 玩家必须指定接任者。
+  if (!replacement) {
+    return { ok: false, reason: "现任协理者将失格，须指定新的六宫主理者。" };
+  }
+  if (replacement.kind === "neiwu_proxy") {
+    return { ok: false, reason: "宫中尚有驸级以上侍君可接任，须选择侍君协理。" };
+  }
+  const chosen = eligible.find((c) => c.id === replacement.charId);
+  if (!chosen) {
+    return { ok: false, reason: "所选接任者不符合协理六宫资格。" };
+  }
+  const replacementName = targetName(db, state, replacement.charId);
+  return {
+    ok: true,
+    effect: {
+      type: "set_harem_administration",
+      state: { mode: "acting_consort", charId: replacement.charId, appointedAt: now, reason: "empress_confined" },
+    },
+    note: `${replacementName}接任协理六宫。`,
+  };
 }
 
 /**
@@ -200,6 +255,10 @@ export function planImperialCommand(
     }
 
     // ── 普通侍君禁足 ──────────────────────────────────────────────────
+    // 若目标是当前协理者，须处理接任问题。
+    const repResult = resolveActingAdminReplacement(db, state, charId, command.administratorReplacement, now);
+    if (!repResult.ok) return { ok: false, reason: repResult.reason };
+
     const effects: EventEffect[] = [
       {
         type: "confine",
@@ -226,6 +285,7 @@ export function planImperialCommand(
           emotions: { fear: 35, shame: 25 },
         },
       },
+      ...(repResult.effect ? [repResult.effect] : []),
     ];
     const chronicle: Omit<CourtEvent, "id">[] = [
       {
@@ -247,9 +307,10 @@ export function planImperialCommand(
         tags: ["imperial_decree", "confinement"],
       },
     ];
+    const repNote = repResult.note ? ` ${repResult.note}` : "";
     return {
       ok: true,
-      plan: { command, charId, effects, chronicle, lines: [`${name}惶恐领旨，自此闭锁宫中。`] },
+      plan: { command, charId, effects, chronicle, lines: [`${name}惶恐领旨，自此闭锁宫中。${repNote}`] },
     };
   }
 
@@ -320,11 +381,16 @@ export function planImperialCommand(
     return { ok: false, reason: "凤后不受赐死之令。" };
   }
 
+  // 若目标是当前协理者，须处理接任问题。
+  const execRepResult = resolveActingAdminReplacement(db, state, charId, command.administratorReplacement, now);
+  if (!execRepResult.ok) return { ok: false, reason: execRepResult.reason };
+
   // execute — 走统一死亡管线（consort_decease + enqueue_aftermath），并附结构化赐死史。
   const aftermathId = `death:consort:${charId}:${now.dayIndex}`;
   const effects: EventEffect[] = [
     { type: "consort_decease", char: charId, at: now, cause: "imperial_execution" },
     { type: "enqueue_aftermath", id: aftermathId, kind: "consort", subjectId: charId, at: now },
+    ...(execRepResult.effect ? [execRepResult.effect] : []),
   ];
   const chronicle: Omit<CourtEvent, "id">[] = [
     {
@@ -347,8 +413,9 @@ export function planImperialCommand(
       tags: ["imperial_decree", "execution"],
     },
   ];
+  const execRepNote = execRepResult.note ? ` ${execRepResult.note}` : "";
   return {
     ok: true,
-    plan: { command, charId, effects, chronicle, lines: [`${name}领旨谢恩，香消玉殒。`] },
+    plan: { command, charId, effects, chronicle, lines: [`${name}领旨谢恩，香消玉殒。${execRepNote}`] },
   };
 }

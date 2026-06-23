@@ -40,6 +40,7 @@ import type { RingBufferLogger } from "../engine/infra/logger";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees } from "../engine/characters/greeting";
+import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
@@ -2435,19 +2436,22 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onClose={() => setSettingsOpen(false)}
         />
       )}
-      {ceremonyOpen && (
-        <GreetingCeremonyOverlay
-          empressName={db.characters.shen_zhibai?.profile.name ?? "皇后"}
-          onDone={() => {
-            setCeremonyOpen(false);
-            if (reactionQueue.length > 0) {
-              const [first, ...rest] = reactionQueue;
-              setReaction(first!);
-              setReactionQueue(rest);
-            }
-          }}
-        />
-      )}
+      {ceremonyOpen && (() => {
+        const hostView = getGreetingHostView(db, store.getState());
+        return hostView ? (
+          <GreetingCeremonyOverlay
+            hostView={hostView}
+            onDone={() => {
+              setCeremonyOpen(false);
+              if (reactionQueue.length > 0) {
+                const [first, ...rest] = reactionQueue;
+                setReaction(first!);
+                setReactionQueue(rest);
+              }
+            }}
+          />
+        ) : null;
+      })()}
       {morningAfterOpen && morningAfterCharId && (
         <MorningAfterOverlay
           consortName={db.characters[morningAfterCharId]?.profile.name ?? "爱卿"}

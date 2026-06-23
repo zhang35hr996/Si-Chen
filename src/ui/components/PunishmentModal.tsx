@@ -28,8 +28,10 @@ type Step =
   | { kind: "menu" }
   | { kind: "confine_duration" }
   | { kind: "confine_admin_select"; duration: ConfinementDurationKey }
-  | { kind: "confine_confirm"; duration: ConfinementDurationKey; administrator?: HaremAdministratorChoice }
-  | { kind: "execute_confirm" };
+  | { kind: "confine_replacement_select"; duration: ConfinementDurationKey }
+  | { kind: "confine_confirm"; duration: ConfinementDurationKey; administrator?: HaremAdministratorChoice; administratorReplacement?: HaremAdministratorChoice }
+  | { kind: "execute_replacement_select" }
+  | { kind: "execute_confirm"; administratorReplacement?: HaremAdministratorChoice };
 
 export function PunishmentModal({
   db,
@@ -53,6 +55,13 @@ export function PunishmentModal({
   const eraName = state.calendar.eraName;
   const confinement = activeConfinement(state, character.id);
   const isEmpress = standing?.rank === "fenghou";
+
+  const haremAdmin = state.haremAdministration;
+  const isActingAdmin = haremAdmin.mode === "acting_consort" && haremAdmin.charId === character.id;
+  // 协理者失格后有资格接任的候选（排除目标本身）。
+  const replacementCandidates = isActingAdmin ? eligibleHaremAdministrators(db, state).filter((c) => c.id !== character.id) : [];
+  // 仅当有候选时才需要玩家选择；无候选时自动切内务府。
+  const needsReplacementChoice = isActingAdmin && replacementCandidates.length > 0;
 
   const issue = (command: ImperialCommand) => {
     onCommand(command);
@@ -166,6 +175,77 @@ export function PunishmentModal({
     );
   }
 
+  // ── 协理者接任选择（禁足目标是当前协理者）────────────────────────────────
+  if (step.kind === "confine_replacement_select") {
+    return (
+      <Backdrop onClose={onClose}>
+        <h2>指定六宫接任者</h2>
+        <p className="punish-modal__subtitle">{name}禁足后，须指定新的六宫主理者：</p>
+        <div className="punish-modal__admin-list">
+          {replacementCandidates.map((c) => {
+            const cSt = state.standing[c.id];
+            const cRank = cSt ? db.ranks[cSt.rank] : undefined;
+            const cName = resolveDisplayName(c, cSt, cRank);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className="punish-btn"
+                onClick={() =>
+                  setStep({
+                    kind: "confine_confirm",
+                    duration: step.duration,
+                    administratorReplacement: { kind: "consort", charId: c.id },
+                  })
+                }
+              >
+                {cName}
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" className="punish-btn punish-btn--minor" onClick={() => setStep({ kind: "confine_duration" })}>
+          返回
+        </button>
+      </Backdrop>
+    );
+  }
+
+  // ── 协理者接任选择（赐死目标是当前协理者）────────────────────────────────
+  if (step.kind === "execute_replacement_select") {
+    return (
+      <Backdrop onClose={onClose}>
+        <h2>指定六宫接任者</h2>
+        <p className="punish-modal__subtitle">{name}赐死后，须指定新的六宫主理者：</p>
+        <div className="punish-modal__admin-list">
+          {replacementCandidates.map((c) => {
+            const cSt = state.standing[c.id];
+            const cRank = cSt ? db.ranks[cSt.rank] : undefined;
+            const cName = resolveDisplayName(c, cSt, cRank);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className="punish-btn"
+                onClick={() =>
+                  setStep({
+                    kind: "execute_confirm",
+                    administratorReplacement: { kind: "consort", charId: c.id },
+                  })
+                }
+              >
+                {cName}
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" className="punish-btn punish-btn--minor" onClick={() => setStep({ kind: "menu" })}>
+          返回
+        </button>
+      </Backdrop>
+    );
+  }
+
   // ── 禁足期限选择 ──────────────────────────────────────────────────────
   if (step.kind === "confine_duration") {
     return (
@@ -177,11 +257,15 @@ export function PunishmentModal({
               key={key}
               type="button"
               className="punish-btn"
-              onClick={() =>
-                isEmpress
-                  ? setStep({ kind: "confine_admin_select", duration: key })
-                  : setStep({ kind: "confine_confirm", duration: key })
-              }
+              onClick={() => {
+                if (isEmpress) {
+                  setStep({ kind: "confine_admin_select", duration: key });
+                } else if (needsReplacementChoice) {
+                  setStep({ kind: "confine_replacement_select", duration: key });
+                } else {
+                  setStep({ kind: "confine_confirm", duration: key });
+                }
+              }}
             >
               {CONFINEMENT_DURATION_LABELS[key]}
             </button>
@@ -215,6 +299,25 @@ export function PunishmentModal({
         adminLine = <p className="punish-modal__confirm">六宫主理：{acName}协理六宫。</p>;
       }
     }
+    let replacementLine: ReactNode = null;
+    if (step.administratorReplacement) {
+      const r = step.administratorReplacement;
+      if (r.kind === "neiwu_proxy") {
+        replacementLine = <p className="punish-modal__confirm">六宫接任：内务府总管暂代宫务。</p>;
+      } else {
+        const rc = db.characters[r.charId] ?? state.generatedConsorts[r.charId];
+        const rcSt = state.standing[r.charId];
+        const rcRank = rcSt ? db.ranks[rcSt.rank] : undefined;
+        const rcName = rc ? resolveDisplayName(rc, rcSt, rcRank) : r.charId;
+        replacementLine = <p className="punish-modal__confirm">六宫接任：{rcName}协理六宫。</p>;
+      }
+    }
+
+    const prevStepForBack = isEmpress
+      ? ({ kind: "confine_admin_select", duration: step.duration } as const)
+      : needsReplacementChoice
+        ? ({ kind: "confine_replacement_select", duration: step.duration } as const)
+        : ({ kind: "confine_duration" } as const);
 
     return (
       <Backdrop onClose={onClose}>
@@ -235,6 +338,7 @@ export function PunishmentModal({
           </p>
         )}
         {adminLine}
+        {replacementLine}
         <div className="punish-modal__actions">
           <button
             type="button"
@@ -245,6 +349,7 @@ export function PunishmentModal({
                 targetId: character.id,
                 durationTurns,
                 ...(step.administrator ? { administrator: step.administrator } : {}),
+                ...(step.administratorReplacement ? { administratorReplacement: step.administratorReplacement } : {}),
               })
             }
           >
@@ -253,11 +358,7 @@ export function PunishmentModal({
           <button
             type="button"
             className="punish-btn punish-btn--minor"
-            onClick={() =>
-              isEmpress
-                ? setStep({ kind: "confine_admin_select", duration: step.duration })
-                : setStep({ kind: "confine_duration" })
-            }
+            onClick={() => setStep(prevStepForBack)}
           >
             返回
           </button>
@@ -269,6 +370,22 @@ export function PunishmentModal({
   // ── 赐死高危确认（输入姓名方可下旨，视觉区别于普通确认）────────────────
   if (step.kind === "execute_confirm") {
     const nameMatches = typedName.trim() === name;
+    let execReplacementLine: ReactNode = null;
+    if (step.administratorReplacement) {
+      const r = step.administratorReplacement;
+      if (r.kind === "neiwu_proxy") {
+        execReplacementLine = <p className="punish-modal__confirm">六宫接任：内务府总管暂代宫务。</p>;
+      } else {
+        const rc = db.characters[r.charId] ?? state.generatedConsorts[r.charId];
+        const rcSt = state.standing[r.charId];
+        const rcRank = rcSt ? db.ranks[rcSt.rank] : undefined;
+        const rcName = rc ? resolveDisplayName(rc, rcSt, rcRank) : r.charId;
+        execReplacementLine = <p className="punish-modal__confirm">六宫接任：{rcName}协理六宫。</p>;
+      }
+    }
+    const backStep: Step = needsReplacementChoice
+      ? { kind: "execute_replacement_select" }
+      : { kind: "menu" };
     return (
       <Backdrop onClose={onClose}>
         <div className="punish-modal__danger">
@@ -278,6 +395,7 @@ export function PunishmentModal({
             <br />
             相关剧情、关系和未完成事件将被终止。此举不可逆。
           </p>
+          {execReplacementLine}
           <label className="punish-modal__name-confirm">
             为防误触，请输入该角色姓名「{name}」以确认：
             <input
@@ -292,7 +410,11 @@ export function PunishmentModal({
               type="button"
               className="punish-btn punish-btn--execute"
               disabled={!nameMatches}
-              onClick={() => issue({ type: "execute", targetId: character.id })}
+              onClick={() => issue({
+                type: "execute",
+                targetId: character.id,
+                ...(step.administratorReplacement ? { administratorReplacement: step.administratorReplacement } : {}),
+              })}
             >
               赐死
             </button>
@@ -301,7 +423,7 @@ export function PunishmentModal({
               className="punish-btn punish-btn--minor"
               onClick={() => {
                 setTypedName("");
-                setStep({ kind: "menu" });
+                setStep(backStep);
               }}
             >
               取消
@@ -327,7 +449,11 @@ export function PunishmentModal({
           <button
             type="button"
             className="punish-btn punish-btn--danger"
-            onClick={() => setStep({ kind: "execute_confirm" })}
+            onClick={() =>
+              needsReplacementChoice
+                ? setStep({ kind: "execute_replacement_select" })
+                : setStep({ kind: "execute_confirm" })
+            }
           >
             赐死
           </button>

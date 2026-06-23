@@ -367,6 +367,47 @@ export function validateEffects(
         }
         break;
       }
+      case "set_harem_administration": {
+        // 判断凤后禁足现状（或本批中是否存在禁足/解禁凤后的效果）。
+        const fenghousId = Object.keys(state.standing).find(
+          (id) => state.standing[id]!.rank === "fenghou" && state.standing[id]!.lifecycle !== "deceased",
+        );
+        const alreadyConfined = fenghousId
+          ? state.statusEffects.some(
+              (se) => se.kind === "confinement" && se.characterId === fenghousId && (se as { liftedTurn?: number }).liftedTurn === undefined,
+            )
+          : false;
+        const confinedinBatch = effects.some((be) => be.type === "confine" && (be as { char?: string }).char === fenghousId);
+        const liftedInBatch = effects.some((be) => be.type === "lift_confinement" && (be as { char?: string }).char === fenghousId);
+        const effectivelyConfined = (alreadyConfined && !liftedInBatch) || confinedinBatch;
+
+        const ns = e.state;
+        if (ns.mode === "empress") {
+          if (effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is confined", {});
+          }
+        } else if (ns.mode === "acting_consort") {
+          if (!effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "acting_consort mode requires empress to be confined", {});
+          } else {
+            const c = db.characters[ns.charId] ?? state.generatedConsorts[ns.charId];
+            const st = state.standing[ns.charId];
+            if (!c || c.kind !== "consort" || !st) {
+              bad(index, "BAD_EFFECT_TARGET", `acting consort "${ns.charId}" not found`, { char: ns.charId });
+            } else if (st.rank === "fenghou") {
+              bad(index, "BAD_EFFECT", `acting consort cannot be fenghou: "${ns.charId}"`, { char: ns.charId });
+            } else if (st.lifecycle === "deceased" || st.lifecycle === "candidate") {
+              bad(index, "BAD_EFFECT_TARGET", `acting consort is deceased or candidate: "${ns.charId}"`, { char: ns.charId });
+            }
+          }
+        } else {
+          // neiwu_proxy
+          if (!effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "neiwu_proxy mode requires empress to be confined", {});
+          }
+        }
+        break;
+      }
     }
   });
   return errors;
@@ -793,26 +834,17 @@ export function applyEffects(
     }
   }
 
-  // 批后不变量：若协理者因本批效果（禁足/赐死等）失格，自动切换到下一合格侍君或内务府代理。
+  // 批后不变量：若协理者因本批效果（禁足/赐死/疾毙等）失格，切换内务府代理。
+  // 注意：命令层负责询问玩家选新协理者；此处仅兜底处置非玩家触发的失格（如疾病身亡）。
   if (next.haremAdministration.mode === "acting_consort") {
     const adminId = next.haremAdministration.charId;
     const eligible = eligibleHaremAdministrators(db, next);
     if (!eligible.some((c) => c.id === adminId)) {
-      const next_ = eligible[0];
-      if (next_) {
-        next.haremAdministration = {
-          mode: "acting_consort",
-          charId: next_.id,
-          appointedAt: toGameTime(next.calendar),
-          reason: "empress_confined",
-        };
-      } else {
-        next.haremAdministration = {
-          mode: "neiwu_proxy",
-          appointedAt: toGameTime(next.calendar),
-          reason: "no_eligible_consort",
-        };
-      }
+      next.haremAdministration = {
+        mode: "neiwu_proxy",
+        appointedAt: toGameTime(next.calendar),
+        reason: "no_eligible_consort",
+      };
     }
   }
 

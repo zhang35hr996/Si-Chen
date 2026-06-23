@@ -12,6 +12,7 @@ import type { ContentDB } from "../content/loader";
 import type { CharacterContent } from "../content/schemas";
 import type { GameState, HaremAdministrationState } from "../state/types";
 import { isConfined } from "./confinement";
+import { resolveDisplayName } from "./standing";
 
 /** 凤后驸级门槛：rank.order 须 >= fu 的 order。 */
 function fuOrder(db: ContentDB): number {
@@ -29,14 +30,15 @@ function fuOrder(db: ContentDB): number {
  *   - 当前位分 order >= fu.order
  *
  * 排序：有效位分从高到低；同位分按 charId 字典序（稳定）。
- * 生成侍君（generatedConsorts）同样纳入候选。
+ * 生成侍君（generatedConsorts）同样纳入候选；按 id 去重（generatedConsorts 已并入 db 时不重复）。
  */
 export function eligibleHaremAdministrators(db: ContentDB, state: GameState): CharacterContent[] {
   const minOrder = fuOrder(db);
-  const all: CharacterContent[] = [
-    ...Object.values(db.characters),
-    ...Object.values(state.generatedConsorts),
-  ];
+  // 按 id 去重，避免 generatedConsorts 被 App 合并进 db 时重复出现。
+  const allById = new Map<string, CharacterContent>();
+  for (const c of Object.values(db.characters)) allById.set(c.id, c);
+  for (const c of Object.values(state.generatedConsorts)) allById.set(c.id, c);
+  const all = Array.from(allById.values());
   return all
     .filter((c) => {
       if (c.kind !== "consort") return false;
@@ -99,4 +101,52 @@ export function getGreetingLocation(db: ContentDB, state: GameState): string | n
  */
 export function empressRestoredAdministration(): HaremAdministrationState {
   return { mode: "empress" };
+}
+
+/** 请安主持者视图：用于 UI 层动态生成请安入口文案。neiwu_proxy 时无正式请安，返回 null。 */
+export interface GreetingHostView {
+  mode: "empress" | "acting_consort";
+  hostId: string;
+  /** 展示名（如「沈织白」「许贵君」）。 */
+  hostName: string;
+  locationId: string;
+  /** 宫殿名（如「坤宁宫」「昭阳宫」）。 */
+  locationName: string;
+}
+
+/**
+ * 当前请安主持者视图。
+ *   empress mode        → 凤后及其寝殿
+ *   acting_consort mode → 协理者及其寝殿
+ *   neiwu_proxy mode    → null（无正式请安）
+ */
+export function getGreetingHostView(db: ContentDB, state: GameState): GreetingHostView | null {
+  const admin = state.haremAdministration;
+  if (admin.mode === "neiwu_proxy") return null;
+
+  if (admin.mode === "empress") {
+    for (const [id, st] of Object.entries(state.standing)) {
+      if (st.rank === "fenghou" && st.lifecycle !== "deceased") {
+        const char = db.characters[id];
+        const locationId = st.residence ?? char?.defaultLocation ?? "kunninggong";
+        const location = db.locations[locationId];
+        const rank = db.ranks[st.rank];
+        const hostName = char ? resolveDisplayName(char, st, rank) : "皇后";
+        return { mode: "empress", hostId: id, hostName, locationId, locationName: location?.name ?? locationId };
+      }
+    }
+    return null;
+  }
+
+  // acting_consort
+  const charId = admin.charId;
+  const st = state.standing[charId];
+  const char = db.characters[charId] ?? state.generatedConsorts[charId];
+  if (!st || !char) return null;
+  const locationId = st.residence ?? char.defaultLocation;
+  if (!locationId) return null;
+  const location = db.locations[locationId];
+  const rank = db.ranks[st.rank];
+  const hostName = resolveDisplayName(char, st, rank);
+  return { mode: "acting_consort", hostId: charId, hostName, locationId, locationName: location?.name ?? locationId };
 }

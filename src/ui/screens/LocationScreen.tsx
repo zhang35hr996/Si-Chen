@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay, isGreetingSlot } from "../../engine/calendar/time";
 import { getPresentAt, absentAt } from "../../engine/characters/presence";
+import { getGreetingHostView } from "../../engine/characters/haremAdministration";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
@@ -77,9 +78,10 @@ export function LocationScreen({
   const roster = getPresentAt(db, state, location.id); // 住处花名册（谁住这）
   const absence = absentAt(db, state, location.id); // charId → 去向 locationId
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
+  const greetingHost = isGreetingSlot(state.calendar) ? getGreetingHostView(db, state) : null;
   const greetingHere =
-    location.id === "kunninggong" &&
-    isGreetingSlot(state.calendar) &&
+    greetingHost !== null &&
+    greetingHost.locationId === location.id &&
     (greetingAttendeeCount ?? 0) > 0;
 
   // 普通地点场景人物条（单一权威：presentAt 物理在场，绝不用住处花名册填充在场）。
@@ -156,18 +158,22 @@ export function LocationScreen({
         </main>
       )}
 
-      {greetingHere && onEnterGreeting && onExitGreeting && (
+      {greetingHere && greetingHost && onEnterGreeting && onExitGreeting && (
         <div className="modal-backdrop">
           <div className="event-overlay" onClick={(e) => e.stopPropagation()}>
-            <h2 className="event-overlay__title">坤宁宫　晨省</h2>
-            <p className="event-overlay__hint">乘风躬身：「众侍君正给皇后请安，陛下是否去看看？」</p>
+            <h2 className="event-overlay__title">{greetingHost.locationName}　晨省</h2>
+            <p className="event-overlay__hint">
+              {greetingHost.mode === "empress"
+                ? `乘风躬身：「众侍君正给${greetingHost.hostName}请安，陛下是否去看看？」`
+                : `众侍君正在${greetingHost.hostName}处请安，陛下是否前往？`}
+            </p>
             <div className="event-overlay__choices">
               <button type="button" onClick={onEnterGreeting}>
                 进入主殿（耗一个行动点）
               </button>
             </div>
             <button type="button" className="event-overlay__later" onClick={onExitGreeting}>
-              退出坤宁宫
+              退出{greetingHost.locationName}
             </button>
           </div>
         </div>
