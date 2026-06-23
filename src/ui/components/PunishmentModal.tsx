@@ -5,6 +5,7 @@
  *   惩罚：禁足（可用）/ 下狱（禁用·尚未开放）/ 赐死（可用·二次确认）/ 株连九族（禁用·尚未开放）
  *
  * 已禁足者打开菜单时直接显示禁足详情与「解除禁足」，而非重复下旨。
+ * 凤后禁足流程增加「六宫主理者选择」步骤。
  */
 import { useState, type ReactNode } from "react";
 import {
@@ -14,18 +15,20 @@ import {
   activeConfinement,
   type ConfinementDurationKey,
 } from "../../engine/characters/confinement";
-import { addTurns, formatGameTime, toGameTime } from "../../engine/calendar/time";
+import { eligibleHaremAdministrators } from "../../engine/characters/haremAdministration";
 import { resolveDisplayName } from "../../engine/characters/standing";
+import { addTurns, formatGameTime, toGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
-import type { ImperialCommand } from "../../store/imperialCommands";
+import type { HaremAdministratorChoice, ImperialCommand } from "../../store/imperialCommands";
 import { describeActiveConfinement } from "../format/confinement";
 
 type Step =
   | { kind: "menu" }
   | { kind: "confine_duration" }
-  | { kind: "confine_confirm"; duration: ConfinementDurationKey }
+  | { kind: "confine_admin_select"; duration: ConfinementDurationKey }
+  | { kind: "confine_confirm"; duration: ConfinementDurationKey; administrator?: HaremAdministratorChoice }
   | { kind: "execute_confirm" };
 
 export function PunishmentModal({
@@ -49,6 +52,7 @@ export function PunishmentModal({
   const name = resolveDisplayName(character, standing, rank);
   const eraName = state.calendar.eraName;
   const confinement = activeConfinement(state, character.id);
+  const isEmpress = standing?.rank === "fenghou";
 
   const issue = (command: ImperialCommand) => {
     onCommand(command);
@@ -85,6 +89,83 @@ export function PunishmentModal({
     );
   }
 
+  // ── 凤后禁足：选择六宫主理者 ────────────────────────────────────────────
+  if (step.kind === "confine_admin_select") {
+    const candidates = eligibleHaremAdministrators(db, state);
+    if (candidates.length === 0) {
+      // 无候选者 → 唯一选项是内务府代理，不需要用户选择，直接确认。
+      return (
+        <Backdrop onClose={onClose}>
+          <h2>六宫主理　内务府代理</h2>
+          <p className="punish-modal__confirm">
+            宫中目前无驸级以上侍君可协理六宫。
+            <br />
+            凤后禁足期间，将由内务府总管暂代宫务。
+          </p>
+          <div className="punish-modal__actions">
+            <button
+              type="button"
+              className="punish-btn punish-btn--confine"
+              onClick={() =>
+                setStep({
+                  kind: "confine_confirm",
+                  duration: step.duration,
+                  administrator: { kind: "neiwu_proxy" },
+                })
+              }
+            >
+              确认
+            </button>
+            <button
+              type="button"
+              className="punish-btn punish-btn--minor"
+              onClick={() => setStep({ kind: "confine_duration" })}
+            >
+              返回
+            </button>
+          </div>
+        </Backdrop>
+      );
+    }
+
+    return (
+      <Backdrop onClose={onClose}>
+        <h2>选择协理六宫者</h2>
+        <p className="punish-modal__subtitle">凤后禁足期间，须指定一位侍君协理六宫：</p>
+        <div className="punish-modal__admin-list">
+          {candidates.map((c) => {
+            const cSt = state.standing[c.id];
+            const cRank = cSt ? db.ranks[cSt.rank] : undefined;
+            const cName = resolveDisplayName(c, cSt, cRank);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className="punish-btn"
+                onClick={() =>
+                  setStep({
+                    kind: "confine_confirm",
+                    duration: step.duration,
+                    administrator: { kind: "consort", charId: c.id },
+                  })
+                }
+              >
+                {cName}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          className="punish-btn punish-btn--minor"
+          onClick={() => setStep({ kind: "confine_duration" })}
+        >
+          返回
+        </button>
+      </Backdrop>
+    );
+  }
+
   // ── 禁足期限选择 ──────────────────────────────────────────────────────
   if (step.kind === "confine_duration") {
     return (
@@ -96,7 +177,11 @@ export function PunishmentModal({
               key={key}
               type="button"
               className="punish-btn"
-              onClick={() => setStep({ kind: "confine_confirm", duration: key })}
+              onClick={() =>
+                isEmpress
+                  ? setStep({ kind: "confine_admin_select", duration: key })
+                  : setStep({ kind: "confine_confirm", duration: key })
+              }
             >
               {CONFINEMENT_DURATION_LABELS[key]}
             </button>
@@ -116,6 +201,21 @@ export function PunishmentModal({
     const startLabel = formatGameTime({ ...now, eraName });
     const indefinite = durationTurns === null;
     const releaseLabel = indefinite ? null : formatGameTime({ ...addTurns(now, durationTurns), eraName });
+
+    let adminLine: ReactNode = null;
+    if (isEmpress && step.administrator) {
+      const a = step.administrator;
+      if (a.kind === "neiwu_proxy") {
+        adminLine = <p className="punish-modal__confirm">六宫主理：内务府总管暂代宫务。</p>;
+      } else {
+        const ac = db.characters[a.charId] ?? state.generatedConsorts[a.charId];
+        const acSt = state.standing[a.charId];
+        const acRank = acSt ? db.ranks[acSt.rank] : undefined;
+        const acName = ac ? resolveDisplayName(ac, acSt, acRank) : a.charId;
+        adminLine = <p className="punish-modal__confirm">六宫主理：{acName}协理六宫。</p>;
+      }
+    }
+
     return (
       <Backdrop onClose={onClose}>
         <h2>{name}　禁足下旨</h2>
@@ -134,15 +234,31 @@ export function PunishmentModal({
             禁足期间不得离宫、请安、赴宴或接受普通召见。
           </p>
         )}
+        {adminLine}
         <div className="punish-modal__actions">
           <button
             type="button"
             className="punish-btn punish-btn--confine"
-            onClick={() => issue({ type: "impose_confinement", targetId: character.id, durationTurns })}
+            onClick={() =>
+              issue({
+                type: "impose_confinement",
+                targetId: character.id,
+                durationTurns,
+                ...(step.administrator ? { administrator: step.administrator } : {}),
+              })
+            }
           >
             确认下旨
           </button>
-          <button type="button" className="punish-btn punish-btn--minor" onClick={() => setStep({ kind: "confine_duration" })}>
+          <button
+            type="button"
+            className="punish-btn punish-btn--minor"
+            onClick={() =>
+              isEmpress
+                ? setStep({ kind: "confine_admin_select", duration: step.duration })
+                : setStep({ kind: "confine_duration" })
+            }
+          >
             返回
           </button>
         </div>
@@ -207,9 +323,15 @@ export function PunishmentModal({
         <button type="button" className="punish-btn" disabled title="尚未开放">
           下狱（尚未开放）
         </button>
-        <button type="button" className="punish-btn punish-btn--danger" onClick={() => setStep({ kind: "execute_confirm" })}>
-          赐死
-        </button>
+        {!isEmpress && (
+          <button
+            type="button"
+            className="punish-btn punish-btn--danger"
+            onClick={() => setStep({ kind: "execute_confirm" })}
+          >
+            赐死
+          </button>
+        )}
         <button type="button" className="punish-btn" disabled title="尚未开放">
           株连九族（尚未开放）
         </button>

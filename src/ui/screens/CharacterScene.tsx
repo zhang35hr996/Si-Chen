@@ -16,6 +16,7 @@ import { activeConfinement } from "../../engine/characters/confinement";
 import { describeActiveConfinement } from "../format/confinement";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import { reportingAttendant } from "../../engine/characters/gongli";
+import { getGreetingLocation } from "../../engine/characters/haremAdministration";
 
 /** 恪守礼数的问候集；按 charId 确定性选取，避免僭越或失礼。 */
 const GREETINGS = ["恭迎陛下圣驾。", "陛下万福金安。", "臣侍恭候陛下多时了。", "见过陛下，陛下圣安。"];
@@ -81,14 +82,20 @@ export function CharacterScene({
   const actionable = !!character && state.calendar.ap >= 1 && canSummon(state, character.id);
   // 禁足：宫门闭锁，普通往来不可，仅留管理/解除与奉旨传太医（后者经紫宸殿）。
   const confinement = character ? activeConfinement(state, character.id) : undefined;
+  // 协理六宫：若当前场景侍君是协理者，显示标识。
+  const admin = state.haremAdministration;
+  const isActingAdmin = character && admin.mode === "acting_consort" && admin.charId === character.id;
 
   const awayTo = character ? absence?.[character.id] : undefined;
   const awayName = character && standing ? resolveDisplayName(character, standing, rank) : "";
   // 缺席时由该侍君贴身宫隶（当日确定）口吻禀告。
   const servant = awayTo && character ? reportingAttendant(state.rngSeed, character.id, state.calendar.dayIndex) : null;
+  const greetingLoc = getGreetingLocation(db, state);
   const whereLine =
-    awayTo === "kunninggong"
-      ? `${awayName}往坤宁宫向皇后请安去了。`
+    greetingLoc && awayTo === greetingLoc
+      ? admin.mode === "acting_consort"
+        ? `${awayName}往协理者处请安去了。`
+        : `${awayName}往坤宁宫向皇后请安去了。`
       : awayTo === "yuhuayuan"
         ? `${awayName}往御花园散心去了。`
         : awayTo
@@ -164,6 +171,11 @@ export function CharacterScene({
           <>
             <div className="char-scene__nameplate">
               <span className="char-scene__name">{servant ? servant.name : character.profile.name}</span>
+              {isActingAdmin && (
+                <span className="char-scene__admin-badge" title="奉旨协理六宫">
+                  协理六宫
+                </span>
+              )}
               <span className="char-scene__sub">
                 {servant ? `${character.profile.name}的宫人 · ` : rank ? `${rank.name} · ` : ""}
                 {location.name}

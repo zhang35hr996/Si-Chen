@@ -122,7 +122,6 @@ export function LocationScreen({
           onManage={onManage}
           onPunish={onPunish}
           onRelocate={onRelocate}
-          onSummonPhysician={onSummonPhysician}
         />
       ) : (
         <main className="location-screen">

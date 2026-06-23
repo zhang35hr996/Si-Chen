@@ -13,6 +13,7 @@ import { getPresentAt } from "../../engine/characters/presence";
 import { isConfined } from "../../engine/characters/confinement";
 import { CHAMBERED_PALACE_ORDER } from "../../engine/characters/chambers";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
+import type { HaremAdministrationState } from "../../engine/state/types";
 
 const EMPRESS_PALACE = "kunninggong"; // 坤宁宫 · 皇后（凤后）居所，置顶
 const COLD_PALACE = "changmengong"; // 长门宫 · 冷宫
@@ -49,7 +50,13 @@ interface PalaceView {
   capacity?: number;
 }
 
-function viewOf(db: ContentDB, state: GameState, loc: LocationContent, role?: string, capacity?: number): PalaceView {
+function viewOf(
+  db: ContentDB,
+  state: GameState,
+  loc: LocationContent,
+  role?: string,
+  capacity?: number,
+): PalaceView {
   const consorts = getPresentAt(db, state, loc.id).filter((c) => c.kind === "consort");
   const residents = consorts.map((c) => ({
     id: c.id,
@@ -58,6 +65,16 @@ function viewOf(db: ContentDB, state: GameState, loc: LocationContent, role?: st
   // 汇总住客状态标，去重后至多 3 枚。
   const seen = new Set<string>();
   const statuses: Status[] = [];
+  // 协理六宫标识：若本宫的住客是协理者，显示「协」。
+  const admin: HaremAdministrationState = state.haremAdministration;
+  if (admin.mode === "acting_consort") {
+    const adminSt = state.standing[admin.charId];
+    const home = adminSt?.residence ?? (db.characters[admin.charId]?.defaultLocation ?? state.generatedConsorts[admin.charId]?.defaultLocation);
+    if (home === loc.id) {
+      statuses.push({ icon: "协", label: "协理六宫", tone: "info" });
+      seen.add("协");
+    }
+  }
   for (const c of consorts) {
     for (const s of statusesOf(state, c.id)) {
       if (seen.has(s.icon)) continue;

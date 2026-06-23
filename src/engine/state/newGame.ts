@@ -105,6 +105,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     eventLog: [],
     chronicle: [],
     statusEffects: [],
+    haremAdministration: { mode: "empress" },
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],

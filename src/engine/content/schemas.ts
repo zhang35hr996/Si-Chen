@@ -305,6 +305,23 @@ export const eventEffectSchema = z.union([
     at: gameTimeShape,
   }),
   z.strictObject({
+    type: z.literal("set_harem_administration"),
+    state: z.discriminatedUnion("mode", [
+      z.strictObject({ mode: z.literal("empress") }),
+      z.strictObject({
+        mode: z.literal("acting_consort"),
+        charId: idSchema,
+        appointedAt: gameTimeShape,
+        reason: z.literal("empress_confined"),
+      }),
+      z.strictObject({
+        mode: z.literal("neiwu_proxy"),
+        appointedAt: gameTimeShape,
+        reason: z.literal("no_eligible_consort"),
+      }),
+    ]),
+  }),
+  z.strictObject({
     type: z.literal("record_physician_visit"),
     subject: z.discriminatedUnion("kind", [
       z.strictObject({ kind: z.literal("sovereign") }),

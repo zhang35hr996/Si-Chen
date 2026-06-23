@@ -498,6 +498,22 @@ export class GameStore {
       const ap = appendCourtEvent(cur, draft);
       if (!ap.ok) return err(ap.error);
       cur = ap.value.state;
+      // 凤后禁足到期：附加「复掌六宫」编年史（主理权已由漏斗 lift_confinement 自动归还）。
+      if (cur.standing[e.characterId]?.rank === "fenghou") {
+        const restoredDraft: Omit<CourtEvent, "id"> = {
+          type: "punished",
+          occurredAt: expiryAt,
+          participants: [{ charId: e.characterId, role: "confined" }],
+          payload: { decree: "empress_administration_restored", targetId: e.characterId, reason: "term_expired" },
+          publicity: { scope: "palace", persistence: "institutional" },
+          publicSalience: 70,
+          retention: "permanent",
+          tags: ["imperial_decree", "harem_administration", "empress_restored"],
+        };
+        const ap2 = appendCourtEvent(cur, restoredDraft);
+        if (!ap2.ok) return err(ap2.error);
+        cur = ap2.value.state;
+      }
     }
     return ok(cur);
   }

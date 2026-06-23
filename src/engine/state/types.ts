@@ -463,6 +463,26 @@ export interface CourtEvent {
   tags: string[];
 }
 
+/**
+ * 后宫主理权运行态。
+ *   empress        — 凤后正常掌宫（默认）。
+ *   acting_consort — 凤后禁足期间由某位侍君奉旨协理。
+ *   neiwu_proxy    — 凤后禁足且无合格侍君，内务府暂代宫务。
+ */
+export type HaremAdministrationState =
+  | { mode: "empress" }
+  | {
+      mode: "acting_consort";
+      charId: string;
+      appointedAt: GameTime;
+      reason: "empress_confined";
+    }
+  | {
+      mode: "neiwu_proxy";
+      appointedAt: GameTime;
+      reason: "no_eligible_consort";
+    };
+
 export interface GameState {
   calendar: CalendarState;
   playerLocation: string;
@@ -501,6 +521,8 @@ export interface GameState {
   pendingDaxuan?: PendingDaxuan;
   /** 终局：皇帝崩逝由时间事务在同批写入；置位后 title「继续」禁用（Task 5/8）。 */
   gameOver?: { cause: "sovereign_death"; at: GameTime };
+  /** 后宫主理权运行态（六宫主理）。凤后正常时为 empress；禁足期间由侍君/内务府代理。 */
+  haremAdministration: HaremAdministrationState;
   rngSeed: number;
 }
 

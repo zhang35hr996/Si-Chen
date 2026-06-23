@@ -263,6 +263,20 @@ export const gameStateSchema = z.strictObject({
   ),
   pendingDaxuan: z.strictObject({ kind: z.enum(["announce", "dianxuan"]), year: z.number() }).optional(),
   gameOver: z.strictObject({ cause: z.literal("sovereign_death"), at: gameTimeSchema }).optional(),
+  haremAdministration: z.discriminatedUnion("mode", [
+    z.strictObject({ mode: z.literal("empress") }),
+    z.strictObject({
+      mode: z.literal("acting_consort"),
+      charId: idSchema,
+      appointedAt: gameTimeSchema,
+      reason: z.literal("empress_confined"),
+    }),
+    z.strictObject({
+      mode: z.literal("neiwu_proxy"),
+      appointedAt: gameTimeSchema,
+      reason: z.literal("no_eligible_consort"),
+    }),
+  ]).default({ mode: "empress" }),
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;
 

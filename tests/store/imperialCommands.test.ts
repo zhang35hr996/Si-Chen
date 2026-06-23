@@ -16,10 +16,20 @@ function freshStore() {
 describe("consortGate 皇后例外", () => {
   const state = createNewGameState(db);
 
-  it("禁足令对皇后（凤后位分）明确拒绝", () => {
+  it("禁足令对皇后：缺 administrator 时被拒", () => {
     const r = planImperialCommand(db, state, { type: "impose_confinement", targetId: "shen_zhibai", durationTurns: 3 });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toContain("凤后");
+    if (!r.ok) expect(r.reason).toContain("凤后禁足须同时指定");
+  });
+
+  it("禁足令对皇后：提供合格 administrator 时通过", () => {
+    const r = planImperialCommand(db, state, {
+      type: "impose_confinement",
+      targetId: "shen_zhibai",
+      durationTurns: 3,
+      administrator: { kind: "consort", charId: "xu_qinghuan" },
+    });
+    expect(r.ok).toBe(true);
   });
 
   it("赐死令对皇后也明确拒绝", () => {

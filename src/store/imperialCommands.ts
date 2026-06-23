@@ -8,13 +8,25 @@
  */
 import { toGameTime } from "../engine/calendar/time";
 import { isConfined } from "../engine/characters/confinement";
+import { eligibleHaremAdministrators } from "../engine/characters/haremAdministration";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { CourtEvent, GameState } from "../engine/state/types";
 
+/** 凤后禁足时必须指定六宫主理者。 */
+export type HaremAdministratorChoice =
+  | { kind: "consort"; charId: string }
+  | { kind: "neiwu_proxy" };
+
 export type ImperialCommand =
-  | { type: "impose_confinement"; targetId: string; durationTurns: number | null }
+  | {
+      type: "impose_confinement";
+      targetId: string;
+      durationTurns: number | null;
+      /** 凤后禁足时必须携带，指定接管六宫主理的人选；普通侍君禁足时不需要。 */
+      administrator?: HaremAdministratorChoice;
+    }
   | { type: "lift_confinement"; targetId: string }
   | { type: "execute"; targetId: string };
 
@@ -42,13 +54,15 @@ function targetName(db: ContentDB, state: GameState, charId: string): string {
   return resolveDisplayName(char, st, st ? db.ranks[st.rank] : undefined);
 }
 
-/** 目标必须是仍存活、有 standing 的侍君。返回错误文案或 null（合法）。 */
+/**
+ * 目标必须是仍存活、有 standing 的侍君。
+ * 注意：凤后可以被禁足/解除禁足；仅赐死按 command type 单独禁止。
+ */
 function consortGate(db: ContentDB, state: GameState, charId: string): string | null {
   const char = db.characters[charId] ?? state.generatedConsorts[charId];
   const st = state.standing[charId];
   if (!char || char.kind !== "consort" || !st) return "此人非可处置的侍君。";
   if (st.lifecycle === "deceased") return "斯人已逝，无从处置。";
-  if (st.rank === "fenghou") return "凤后不受此令。";
   return null;
 }
 
@@ -64,15 +78,128 @@ export function planImperialCommand(
   const now = toGameTime(state.calendar);
   const name = targetName(db, state, charId);
   const source = state.playerLocation || undefined;
+  const st = state.standing[charId]!;
+  const isEmpress = st.rank === "fenghou";
 
   if (command.type === "impose_confinement") {
     if (isConfined(state, charId)) return { ok: false, reason: `${name}已在禁足中。` };
     if (command.durationTurns !== null && command.durationTurns <= 0) {
       return { ok: false, reason: "禁足期限无效。" };
     }
-    const startTurn = state.calendar.dayIndex; // 当前旬即第一旬
+
+    const startTurn = state.calendar.dayIndex;
     const endTurnExclusive = command.durationTurns === null ? null : startTurn + command.durationTurns;
     const indefinite = command.durationTurns === null;
+
+    // ── 凤后禁足：必须携带六宫主理选择 ─────────────────────────────────
+    if (isEmpress) {
+      const eligible = eligibleHaremAdministrators(db, state);
+      const admin = command.administrator;
+
+      if (!admin) {
+        return { ok: false, reason: "凤后禁足须同时指定六宫主理者。" };
+      }
+      if (admin.kind === "neiwu_proxy" && eligible.length > 0) {
+        return { ok: false, reason: "宫中尚有驸级以上侍君，须指定侍君协理六宫，不得直接选择内务府代理。" };
+      }
+      if (admin.kind === "consort") {
+        const chosen = eligible.find((c) => c.id === admin.charId);
+        if (!chosen) {
+          return { ok: false, reason: "所选侍君不符合协理六宫资格。" };
+        }
+      }
+
+      // 组装管理权效果
+      const adminName =
+        admin.kind === "consort"
+          ? targetName(db, state, admin.charId)
+          : "内务府总管";
+
+      const adminState =
+        admin.kind === "consort"
+          ? ({ mode: "acting_consort", charId: admin.charId, appointedAt: now, reason: "empress_confined" } as const)
+          : ({ mode: "neiwu_proxy", appointedAt: now, reason: "no_eligible_consort" } as const);
+
+      const effects: EventEffect[] = [
+        {
+          type: "confine",
+          char: charId,
+          startTurn,
+          endTurnExclusive,
+          imposedAt: now,
+          ...(source ? { sourceLocation: source } : {}),
+        },
+        { type: "set_harem_administration", state: adminState },
+        {
+          type: "memory",
+          char: charId,
+          entry: {
+            kind: "trauma",
+            summary: indefinite
+              ? "臣被皇帝下旨禁足，无诏不得出。"
+              : "臣被皇帝下旨禁足，闭锁宫中，不得擅出。",
+            strength: 90,
+            retention: "permanent",
+            subjectIds: [SOVEREIGN, charId],
+            perspective: "target",
+            triggerTags: [SOVEREIGN, "confinement"],
+            unresolved: true,
+            emotions: { fear: 45, shame: 35 },
+          },
+        },
+      ];
+      const chronicle: Omit<CourtEvent, "id">[] = [
+        {
+          type: "punished",
+          occurredAt: now,
+          participants: [{ charId, role: "confined" }],
+          ...(source ? { locationId: source } : {}),
+          payload: {
+            decree: "confinement_imposed",
+            targetId: charId,
+            startTurn,
+            endTurnExclusive,
+            durationTurns: command.durationTurns,
+            indefinite,
+          },
+          publicity: { scope: "palace", persistence: "institutional" },
+          publicSalience: 90,
+          retention: "permanent",
+          tags: ["imperial_decree", "confinement", "empress"],
+        },
+        {
+          type: "punished",
+          occurredAt: now,
+          participants: [
+            ...(admin.kind === "consort" ? [{ charId: admin.charId, role: "appointed_administrator" as const }] : []),
+          ],
+          payload: {
+            decree: admin.kind === "consort" ? "harem_administrator_appointed" : "neiwu_proxy_appointed",
+            administrator: admin,
+          },
+          publicity: { scope: "palace", persistence: "institutional" },
+          publicSalience: 80,
+          retention: "permanent",
+          tags: ["imperial_decree", "harem_administration"],
+        },
+      ];
+      const adminLine =
+        admin.kind === "consort"
+          ? `${adminName}奉旨协理六宫，暂掌后宫诸事。`
+          : "内务府总管奉旨暂代宫务。";
+      return {
+        ok: true,
+        plan: {
+          command,
+          charId,
+          effects,
+          chronicle,
+          lines: [`${name}惶恐领旨，自此闭锁宫中。${adminLine}`],
+        },
+      };
+    }
+
+    // ── 普通侍君禁足 ──────────────────────────────────────────────────
     const effects: EventEffect[] = [
       {
         type: "confine",
@@ -167,10 +294,30 @@ export function planImperialCommand(
         tags: ["imperial_decree", "confinement_lifted"],
       },
     ];
+
+    // 凤后禁足解除：附加「复掌六宫」编年史
+    if (isEmpress) {
+      chronicle.push({
+        type: "punished",
+        occurredAt: now,
+        participants: [{ charId, role: "confined" }],
+        payload: { decree: "empress_administration_restored", targetId: charId },
+        publicity: { scope: "palace", persistence: "institutional" },
+        publicSalience: 70,
+        retention: "permanent",
+        tags: ["imperial_decree", "harem_administration", "empress_restored"],
+      });
+    }
+
     return {
       ok: true,
       plan: { command, charId, effects, chronicle, lines: [`${name}叩首谢恩。`] },
     };
+  }
+
+  // execute — 赐死凤后在本次范围外明确禁止。
+  if (isEmpress) {
+    return { ok: false, reason: "凤后不受赐死之令。" };
   }
 
   // execute — 走统一死亡管线（consort_decease + enqueue_aftermath），并附结构化赐死史。

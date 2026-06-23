@@ -17,6 +17,7 @@
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
+import { eligibleHaremAdministrators } from "../characters/haremAdministration";
 import { nextHeirId } from "../characters/heirs";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
@@ -704,6 +705,14 @@ export function applyEffects(
             se.liftReason = "lifted_by_emperor";
           }
         }
+        // 凤后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
+        if (next.standing[effect.char]?.rank === "fenghou" && next.haremAdministration.mode !== "empress") {
+          next.haremAdministration = { mode: "empress" };
+        }
+        break;
+      }
+      case "set_harem_administration": {
+        next.haremAdministration = effect.state;
         break;
       }
       case "consort_decease": {
@@ -783,5 +792,29 @@ export function applyEffects(
       }
     }
   }
+
+  // 批后不变量：若协理者因本批效果（禁足/赐死等）失格，自动切换到下一合格侍君或内务府代理。
+  if (next.haremAdministration.mode === "acting_consort") {
+    const adminId = next.haremAdministration.charId;
+    const eligible = eligibleHaremAdministrators(db, next);
+    if (!eligible.some((c) => c.id === adminId)) {
+      const next_ = eligible[0];
+      if (next_) {
+        next.haremAdministration = {
+          mode: "acting_consort",
+          charId: next_.id,
+          appointedAt: toGameTime(next.calendar),
+          reason: "empress_confined",
+        };
+      } else {
+        next.haremAdministration = {
+          mode: "neiwu_proxy",
+          appointedAt: toGameTime(next.calendar),
+          reason: "no_eligible_consort",
+        };
+      }
+    }
+  }
+
   return ok(next);
 }

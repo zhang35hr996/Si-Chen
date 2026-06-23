@@ -18,7 +18,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 9;
+export const SAVE_FORMAT_VERSION = 10;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -148,6 +148,20 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return {
       ...env,
       formatVersion: 9,
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
+    };
+  },
+  // v9 → v10: 引入 haremAdministration 字段（六宫主理权）。旧档默认 { mode: "empress" }。
+  9: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!state.haremAdministration) {
+      state.haremAdministration = { mode: "empress" };
+    }
+    return {
+      ...env,
+      formatVersion: 10,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };
