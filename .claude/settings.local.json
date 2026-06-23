@@ -52,8 +52,7 @@
       "Bash(gh pr create --base main --head feat/map-boards-and-content-foundation --title 'feat: 位分升降+封号系统、地图主界面、女尊称谓清理与对话规则对齐' --body ' *)",
       "Skill(code-review)",
       "Bash(gh pr create --base main --head feat/heir-lifecycle-system --title 'feat: 承嗣/生产/子嗣 heir lifecycle system' --body ' *)",
-      "Bash(read f *)",
-      "Bash(gh pr *)"
+      "Bash(read f *)"
     ]
   }
 }
