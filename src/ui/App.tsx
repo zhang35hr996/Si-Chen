@@ -133,7 +133,7 @@ import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
 import { GardenOverviewScreen, type GardenSubAreaView } from "./screens/GardenOverviewScreen";
 import { XuanzhengdianScreen } from "./screens/XuanzhengdianScreen";
-import { pickSubLocationEvent } from "../engine/map/subLocations";
+import { pickSubLocationEvent, subLocationEventAffordable } from "../engine/map/subLocations";
 import { presentBarItems, focusedCharacterView, reconcileSelection } from "./sceneView";
 import { courtAgendaPreview, snapshotCourtMetrics, diffCourtMetrics, type CourtMetrics, type CourtMetricsDiff } from "../engine/court/agenda";
 import { buildCourtSummary, courtHoldGate } from "./xuanzhengView";
@@ -258,6 +258,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   }, [view, currentBoard, bgmZone]);
 
   const reactiveState = useGameState(store);
+
+  // 御花园选中态调和写回：园中在场人物变化后，把陈旧 charId 真正从 state 清掉（取下一个在场者或清空），
+  // 不只是渲染期派生——杜绝她离场后旧 ID 残留、再次出现自动抢回焦点。
+  useEffect(() => {
+    if (view !== "garden") return;
+    const ids = presentBarItems(db, reactiveState, "yuhuayuan").map((i) => i.id);
+    setGardenSelectedId((prev) => (prev == null ? null : reconcileSelection(ids, prev)));
+  }, [view, reactiveState]);
 
   // 死者视图清理：被召见的侍君若在跨月健康 tick 中身故，清除召见态（不在死者宫中停留）。
   useEffect(() => {
@@ -1704,6 +1712,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           const ev = pickSubLocationEvent(db, liveState, "yuhuayuan", sa.id);
           const sbg = registry.resolveVariant(sa.backgroundKey, timeOfDay(liveState.calendar), "background");
           const hint = ev?.presentation?.mode === "exploration" ? ev.presentation.eventHint : undefined;
+          const affordable = ev ? subLocationEventAffordable(liveState, ev) : undefined;
           return {
             id: sa.id,
             name: sa.name,
@@ -1713,14 +1722,21 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
             backgroundPosition: sa.backgroundPosition,
             hasEvent: ev !== null,
             eventHint: hint,
+            eventAffordable: affordable,
+            eventReason: ev && affordable === false ? `行动力不足（需 ${ev.apCost} 行动点）。` : undefined,
           };
         });
         const activeSub = gardenSubLocationId ? subAreas.find((s) => s.id === gardenSubLocationId) ?? null : null;
         const leaveGarden = () => { setGardenSelectedId(null); setGardenSubLocationId(null); setMapAtRoot(false); setView("map"); };
         const enterGardenSubArea = (subId: string) => {
-          // 子地点有符合条件的 exploration 事件 → 进入即开始（返回上下文精确到该子地点）；否则普通游览。
+          // 子地点有可探索事件且可承担 → 进入即开始（返回上下文精确到该子地点）；
+          // 有事件但行动力不足 → 进入子地点，显「行动力不足」（不伪装成普通游览）；
+          // 无事件 → 普通游览（仍可与园中在场人物叙话）。
           const ev = pickSubLocationEvent(db, store.getState(), "yuhuayuan", subId);
-          if (ev) { startEvent(ev.id, { kind: "garden", subLocationId: subId }); return; }
+          if (ev && subLocationEventAffordable(store.getState(), ev)) {
+            startEvent(ev.id, { kind: "garden", subLocationId: subId });
+            return;
+          }
           setGardenSubLocationId(subId);
         };
         return (

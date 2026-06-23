@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContentDB } from "../../src/engine/content/loader";
 import type { GameEventContent } from "../../src/engine/content/schemas";
-import { pickSubLocationEvent } from "../../src/engine/map/subLocations";
+import { pickSubLocationEvent, subLocationEventAffordable } from "../../src/engine/map/subLocations";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
@@ -74,8 +74,17 @@ describe("pickSubLocationEvent", () => {
     expect(pickSubLocationEvent(withEvents(ev), at("yuhuayuan"), "yuhuayuan", "jiangxuexuan")).toBeNull();
   });
 
-  it("unaffordable exploration event is not auto-picked", () => {
+  it("an unaffordable exploration event is STILL returned (exists), but reported as unaffordable", () => {
     const ev = exploration("ev_a", "taiyechi", { apCost: 99 });
-    expect(pickSubLocationEvent(withEvents(ev), at("yuhuayuan"), "yuhuayuan", "taiyechi")).toBeNull();
+    const picked = pickSubLocationEvent(withEvents(ev), at("yuhuayuan"), "yuhuayuan", "taiyechi");
+    expect(picked?.id).toBe("ev_a"); // 事件存在（不因 AP 不足而消失）
+    expect(subLocationEventAffordable({ ...at("yuhuayuan"), calendar: { ...at("yuhuayuan").calendar, ap: 1 } }, picked!)).toBe(false);
+  });
+
+  it("subLocationEventAffordable reflects AP vs apCost", () => {
+    const ev = exploration("ev_a", "taiyechi", { apCost: 1 });
+    const s = at("yuhuayuan");
+    expect(subLocationEventAffordable({ ...s, calendar: { ...s.calendar, ap: 1 } }, ev)).toBe(true);
+    expect(subLocationEventAffordable({ ...s, calendar: { ...s.calendar, ap: 0 } }, ev)).toBe(false);
   });
 });

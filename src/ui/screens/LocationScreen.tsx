@@ -59,6 +59,14 @@ export function LocationScreen({
   useEffect(() => {
     setSelectedId(null);
   }, [state.playerLocation]);
+  // 选中态调和写回：在场人物变化后，把陈旧 charId 真正从 state 清掉（取下一个在场者或清空），
+  // 不只是渲染期派生——否则她离场后旧 ID 仍留存，再次出现会自动抢回焦点。
+  useEffect(() => {
+    const loc = db.locations[state.playerLocation];
+    if (!loc) return;
+    const ids = presentBarItems(db, state, loc.id).map((i) => i.id);
+    setSelectedId((prev) => (prev == null ? null : reconcileSelection(ids, prev)));
+  }, [db, state]);
 
   if (!location) {
     // Loader guarantees startingLocation exists; this is the render-side backstop.
