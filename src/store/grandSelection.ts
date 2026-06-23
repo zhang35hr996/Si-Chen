@@ -171,26 +171,44 @@ export function describeTalent(content: CharacterContent): string {
 }
 
 /**
- * 「到点即补触发」判定（与生产 gestationDue 同构）：当前日历是否已到/已过指定
- * 月·旬的辰时。错过单槽不再丢失——大选年内持续为真，直到对应 flag 置位。
+ * 「到点即补触发」判定（与生产 gestationDue 同构）：当前日历是否已到/已过 `year` 年
+ * `month`·`period` 的辰时。错过单槽不再丢失——该到期日之后持续为真，直到对应 flag 置位。
+ * year 显式传入（而非取 cal.year），使「按 pending 自身年份消费」成为可能（跨年存档稳定）。
  */
-function dueAtOrAfter(cal: GameState["calendar"], month: number, period: "early" | "mid" | "late"): boolean {
-  const dueDayIndex = dayIndexOf(cal.year, month, period);
+function dueAtOrAfter(cal: GameState["calendar"], year: number, month: number, period: "early" | "mid" | "late"): boolean {
+  const dueDayIndex = dayIndexOf(year, month, period);
   if (cal.dayIndex < dueDayIndex) return false;
   if (cal.dayIndex === dueDayIndex && shichenSlot(cal) < MORNING_SLOT) return false;
   return true;
 }
 
-/** 二月报告到点未报：大选年、未报 flag、且已到/过二月上旬辰时。 */
+/** 二月报告到点未报：大选年、未报 flag、且已到/过二月上旬辰时（按当前日历年）。 */
 export function daxuanAnnounceDue(state: GameState): boolean {
   const cal = state.calendar;
-  return isDaxuanYear(cal.year) && !state.flags[daxuanAnnounceFlagKey(cal.year)] && dueAtOrAfter(cal, 2, "early");
+  return isDaxuanYear(cal.year) && !state.flags[daxuanAnnounceFlagKey(cal.year)] && dueAtOrAfter(cal, cal.year, 2, "early");
 }
 
-/** 四月殿选到点未决：大选年、未决 flag、且已到/过四月下旬辰时。 */
+/** 四月殿选到点未决：大选年、未决 flag、且已到/过四月下旬辰时（按当前日历年）。 */
 export function daxuanDianxuanDue(state: GameState): boolean {
   const cal = state.calendar;
-  return isDaxuanYear(cal.year) && !state.flags[daxuanDianxuanFlagKey(cal.year)] && dueAtOrAfter(cal, 4, "late");
+  return isDaxuanYear(cal.year) && !state.flags[daxuanDianxuanFlagKey(cal.year)] && dueAtOrAfter(cal, cal.year, 4, "late");
+}
+
+/**
+ * 指定年份的殿选是否已到点未决（按 pending.year，年份权威；当前日历已过该年四月下旬辰时
+ * 且该年 dianxuan flag 未置）。用于 announce 消费后链接同年 dianxuan、及跨年存档消费。
+ */
+export function daxuanDianxuanDueForYear(state: GameState, year: number): boolean {
+  return !state.flags[daxuanDianxuanFlagKey(year)] && dueAtOrAfter(state.calendar, year, 4, "late");
+}
+
+/**
+ * 该 pending 对应的 flag 是否已置（已报 / 已决）→ 陈旧，应调和清除而非永久 sticky。
+ * 用于时间事务边界与 UI 消费两处去重，避免陈旧 pending 阻塞下一大选年的探测。
+ */
+export function isPendingDaxuanResolved(state: GameState, pending: PendingDaxuan): boolean {
+  const key = pending.kind === "announce" ? daxuanAnnounceFlagKey(pending.year) : daxuanDianxuanFlagKey(pending.year);
+  return Boolean(state.flags[key]);
 }
 
 /**
@@ -203,10 +221,33 @@ export function nextPendingDaxuan(state: GameState): PendingDaxuan | null {
   return null;
 }
 
+/** 二月大选报告的播报节拍（纯：与到期无关，消费时按 pending.year 执行）。 */
+export function daxuanAnnounceBeats(): DecreeReaction[] {
+  return [
+    {
+      speakerId: "cheng_feng",
+      lines: [
+        "陛下，凤后娘娘遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
+      ],
+    },
+  ];
+}
+
+/** 指定年份的殿选 prompt（两选项均携带该 year；纯：不做到期判定）。 */
+export function daxuanDianxuanPromptFor(year: number): ChengFengPrompt {
+  return {
+    speakerId: "cheng_feng",
+    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
+    choices: [
+      { label: "前往体元殿", action: { type: "daxuanEnter", year } },
+      { label: "让太后皇后决定", action: { type: "daxuanDelegate", year } },
+    ],
+  };
+}
+
 /**
  * 大选年、未报过、且已到/已过「二月上旬辰时」→ 凤后遣人禀告大选已备妥（设 flag + 节拍）。
- * 与殿选 prompt 同构用「到点即补触发」而非单槽相等：玩家若在该时辰未经普通行动而错过窗口，
- * 报告仍会在大选年内的后续行动补出，不会永久丢失，也不会因 flag 已设而重复。
+ * 仅供纯到期判定测试 / 旧调用方使用；实机消费走 store.consumeDaxuanAnnounce（按 pending.year）。
  */
 export function buildDaxuanAnnounce(
   _db: ContentDB,
@@ -215,33 +256,17 @@ export function buildDaxuanAnnounce(
   if (!daxuanAnnounceDue(state)) return null;
   return {
     effects: [{ type: "flag", key: daxuanAnnounceFlagKey(state.calendar.year), value: true }],
-    beats: [
-      {
-        speakerId: "cheng_feng",
-        lines: [
-          "陛下，凤后娘娘遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
-        ],
-      },
-    ],
+    beats: daxuanAnnounceBeats(),
   };
 }
 
 /**
  * 大选年、未决、且已到/已过「四月下旬辰时」→ 殿选 prompt（前往 / 委托）。否则 null。
- * 用「到点即补触发」（与生产 gestationDue 同构）而非单槽相等：玩家若在该时辰未处于
- * 房间视图而错过窗口，殿选仍会在大选年内的后续时机补出，不会永久丢失。
+ * 仅供纯到期判定测试 / 旧调用方使用；实机消费走 pending-aware daxuanDianxuanPromptFor。
  */
 export function buildDaxuanDianxuanPrompt(_db: ContentDB, state: GameState): ChengFengPrompt | null {
   if (!daxuanDianxuanDue(state)) return null;
-  const cal = state.calendar;
-  return {
-    speakerId: "cheng_feng",
-    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
-    choices: [
-      { label: "前往体元殿", action: { type: "daxuanEnter", year: cal.year } },
-      { label: "让太后皇后决定", action: { type: "daxuanDelegate", year: cal.year } },
-    ],
-  };
+  return daxuanDianxuanPromptFor(state.calendar.year);
 }
 
 // ── NPC 自留（委托 + 早退场） ──────────────────────────────────────

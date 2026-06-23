@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { GameStore } from "../../src/store/gameStore";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { dayIndexOf } from "../../src/engine/calendar/time";
-import { daxuanAnnounceFlagKey, daxuanDianxuanFlagKey } from "../../src/store/grandSelection";
+import { daxuanAnnounceFlagKey, daxuanDianxuanFlagKey, daxuanDianxuanPromptFor } from "../../src/store/grandSelection";
+import type { PendingDaxuan } from "../../src/engine/state/types";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -26,6 +27,24 @@ function storeAt(month: number, period: "early" | "mid" | "late", ap: number, fl
     calendar: { ...s.calendar, month, period, dayIndex: dayIndexOf(s.calendar.year, month, period), ap },
     flags: { ...s.flags, ...flags },
     pendingDaxuan: undefined,
+  });
+  return store;
+}
+
+/** 任意年份 + 预置 pending（跨年存档场景）。 */
+function storeWith(opts: {
+  year?: number; month: number; period: "early" | "mid" | "late"; ap?: number;
+  flags?: Record<string, boolean>; pending?: PendingDaxuan;
+}): GameStore {
+  const store = new GameStore();
+  store.newGame(db);
+  const s = store.getState();
+  const year = opts.year ?? 1;
+  store.loadState({
+    ...s,
+    calendar: { ...s.calendar, year, month: opts.month, period: opts.period, dayIndex: dayIndexOf(year, opts.month, opts.period), ap: opts.ap ?? s.calendar.apMax },
+    flags: { ...s.flags, ...(opts.flags ?? {}) },
+    pendingDaxuan: opts.pending,
   });
   return store;
 }
@@ -108,6 +127,74 @@ describe("二月报告同源于统一入口 + 消费语义", () => {
     expect(store.getState().flags[ANNOUNCE]).toBe(true);
     expect(store.getState().pendingDaxuan).toEqual({ kind: "dianxuan", year: 1 }); // 续上殿选
     expect(store.getState().flags[DIANXUAN]).toBeFalsy();
+  });
+});
+
+describe("殿选 enter 事务顺序（扣点失败不丢失）", () => {
+  it("AP=0 选前往 → 扣点失败：pending 保留、flag 不写、不解决", () => {
+    const store = storeWith({ month: 4, period: "late", ap: 0, flags: { [ANNOUNCE]: true }, pending: { kind: "dianxuan", year: 1 } });
+    const r = store.enterDaxuan(db, 1);
+    expect(r.ok).toBe(false);
+    expect(store.getState().pendingDaxuan).toEqual({ kind: "dianxuan", year: 1 });
+    expect(store.getState().flags[DIANXUAN]).toBeFalsy();
+  });
+
+  it("AP 充足选前往 → 扣 1AP、置该年 flag、清 pending", () => {
+    const store = storeWith({ month: 4, period: "late", ap: 4, flags: { [ANNOUNCE]: true }, pending: { kind: "dianxuan", year: 1 } });
+    const r = store.enterDaxuan(db, 1);
+    expect(r.ok).toBe(true);
+    expect(store.getState().calendar.ap).toBe(3);
+    expect(store.getState().flags[DIANXUAN]).toBe(true);
+    expect(store.getState().pendingDaxuan).toBeUndefined();
+  });
+
+  it("委托 resolveDaxuanDianxuan：原子置该年 flag + 清 pending（不扣点）", () => {
+    const store = storeWith({ month: 4, period: "late", flags: { [ANNOUNCE]: true }, pending: { kind: "dianxuan", year: 1 } });
+    const apBefore = store.getState().calendar.ap;
+    store.resolveDaxuanDianxuan(1);
+    expect(store.getState().flags[DIANXUAN]).toBe(true);
+    expect(store.getState().pendingDaxuan).toBeUndefined();
+    expect(store.getState().calendar.ap).toBe(apBefore); // 未扣点
+  });
+});
+
+describe("跨年存档：按 pending.year 消费（年份权威）", () => {
+  it("年1 announce pending 于年2 加载 → 落年1 flag、不落年2 flag", () => {
+    const store = storeWith({ year: 2, month: 5, period: "early", pending: { kind: "announce", year: 1 } });
+    store.consumeDaxuanAnnounce(db);
+    expect(store.getState().flags[daxuanAnnounceFlagKey(1)]).toBe(true);
+    expect(store.getState().flags[daxuanAnnounceFlagKey(2)]).toBeFalsy();
+  });
+
+  it("年1 announce pending 于年1四月之后加载 → 消费 announce 并链接年1 dianxuan", () => {
+    const store = storeWith({ year: 2, month: 5, period: "early", pending: { kind: "announce", year: 1 } });
+    store.consumeDaxuanAnnounce(db);
+    expect(store.getState().pendingDaxuan).toEqual({ kind: "dianxuan", year: 1 });
+  });
+
+  it("年1 dianxuan pending 于年2 加载 → prompt 携带年1；解决落年1 flag、清 pending", () => {
+    const p = daxuanDianxuanPromptFor(1);
+    expect(p.choices.map((c) => (c.action as { year: number }).year)).toEqual([1, 1]);
+    const store = storeWith({ year: 2, month: 5, period: "early", flags: { [daxuanAnnounceFlagKey(1)]: true }, pending: { kind: "dianxuan", year: 1 } });
+    store.resolveDaxuanDianxuan(1);
+    expect(store.getState().flags[daxuanDianxuanFlagKey(1)]).toBe(true);
+    expect(store.getState().pendingDaxuan).toBeUndefined();
+  });
+});
+
+describe("陈旧 pending 调和（不 sticky 阻塞下一大选年）", () => {
+  it("announce flag 已置的陈旧 announce pending：consume 调和清除、不重播", () => {
+    const store = storeWith({ year: 1, month: 2, period: "early", flags: { [ANNOUNCE]: true }, pending: { kind: "announce", year: 1 } });
+    const beats = store.consumeDaxuanAnnounce(db);
+    expect(beats).toEqual([]);
+    expect(store.getState().pendingDaxuan).toBeUndefined();
+  });
+
+  it("陈旧 dianxuan pending 于时间推进时被调和，且不阻塞下一大选年探测", () => {
+    // 年4（下一大选年）二月卯时，残留年1 已决的陈旧 dianxuan pending。
+    const store = storeWith({ year: 4, month: 2, period: "early", flags: { [daxuanDianxuanFlagKey(1)]: true }, pending: { kind: "dianxuan", year: 1 } });
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 }); // → 辰时：先调和陈旧，再探测年4
+    expect(store.getState().pendingDaxuan).toEqual({ kind: "announce", year: 4 });
   });
 });
 
