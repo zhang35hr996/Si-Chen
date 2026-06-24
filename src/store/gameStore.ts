@@ -446,10 +446,24 @@ export class GameStore {
     };
 
     const conseq = planPunishmentConsequences(db, this.state, ctx);
+
+    // Inject punishmentId into base.chronicle so it survives save/load.
+    // Primary punishment entries (decree matches the punishment type) get `punishmentId`;
+    // ancillary administration-transfer entries get `sourcePunishmentId` to avoid ambiguity
+    // when future code searches chronicle for the canonical punishment record.
+    const PUNITIVE_DECREES = new Set(["confinement_imposed", "execution"]);
+    const punishmentChronicle = base.chronicle.map((draft) => {
+      const decree = (draft.payload as { decree?: string }).decree;
+      const extra = PUNITIVE_DECREES.has(decree ?? "")
+        ? { punishmentId, ...(meta.caseId ? { caseId: meta.caseId } : {}) }
+        : { sourcePunishmentId: punishmentId };
+      return { ...draft, payload: { ...draft.payload, ...extra } };
+    });
+
     const txResult = this.commitPlannedTransaction(
       db,
       [...base.effects, ...conseq.effects],
-      [...base.chronicle, ...conseq.chronicle],
+      [...punishmentChronicle, ...conseq.chronicle],
       conseq.reactionBeats,
     );
     if (!txResult.ok) return txResult;
@@ -460,9 +474,8 @@ export class GameStore {
    * Punitive rank change (demotion / strip_title) WITH consequence effects.
    * Rejects any request that would not produce a demotion or strip_title op.
    *
-   * Design note: all sovereign-direct demotions and title strips are treated as
-   * inherently punitive (no "administrative demotion" path exists at this scope).
-   * This must be confirmed before PUNISH-3A adds automatic case creation.
+   * Product rule (locked): all sovereign-direct demotions and title strips are
+   * inherently punitive — there is no "administrative demotion" path at this scope.
    *
    * Ordinary 册封/晋升 and harem-admin rank changes must NOT call this.
    * punishmentId / kind / severity / occurredAt are derived internally.
@@ -490,6 +503,7 @@ export class GameStore {
     // punishmentId from (dayIndex:chronicle.length) — unique because each prior punishment
     // appends at least one chronicle entry before the next one is issued.
     const punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
+    // Rank change chronicle is built inline below and already includes punishmentId in payload.
     const ctx: PunishmentOutcomeContext = {
       punishmentId,
       ...(meta.caseId ? { caseId: meta.caseId } : {}),
