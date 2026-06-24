@@ -18,12 +18,15 @@ import {
   hasPendingRetirement,
 } from "../../engine/officials/selectors";
 import { OfficialDetail } from "./OfficialDetail";
+import { officialPostView } from "./postDisplay";
 import { DEPARTMENT_LABEL, OFFICIAL_STATUS_LABEL } from "./labels";
 
 export interface OfficialsScreenProps {
   db: ContentDB;
   store: GameStore;
   onBack: () => void;
+  /** 任免成功提交后回调（App 用于 autosave，使决定持久化）。 */
+  onCommitted: () => void;
 }
 
 /** 名册状态筛选页（默认在任）。 */
@@ -34,7 +37,7 @@ const DEPARTMENT_ORDER: OfficialDepartment[] = [
   "justice", "works", "censorate", "academy", "provincial", "none",
 ];
 
-export function OfficialsScreen({ db, store, onBack }: OfficialsScreenProps) {
+export function OfficialsScreen({ db, store, onBack, onCommitted }: OfficialsScreenProps) {
   const state = useGameState(store);
   const [tab, setTab] = useState<"roster" | "posts">("roster");
   const [statusFilter, setStatusFilter] = useState<OfficialStatus>("active");
@@ -48,9 +51,16 @@ export function OfficialsScreen({ db, store, onBack }: OfficialsScreenProps) {
   // 选中官员若已不存在则回名册。
   const selected = selectedId ? state.officials[selectedId] : undefined;
 
-  const run = (label: string, fn: () => { ok: boolean; error?: { message: string } }) => {
+  // 成功才 autosave（onCommitted）并提示；失败仅提示、不持久化。返回是否成功，供调任列表据此关闭。
+  const run = (label: string, fn: () => { ok: boolean; error?: { message: string } }): boolean => {
     const r = fn();
-    setNotice(r.ok ? `${label}已办妥。` : `${label}未成：${r.error?.message ?? "未知缘由"}`);
+    if (!r.ok) {
+      setNotice(`${label}未成：${r.error?.message ?? "未知缘由"}`);
+      return false;
+    }
+    onCommitted();
+    setNotice(`${label}已办妥。`);
+    return true;
   };
 
   if (selected) {
@@ -119,11 +129,11 @@ function RosterTab({
   const grouped = useMemo(() => {
     const m = new Map<OfficialDepartment, Official[]>();
     for (const o of officials) {
-      const dept = (o.postId ? db.officialPosts[o.postId]?.department : undefined) ?? "none";
+      const dept = officialPostView(db, state, o).dept; // 非在任也按原任部门归组
       (m.get(dept) ?? m.set(dept, []).get(dept)!).push(o);
     }
     return m;
-  }, [officials, db]);
+  }, [officials, db, state]);
 
   return (
     <>
@@ -143,14 +153,14 @@ function RosterTab({
             <ul className="officials-screen__list">
               {grouped.get(dept)!
                 .slice()
-                .sort((a, b) => (db.officialPosts[b.postId ?? ""]?.gradeOrder ?? -1) - (db.officialPosts[a.postId ?? ""]?.gradeOrder ?? -1))
+                .sort((a, b) => officialPostView(db, state, b).gradeOrder - officialPostView(db, state, a).gradeOrder)
                 .map((o) => {
-                  const post = o.postId ? db.officialPosts[o.postId] : undefined;
+                  const pv = officialPostView(db, state, o);
                   return (
                     <li key={o.id}>
                       <button type="button" className="officials-screen__row" onClick={() => onSelect(o.id)}>
                         <span className="officials-screen__row-name">{nameOf(o)}</span>
-                        <span className="officials-screen__row-post">{post ? `${post.grade}·${post.name}` : "（无职）"}</span>
+                        <span className="officials-screen__row-post">{pv.label}</span>
                         <span className="officials-screen__row-meta">年{o.age}</span>
                       </button>
                     </li>
@@ -213,11 +223,12 @@ function OfficialActions({
   onRestore: () => void;
   onApprove: () => void;
   onRetain: () => void;
-  onAssign: (postId: string | null) => void;
+  onAssign: (postId: string | null) => boolean;
 }) {
   const [transferOpen, setTransferOpen] = useState(false);
   const pendingRetire = hasPendingRetirement(state, official.id);
-  const vacant = getVacantPosts(state, db);
+  // 排除官员当前官职：多席官职对其本人是「同职」，授任会幂等假成功。
+  const vacant = getVacantPosts(state, db).filter((v) => v.postId !== official.postId);
 
   if (official.status === "dead") {
     return <section className="officials-screen__actions"><p className="officials-screen__empty">已故，无可任免。</p></section>;
@@ -254,7 +265,7 @@ function OfficialActions({
                 const p = db.officialPosts[v.postId]!;
                 return (
                   <li key={v.postId}>
-                    <button type="button" className="officials-screen__row" onClick={() => { onAssign(v.postId); setTransferOpen(false); }}>
+                    <button type="button" className="officials-screen__row" onClick={() => { if (onAssign(v.postId)) setTransferOpen(false); }}>
                       <span className="officials-screen__row-name">{p.grade}·{p.name}</span>
                       <span className="officials-screen__row-meta">空 {v.vacantSeatCount}</span>
                     </button>

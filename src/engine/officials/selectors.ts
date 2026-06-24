@@ -126,6 +126,18 @@ export function hasPendingRetirement(state: GameState, officialId: string): bool
   return state.pendingRetirements.some((p) => p.officialId === officialId);
 }
 
+/**
+ * 该官员最近一次离任所释放的官职（从 officialHistory 倒序找首个 vacatedPostId）。
+ * 用于非在任官员的「原任官职/部门」只读展示；从未任职则 undefined。
+ */
+export function getLastHeldPostId(state: GameState, officialId: string): string | undefined {
+  for (let i = state.officialHistory.length - 1; i >= 0; i--) {
+    const h = state.officialHistory[i]!;
+    if (h.officialId === officialId && h.vacatedPostId !== undefined) return h.vacatedPostId;
+  }
+  return undefined;
+}
+
 /** 某家族出身、当前在宫的侍君 charId（按 standing.birthFamilyId）。 */
 export function getConsortsByFamilyId(state: GameState, familyId: string): string[] {
   return Object.entries(state.standing)

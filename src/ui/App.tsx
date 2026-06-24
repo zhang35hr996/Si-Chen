@@ -1930,7 +1930,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onOpenSettings={() => setSettingsOpen(true)}
           className="location-shell"
         >
-          <OfficialsScreen db={db} store={store} onBack={() => setView("xuanzhengdian")} />
+          <OfficialsScreen db={db} store={store} onBack={() => setView("xuanzhengdian")} onCommitted={doAutosave} />
         </GameShell>
       )}
       {view === "map" && (
