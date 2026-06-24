@@ -19,7 +19,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 12;
+export const SAVE_FORMAT_VERSION = 13;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -200,6 +200,18 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       formatVersion: 12,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
+    };
+  },
+  // v12 → v13: officialHistory 增可选 appointment 溯源（候补授官转正）。纯附加可选字段，旧条目
+  // 天然无此字段，无需补值；仅重新打版本/校验和。
+  12: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    return {
+      ...env,
+      formatVersion: 13,
+      state,
+      checksum: checksumOf(state),
     };
   },
 };

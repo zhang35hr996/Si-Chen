@@ -141,7 +141,9 @@ import { LocationScreen } from "./screens/LocationScreen";
 import { GardenOverviewScreen, type GardenSubAreaView } from "./screens/GardenOverviewScreen";
 import { XuanzhengdianScreen } from "./screens/XuanzhengdianScreen";
 import { OfficialsScreen } from "./officials/OfficialsScreen";
+import { ExaminationScreen } from "./officials/ExaminationScreen";
 import { getHighVacancyPosts } from "../engine/officials/selectors";
+import { getUnacknowledgedExaminationResults } from "../engine/officials/examination";
 import { pickSubLocationEvent, subLocationEventAffordable } from "../engine/map/subLocations";
 import { presentBarItems, focusedCharacterView, reconcileSelection } from "./sceneView";
 import { courtAgendaPreview, snapshotCourtMetrics, diffCourtMetrics, type CourtMetrics, type CourtMetricsDiff } from "../engine/court/agenda";
@@ -154,7 +156,7 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian" | "officials";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian" | "officials" | "examination";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -1944,6 +1946,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               onBackToMap={leaveXuan}
               onOpenOfficials={() => setView("officials")}
               highVacancyCount={getHighVacancyPosts(liveState, db).length}
+              onOpenExamination={() => setView("examination")}
+              unacknowledgedExamCount={getUnacknowledgedExaminationResults(liveState).length}
             />
           </GameShell>
         );
@@ -1960,6 +1964,20 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           className="location-shell"
         >
           <OfficialsScreen db={db} store={store} onBack={() => setView("xuanzhengdian")} onCommitted={doAutosave} />
+        </GameShell>
+      )}
+      {view === "examination" && (
+        <GameShell
+          calendar={liveState.calendar}
+          crumbs={breadcrumbFor(db, "xuanzhengdian")}
+          pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
+          onBack={() => setView("xuanzhengdian")}
+          onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          className="location-shell"
+        >
+          <ExaminationScreen db={db} store={store} onBack={() => setView("xuanzhengdian")} onCommitted={doAutosave} />
         </GameShell>
       )}
       {view === "map" && (

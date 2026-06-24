@@ -29,7 +29,8 @@ import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { assignOfficialPost } from "../engine/officials/assign";
 import { dismissOfficial, restoreOfficialToActive, retireOfficial } from "../engine/officials/lifecycle";
 import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
-import { EXAM_MONTH, hasGeneratedExaminationForYear, settleAnnualExamination } from "../engine/officials/examination";
+import { EXAM_MONTH, acknowledgeExaminationResult, hasGeneratedExaminationForYear, settleAnnualExamination } from "../engine/officials/examination";
+import { appointOfficialCandidate } from "../engine/officials/appointment";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
@@ -341,6 +342,20 @@ export class GameStore {
     if (!result.ok) return result;
     this.state = result.value;
     this.emit();
+    return ok(undefined);
+  }
+
+  /** 候补授官转正（PR3B）：eligible 候补 → active 正式官员占空缺官职；写历史。行政行为，非惩罚。 */
+  appointOfficialCandidate(db: ContentDB, candidateId: string, postId: string): Result<void, GameError> {
+    const result = appointOfficialCandidate(this.state, db, candidateId, postId, toGameTime(this.state.calendar));
+    if (!result.ok) return result;
+    this.tracedSet(result.value, { kind: "action", sourceId: "appointOfficialCandidate", label: `appoint candidate: ${candidateId}→${postId}` });
+    return ok(undefined);
+  }
+
+  /** 标记某年度科举榜单为已查看（PR3B）。幂等。 */
+  acknowledgeExaminationResult(year: number): Result<void, GameError> {
+    this.tracedSet(acknowledgeExaminationResult(this.state, year), { kind: "action", sourceId: "acknowledgeExaminationResult", label: `ack exam: ${year}` });
     return ok(undefined);
   }
 

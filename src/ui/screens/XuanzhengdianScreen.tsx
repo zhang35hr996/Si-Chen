@@ -27,6 +27,10 @@ export interface XuanzhengdianScreenProps {
   onOpenOfficials?: () => void;
   /** 高位空缺数（>0 时官员名册按钮带提醒角标）。 */
   highVacancyCount?: number;
+  /** 打开科举与候补/授官（PR3B）。 */
+  onOpenExamination?: () => void;
+  /** 未查看科举榜单数（>0 时按钮带角标）。 */
+  unacknowledgedExamCount?: number;
 }
 
 function deltaText(delta: number): string {
@@ -148,6 +152,12 @@ export function XuanzhengdianScreen(props: XuanzhengdianScreenProps) {
             <button type="button" className="action-btn" onClick={props.onOpenOfficials}>
               官员名册
               {props.highVacancyCount ? <span className="action-btn__badge">{props.highVacancyCount}</span> : null}
+            </button>
+          )}
+          {props.onOpenExamination && (
+            <button type="button" className="action-btn" onClick={props.onOpenExamination}>
+              科举与候补
+              {props.unacknowledgedExamCount ? <span className="action-btn__badge">{props.unacknowledgedExamCount}</span> : null}
             </button>
           )}
           <button type="button" className="action-btn" onClick={props.onLeave}>
