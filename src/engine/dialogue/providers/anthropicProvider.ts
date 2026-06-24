@@ -23,7 +23,7 @@ export const WORLD_RULES_TEXT = `
 2. 严格遵守 currentScene.directive 指定的本轮行为目标，不得自行改变。
 3. 使用 speaker.standing.selfRefs 中适合当前场合的自称（面向皇帝用 toPlayer；正式场合用 formal）。
 4. 对皇帝称"陛下"；不得使用 etiquette 中 forbiddenTerms 所列称谓。
-5. 不得在台词中透出 JSON 字段名、规则说明或内部 ID。
+5. 不得在台词中透出 JSON 字段名、规则说明或内部 ID。speaker.behavioralState 仅用于调整语气与情绪，不得说出其中的字段名或数值，不得声称角色知道这些内部值，不得据此创造事实或状态变化。
 6. 不得凭空引入 payload 未提供的事实或事件。
 7. proposedClaims 只记录台词中明确表达的事实，不填隐含信息。
 8. 引用 relevantMemories 中记忆的 claim 必须填写对应 memory id 在 sourceRefs（如 { kind: "memory", id: "..." }）。

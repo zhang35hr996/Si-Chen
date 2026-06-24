@@ -78,6 +78,35 @@ export function getActiveSeatedOfficials(state: GameState, db: ContentDB): Offic
   );
 }
 
+// ── 官位占用 / 空缺（Phase 2 PR2A） ────────────────────────────────────────
+// 占用只计 active 在任者（非 active 官员的 postId 恒为 null，本不应计入；status 守卫兜底
+// 损坏存档）。多席官职返回剩余席位数，而非 boolean。
+
+/** 某官职当前在任占用人数。 */
+export function getPostOccupancy(state: GameState, _db: ContentDB, postId: string): number {
+  return Object.values(state.officials).filter((o) => o.status === "active" && o.postId === postId).length;
+}
+
+/** 某官职剩余空席数（seatCount − 占用，夹 ≥0）；官职不存在则 0。 */
+export function getVacantSeatCount(state: GameState, db: ContentDB, postId: string): number {
+  const post = db.officialPosts[postId];
+  if (!post) return 0;
+  return Math.max(0, post.seatCount - getPostOccupancy(state, db, postId));
+}
+
+/** 某官职是否尚有空席。 */
+export function isPostVacant(state: GameState, db: ContentDB, postId: string): boolean {
+  return getVacantSeatCount(state, db, postId) > 0;
+}
+
+/** 当前有空席的全部官职（排除 commoner 等 gradeOrder 0 的非官职席位）。 */
+export function getVacantPosts(state: GameState, db: ContentDB): { postId: string; vacantSeatCount: number }[] {
+  return Object.values(db.officialPosts)
+    .filter((p) => p.gradeOrder > 0)
+    .map((p) => ({ postId: p.id, vacantSeatCount: getVacantSeatCount(state, db, p.id) }))
+    .filter((v) => v.vacantSeatCount > 0);
+}
+
 /** 某家族出身、当前在宫的侍君 charId（按 standing.birthFamilyId）。 */
 export function getConsortsByFamilyId(state: GameState, familyId: string): string[] {
   return Object.entries(state.standing)

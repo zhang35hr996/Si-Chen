@@ -7,7 +7,7 @@ import { createCalendar, toGameTime } from "../calendar/time";
 import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import { generateOfficialWorld } from "../officials/worldgen";
-import { validateOfficialWorld } from "../officials/validation";
+import { assertGeneratedOfficialWorld } from "../officials/validation";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
 
 /** 新游戏私库种子（id 须存在于 content/items.json）。 */
@@ -29,12 +29,22 @@ export function memoryEntryId(charId: string, seq: number): string {
  * 测试对象字面量触发 excess-property error / 平行类型漂移。
  */
 export function consortStandingExtras(
-  character: { kind: string; hidden?: { affection: number }; initialStanding?: Partial<CharacterStanding>; attributes?: { health: number } },
+  character: {
+    kind: string;
+    hidden?: { affection?: number; fear?: number; ambition?: number; loyalty?: number };
+    initialStanding?: Partial<CharacterStanding>;
+    attributes?: { health: number };
+  },
   startTime: GameTime,
 ): Partial<CharacterStanding> {
   if (character.kind !== "consort") return {};
   return {
-    ...(character.hidden ? { affection: character.hidden.affection } : {}),
+    ...(character.hidden ? {
+      affection: character.hidden.affection ?? 50,
+      fear:      character.hidden.fear      ?? 30,
+      ambition:  character.hidden.ambition  ?? 35,
+      loyalty:   character.hidden.loyalty   ?? 50,
+    } : {}),
     palaceEnteredAt: character.initialStanding?.palaceEnteredAt ?? startTime,
     health: (character as { attributes?: { health: number } }).attributes?.health ?? 100,
     healthStatus: "healthy",
@@ -109,6 +119,8 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     officialFamilies: officialWorld.officialFamilies,
     familyMembers: officialWorld.familyMembers,
     kinship: officialWorld.kinship,
+    pendingRetirements: [],
+    officialHistory: [],
     memories,
     bedchamber,
     eventLog: [],
@@ -123,8 +135,9 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     rngSeed,
   };
 
-  // 开局自检（fail-fast）：官员世界完整性。仅在建档时执行一次，数据量小，非重复扫描。
-  const integrity = validateOfficialWorld(newState, db);
+  // 开局自检（fail-fast）：持久不变量 + 生成期年龄合理性。仅在建档时执行一次（唯一入口），
+  // 数据量小，非重复扫描。load/import 路径只跑 validateOfficialWorld（不含年龄差）。
+  const integrity = assertGeneratedOfficialWorld(newState, db);
   if (integrity.length > 0) {
     const first = integrity[0]!;
     throw new Error(`createNewGameState: official world integrity failed (${first.code}): ${first.message}`);

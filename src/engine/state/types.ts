@@ -205,13 +205,23 @@ export interface Resources {
 
 // ── Per-character runtime state ───────────────────────────────────────
 
-/** 官员生命周期状态（本阶段只生成 active；其余为后续升迁/告老/株连预留）。 */
+/** 官员生命周期状态。非 active 状态下 postId 必为 null（席位释放，校验器强制）。 */
 export type OfficialStatus = "active" | "retired" | "imprisoned" | "exiled" | "dead";
+
+/** 状态变化原因（受控枚举；具体罪名留待后续放事件/判决记录）。 */
+export type OfficialStatusReason =
+  | "retirement"
+  | "dismissal"
+  | "imprisonment"
+  | "exile"
+  | "natural_death"
+  | "execution";
 
 /**
  * 朝臣名册条目（轻量运行态）。权势不落字段——由 postId→品级 派生（见 officials/power）。
  * 官员只能是女性（世界观硬约束），故无 sex 字段。postId 可空：官职是稳定席位，
  * 官员去职/获罪后席位空缺而官职仍在，故 postId 允许 null。familyId 必有（官员必属一族）。
+ * 死亡不删除人物：dead 仍是侍君生母/家族成员/历史人物，只是不能再任职、不再被任免源选中。
  */
 export interface Official {
   id: string;
@@ -222,9 +232,35 @@ export interface Official {
   loyalty: number; // 忠心 0–100（官员个人，与家族属性分离）
   age: number; // 入仕年龄约束见 officials/constraints
   familyId: string; // 所属官员家族（母系实体）
-  status: OfficialStatus; // 本阶段恒为 "active"
-  /** 任职时刻（可空；本阶段开局官员置开局时刻）。 */
+  status: OfficialStatus;
+  /** 任职时刻（可空；开局官员置开局时刻）。 */
   appointedAt?: GameTime;
+  /** 最近一次状态变化时刻（非 active 时应有）。 */
+  statusChangedAt?: GameTime;
+  /** 最近一次状态变化原因（非 active 时应有；active 时不设）。 */
+  statusReason?: OfficialStatusReason;
+  /** 死亡时刻（status=dead 时应有）。 */
+  deathAt?: GameTime;
+}
+
+/** 待玩家裁决的告老请求（PR2A 只生成；批准/挽留由 store 命令处理，UI 留 PR2B）。 */
+export interface PendingRetirement {
+  officialId: string;
+  requestedAt: GameTime;
+}
+
+/** 官员状态变迁的正式历史记录（append-only；显示文本由 UI 派生）。 */
+export interface OfficialHistoryEntry {
+  /** "ohist_000001" 单调。 */
+  id: string;
+  officialId: string;
+  /** 变迁后的状态。 */
+  status: OfficialStatus;
+  /** 变迁原因；恢复为 active 时不设。 */
+  reason?: OfficialStatusReason;
+  at: GameTime;
+  /** 此次变迁释放的官职（离任前所占）；无则不设。 */
+  vacatedPostId?: string;
 }
 
 /** 官员所属部门（官职归类；驱动名册分组，本阶段不参与数值）。 */
@@ -264,6 +300,8 @@ export interface FamilyMember {
   sex: PersonSex;
   age: number;
   role: FamilyMemberRole;
+  /** 死亡时刻（自然死亡标记）。设后不再增龄，但绝不删除——亲缘/家族关系保留。 */
+  deceasedAt?: GameTime;
 }
 
 /**
@@ -318,6 +356,14 @@ export interface CharacterStanding {
   chamber?: ChamberId;
   /** 好感/情意 0–100（仅侍君；缺省回退 authored hidden.affection）。 */
   affection?: number;
+  /** 恐惧 0–100（仅侍君；缺省回退 hidden.fear，无则 30）。 */
+  fear?: number;
+  /** 野心 0–100（仅侍君；缺省回退 hidden.ambition，无则 35）。 */
+  ambition?: number;
+  /** 忠诚 0–100（仅侍君；缺省回退 hidden.loyalty，无则 50）。 */
+  loyalty?: number;
+  /** 后宫阵营标识（可选；预置角色通过 initialStanding.haremFactionId authored）。 */
+  haremFactionId?: string;
   /** 入宫时刻（知情资格用）；非常住者 undefined。所有入宫流程必须写此字段。 */
   palaceEnteredAt?: GameTime;
   /** 殿选新晋侍君的侍寝解禁月序（monthOrdinal）；缺省即无门槛。 */
@@ -583,6 +629,10 @@ export interface GameState {
   familyMembers: Record<string, FamilyMember>;
   /** 亲缘关系边（正式可查询，绝不靠姓名临时推断）。 */
   kinship: KinshipRelation[];
+  /** 待裁决的告老请求（年度 tick 生成；批准→retired / 挽留→撤回）。 */
+  pendingRetirements: PendingRetirement[];
+  /** 官员状态变迁历史（append-only，可见历史）。 */
+  officialHistory: OfficialHistoryEntry[];
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

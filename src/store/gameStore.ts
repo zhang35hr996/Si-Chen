@@ -15,6 +15,10 @@ import { expiredUnrecordedConfinements } from "../engine/characters/confinement"
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
 import { planHaremAdminRankCommand, type HaremAdminRankCommand, type HaremAdminCommandPlan } from "./haremAdminCommands";
+import { planPunishmentConsequences } from "../engine/punishments/consequencePlanner";
+import { buildRankOp, type RankOpRequest } from "./rankOps";
+import type { PunishmentOutcomeContext, PunishmentMeta, ReactionBeat } from "../engine/punishments/types";
+import { punishmentSeverity, type PunishmentKind } from "../engine/punishments/types";
 import type { CourtEvent } from "../engine/state/types";
 import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
@@ -23,6 +27,8 @@ import { applyBatch, applyCommand, type CommandResult } from "../engine/state/re
 import type { GameState, PendingDaxuan } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { assignOfficialPost } from "../engine/officials/assign";
+import { retireOfficial } from "../engine/officials/lifecycle";
+import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
@@ -58,6 +64,13 @@ export interface GameStoreOptions {
   /** Override trace history capacity. Defaults to 200. */
   traceHistoryLimit?: number;
 }
+
+/** 推进日历的命令——必须经统一时间入口（带边界结算），不可裸 dispatch。 */
+const isTimeCommand = (c: GameCommand): boolean => c.type === "SPEND_AP" || c.type === "SKIP_REMAINDER";
+const rawTimeDispatchError: GameError = stateError(
+  "RAW_TIME_DISPATCH",
+  "time commands (SPEND_AP/SKIP_REMAINDER) must route through advanceTime/resolveTimedAction/travelAndAdvance",
+);
 
 export class GameStore {
   private state: GameState;
@@ -176,6 +189,10 @@ export class GameStore {
   };
 
   dispatch(command: GameCommand): CommandResult {
+    if (isTimeCommand(command)) {
+      this.logger?.logGameError(rawTimeDispatchError); // 拒绝绝不静默
+      return err(rawTimeDispatchError);
+    }
     if (this.traceMode === "off") return this.commit(applyCommand(this.state, command));
     const beforeState = this.state;
     const result = applyCommand(this.state, command);
@@ -193,6 +210,12 @@ export class GameStore {
   }
 
   dispatchBatch(commands: readonly GameCommand[]): CommandResult {
+    // 时间命令必须走统一入口（advanceTime/resolveTimedAction/travelAndAdvance）以保证边界结算；
+    // 裸 dispatch 会绕过 settleCalendarAdvance，一律拒绝。
+    if (commands.some(isTimeCommand)) {
+      this.logger?.logGameError(rawTimeDispatchError);
+      return err(rawTimeDispatchError);
+    }
     if (this.traceMode === "off") return this.commit(applyBatch(this.state, commands));
     const beforeState = this.state;
     const result = applyBatch(this.state, commands);
@@ -244,9 +267,34 @@ export class GameStore {
    * 仅在 ok 时落库；返回 Result 供调用方处理错误（v1 无 UI 调用方，仅留接口）。
    */
   assignOfficialPost(db: ContentDB, officialId: string, newPostId: string | null): Result<void, GameError> {
-    const result = assignOfficialPost(this.state, db, officialId, newPostId);
+    const result = assignOfficialPost(this.state, db, officialId, newPostId, toGameTime(this.state.calendar));
     if (!result.ok) return result;
     this.tracedSet(result.value, { kind: "action", sourceId: "assignOfficialPost", label: `assignOfficialPost: ${officialId}` });
+    return ok(undefined);
+  }
+
+  /** 准其告老：消费一条未决告老请求 → retireOfficial（状态 retired、释放席位、写历史）。 */
+  approveRetirement(officialId: string): Result<void, GameError> {
+    if (!this.state.pendingRetirements.some((p) => p.officialId === officialId)) {
+      return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
+    }
+    const result = retireOfficial(this.state, officialId, toGameTime(this.state.calendar));
+    if (!result.ok) return result;
+    this.state = result.value; // retireOfficial 内部已撤回该 pending
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 挽留一年：撤回该未决告老请求（来年可再请）。官员保持在任。 */
+  retainRetirement(officialId: string): Result<void, GameError> {
+    if (!this.state.pendingRetirements.some((p) => p.officialId === officialId)) {
+      return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
+    }
+    this.state = {
+      ...this.state,
+      pendingRetirements: this.state.pendingRetirements.filter((p) => p.officialId !== officialId),
+    };
+    this.emit();
     return ok(undefined);
   }
 
@@ -594,6 +642,186 @@ export class GameStore {
   }
 
   /**
+   * Internal atomic helper shared by the two punitive entry points below.
+   * Applies effects → chronicle → single emit.  Returns the final plan + beats.
+   * On any failure the state is left unchanged.
+   */
+  private commitPlannedTransaction(
+    db: ContentDB,
+    effects: readonly EventEffect[],
+    chronicle: Omit<CourtEvent, "id">[],
+    reactionBeats: ReactionBeat[],
+  ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
+    const applied = applyEffects(db, this.state, effects);
+    if (!applied.ok) {
+      for (const e of applied.error) this.logger?.logGameError(e);
+      this.lastEffectReport = { effects: [...effects], outcome: "rejected", errors: applied.error };
+      return err(applied.error);
+    }
+    let candidate = applied.value;
+    for (const draft of chronicle) {
+      const ap = appendCourtEvent(candidate, draft);
+      if (!ap.ok) {
+        for (const e of ap.error) this.logger?.logGameError(e);
+        return err(ap.error); // this.state untouched — atomic
+      }
+      candidate = ap.value.state;
+    }
+    this.state = candidate;
+    this.lastEffectReport = { effects: [...effects], outcome: "applied", errors: [] };
+    this.emit();
+    return ok({ reactionBeats });
+  }
+
+  /**
+   * Punitive imperial command (confinement / execution) WITH consequence effects.
+   * Both base command effects and consequence effects are committed atomically.
+   *
+   * punishmentId is generated internally from (dayIndex:chronicle.length) to
+   * guarantee per-event uniqueness — callers must NOT supply it.
+   * kind / severity / occurredAt are also derived from the validated command.
+   *
+   * Ordinary non-punitive commands (lift_confinement) must use applyImperialCommand.
+   */
+  applyImperialPunishmentWithConsequences(
+    db: ContentDB,
+    command: ImperialCommand & { type: "impose_confinement" | "execute" },
+    meta: PunishmentMeta,
+  ): Result<{ punishmentId: string; reactionBeats: ReactionBeat[]; baseLines: string[] }, GameError[]> {
+    const planned = planImperialCommand(db, this.state, command);
+    if (!planned.ok) {
+      const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    const base = planned.plan;
+
+    // Derive context from the validated command — not from the caller.
+    const kind: PunishmentKind = command.type === "execute"
+      ? "execution"
+      : command.durationTurns === null
+        ? "indefinite_confinement"
+        : "finite_confinement";
+    // punishmentId is generated from (dayIndex:chronicle.length) — unique per event within a save.
+    const punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
+    const ctx: PunishmentOutcomeContext = {
+      punishmentId,
+      ...(meta.caseId ? { caseId: meta.caseId } : {}),
+      targetId: command.targetId,
+      actorId: "player",
+      kind,
+      severity: punishmentSeverity(kind),
+      occurredAt: toGameTime(this.state.calendar),
+      ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
+      ...(meta.publicity ? { publicity: meta.publicity } : {}),
+    };
+
+    const conseq = planPunishmentConsequences(db, this.state, ctx);
+
+    // Inject punishmentId into base.chronicle so it survives save/load.
+    // Primary punishment entries (decree matches the punishment type) get `punishmentId`;
+    // ancillary administration-transfer entries get `sourcePunishmentId` to avoid ambiguity
+    // when future code searches chronicle for the canonical punishment record.
+    const PUNITIVE_DECREES = new Set(["confinement_imposed", "execution"]);
+    const punishmentChronicle = base.chronicle.map((draft) => {
+      const decree = (draft.payload as { decree?: string }).decree;
+      const extra = PUNITIVE_DECREES.has(decree ?? "")
+        ? { punishmentId, ...(meta.caseId ? { caseId: meta.caseId } : {}) }
+        : { sourcePunishmentId: punishmentId };
+      return { ...draft, payload: { ...draft.payload, ...extra } };
+    });
+
+    const txResult = this.commitPlannedTransaction(
+      db,
+      [...base.effects, ...conseq.effects],
+      [...punishmentChronicle, ...conseq.chronicle],
+      conseq.reactionBeats,
+    );
+    if (!txResult.ok) return txResult;
+    return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: base.lines });
+  }
+
+  /**
+   * Punitive rank change (demotion / strip_title) WITH consequence effects.
+   * Rejects any request that would not produce a demotion or strip_title op.
+   *
+   * Product rule (locked): all sovereign-direct demotions and title strips are
+   * inherently punitive — there is no "administrative demotion" path at this scope.
+   *
+   * Ordinary 册封/晋升 and harem-admin rank changes must NOT call this.
+   * punishmentId / kind / severity / occurredAt are derived internally.
+   */
+  applyPunitiveRankChangeWithConsequences(
+    db: ContentDB,
+    targetId: string,
+    request: RankOpRequest,
+    meta: PunishmentMeta,
+  ): Result<{ punishmentId: string; reactionBeats: ReactionBeat[]; baseLines: string[] }, GameError[]> {
+    const op = buildRankOp(db, this.state, targetId, request, { kind: "sovereign", actorId: "player" });
+    if (!op) {
+      const error = stateError("RANK_OP_INVALID", "rank change is a no-op or target has no standing");
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    if (op.kind !== "demote" && op.kind !== "strip_title") {
+      const error = stateError("RANK_OP_INVALID", `punitive entry requires demote or strip_title, got: ${op.kind}`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+
+    const kind: PunishmentKind = op.kind === "strip_title" ? "strip_title" : "rank_demotion";
+    const occurredAt = toGameTime(this.state.calendar);
+    // punishmentId from (dayIndex:chronicle.length) — unique because each prior punishment
+    // appends at least one chronicle entry before the next one is issued.
+    const punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
+    // Rank change chronicle is built inline below and already includes punishmentId in payload.
+    const ctx: PunishmentOutcomeContext = {
+      punishmentId,
+      ...(meta.caseId ? { caseId: meta.caseId } : {}),
+      targetId,
+      actorId: "player",
+      kind,
+      severity: punishmentSeverity(kind),
+      occurredAt,
+      ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
+      ...(meta.publicity ? { publicity: meta.publicity } : {}),
+    };
+
+    const conseq = planPunishmentConsequences(db, this.state, ctx);
+    const chronicle: Omit<CourtEvent, "id">[] = [
+      {
+        type: "rank_changed",
+        occurredAt,
+        participants: [
+          { charId: "player", role: "actor" },
+          { charId: targetId, role: "demoted" },
+        ],
+        payload: {
+          decree: "imperial_punitive_rank_change",
+          targetId,
+          direction: op.kind,
+          punishmentId,
+          ...(meta.caseId ? { caseId: meta.caseId } : {}),
+        },
+        publicity: { scope: "palace", persistence: "institutional" },
+        publicSalience: 65,
+        retention: "slow",
+        tags: ["punitive", "rank_change", op.kind],
+      },
+      ...conseq.chronicle,
+    ];
+
+    const txResult = this.commitPlannedTransaction(
+      db,
+      [...op.effects, ...conseq.effects],
+      chronicle,
+      conseq.reactionBeats,
+    );
+    if (!txResult.ok) return txResult;
+    return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: op.lines });
+  }
+
+  /**
    * Resolve an event as ONE transaction: same effect funnel + apCost spend +
    * eventLog entry (review rule #4). Rejection → state untouched, no notify,
    * NOT marked fired; errors logged once and reported as diagnostics.
@@ -603,22 +831,12 @@ export class GameStore {
     eventId: string,
     effects: readonly EventEffect[],
   ): Result<EventResolution, GameError[]> {
+    // 1) effects + apCost 推进（引擎事务；含 affordability / firedAt / eventLog）。
     const collector = this.makeCollector();
     const beforeState = this.state;
     const source: TraceSource = { kind: "event", sourceId: eventId, label: `event: ${eventId}` };
     const result = resolveEvent(db, this.state, eventId, effects, collector ? { collector } : undefined);
-    if (result.ok) {
-      const candidateState = result.value.state;
-      if (collector) {
-        const tx = this.buildTrace(beforeState, candidateState, source, collector, "committed");
-        this.state = candidateState;
-        this.traceHistory.push(tx);
-      } else {
-        this.state = candidateState;
-      }
-      this.lastEffectReport = { effects, outcome: "applied", errors: [] };
-      this.emit();
-    } else {
+    if (!result.ok) {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
       if (collector) {
@@ -626,8 +844,33 @@ export class GameStore {
           result.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
       }
+      return result;
     }
-    return result;
+    // 2) 统一边界结算：事件 apCost 若跨月/跨年，照常跑健康/增龄/死亡/告老/大选/禁足，
+    //    杜绝事件流绕过结算。失败 → 整体回滚（state 不变、不 emit）。
+    const settled = this.settlePostAdvance(db, this.state, result.value.state, collector ?? undefined);
+    if (!settled.ok) {
+      for (const error of settled.error) this.logger?.logGameError(error);
+      this.lastEffectReport = { effects, outcome: "rejected", errors: settled.error };
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          settled.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
+      return err(settled.error);
+    }
+    // 3) 成功：commit + emit。
+    const finalState = settled.value.state;
+    if (collector) {
+      const tx = this.buildTrace(beforeState, finalState, source, collector, "committed");
+      this.state = finalState;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = finalState;
+    }
+    this.lastEffectReport = { effects, outcome: "applied", errors: [] };
+    this.emit();
+    return ok({ state: finalState, rolledOver: result.value.rolledOver });
   }
 
   /**
@@ -743,23 +986,20 @@ export class GameStore {
    * panel can attribute calendar/daxuan/gameOver mutations to their correct phase
    * instead of labelling them "untracked".
    */
-  private advanceCandidate(
+  /**
+   * Runs health tick, official yearly tick, daxuan detection, and confinement sweep
+   * on a state that has ALREADY had its calendar advanced. Called by both
+   * advanceCandidate (after applying a command) and resolveEvent (after engine
+   * apCost resolves the calendar move).
+   */
+  private settlePostAdvance(
     db: ContentDB,
-    candidateIn: GameState,
-    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+    before: GameState,
+    advanced: GameState,
     collector?: TraceCollector,
-  ): Result<{ rolledOver: boolean; monthChanged: boolean; healthOutcome: MonthlyTickResult | null; nextState: GameState }, GameError[]> {
-    let candidate = candidateIn;
-
-    // 2) Calendar advance (pure reducer).
-    const before = monthOrdinal(candidate.calendar);
-    const beforeCalendar = candidate;
-    const cmd = applyCommand(candidate, command);
-    if (!cmd.ok) return err([cmd.error]);
-    candidate = cmd.value.state;
-    collector?.capturePhaseScheduled("calendar_advance", diffGameState(beforeCalendar, candidate));
-
-    const monthChanged = monthOrdinal(candidate.calendar) !== before;
+  ): Result<{ state: GameState; monthChanged: boolean; healthOutcome: MonthlyTickResult | null }, GameError[]> {
+    let candidate = advanced;
+    const monthChanged = monthOrdinal(advanced.calendar) !== monthOrdinal(before.calendar);
 
     // 3) Cross-month health tick.
     let healthOutcome: MonthlyTickResult | null = null;
@@ -788,6 +1028,11 @@ export class GameStore {
       }
     }
 
+    // 跨入正月（新年第一月）→ 官员年度 tick（增龄/死亡/告老请求）。
+    if (monthChanged && candidate.calendar.month === 1) {
+      candidate = buildOfficialYearlyTick(candidate, db, toGameTime(candidate.calendar));
+    }
+
     // 5) Daxuan calendar event detection.
     const beforeDaxuan = candidate;
     if (candidate.pendingDaxuan && isPendingDaxuanResolved(candidate, candidate.pendingDaxuan)) {
@@ -810,7 +1055,25 @@ export class GameStore {
     candidate = swept.value;
     collector?.capturePhaseScheduled("sweep_expired_confinements", diffGameState(beforeSweep, candidate));
 
-    return ok({ rolledOver: cmd.value.rolledOver, monthChanged, healthOutcome, nextState: candidate });
+    return ok({ state: candidate, monthChanged, healthOutcome });
+  }
+
+  private advanceCandidate(
+    db: ContentDB,
+    candidateIn: GameState,
+    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+    collector?: TraceCollector,
+  ): Result<{ rolledOver: boolean; monthChanged: boolean; healthOutcome: MonthlyTickResult | null; nextState: GameState }, GameError[]> {
+    // 2) Calendar advance (pure reducer).
+    const beforeCalendar = candidateIn;
+    const cmd = applyCommand(candidateIn, command);
+    if (!cmd.ok) return err([cmd.error]);
+    const calendared = cmd.value.state;
+    collector?.capturePhaseScheduled("calendar_advance", diffGameState(beforeCalendar, calendared));
+
+    const settled = this.settlePostAdvance(db, candidateIn, calendared, collector);
+    if (!settled.ok) return err(settled.error);
+    return ok({ rolledOver: cmd.value.rolledOver, monthChanged: settled.value.monthChanged, healthOutcome: settled.value.healthOutcome, nextState: settled.value.state });
   }
 
   /**

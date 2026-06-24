@@ -21,21 +21,24 @@ describe("diffGameState", () => {
 
   it("detects favor change in standing", () => {
     const before = makeStarted();
-    const firstChar = Object.keys(before.standing)[0]!;
-    const result = applyEffects(db, before, [{ type: "favor", char: firstChar, delta: 5 }]);
+    // favor only works on consort-kind characters; pick the first consort.
+    const consortId = Object.keys(before.standing).find((id) => db.characters[id]?.kind === "consort");
+    if (!consortId) return; // no consort in fixture
+    const result = applyEffects(db, before, [{ type: "favor", char: consortId, delta: 5 }]);
     if (!result.ok) throw new Error("expected ok");
     const after = result.value;
     const diffs = diffGameState(before, after);
-    const favorDiff = diffs.find((d) => d.path === `standing.${firstChar}.favor`);
+    const favorDiff = diffs.find((d) => d.path === `standing.${consortId}.favor`);
     expect(favorDiff).toBeDefined();
-    expect(favorDiff?.after).toBe((before.standing[firstChar]?.favor ?? 0) + 5);
+    expect(favorDiff?.after).toBe((before.standing[consortId]?.favor ?? 0) + 5);
   });
 
   it("detects calendar AP change", () => {
     const store = createGameStore();
     store.newGame(db);
     const before = store.getState();
-    store.dispatch({ type: "SPEND_AP", amount: 1 });
+    // SPEND_AP must route through advanceTime (dispatch now rejects time commands).
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
     const after = store.getState();
     const diffs = diffGameState(before, after);
     const apDiff = diffs.find((d) => d.path === "calendar.ap");

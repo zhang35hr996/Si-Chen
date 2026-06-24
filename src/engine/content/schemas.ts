@@ -71,6 +71,10 @@ export const characterStandingSchema = z.strictObject({
   residence: idSchema.optional(),
   chamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
   affection: percent.optional(),
+  fear: percent.optional(),
+  ambition: percent.optional(),
+  loyalty: percent.optional(),
+  haremFactionId: z.string().min(1).optional(),
   palaceEnteredAt: gameTimeShape.optional(),
   availableFromMonth: z.number().int().min(1).optional(),
   health: percent.optional(),
@@ -343,6 +347,20 @@ export const eventEffectSchema = z.union([
     ]),
     monthKey: z.string().min(1),
   }),
+  /**
+   * Adjust a consort's hidden runtime attribute (affection / fear / ambition /
+   * loyalty) by a signed integer delta.  The funnel resolves the current
+   * runtime value via resolveConsortRuntimeAttrs, applies the delta, and clamps
+   * to [0, 100].  Unlike the `favor` effect, this bypasses AXIS_CAP — the
+   * punishment consequence planner is responsible for keeping per-field
+   * aggregated deltas reasonable.  Allowed range −50..50 enforces intent.
+   */
+  z.strictObject({
+    type: z.literal("adjust_consort_attr"),
+    char: idSchema,
+    field: z.enum(["affection", "fear", "ambition", "loyalty"]),
+    delta: z.number().int().min(-50).max(50),
+  }),
 ]);
 
 export type EventEffect = z.infer<typeof eventEffectSchema>;
@@ -367,6 +385,7 @@ export const consortHiddenSchema = z.strictObject({
   affection: percent, // 情意
   fear: percent, // 恐惧
   ambition: percent, // 野心
+  loyalty: percent.optional(), // 忠诚（可选 authored 初值）
 });
 
 export type ConsortHidden = z.infer<typeof consortHiddenSchema>;

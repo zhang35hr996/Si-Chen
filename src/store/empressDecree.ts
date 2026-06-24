@@ -11,15 +11,12 @@ export const DEMOTE_FAVOR = 35;
 export const DECREE_RANK_CEILING = 100; // 贵人
 export const DECREE_RANK_FLOOR = 40; // 官男子
 
-export interface DecreeReaction {
-  speakerId: string;
-  lines: string[];
-  /** 覆盖反应画面背景（资源 key，带时段变体）；缺省用玩家当前所在地点背景。 */
-  backgroundKey?: string;
-}
+export type { ReactionBeat as DecreeReaction } from "../engine/punishments/types";
+import type { ReactionBeat } from "../engine/punishments/types";
+
 export interface DecreePlan {
   effects: EventEffect[];
-  reactions: DecreeReaction[];
+  reactions: ReactionBeat[];
 }
 
 type Dir = "promote" | "demote";
@@ -87,7 +84,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
     },
   ];
   const verb = dir === "promote" ? "晋" : "贬";
-  const reactions: DecreeReaction[] = [
+  const reactions: ReactionBeat[] = [
     { speakerId: "wei_sui", lines: [`司礼官启奏：凤后娘娘懿旨——${verb}${name}为${targetName}。`] },
     {
       speakerId: pick.id,

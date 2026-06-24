@@ -11,17 +11,23 @@ const makeStarted = (traceMode: "record" | "off" | "strict" = "record") => {
   return store;
 };
 
+/** favor requires a consort-kind character; pick the first one from standing. */
+const firstConsortId = (store: ReturnType<typeof makeStarted>): string => {
+  return Object.keys(store.getState().standing).find((id) => db.characters[id]?.kind === "consort") ??
+    Object.keys(store.getState().standing)[0]!;
+};
+
 describe("GameStore trace integration", () => {
   it("records a trace transaction after applyEffects in 'record' mode", () => {
     const store = makeStarted("record");
-    const firstChar = Object.keys(store.getState().standing)[0]!;
-    store.applyEffects(db, [{ type: "favor", char: firstChar, delta: 3 }]);
+    const consortId = firstConsortId(store);
+    store.applyEffects(db, [{ type: "favor", char: consortId, delta: 3 }]);
     const history = store.getTraceHistory();
     expect(history.size).toBeGreaterThanOrEqual(1);
     const tx = history.getAll().at(-1)!;
     expect(tx.outcome).toBe("committed");
     expect(tx.source.kind).toBe("action");
-    const favorMut = tx.mutations.find((m) => m.path === `standing.${firstChar}.favor`);
+    const favorMut = tx.mutations.find((m) => m.path === `standing.${consortId}.favor`);
     expect(favorMut).toBeDefined();
     expect(favorMut?.delta).toBe(3);
   });
@@ -37,29 +43,30 @@ describe("GameStore trace integration", () => {
 
   it("produces no trace history in 'off' mode", () => {
     const store = makeStarted("off");
-    const firstChar = Object.keys(store.getState().standing)[0]!;
-    store.applyEffects(db, [{ type: "favor", char: firstChar, delta: 3 }]);
+    const consortId = firstConsortId(store);
+    store.applyEffects(db, [{ type: "favor", char: consortId, delta: 3 }]);
     expect(store.getTraceHistory().size).toBe(0);
   });
 
   it("does not change game state outcome with tracing enabled vs disabled", () => {
-    const char1 = Object.keys(makeStarted("off").getState().standing)[0]!;
+    const storeRef = makeStarted("off");
+    const consortId = firstConsortId(storeRef);
 
     const storeOff = makeStarted("off");
-    storeOff.applyEffects(db, [{ type: "favor", char: char1, delta: 5 }]);
+    storeOff.applyEffects(db, [{ type: "favor", char: consortId, delta: 5 }]);
 
     const storeRec = makeStarted("record");
-    storeRec.applyEffects(db, [{ type: "favor", char: char1, delta: 5 }]);
+    storeRec.applyEffects(db, [{ type: "favor", char: consortId, delta: 5 }]);
 
-    const favOff = storeOff.getState().standing[char1]?.favor;
-    const favRec = storeRec.getState().standing[char1]?.favor;
+    const favOff = storeOff.getState().standing[consortId]?.favor;
+    const favRec = storeRec.getState().standing[consortId]?.favor;
     expect(favRec).toBe(favOff);
   });
 
   it("trace transaction captures gameTime from post-commit state calendar", () => {
     const store = makeStarted("record");
-    const firstChar = Object.keys(store.getState().standing)[0]!;
-    store.applyEffects(db, [{ type: "favor", char: firstChar, delta: 1 }]);
+    const consortId = firstConsortId(store);
+    store.applyEffects(db, [{ type: "favor", char: consortId, delta: 1 }]);
     const tx = store.getTraceHistory().getAll().at(-1)!;
     expect(typeof tx.gameTime).toBe("string");
     expect(tx.gameTime!.length).toBeGreaterThan(0);
@@ -125,13 +132,13 @@ describe("GameStore trace integration", () => {
 
   it("strict mode: successful operation still commits (no false positives)", () => {
     const store = makeStarted("strict");
-    const firstChar = Object.keys(store.getState().standing)[0]!;
-    const initialFavor = store.getState().standing[firstChar]?.favor ?? 0;
+    const consortId = firstConsortId(store);
+    const initialFavor = store.getState().standing[consortId]?.favor ?? 0;
 
     // In strict mode, a fully-instrumented effect should commit successfully.
-    const result = store.applyEffects(db, [{ type: "favor", char: firstChar, delta: 7 }]);
+    const result = store.applyEffects(db, [{ type: "favor", char: consortId, delta: 7 }]);
     expect(result.ok).toBe(true);
-    expect(store.getState().standing[firstChar]?.favor).toBe(initialFavor + 7);
+    expect(store.getState().standing[consortId]?.favor).toBe(initialFavor + 7);
     const tx = store.getTraceHistory().getAll().at(-1)!;
     expect(tx.outcome).toBe("committed");
     expect(tx.untrackedCount).toBe(0);
@@ -224,8 +231,8 @@ describe("GameStore trace integration", () => {
 
   it("untrackedCount === 0 for favor effect in strict mode", () => {
     const store = makeStarted("strict");
-    const firstChar = Object.keys(store.getState().standing)[0]!;
-    const result = store.applyEffects(db, [{ type: "favor", char: firstChar, delta: 3 }]);
+    const consortId = firstConsortId(store);
+    const result = store.applyEffects(db, [{ type: "favor", char: consortId, delta: 3 }]);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("favor effect failed");
     const tx = store.getTraceHistory().getAll().at(-1)!;
