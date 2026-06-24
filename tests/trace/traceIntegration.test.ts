@@ -222,22 +222,60 @@ describe("GameStore trace integration", () => {
 
   // ── untrackedCount === 0 for core funnel effects ──────────────────────────
 
-  it.each([
-    ["favor", (char: string) => [{ type: "favor" as const, char, delta: 3 }]],
-    ["resource", () => [{ type: "resource" as const, pillar: "sovereign" as const, field: "prestige" as const, delta: 2 }]],
-    ["flag", () => [{ type: "flag" as const, key: "test_untrack_flag", value: 1 }]],
-    ["set_rank", (char: string) => [{ type: "set_rank" as const, char, rank: "jiujieying" as const }]],
-  ])("untrackedCount === 0 for %s effect in strict mode", (_name, makeEffects) => {
+  it("untrackedCount === 0 for favor effect in strict mode", () => {
     const store = makeStarted("strict");
     const firstChar = Object.keys(store.getState().standing)[0]!;
-    const result = store.applyEffects(db, makeEffects(firstChar));
-    if (!result.ok) return; // skip if effect is invalid for this fixture
+    const result = store.applyEffects(db, [{ type: "favor", char: firstChar, delta: 3 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("favor effect failed");
     const tx = store.getTraceHistory().getAll().at(-1)!;
     expect(tx.outcome).toBe("committed");
     expect(tx.untrackedCount).toBe(0);
   });
 
-  it("untrackedCount === 0 for memory effect in strict mode", () => {
+  it("untrackedCount === 0 for resource effect in strict mode", () => {
+    const store = makeStarted("strict");
+    const result = store.applyEffects(db, [
+      { type: "resource", pillar: "sovereign", field: "prestige", delta: 2 },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("resource effect failed");
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.untrackedCount).toBe(0);
+  });
+
+  it("untrackedCount === 0 for flag effect in strict mode", () => {
+    const store = makeStarted("strict");
+    const result = store.applyEffects(db, [{ type: "flag", key: "test_untrack_flag", value: 1 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("flag effect failed");
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.untrackedCount).toBe(0);
+  });
+
+  it("untrackedCount === 0 for set_rank effect in strict mode", () => {
+    const store = makeStarted("strict");
+    // set_rank requires a consort-kind character with standing.
+    const consortId = Object.keys(store.getState().standing).find(
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+    );
+    if (!consortId) return; // no eligible consort in fixture
+
+    const currentRank = store.getState().standing[consortId]!.rank;
+    const targetRank = Object.keys(db.ranks).find((r) => r !== currentRank && r !== "fenghou");
+    if (!targetRank) return;
+
+    const result = store.applyEffects(db, [
+      { type: "set_rank", char: consortId, rank: targetRank, authority: { kind: "sovereign", actorId: "player" } },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.map((e) => e.message).join("; "));
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+  });
+
+  it("untrackedCount === 0 for memory effect in strict mode (including nextSeq)", () => {
     const store = makeStarted("strict");
     const firstChar = Object.keys(store.getState().standing)[0]!;
     const result = store.applyEffects(db, [
@@ -258,57 +296,128 @@ describe("GameStore trace integration", () => {
       },
     ]);
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.map((e) => e.message).join("; "));
     const tx = store.getTraceHistory().getAll().at(-1)!;
     expect(tx.outcome).toBe("committed");
     expect(tx.untrackedCount).toBe(0);
-    // nextSeq change must be captured by the per-effect diff
+    // Per-effect diff must capture nextSeq increment alongside the entry object.
     const seqMut = tx.mutations.find((m) => m.path.includes("nextSeq"));
     expect(seqMut).toBeDefined();
   });
 
   it("untrackedCount === 0 for birth effect in strict mode", () => {
     const store = makeStarted("strict");
-    const firstChar = Object.keys(store.getState().standing)[0]!;
-    const cal = store.getState().calendar;
-    const now = toGameTime(cal);
-    // Precondition: set up a gestation so the birth effect is valid
-    store.applyEffects(db, [{ type: "pregnancy", op: "carry" as const }]);
-    const storeAfterCarry = store.getState();
-    if (storeAfterCarry.resources.bloodline.gestations.length === 0) return; // fixture check
-    const result = store.applyEffects(db, [
+
+    // Step 1: begin sovereign pregnancy (status: none → pending).
+    const beginResult = store.applyEffects(db, [{ type: "pregnancy", op: "begin" }]);
+    expect(beginResult.ok).toBe(true);
+    if (!beginResult.ok) throw new Error(beginResult.error.map((e) => e.message).join("; "));
+    expect(store.getTraceHistory().getAll().at(-1)!.untrackedCount).toBe(0);
+
+    // Step 2: carry (status: pending → carrying, creates sovereign gestation).
+    const carryResult = store.applyEffects(db, [{ type: "pregnancy", op: "carry" }]);
+    expect(carryResult.ok).toBe(true);
+    if (!carryResult.ok) throw new Error(carryResult.error.map((e) => e.message).join("; "));
+    expect(store.getTraceHistory().getAll().at(-1)!.untrackedCount).toBe(0);
+    expect(store.getState().resources.bloodline.gestations.length).toBeGreaterThan(0);
+
+    // Step 3: birth (clears gestation, adds heir).
+    const birthResult = store.applyEffects(db, [
       {
         type: "birth",
-        bearer: "sovereign" as const,
-        sex: "male" as const,
-        fatherId: "player",
-        bearerOutcome: "safe" as const,
+        bearer: "sovereign",
+        sex: "son",
+        fatherId: null,
+        bearerOutcome: "safe",
         favor: 50,
         legitimate: true,
       },
     ]);
-    if (!result.ok) return; // fixture-dependent
+    expect(birthResult.ok).toBe(true);
+    if (!birthResult.ok) throw new Error(birthResult.error.map((e) => e.message).join("; "));
     const tx = store.getTraceHistory().getAll().at(-1)!;
     expect(tx.outcome).toBe("committed");
     expect(tx.untrackedCount).toBe(0);
+    // Heir must be attributed via per-effect diff.
+    const heirMut = tx.mutations.find((m) => m.path.startsWith("resources.bloodline.heirs."));
+    expect(heirMut).toBeDefined();
   });
 
   it("untrackedCount === 0 for confine + lift_confinement in strict mode", () => {
     const store = makeStarted("strict");
-    const firstChar = Object.keys(store.getState().standing)[0]!;
+    // confine requires a consort-kind character (not an official).
+    const consortId = Object.keys(store.getState().standing).find(
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+    );
+    if (!consortId) return; // no eligible consort in fixture
+
     const cal = store.getState().calendar;
     const now = toGameTime(cal);
+
     const confineResult = store.applyEffects(db, [
-      { type: "confine", char: firstChar, startTurn: cal.dayIndex, endTurnExclusive: cal.dayIndex + 6, imposedAt: now },
+      { type: "confine", char: consortId, startTurn: cal.dayIndex, endTurnExclusive: cal.dayIndex + 6, imposedAt: now },
     ]);
-    if (!confineResult.ok) return;
-    const confineTx = store.getTraceHistory().getAll().at(-1)!;
-    expect(confineTx.untrackedCount).toBe(0);
+    expect(confineResult.ok).toBe(true);
+    if (!confineResult.ok) throw new Error(confineResult.error.map((e) => e.message).join("; "));
+    expect(store.getTraceHistory().getAll().at(-1)!.untrackedCount).toBe(0);
 
     const liftResult = store.applyEffects(db, [
-      { type: "lift_confinement", char: firstChar, at: now, reason: "lifted_by_emperor" as const },
+      { type: "lift_confinement", char: consortId, at: now, reason: "lifted_by_emperor" },
     ]);
-    if (!liftResult.ok) return;
-    const liftTx = store.getTraceHistory().getAll().at(-1)!;
-    expect(liftTx.untrackedCount).toBe(0);
+    expect(liftResult.ok).toBe(true);
+    if (!liftResult.ok) throw new Error(liftResult.error.map((e) => e.message).join("; "));
+    expect(store.getTraceHistory().getAll().at(-1)!.untrackedCount).toBe(0);
+  });
+
+  it("post-batch invariant (acting_consort invalidation) classified as derived, untrackedCount === 0", () => {
+    const store = makeStarted("strict");
+    const chars = Object.keys(store.getState().standing);
+    // Find a character eligible to act as harem administrator.
+    const consort = chars.find((id) => {
+      const st = store.getState().standing[id];
+      return st && st.lifecycle === "normal" && st.rank !== "fenghou";
+    });
+    if (!consort) return; // no eligible consort in fixture
+
+    // Empress must be confined before acting_consort mode is valid.
+    const empress = chars.find((id) => store.getState().standing[id]?.rank === "fenghou");
+    if (!empress) return;
+
+    const cal = store.getState().calendar;
+    const now = toGameTime(cal);
+
+    const confineEmpressResult = store.applyEffects(db, [
+      { type: "confine", char: empress, startTurn: cal.dayIndex, endTurnExclusive: null, imposedAt: now },
+    ]);
+    if (!confineEmpressResult.ok) return; // fixture can't reach this scenario
+
+    // Set up acting_consort administration via the funnel.
+    const adminResult = store.applyEffects(db, [
+      {
+        type: "set_harem_administration",
+        state: { mode: "acting_consort", charId: consort, appointedAt: now, reason: "empress_confined" },
+      },
+    ]);
+    if (!adminResult.ok) return; // fixture doesn't support this
+
+    // Confine the acting consort — they become ineligible, triggering the post-batch invariant.
+    const cal2 = store.getState().calendar;
+    const now2 = toGameTime(cal2);
+    const confineResult = store.applyEffects(db, [
+      { type: "confine", char: consort, startTurn: cal2.dayIndex, endTurnExclusive: null, imposedAt: now2 },
+    ]);
+    expect(confineResult.ok).toBe(true);
+    if (!confineResult.ok) throw new Error(confineResult.error.map((e) => e.message).join("; "));
+
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+
+    // The administration mode change must be classified as "derived".
+    const adminMut = tx.mutations.find(
+      (m) => m.path === "haremAdministration.mode" && m.classification === "derived",
+    );
+    expect(adminMut).toBeDefined();
+    expect(adminMut?.after).toBe("neiwu_proxy");
   });
 });

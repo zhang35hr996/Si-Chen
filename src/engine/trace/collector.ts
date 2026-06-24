@@ -62,6 +62,7 @@ export class TraceCollector {
     effectType: string,
     effectIndex: number,
     diffs: readonly StateDiffEntry[],
+    reason?: string,
   ): void {
     for (const d of diffs) {
       const delta =
@@ -75,8 +76,30 @@ export class TraceCollector {
         before: d.before,
         after: d.after,
         delta,
+        reason,
         classification: "direct",
         phase: this._phase,
+      });
+    }
+  }
+
+  /**
+   * Attribute post-batch invariant mutations (classification "derived").
+   * Used for structural state repairs that happen after the effect loop.
+   */
+  captureDerivedDiff(phase: string, diffs: readonly StateDiffEntry[]): void {
+    for (const d of diffs) {
+      const delta =
+        typeof d.before === "number" && typeof d.after === "number"
+          ? d.after - d.before
+          : undefined;
+      this._mutations.push({
+        path: d.path,
+        before: d.before,
+        after: d.after,
+        delta,
+        classification: "derived",
+        phase,
       });
     }
   }

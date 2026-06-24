@@ -443,6 +443,49 @@ export interface EffectContext {
   collector?: TraceCollector;
 }
 
+/** Human-readable one-line summary of an effect's intent (for trace panel). */
+function describeEffect(effect: EventEffect): string {
+  switch (effect.type) {
+    case "favor": return `favor ${effect.char} ${effect.delta >= 0 ? "+" : ""}${effect.delta}`;
+    case "resource": return `resource ${effect.pillar}.${effect.field} ${effect.delta >= 0 ? "+" : ""}${effect.delta}`;
+    case "memory": return `memory ${effect.char}: "${effect.entry.summary.length > 50 ? effect.entry.summary.slice(0, 50) + "…" : effect.entry.summary}"`;
+    case "flag": return `flag ${effect.key}=${effect.value}`;
+    case "set_rank": return `set_rank ${effect.char} → ${effect.rank}`;
+    case "set_title": return `set_title ${effect.char} "${effect.title}"`;
+    case "remove_title": return `remove_title ${effect.char}`;
+    case "relocate": return `relocate ${effect.char} → ${effect.location}`;
+    case "bedchamber": return `bedchamber ${effect.char} mode=${effect.mode}`;
+    case "pregnancy": return `pregnancy op=${effect.op}`;
+    case "pregnancy_transfer": return `pregnancy_transfer → ${effect.carrierId} at month ${effect.atMonth}`;
+    case "pregnancy_abort": return "pregnancy_abort";
+    case "consort_miscarriage": return `consort_miscarriage ${effect.carrierId}`;
+    case "birth": return `birth bearer=${effect.bearer} sex=${effect.sex} outcome=${effect.bearerOutcome}`;
+    case "heir_designate": return `heir_designate [${effect.charIds.join(",")}]`;
+    case "heir_candidate": return `heir_candidate ${effect.char} op=${effect.op}`;
+    case "heir_name": return `heir_name ${effect.heirId} ${effect.field}="${effect.name}"`;
+    case "heir_summon": return `heir_summon ${effect.heirId}`;
+    case "heir_educate": return `heir_educate ${effect.heirId} ${effect.subject}`;
+    case "heir_adopt": return `heir_adopt ${effect.heirId}`;
+    case "child_favor": return `child_favor ${effect.heirId} ${effect.delta >= 0 ? "+" : ""}${effect.delta}`;
+    case "heir_died": return `heir_died ${effect.heirId}`;
+    case "heir_decease": return `heir_decease ${effect.heirId}`;
+    case "set_sovereign_health": return `set_sovereign_health${effect.healthDelta !== undefined ? ` delta=${effect.healthDelta}` : ""}${effect.healthStatus !== undefined ? ` status=${effect.healthStatus}` : ""}`;
+    case "set_taihou_health": return `set_taihou_health${effect.healthDelta !== undefined ? ` delta=${effect.healthDelta}` : ""}`;
+    case "taihou_decease": return `taihou_decease at=${effect.at.year}-${effect.at.month}`;
+    case "set_consort_health": return `set_consort_health ${effect.char}${effect.healthDelta !== undefined ? ` delta=${effect.healthDelta}` : ""}`;
+    case "consort_decease": return `consort_decease ${effect.char} cause=${effect.cause}`;
+    case "set_heir_health": return `set_heir_health ${effect.heirId}`;
+    case "set_bloodline_status": return `set_bloodline_status ${effect.value}`;
+    case "set_consort_posthumous": return `set_consort_posthumous ${effect.char}`;
+    case "confine": return `confine ${effect.char}${effect.endTurnExclusive !== null ? ` until turn ${effect.endTurnExclusive}` : " (indefinite)"}`;
+    case "lift_confinement": return `lift_confinement ${effect.char} reason=${effect.reason}`;
+    case "set_harem_administration": return `set_harem_administration mode=${effect.state.mode}`;
+    case "enqueue_aftermath": return `enqueue_aftermath kind=${effect.kind} subject=${effect.subjectId}`;
+    case "record_physician_visit": return `record_physician_visit month=${effect.monthKey}`;
+    default: return (effect as { type: string }).type;
+  }
+}
+
 export function applyEffects(
   db: ContentDB,
   state: GameState,
@@ -878,12 +921,13 @@ export function applyEffects(
       }
     }
     if (beforeEffect !== undefined) {
-      collector!.captureEffectDiff(effect.type, effectIndex, diffGameState(beforeEffect, next));
+      collector!.captureEffectDiff(effect.type, effectIndex, diffGameState(beforeEffect, next), describeEffect(effect));
     }
   }
 
   // 批后不变量：若协理者因本批效果（禁足/赐死/疾毙等）失格，切换内务府代理。
   // 注意：命令层负责询问玩家选新协理者；此处仅兜底处置非玩家触发的失格（如疾病身亡）。
+  const beforeInvariant = collector ? (structuredClone(next) as GameState) : undefined;
   if (next.haremAdministration.mode === "acting_consort") {
     const adminId = next.haremAdministration.charId;
     const eligible = eligibleHaremAdministrators(db, next);
@@ -894,6 +938,10 @@ export function applyEffects(
         reason: "no_eligible_consort",
       };
     }
+  }
+  if (beforeInvariant !== undefined) {
+    const diffs = diffGameState(beforeInvariant, next);
+    if (diffs.length > 0) collector!.captureDerivedDiff("post_batch_harem_administration", diffs);
   }
 
   return ok(next);
