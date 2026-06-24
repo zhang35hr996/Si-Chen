@@ -922,7 +922,11 @@ export class GameStore {
       allReactionBeats = [...plan.reactionBeats, ...conseq.reactionBeats];
     }
 
-    const txResult = this.commitPlannedTransaction(db, allEffects, allChronicle, allReactionBeats);
+    const txResult = this.commitPlannedTransaction(db, allEffects, allChronicle, allReactionBeats, {
+      kind: "harem_admin",
+      sourceId: command.type,
+      label: `harem admin transfer: ${command.type}`,
+    });
     if (!txResult.ok) return txResult;
     return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, lines: plan.lines });
   }
