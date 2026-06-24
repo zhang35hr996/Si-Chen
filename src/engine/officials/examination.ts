@@ -153,6 +153,23 @@ export function getCandidatePoolCount(state: GameState): number {
   return getEligibleOfficialCandidates(state).length;
 }
 
+/** 尚未查看的科举榜单（PR3B 入口角标用），按年份升序。 */
+export function getUnacknowledgedExaminationResults(state: GameState): ExaminationResult[] {
+  return state.examinationResults.filter((r) => !r.acknowledged).sort((a, b) => a.year - b.year);
+}
+
+/**
+ * 标记某年度榜单为已查看（PR3B）。纯函数、幂等：无该年榜单或已 acknowledged 则返回原引用。
+ * 只改对应榜单的 acknowledged，绝不触碰候补/官员；不在 render/selector 中调用。
+ */
+export function acknowledgeExaminationResult(state: GameState, year: number): GameState {
+  const idx = state.examinationResults.findIndex((r) => r.year === year);
+  if (idx < 0 || state.examinationResults[idx]!.acknowledged) return state;
+  const next = state.examinationResults.slice();
+  next[idx] = { ...next[idx]!, acknowledged: true };
+  return { ...state, examinationResults: next };
+}
+
 /**
  * 二月统一结算：先候补池增龄/退出，再生成本年科举（仅当本年未生成）。幂等。
  * 由日历边界结算在跨入二月（或其后首次推进，catch-up）时调用一次。
