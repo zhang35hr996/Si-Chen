@@ -44,6 +44,7 @@ export function extractProvenance(
   retrievalStatus: KnowledgeRetrievalStatus,
 ): KnowledgeProvenance {
   const seen = new Set<string>();
+  const seenUnknown = new Set<string>();
   const sourceRefs: ContextRef[] = [];
   const unknownRefs: ContextRef[] = [];
   const knowledgeChunkIds: string[] = [];
@@ -51,7 +52,10 @@ export function extractProvenance(
   function processRef(ref: ContextRef): void {
     const key = contextRefKey(ref);
     if (!offeredRefKeys.has(key)) {
-      unknownRefs.push(ref);
+      if (!seenUnknown.has(key)) {
+        seenUnknown.add(key);
+        unknownRefs.push(ref);
+      }
       return;
     }
     if (seen.has(key)) return;

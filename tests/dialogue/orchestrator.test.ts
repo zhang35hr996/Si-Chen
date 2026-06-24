@@ -29,6 +29,7 @@ import {
   produceDialogueTurn,
 } from "../../src/engine/dialogue/orchestrator";
 import type { DialogueProvider, DialogueRequest } from "../../src/engine/dialogue/types";
+import { RingBufferLogger } from "../../src/engine/infra/logger";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -825,18 +826,16 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
     expect(result.value.line.meta.knowledge?.degradationReason).toBe("provider_error");
   });
 
-  it("fatal error + fail_turn: output state reference-equals input state", async () => {
+  it("fatal error + fail_turn: input state is not mutated", async () => {
+    const stateBefore = structuredClone(state);
     const failingRetriever: KnowledgeRetriever = { retrieve: async () => { throw new Error("disk"); } };
     const result = await produceDialogueTurn(db, makeCountingProvider(), makeGenerativeRequest(), state, {
       retriever: failingRetriever,
       knowledgeFailureMode: "fail_turn",
     });
     expect(result.ok).toBe(false);
-    // On fail_turn the state the caller passed in is never mutated — verify by
-    // checking that nextState is not returned (error path returns no nextState)
-    if (result.ok) throw new Error("expected error");
-    // The result has no nextState field — state was not advanced
-    expect("nextState" in result).toBe(false);
+    // The caller's state object must not have been mutated by the error path
+    expect(state).toEqual(stateBefore);
   });
 
   it("hallucinated knowledge ref: provenanceFindings contains unknown_context_ref diagnostic", async () => {
@@ -885,19 +884,22 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
       proposedClaims: [],
       mentionedContextRefs: [offeredRef, hallucRef],
     };
-    const outcome = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponse);
+    const logger = new RingBufferLogger();
+    const outcome = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponse, logger);
     expect(outcome.ok).toBe(true);
     expect(outcome.diagnostics.provenanceFindings).toEqual([
       { code: "unknown_context_ref", ref: hallucRef },
     ]);
-    // Duplicate invalid refs behave deterministically
+    // Logger must record the UNKNOWN_CONTEXT_REF warning
+    expect(logger.entries().some((e) => e.message.includes("UNKNOWN_CONTEXT_REF"))).toBe(true);
+
+    // Duplicate invalid refs are deduped in diagnostics and logs (one finding, one log entry)
+    const logger2 = new RingBufferLogger();
     const mockResponseDup: DialogueProviderResult = { ...mockResponse, mentionedContextRefs: [offeredRef, hallucRef, hallucRef] };
-    const outcomeDup = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponseDup);
-    // Both copies of the hallucinated ref should appear (or deduped — either is valid; verify determinism)
+    const outcomeDup = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponseDup, logger2);
     expect(outcomeDup.ok).toBe(true);
     const dupFindings = outcomeDup.diagnostics.provenanceFindings.filter((f) => f.ref.id === "hallucinated_chunk");
-    // Current implementation does not dedup unknownRefs (processRef only skips seen offered refs)
-    // so two copies should appear — this is deterministic regardless of implementation choice
-    expect(dupFindings.length).toBeGreaterThanOrEqual(1);
+    expect(dupFindings).toEqual([{ code: "unknown_context_ref", ref: hallucRef }]);
+    expect(logger2.entries().filter((e) => e.message.includes("UNKNOWN_CONTEXT_REF"))).toHaveLength(1);
   });
 });
