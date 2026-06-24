@@ -138,19 +138,20 @@ describe("canAdministratorAdjustRank — 前置条件校验", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("RA-08: 凤后未禁足时协理处分权失效 → 拒绝", () => {
-    // 构造 acting_consort 但不加凤后 statusEffect。
+  it("RA-08: acting_consort 模式不要求凤后禁足（PUNISH-3A imperial_deprivation 路径）→ 允许", () => {
+    // PUNISH-3A 后：权威判据为 haremAdministration.mode，不再要求凤后禁足。
+    // imperial_deprivation/empress_illness 委任均不伴随凤后禁足。
     const state: GameState = {
       ...baseState(),
       haremAdministration: {
         mode: "acting_consort",
         charId: "xu_qinghuan",
         appointedAt: toGameTime(baseState().calendar),
-        reason: "empress_confined",
+        reason: "imperial_deprivation",
       },
     };
     const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "fu");
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
 
   it("RA-09: 协理者生命周期 = deceased → 拒绝", () => {

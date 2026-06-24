@@ -174,23 +174,17 @@ describe("buildMonthlyHealthTick – empress critical burden (C)", () => {
 // ── D: Emperor critical burden via buildMonthlyHealthTick ─────────────────────
 
 describe("buildMonthlyHealthTick – emperor critical burden (D)", () => {
-  it("D1. critical sovereign: extra -2 drain vs baseline (sick sovereign)", () => {
-    const stateC = createNewGameState(db);
-    stateC.resources.sovereign.health = 60;
-    stateC.resources.sovereign.healthStatus = "critical";
+  it("D1. critical sovereign: total loss >= 5 (critdmg 3–5 + workload 2)", () => {
+    const state = createNewGameState(db);
+    state.resources.sovereign.health = 60;
+    state.resources.sovereign.healthStatus = "critical";
 
-    const stateS = createNewGameState(db);
-    stateS.resources.sovereign.health = 60;
-    stateS.resources.sovereign.healthStatus = "sick";
-
-    const tickC = buildMonthlyHealthTick(db, stateC);
-    // For comparison: critical damage + workload vs just sick damage
-    const afterC = applyEffects(db, stateC, tickC.effects);
-    expect(afterC.ok).toBe(true);
-    if (!afterC.ok) return;
-    const healthC = afterC.value.resources.sovereign.health;
-    // critdmg(3-5) + 2 = at least 5 loss from 60 → max 55
-    expect(60 - healthC).toBeGreaterThanOrEqual(5);
+    const tick = buildMonthlyHealthTick(db, state);
+    const after = applyEffects(db, state, tick.effects);
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    // critdmg(3-5) + workload(2) = at least 5 loss from 60
+    expect(60 - after.value.resources.sovereign.health).toBeGreaterThanOrEqual(5);
   });
 
   it("D2. critical sovereign: extra -2 vs same state without workload (projectMonthlyHealth)", () => {
