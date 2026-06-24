@@ -44,6 +44,7 @@ import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 import type { HaremAdminRankCommand } from "../store/haremAdminCommands";
+import type { HaremAdministrationTarget } from "../store/haremAdminTransfer";
 import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
 import {
@@ -214,6 +215,8 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // 从「查看侍君」列表进入封号管理/搬迁时记录该侍君：先关列表（两个弹窗叠层会互相遮挡点击），
   // 操作（或取消）结束后据此重开列表并定位回同一位侍君。非列表入口（紫宸殿卡片/召见）保持 null。
   const [consortListReturnId, setConsortListReturnId] = useState<string | null>(null);
+  // 传乘风「交付六宫主理权」：true 时 ConsortListModal 显示「委以六宫」选项。
+  const [haremTransferPending, setHaremTransferPending] = useState(false);
   const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
   const [physicianReaction, setPhysicianReaction] = useState<{ portraitSet: string; speakerName: string; lines: string[] } | null>(null);
   const [physicianConsortPickerOpen, setPhysicianConsortPickerOpen] = useState(false);
@@ -1803,6 +1806,11 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               onRelocate={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
               onBestow={() => setStorehouseOpen(true)}
               onPhysician={() => setPhysicianOpen(true)}
+              onTransferHaremAdministration={() => {
+                setHaremTransferPending(true);
+                setConsortListReturnId(null);
+                setConsortListOpen(true);
+              }}
             />
           </GameShell>
         );
@@ -2243,9 +2251,20 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           }}
           onAddCandidate={addCandidate}
           onRemoveCandidate={removeCandidate}
+          onTransferHaremAdmin={haremTransferPending ? (charId) => {
+            setConsortListOpen(false);
+            setHaremTransferPending(false);
+            const target: HaremAdministrationTarget = { kind: "consort", charId };
+            const result = store.transferHaremAdministration(db, { type: "transfer_harem_administration", target });
+            if (result.ok) {
+              doAutosave();
+              playReactions(result.value.reactionBeats, null);
+            }
+          } : undefined}
           onClose={() => {
             setConsortListReturnId(null);
             setConsortListOpen(false);
+            setHaremTransferPending(false);
           }}
         />
       )}

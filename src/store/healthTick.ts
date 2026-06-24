@@ -13,7 +13,7 @@ import { currentAgeOf, livingConsortIds } from "./healthRoster";
 /** 冷宫（长门宫）孕侍君每月额外小产几率（百分点）。设计：冷宫缺医少食，胎息难安。 */
 const COLD_PALACE_MISCARRIAGE_PCT = 20;
 
-export interface MonthlyHealthContext { health: number; status: HealthStatus; age: number; isYearStart: boolean; pregnancyMonthlyCost: boolean; seedKey: string; }
+export interface MonthlyHealthContext { health: number; status: HealthStatus; age: number; isYearStart: boolean; pregnancyMonthlyCost: boolean; seedKey: string; workloadLoss?: number; }
 export interface MonthlyHealthOutcome { previousHealth: number; nextHealth: number; previousStatus: HealthStatus; nextStatus: HealthStatus; died: boolean; deathCause?: DeathCause; }
 
 const clampPct = (n: number) => Math.min(100, Math.max(0, n));
@@ -34,6 +34,9 @@ export function projectMonthlyHealth(ctx: MonthlyHealthContext): MonthlyHealthOu
   if (ctx.isYearStart && ctx.age >= 35) h -= 1 + Math.floor(ageOver35(ctx.age) / 10);
   if (previousStatus === "sick") h -= healthRollRange(`${k}:sickdmg`, 1, 2);
   else if (previousStatus === "critical") h -= healthRollRange(`${k}:critdmg`, 3, 5);
+  // Workload loss: extra health drain for critical characters still performing duties.
+  // Applied only when previousStatus === "critical" to avoid ambiguity on sick→critical transitions.
+  if (previousStatus === "critical" && ctx.workloadLoss) h -= ctx.workloadLoss;
   h = clampPct(h);
   if (h <= 0) return { previousHealth, nextHealth: 0, previousStatus, nextStatus: previousStatus, died: true, deathCause: "illness" };
   if (previousStatus === "critical" && healthRoll(`${k}:sudden`) < 5)
@@ -77,7 +80,9 @@ export function buildMonthlyHealthTick(db: ContentDB, state: GameState): Monthly
     const age = currentAgeOf(db, state, { kind: "sovereign" });
     const health = state.resources.sovereign.health;
     const status = state.resources.sovereign.healthStatus;
-    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey });
+    // 皇帝重病仍需批阅奏折、处理日常政务，额外消耗 -2 健康。
+    const workloadLoss = status === "critical" ? 2 : undefined;
+    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: false, seedKey, workloadLoss });
     const { effects: fx } = planHealthChange(state, {
       subject: { kind: "sovereign" },
       ...(out.nextHealth !== health ? { healthDelta: out.nextHealth - health } : {}),
@@ -121,7 +126,13 @@ export function buildMonthlyHealthTick(db: ContentDB, state: GameState): Monthly
     const health = st?.health ?? 100;
     const status = st?.healthStatus ?? "healthy";
     const carrying = state.resources.bloodline.gestations.some((g) => g.carrier === consortId);
-    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: carrying, seedKey });
+    // 凤后重病仍亲理六宫（mode=empress）时，额外消耗 -2 健康/月。
+    const isEmpressManaging =
+      st?.rank === "fenghou" &&
+      status === "critical" &&
+      state.haremAdministration.mode === "empress";
+    const workloadLoss = isEmpressManaging ? 2 : undefined;
+    const out = projectMonthlyHealth({ health, status, age, isYearStart, pregnancyMonthlyCost: carrying, seedKey, workloadLoss });
     const { effects: fx } = planHealthChange(state, {
       subject: { kind: "consort", id: consortId },
       ...(out.nextHealth !== health ? { healthDelta: out.nextHealth - health } : {}),
