@@ -12,6 +12,7 @@ function makeTx(id: string): TraceTransaction {
     outcome: "committed",
     directCount: 0,
     untrackedCount: 0,
+    domainEvents: [],
   };
 }
 

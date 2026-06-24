@@ -1,3 +1,10 @@
+import type {
+  EligibilityTraceEvent,
+  MemoryTraceEvent,
+  QueueTraceEvent,
+  RollbackTraceEvent,
+  TraceDomainEvent,
+} from "./domainEvents";
 import type { MutationClassification, MutationRecord, StateDiffEntry, TraceWarning } from "./types";
 
 /**
@@ -8,6 +15,7 @@ import type { MutationClassification, MutationRecord, StateDiffEntry, TraceWarni
 export class TraceCollector {
   private readonly _mutations: MutationRecord[] = [];
   private readonly _warnings: TraceWarning[] = [];
+  private readonly _domainEvents: TraceDomainEvent[] = [];
   private _phase = "effects";
 
   get currentPhase(): string {
@@ -136,6 +144,52 @@ export class TraceCollector {
     this._warnings.push({ message, path });
   }
 
+  recordDomainEvent(event: TraceDomainEvent): void {
+    this._domainEvents.push(cloneDomainEvent(event));
+  }
+
+  recordMemoryEvent(event: Omit<MemoryTraceEvent, "kind">): void {
+    this._domainEvents.push({ kind: "memory", ...event });
+  }
+
+  recordQueueEvent(event: Omit<QueueTraceEvent, "kind">): void {
+    this._domainEvents.push({ kind: "queue", ...event });
+  }
+
+  recordEligibilityEvent(event: Omit<EligibilityTraceEvent, "kind">): void {
+    this._domainEvents.push({
+      kind: "eligibility",
+      ...event,
+      failedBefore: [...event.failedBefore],
+      failedAfter: [...event.failedAfter],
+    });
+  }
+
+  /** Record a rollback with phase attribution and counts of attempted work. */
+  fail(failedPhase: string, error: { message: string; code?: string } | { message: string; code?: string }[] | string): void {
+    let message: string;
+    let errorCode: string | undefined;
+    if (typeof error === "string") {
+      message = error;
+    } else if (Array.isArray(error)) {
+      message = error.map((e) => e.message).join("; ");
+      errorCode = error[0]?.code;
+    } else {
+      message = error.message;
+      errorCode = error.code;
+    }
+    const rollback: RollbackTraceEvent = {
+      kind: "rollback",
+      failedPhase,
+      ...(errorCode !== undefined ? { errorCode } : {}),
+      message,
+      attemptedMutationCount: this._mutations.length,
+      attemptedDomainEventCount: this._domainEvents.length,
+      phase: this._phase,
+    };
+    this._domainEvents.push(rollback);
+  }
+
   getMutations(): readonly MutationRecord[] {
     return this._mutations;
   }
@@ -143,6 +197,17 @@ export class TraceCollector {
   getWarnings(): readonly TraceWarning[] {
     return this._warnings;
   }
+
+  getDomainEvents(): readonly TraceDomainEvent[] {
+    return this._domainEvents;
+  }
+}
+
+function cloneDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
+  if (event.kind === "eligibility") {
+    return { ...event, failedBefore: [...event.failedBefore], failedAfter: [...event.failedAfter] };
+  }
+  return { ...event };
 }
 
 /** Semantic equality: reference equality for primitives, JSON-compare for objects. */

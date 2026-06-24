@@ -914,6 +914,13 @@ export function applyEffects(
             at: effect.at,
             resolved: false,
           });
+          collector?.recordQueueEvent({
+            queue: "pendingAftermath",
+            operation: "enqueued",
+            itemId: effect.id,
+            itemType: effect.kind,
+            phase: collector.currentPhase,
+          });
         }
         break;
       }
@@ -937,7 +944,30 @@ export function applyEffects(
         };
         store.entries.push(newEntry);
         store.nextSeq += 1;
-        // Record with full entry payload so the trace panel can inspect memory content.
+        if (collector) {
+          if (d.sourceEventId !== undefined) {
+            collector.recordMemoryEvent({
+              operation: "propagated",
+              ownerId: effect.char,
+              entryId: newEntry.id,
+              sourceCourtEventId: d.sourceEventId,
+              summary: d.summary,
+              effectType: "memory",
+              effectIndex,
+              phase: collector.currentPhase,
+            });
+          } else {
+            collector.recordMemoryEvent({
+              operation: "created",
+              ownerId: effect.char,
+              entryId: newEntry.id,
+              summary: d.summary,
+              effectType: "memory",
+              effectIndex,
+              phase: collector.currentPhase,
+            });
+          }
+        }
         break;
       }
     }
