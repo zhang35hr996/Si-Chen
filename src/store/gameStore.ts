@@ -539,6 +539,7 @@ export class GameStore {
     if (result.ok) {
       const candidateState = result.value;
       if (collector) {
+        captureEligibilityTransitions(db, beforeState, candidateState, collector);
         // Build trace BEFORE committing state — strict mode may throw here.
         const tx = this.buildTrace(beforeState, candidateState, source, collector, "committed");
         this.state = candidateState;
@@ -582,6 +583,7 @@ export class GameStore {
       const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
       this.logger?.logGameError(error);
       if (collector) {
+        collector.fail("planning_rejected", planned.reason);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back", planned.reason);
         this.traceHistory.push(tx);
       }
@@ -593,6 +595,7 @@ export class GameStore {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: plan.effects, outcome: "rejected", errors: applied.error };
       if (collector) {
+        collector.fail("effects", applied.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           applied.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -606,6 +609,7 @@ export class GameStore {
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
         if (collector) {
+          collector.fail("chronicle_append", ap.error);
           const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
             ap.error.map((e) => e.message).join("; "));
           this.traceHistory.push(tx);
@@ -616,6 +620,7 @@ export class GameStore {
     }
     collector?.capturePhaseScheduled("chronicle_append", diffGameState(beforeChronicle, candidate));
     if (collector) {
+      captureEligibilityTransitions(db, beforeState, candidate, collector);
       // Build trace BEFORE committing state — strict mode may throw here.
       const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
       this.state = candidate;
@@ -644,6 +649,7 @@ export class GameStore {
       const error = stateError("HAREM_ADMIN_RANK_REJECTED", planned.reason);
       this.logger?.logGameError(error);
       if (collector) {
+        collector.fail("planning_rejected", planned.reason);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back", planned.reason);
         this.traceHistory.push(tx);
       }
@@ -655,6 +661,7 @@ export class GameStore {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: plan.effects, outcome: "rejected", errors: applied.error };
       if (collector) {
+        collector.fail("effects", applied.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           applied.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -668,6 +675,7 @@ export class GameStore {
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
         if (collector) {
+          collector.fail("chronicle_append", ap.error);
           const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
             ap.error.map((e) => e.message).join("; "));
           this.traceHistory.push(tx);
@@ -678,6 +686,7 @@ export class GameStore {
     }
     collector?.capturePhaseScheduled("chronicle_append", diffGameState(beforeChronicle2, candidate));
     if (collector) {
+      captureEligibilityTransitions(db, beforeState, candidate, collector);
       const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
       this.state = candidate;
       this.traceHistory.push(tx);
@@ -1101,7 +1110,14 @@ export class GameStore {
     if (moveCommands.length > 0) {
       const beforeMove = candidate;
       const m = applyBatch(candidate, moveCommands);
-      if (!m.ok) return err([m.error]);
+      if (!m.ok) {
+        if (collector) {
+          collector.fail("travel_move", m.error.message);
+          const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back", m.error.message);
+          this.traceHistory.push(tx);
+        }
+        return err([m.error]);
+      }
       candidate = m.value.state;
       // Capture travel location change as a scheduled phase mutation.
       collector?.capturePhaseScheduled("travel_move", diffGameState(beforeMove, candidate));

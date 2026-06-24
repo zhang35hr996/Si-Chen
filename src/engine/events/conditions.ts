@@ -88,8 +88,12 @@ export function explainCondition(condition: TriggerCondition, ctx: ConditionCont
     const eligible = hasMemoryTag(state, char, tag);
     return { eligible, failedConditions: eligible ? [] : [{ conditionType: "hasMemoryTag", expected: tag, actual: null, subjectId: char }] };
   }
-  const eligible = hasEventFired(state, condition.eventFired);
-  return { eligible, failedConditions: eligible ? [] : [{ conditionType: "eventFired", expected: condition.eventFired, actual: null }] };
+  if ("eventFired" in condition) {
+    const eligible = hasEventFired(state, condition.eventFired);
+    return { eligible, failedConditions: eligible ? [] : [{ conditionType: "eventFired", expected: condition.eventFired, actual: null }] };
+  }
+  // Unknown condition shape — safe fallback: report as ineligible with a sentinel failure.
+  return { eligible: false, failedConditions: [{ conditionType: "unknown", actual: null }] };
 }
 
 export function evaluateCondition(condition: TriggerCondition, ctx: ConditionContext): boolean {
