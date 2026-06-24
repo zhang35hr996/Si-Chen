@@ -219,7 +219,7 @@ describe("evaluateExpectations (T11)", () => {
     const r = evaluateExpectations(
       { requiredSourceRefs: [{ kind: "event" as const, id: RANK_EVENT_ID }] },
       PASS_RESULT,
-      { claimFindings: [], textFindings: [], acceptedClaims: [claim] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [claim] , provenanceFindings: []},
     );
     expect(r.status).toBe("pass");
     expect(r.findings).toEqual([]);
@@ -229,7 +229,7 @@ describe("evaluateExpectations (T11)", () => {
     const r = evaluateExpectations(
       { requiredSourceRefs: [{ kind: "event" as const, id: RANK_EVENT_ID }] },
       PASS_RESULT,
-      { claimFindings: [], textFindings: [], acceptedClaims: [] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [] , provenanceFindings: []},
     );
     expect(r.status).toBe("fail");
     expect(r.findings).toContainEqual({
@@ -242,7 +242,7 @@ describe("evaluateExpectations (T11)", () => {
     const r = evaluateExpectations(
       { gatePass: true },
       { ...PASS_RESULT, knownEventIds: [RANK_EVENT_ID] },
-      { claimFindings: [], textFindings: [], acceptedClaims: [] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [] , provenanceFindings: []},
       [RANK_EVENT_ID],
     );
     expect(r.status).toBe("pass");
@@ -253,7 +253,7 @@ describe("evaluateExpectations (T11)", () => {
     const r = evaluateExpectations(
       {},
       { ...PASS_RESULT, knownEventIds: [] },
-      { claimFindings: [], textFindings: [], acceptedClaims: [] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [] , provenanceFindings: []},
       [RANK_EVENT_ID],
     );
     expect(r.status).toBe("fail");

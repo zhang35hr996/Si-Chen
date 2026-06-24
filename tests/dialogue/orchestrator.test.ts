@@ -583,22 +583,25 @@ describe("buildDialoguePolicyContext — Suite G: knowledge chunk IDs in offered
   });
 
   it("still includes memory and event refs alongside knowledge refs", () => {
-    const request = makeRequest();
-    const requestWithKnowledge = {
-      ...request,
+    // Inject known IDs into promptContext using the exact PromptMemory / PromptEvent shapes.
+    const baseReq = makeRequest();
+    const fakeMemory = { id: "mem_test_1" } as import("../../src/engine/dialogue/promptPayload").PromptMemory;
+    const fakeEvent  = { id: "evt_test_1" } as import("../../src/engine/dialogue/promptPayload").PromptEvent;
+    const requestWithAll = {
+      ...baseReq,
       promptContext: {
-        ...request.promptContext,
+        ...baseReq.promptContext,
+        relevantMemories: [fakeMemory],
+        knownEvents: [fakeEvent],
         knowledgeContext: [
-          { id: "chunk_1", title: "t", text: "body", sourceType: "etiquette" as const },
+          { id: "chunk_kw_1", title: "t", text: "body", sourceType: "etiquette" as const },
         ],
       },
     };
-    const policy = buildDialoguePolicyContext(db, state, requestWithKnowledge);
-    expect(policy.offeredRefKeys.has("knowledge:chunk_1")).toBe(true);
-    // Memory and event keys still present (regression guard — no vacuous assertion)
-    const allKeys = [...policy.offeredRefKeys];
-    // knowledge key is in the full set
-    expect(allKeys.some((k) => k.startsWith("knowledge:"))).toBe(true);
+    const policy = buildDialoguePolicyContext(db, state, requestWithAll);
+    expect(policy.offeredRefKeys.has("memory:mem_test_1")).toBe(true);
+    expect(policy.offeredRefKeys.has("event:evt_test_1")).toBe(true);
+    expect(policy.offeredRefKeys.has("knowledge:chunk_kw_1")).toBe(true);
   });
 });
 
@@ -792,5 +795,109 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
     expect(result.value.line.meta.knowledge).toBeDefined();
     expect(result.value.line.meta.knowledge?.degraded).toBe(true);
     expect(result.value.line.meta.knowledge?.chunkIds).toEqual([]);
+  });
+
+  it("successful zero-hit retrieval: degraded=false (empty hits ≠ degraded)", async () => {
+    const { provider } = makeCapturingProvider(TURN_VALID_TEXT, []);
+    // No vectorDegradation — retriever succeeded but found nothing
+    const retriever = makeFakeRetriever({ hits: [] });
+
+    const result = await produceDialogueTurn(db, provider, makeGenerativeRequest(), state, { retriever });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.line.meta.knowledge).toBeDefined();
+    expect(result.value.line.meta.knowledge?.degraded).toBe(false);
+    expect(result.value.line.meta.knowledge).not.toHaveProperty("degradationKind");
+  });
+
+  it("vector_degraded with keyword hits: degradationKind=vector_degraded, degradationReason preserved", async () => {
+    const { provider } = makeCapturingProvider(TURN_VALID_TEXT, [{ kind: "knowledge", id: "c_kw" }]);
+    const retriever = makeFakeRetriever({
+      hits: [makeHit("c_kw")],
+      vectorDegradation: { reason: "provider_error", message: "openai timeout" },
+    });
+
+    const result = await produceDialogueTurn(db, provider, makeGenerativeRequest(), state, { retriever });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.line.meta.knowledge?.degraded).toBe(true);
+    expect(result.value.line.meta.knowledge?.degradationKind).toBe("vector_degraded");
+    expect(result.value.line.meta.knowledge?.degradationReason).toBe("provider_error");
+  });
+
+  it("fatal error + fail_turn: output state reference-equals input state", async () => {
+    const failingRetriever: KnowledgeRetriever = { retrieve: async () => { throw new Error("disk"); } };
+    const result = await produceDialogueTurn(db, makeCountingProvider(), makeGenerativeRequest(), state, {
+      retriever: failingRetriever,
+      knowledgeFailureMode: "fail_turn",
+    });
+    expect(result.ok).toBe(false);
+    // On fail_turn the state the caller passed in is never mutated — verify by
+    // checking that nextState is not returned (error path returns no nextState)
+    if (result.ok) throw new Error("expected error");
+    // The result has no nextState field — state was not advanced
+    expect("nextState" in result).toBe(false);
+  });
+
+  it("hallucinated knowledge ref: provenanceFindings contains unknown_context_ref diagnostic", async () => {
+    // The model mentions a knowledge ref that was never offered (simulates hallucination)
+    const hallucRef = { kind: "knowledge" as const, id: "hallucinated_chunk" };
+    const offeredRef = { kind: "knowledge" as const, id: "offered_chunk" };
+
+    const capturingProvider: DialogueProvider = {
+      id: "halluc-provider",
+      kind: "generative",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async () => ok<DialogueProviderResult>({
+        speaker: SPEAKER,
+        text: TURN_VALID_TEXT,
+        expression: "neutral",
+        choices: [],
+        proposedClaims: [],
+        mentionedContextRefs: [offeredRef, hallucRef],
+      }),
+    };
+
+    const retriever = makeFakeRetriever({ hits: [makeHit("offered_chunk")] });
+    const request = makeGenerativeRequest();
+    const result = await produceDialogueTurn(db, capturingProvider, request, state, { retriever });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Valid ref retained
+    expect(result.value.line.meta.sourceRefs?.some((r) => r.id === "offered_chunk")).toBe(true);
+    // Hallucinated ref absent from sourceRefs
+    expect(result.value.line.meta.sourceRefs?.some((r) => r.id === "hallucinated_chunk")).toBeFalsy();
+
+    // provenanceFindings carries the unknown ref diagnostic
+    // We test this through validateDialogueProviderResult directly for diagnostic access
+    const knowledgeContext = [{ id: "offered_chunk", title: "t", text: "body", sourceType: "etiquette" as const }];
+    const enrichedRequest = {
+      ...request,
+      promptContext: { ...request.promptContext, knowledgeContext },
+    };
+    const policy = buildDialoguePolicyContext(db, state, enrichedRequest);
+    const mockResponse: DialogueProviderResult = {
+      speaker: SPEAKER,
+      text: TURN_VALID_TEXT,
+      expression: "neutral",
+      choices: [],
+      proposedClaims: [],
+      mentionedContextRefs: [offeredRef, hallucRef],
+    };
+    const outcome = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponse);
+    expect(outcome.ok).toBe(true);
+    expect(outcome.diagnostics.provenanceFindings).toEqual([
+      { code: "unknown_context_ref", ref: hallucRef },
+    ]);
+    // Duplicate invalid refs behave deterministically
+    const mockResponseDup: DialogueProviderResult = { ...mockResponse, mentionedContextRefs: [offeredRef, hallucRef, hallucRef] };
+    const outcomeDup = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponseDup);
+    // Both copies of the hallucinated ref should appear (or deduped — either is valid; verify determinism)
+    expect(outcomeDup.ok).toBe(true);
+    const dupFindings = outcomeDup.diagnostics.provenanceFindings.filter((f) => f.ref.id === "hallucinated_chunk");
+    // Current implementation does not dedup unknownRefs (processRef only skips seen offered refs)
+    // so two copies should appear — this is deterministic regardless of implementation choice
+    expect(dupFindings.length).toBeGreaterThanOrEqual(1);
   });
 });

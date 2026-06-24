@@ -44,6 +44,8 @@ import {
   type DialogueTurnOptions,
   type DialogueValidationDiagnostics,
   type DialogueValidationOutcome,
+  type KnowledgeRetrievalStatus,
+  type ProvenanceFinding,
 } from "./types";
 
 /** 尊长（elder）合成 standing 的占位位分 id；故意不入 db.ranks，下游按无位分降级。 */
@@ -359,6 +361,7 @@ export function validateDialogueProviderResult(
     claimFindings: [],
     textFindings: [],
     acceptedClaims: [],
+    provenanceFindings: [],
   };
 
   // ── 1. Speaker check ──────────────────────────────────────────────
@@ -437,13 +440,29 @@ export function validateDialogueProviderResult(
       ? response.expression
       : "neutral";
 
+  const retrievalStatus = policy.knowledgeRetrievalStatus ?? { kind: "not_configured" } as const;
   const provenance = extractProvenance(
     claimResult.acceptedClaims,
     response.mentionedContextRefs ?? [],
     policy.offeredRefKeys,
     request.promptContext.knowledgeContext,
-    policy.knowledgeVectorDegraded ?? false,
+    retrievalStatus,
   );
+
+  // Emit provenance findings for any refs the model mentioned that were not offered.
+  const provenanceFindings: ProvenanceFinding[] = provenance.unknownRefs.map((ref) => ({
+    code: "unknown_context_ref" as const,
+    ref,
+  }));
+  diagnostics.provenanceFindings = provenanceFindings;
+  for (const finding of provenanceFindings) {
+    logger?.logGameError(
+      aiError("UNKNOWN_CONTEXT_REF", `model mentioned un-offered ref ${finding.ref.kind}:${finding.ref.id}`, {
+        severity: "warn",
+        context: { speakerId: request.speakerId, refKind: finding.ref.kind, refId: finding.ref.id },
+      }),
+    );
+  }
 
   const line: DialogueLine = {
     speakerId: request.speakerId,
@@ -546,8 +565,12 @@ async function produceDialogueLineWithPolicy(
  *
  * When `options.retriever` is provided (PR3+), knowledge retrieval runs before the
  * provider call, injects advisory context into the prompt, and populates
- * `line.meta.knowledge` on the result.  Retrieval errors are logged and the turn
- * proceeds without knowledge context (never fail the turn for a knowledge miss).
+ * `line.meta.knowledge` on the result.
+ *
+ * Fatal retrieval errors behave according to `options.knowledgeFailureMode`:
+ *   - `"continue_without_knowledge"` (default): turn proceeds with `knowledgeContext: []`;
+ *     `meta.knowledge.degraded = true`, `degradationKind = "fatal_degraded"`.
+ *   - `"fail_turn"`: turn returns an error before provider is called; state unchanged.
  *
  * Error cases:
  *   - `generative` provider + `request.scripted` set → `invalid_combination`.
@@ -574,13 +597,15 @@ export async function produceDialogueTurn(
   // Only runs on the generative path — scripted lines are authored and do not
   // need advisory context.
   let finalRequest = request;
-  let vectorDegraded = false;
+  let retrievalStatus: KnowledgeRetrievalStatus = { kind: "not_configured" };
   if (options?.retriever && provider.kind === "generative") {
     const ceiling = resolveVisibilityCeiling(request.speakerId, db, state);
     const query = buildDialogueKnowledgeQuery(request, ceiling);
     try {
       const result = await options.retriever.retrieve(query);
-      vectorDegraded = result.vectorDegradation !== undefined;
+      retrievalStatus = result.vectorDegradation !== undefined
+        ? { kind: "vector_degraded", reason: result.vectorDegradation.reason }
+        : { kind: "ok" };
       const chunks = packPromptKnowledge(result.hits, ceiling);
       finalRequest = {
         ...request,
@@ -598,12 +623,12 @@ export async function produceDialogueTurn(
       if (failureMode === "fail_turn") {
         return err(aiError("KNOWLEDGE_RETRIEVAL_FAILED", errMsg, { context: { speakerId: request.speakerId } }));
       }
-      // continue_without_knowledge: inject empty array so provenance knows retrieval ran
+      // continue_without_knowledge: inject empty array so provenance sees retrieval ran
       finalRequest = {
         ...request,
         promptContext: { ...request.promptContext, knowledgeContext: [] },
       };
-      vectorDegraded = true; // mark as degraded — fatal failure is the worst degradation
+      retrievalStatus = { kind: "fatal_degraded" };
     }
   }
 
@@ -616,8 +641,8 @@ export async function produceDialogueTurn(
 
   // Generative path: full policy pipeline
   const policy = buildDialoguePolicyContext(db, state, finalRequest);
-  const policyWithKnowledge: DialoguePolicyContext = vectorDegraded
-    ? { ...policy, knowledgeVectorDegraded: true }
+  const policyWithStatus: DialoguePolicyContext = retrievalStatus.kind !== "not_configured"
+    ? { ...policy, knowledgeRetrievalStatus: retrievalStatus }
     : policy;
-  return produceDialogueLineWithPolicy(db, provider, finalRequest, policyWithKnowledge, state, logger);
+  return produceDialogueLineWithPolicy(db, provider, finalRequest, policyWithStatus, state, logger);
 }

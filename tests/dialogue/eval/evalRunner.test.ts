@@ -372,7 +372,7 @@ describe("runEvalScenario", () => {
     const r = evaluateExpectations(
       { requiredSourceRefs: [{ kind: "memory" as const, id: offeredId }] },
       { schemaStatus: "pass", gateStatus: "pass", text: VALID_TEXT },
-      { claimFindings: [], textFindings: [], acceptedClaims: [validClaim] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [validClaim], provenanceFindings: [] },
     );
     expect(r.status).toBe("pass");
     expect(r.findings).toEqual([]);
@@ -435,7 +435,7 @@ describe("evaluateExpectations", () => {
     const r = evaluateExpectations(
       { gatePass: true, forbiddenTexts: ["龙颜"], requiredSourceRefs: [] },
       { ...PASS_RESULT, text: "无违禁词" },
-      { claimFindings: [], textFindings: [], acceptedClaims: [] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [], provenanceFindings: [] },
     );
     expect(r.status).toBe("pass");
     expect(r.findings).toEqual([]);
@@ -479,7 +479,7 @@ describe("evaluateExpectations", () => {
     const r = evaluateExpectations(
       { requiredSourceRefs: [{ kind: "memory" as const, id: "mem_001" }] },
       PASS_RESULT,
-      { claimFindings: [], textFindings: [], acceptedClaims: [] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [], provenanceFindings: [] },
     );
     expect(r.status).toBe("fail");
     expect(r.findings).toContainEqual({
@@ -504,7 +504,7 @@ describe("evaluateExpectations", () => {
     const r = evaluateExpectations(
       { requiredSourceRefs: [{ kind: "memory" as const, id: "mem_001" }] },
       PASS_RESULT,
-      { claimFindings: [], textFindings: [], acceptedClaims: [claim] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [claim], provenanceFindings: [] },
     );
     expect(r.status).toBe("pass");
     expect(r.findings).toEqual([]);
@@ -518,7 +518,7 @@ describe("evaluateExpectations", () => {
         requiredSourceRefs: [{ kind: "memory" as const, id: "mem_999" }],   // fails: no acceptedClaims
       },
       FAIL_GATE_RESULT,
-      { claimFindings: [], textFindings: [], acceptedClaims: [] },
+      { claimFindings: [], textFindings: [], acceptedClaims: [], provenanceFindings: [] },
     );
     expect(r.status).toBe("fail");
     expect(r.findings.length).toBe(3);
