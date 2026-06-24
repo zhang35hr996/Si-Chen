@@ -132,6 +132,83 @@ describe("applyJusticePlan — atomic nextSeq", () => {
     expect(result.value.justice.cases["case_000001"]!.punishmentIds).toContain("pun_000001");
     expect(result.value.justice.nextSeq).toEqual(alloc.nextSeq);
   });
+
+  it("JP6. nextSeq claims N but zero mutations → rejected", () => {
+    const state = makeState();
+    // Plan claims punishment counter advanced by 99, but no mutations.
+    const plan: JusticePlan = {
+      mutations: [],
+      nextSeq: { ...state.justice.nextSeq, punishment: 100 },
+    };
+    const result = applyJusticePlan(state, plan);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.message.includes("nextSeq.punishment"))).toBe(true);
+  });
+
+  it("JP7. mutation creates wrong seq number (not in [old, new) range) → rejected", () => {
+    const state = makeState();
+    // Allocate seq 1 (nextSeq goes 1→2), but insert a punishment with seq 99.
+    const alloc = allocateJusticeIds(state.justice, { punishments: 1 });
+    const wrongPun = { ...makePunishment(state), id: "pun_000099" } as PunishmentRecord;
+    const plan: JusticePlan = {
+      mutations: [{ type: "create_punishment", record: wrongPun }],
+      nextSeq: alloc.nextSeq, // nextSeq.punishment = 2, range = [1,2) = {1}, but seq 99 used
+    };
+    const result = applyJusticePlan(state, plan);
+    expect(result.ok).toBe(false);
+  });
+
+  it("JP8. create_punishment with closed case → rejected", () => {
+    const state = makeState();
+    const now = makeNow(state);
+    const alloc1 = allocateJusticeIds(state.justice, { cases: 1 });
+    const kase = makeCase(state);
+    const planWithCase = applyJusticePlan(state, {
+      mutations: [
+        { type: "create_case", record: kase },
+        { type: "close_case", caseId: kase.id, closedAt: now },
+      ],
+      nextSeq: alloc1.nextSeq,
+    });
+    expect(planWithCase.ok).toBe(true);
+    if (!planWithCase.ok) return;
+
+    const stateWithClosedCase = planWithCase.value;
+    const alloc2 = allocateJusticeIds(stateWithClosedCase.justice, { punishments: 1 });
+    const pun = { ...makePunishment(stateWithClosedCase, kase.id), id: alloc2.punishments[0]! } as PunishmentRecord;
+    const result = applyJusticePlan(stateWithClosedCase, {
+      mutations: [{ type: "create_punishment", record: pun }],
+      nextSeq: alloc2.nextSeq,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.message.includes("closed"))).toBe(true);
+  });
+
+  it("JP9. create_punishment with targetId not in case.subjectIds → rejected", () => {
+    const state = makeState();
+    const alloc1 = allocateJusticeIds(state.justice, { cases: 1 });
+    const kase = { ...makeCase(state), subjectIds: ["shen_zhibai"] };
+    const planWithCase = applyJusticePlan(state, {
+      mutations: [{ type: "create_case", record: kase }],
+      nextSeq: alloc1.nextSeq,
+    });
+    expect(planWithCase.ok).toBe(true);
+    if (!planWithCase.ok) return;
+
+    const stateWithCase = planWithCase.value;
+    const alloc2 = allocateJusticeIds(stateWithCase.justice, { punishments: 1 });
+    // Use a targetId NOT in subjectIds.
+    const pun = { ...makePunishment(stateWithCase, kase.id), targetId: "lu_huaijin", id: alloc2.punishments[0]! } as PunishmentRecord;
+    const result = applyJusticePlan(stateWithCase, {
+      mutations: [{ type: "create_punishment", record: pun }],
+      nextSeq: alloc2.nextSeq,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.some((e) => e.message.includes("not a subject"))).toBe(true);
+  });
 });
 
 // ── Section ORD: ordering semantics ──────────────────────────────────────────

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checksumOf } from "../../src/engine/save/canonical";
 import {
-  CORRUPT_KEY_PREFIX,
   createSaveData,
   readSlot,
   SAVE_KEY_PREFIX,
@@ -12,8 +11,8 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 
-describe("save migration v2 (no-save-backcompat: quarantines at v5→v6 boundary)", () => {
-  it("v2 save quarantines — no MIGRATIONS[5] to reach v6", () => {
+describe("save migration v2 (no-save-backcompat: rejected as obsolete)", () => {
+  it("v2 save is rejected as OBSOLETE_VERSION (not quarantined)", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
     (state.resources.bloodline.heirs as unknown as Record<string, unknown>[]).push({
@@ -33,8 +32,8 @@ describe("save migration v2 (no-save-backcompat: quarantines at v5→v6 boundary
     const loaded = readSlot(storage, db, "slot1", { now: () => 2002 });
     expect(loaded.ok).toBe(false);
     if (loaded.ok) return;
-    expect(loaded.error.code).toBe("CORRUPT");
-    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
-    expect(storage.get(`${CORRUPT_KEY_PREFIX}2002`)).not.toBeNull();
+    expect(loaded.error.code).toBe("OBSOLETE_VERSION");
+    // Not quarantined — expected obsolete saves are not treated as corrupt.
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).not.toBeNull();
   });
 });

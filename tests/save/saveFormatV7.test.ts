@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { checksumOf } from "../../src/engine/save/canonical";
 import {
-  CORRUPT_KEY_PREFIX,
   createSaveData,
   readSlot,
   SAVE_FORMAT_VERSION,
@@ -18,15 +17,13 @@ describe("SAVE_FORMAT_VERSION = 7（Phase 3 字段引入，旧档隔离）", () 
     expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(10);
   });
 
-  it("fresh v7 save round-trips successfully", () => {
+  it("fresh save round-trips successfully", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
-    const v7 = createSaveData(db, state, "slot1");
+    const save = createSaveData(db, state, "slot1");
 
-    // Write the v7 save as JSON to storage
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(v7));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(save));
 
-    // Read it back
     const loaded = readSlot(storage, db, "slot1", { now: () => 1000 });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
@@ -34,22 +31,19 @@ describe("SAVE_FORMAT_VERSION = 7（Phase 3 字段引入，旧档隔离）", () 
     expect(loaded.value.state).toBeDefined();
   });
 
-  it("v6 save quarantines (no MIGRATIONS[6] — no-save-backcompat policy)", () => {
+  it("v6 save is rejected as OBSOLETE_VERSION (not quarantined)", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
-    const v7 = createSaveData(db, state, "slot1");
+    const current = createSaveData(db, state, "slot1");
 
-    // Simulate a v6 save by downgrading the envelope
-    const envelope = { ...v7, formatVersion: 6, checksum: checksumOf(v7.state) };
+    const envelope = { ...current, formatVersion: 6, checksum: checksumOf(current.state) };
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(envelope));
 
-    // Try to read it
     const loaded = readSlot(storage, db, "slot1", { now: () => 6006 });
     expect(loaded.ok).toBe(false);
     if (loaded.ok) return;
-    expect(loaded.error.code).toBe("CORRUPT");
-    // Verify quarantine: original key removed, corrupt key created
-    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
-    expect(storage.get(`${CORRUPT_KEY_PREFIX}6006`)).not.toBeNull();
+    expect(loaded.error.code).toBe("OBSOLETE_VERSION");
+    // Not quarantined — expected obsolete saves are not treated as corrupt.
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).not.toBeNull();
   });
 });

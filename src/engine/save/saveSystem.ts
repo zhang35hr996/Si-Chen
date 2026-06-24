@@ -346,12 +346,13 @@ function validateSave(
       quarantineWorthy: false,
     });
   }
-  // v11 saves are explicitly rejected (not quarantined as corrupt).
-  // Per no-save-backcompat policy: v11 lacks JusticeState. Adding empty justice would
-  // leave active confinements with no PunishmentRecord — half-migration is worse than rejection.
-  if (save.formatVersion === 11) {
+  // All pre-v12 saves are rejected (not quarantined as corrupt).
+  // v9+ has active statusEffects/haremAdministration state without corresponding JusticeRecords;
+  // migrating them to empty justice leaves half-migrated state worse than rejection.
+  // v7/v8 saves also lack v9+ fields, so we reject all pre-v12 uniformly.
+  if (save.formatVersion < 12) {
     return err({
-      error: saveError("OBSOLETE_VERSION", `save format v11 is no longer supported (current: v${SAVE_FORMAT_VERSION}). Start a new game.`),
+      error: saveError("OBSOLETE_VERSION", `save format v${save.formatVersion} is no longer supported (current: v${SAVE_FORMAT_VERSION}). Start a new game.`),
       quarantineWorthy: false,
     });
   }

@@ -48,6 +48,81 @@ function justiceErr(msg: string): GameError {
   return gameError("state", "BAD_JUSTICE_MUTATION", msg);
 }
 
+// ── Sequence consumption verification ─────────────────────────────────────────
+
+type SeqDomain = "case" | "punishment" | "charge" | "evidence" | "confession" | "verdict";
+
+function parseSeq(id: string): number {
+  return parseInt(id.slice(-6), 10);
+}
+
+function collectCreatedSeqs(mutations: JusticeMutation[]): Record<SeqDomain, Set<number>> {
+  const sets: Record<SeqDomain, Set<number>> = {
+    case: new Set(), punishment: new Set(), charge: new Set(),
+    evidence: new Set(), confession: new Set(), verdict: new Set(),
+  };
+  for (const mut of mutations) {
+    switch (mut.type) {
+      case "create_case":
+        sets.case.add(parseSeq(mut.record.id));
+        for (const c of mut.record.charges) sets.charge.add(parseSeq(c.id));
+        for (const e of mut.record.evidence) sets.evidence.add(parseSeq(e.id));
+        for (const c of mut.record.confessions) sets.confession.add(parseSeq(c.id));
+        if (mut.record.verdict) sets.verdict.add(parseSeq(mut.record.verdict.id));
+        break;
+      case "create_punishment":
+        sets.punishment.add(parseSeq(mut.record.id));
+        break;
+      case "append_charge":
+        sets.charge.add(parseSeq(mut.charge.id));
+        break;
+      case "append_evidence":
+        sets.evidence.add(parseSeq(mut.evidence.id));
+        break;
+      case "append_confession":
+        sets.confession.add(parseSeq(mut.confession.id));
+        break;
+      case "record_verdict":
+        sets.verdict.add(parseSeq(mut.verdict.id));
+        break;
+    }
+  }
+  return sets;
+}
+
+function verifySeqConsumption(
+  before: JusticeNextSeq,
+  planNextSeq: JusticeNextSeq,
+  mutations: JusticeMutation[],
+): GameError[] {
+  const errors: GameError[] = [];
+  const created = collectCreatedSeqs(mutations);
+  const domains: SeqDomain[] = ["case", "punishment", "charge", "evidence", "confession", "verdict"];
+
+  for (const domain of domains) {
+    const oldSeq = before[domain];
+    const newSeq = planNextSeq[domain];
+    if (newSeq < oldSeq) {
+      errors.push(justiceErr(`nextSeq.${domain}: may not decrease (${oldSeq} → ${newSeq})`));
+      continue;
+    }
+    const count = newSeq - oldSeq;
+    const createdSet = created[domain];
+    if (createdSet.size !== count) {
+      errors.push(justiceErr(
+        `nextSeq.${domain}: plan claims ${count} new IDs (${oldSeq}→${newSeq}) but mutations create ${createdSet.size}`,
+      ));
+      continue;
+    }
+    for (let seq = oldSeq; seq < newSeq; seq++) {
+      if (!createdSet.has(seq)) {
+        errors.push(justiceErr(`nextSeq.${domain}: expected seq ${seq} to be created but was not`));
+      }
+    }
+  }
+  return errors;
+}
+
 // ── Single-mutation applicator ────────────────────────────────────────────────
 
 function applyOneMutation(
@@ -66,8 +141,17 @@ function applyOneMutation(
       if (justice.punishments[mut.record.id]) {
         return err(justiceErr(`duplicate punishment ID ${mut.record.id}`));
       }
-      if (mut.record.caseId && !justice.cases[mut.record.caseId]) {
-        return err(justiceErr(`punishment ${mut.record.id} references unknown case ${mut.record.caseId}`));
+      if (mut.record.caseId) {
+        const kase = justice.cases[mut.record.caseId];
+        if (!kase) {
+          return err(justiceErr(`punishment ${mut.record.id} references unknown case ${mut.record.caseId}`));
+        }
+        if (kase.status === "closed") {
+          return err(justiceErr(`punishment ${mut.record.id} references closed case ${mut.record.caseId}`));
+        }
+        if (!kase.subjectIds.includes(mut.record.targetId)) {
+          return err(justiceErr(`punishment ${mut.record.id}: targetId ${mut.record.targetId} is not a subject of case ${mut.record.caseId}`));
+        }
       }
       let cases = justice.cases;
       if (mut.record.caseId) {
@@ -148,6 +232,10 @@ export function applyJusticePlan(
   state: GameState,
   plan: JusticePlan,
 ): Result<GameState, GameError[]> {
+  // Verify IDs created by mutations exactly cover [old nextSeq, plan.nextSeq).
+  const seqErrors = verifySeqConsumption(state.justice.nextSeq, plan.nextSeq, plan.mutations);
+  if (seqErrors.length > 0) return err(seqErrors);
+
   if (plan.mutations.length === 0) {
     // Still apply nextSeq update even with no mutations (idempotent allocations).
     const newJustice = { ...state.justice, nextSeq: plan.nextSeq };
