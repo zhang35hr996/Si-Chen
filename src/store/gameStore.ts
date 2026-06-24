@@ -311,16 +311,16 @@ export class GameStore {
     const pd = this.state.pendingDaxuan;
     if (pd?.kind !== "announce") return [];
     if (this.state.flags[daxuanAnnounceFlagKey(pd.year)]) {
-      this.state = { ...this.state, pendingDaxuan: undefined }; // 陈旧调和
-      this.emit();
+      this.tracedSet({ ...this.state, pendingDaxuan: undefined },
+        { kind: "system", sourceId: "consumeDaxuanAnnounce:stale", label: "consumeDaxuanAnnounce (stale reconcile)" });
       return [];
     }
     const flags = { ...this.state.flags, [daxuanAnnounceFlagKey(pd.year)]: true };
     const chained: PendingDaxuan | undefined = daxuanDianxuanDueForYear({ ...this.state, flags }, pd.year)
       ? { kind: "dianxuan", year: pd.year }
       : undefined;
-    this.state = { ...this.state, flags, pendingDaxuan: chained };
-    this.emit();
+    this.tracedSet({ ...this.state, flags, pendingDaxuan: chained },
+      { kind: "system", sourceId: "consumeDaxuanAnnounce", label: `consumeDaxuanAnnounce: year ${pd.year}` });
     return daxuanAnnounceBeats();
   }
 
@@ -332,12 +332,10 @@ export class GameStore {
    */
   resolveDaxuanDianxuan(year: number): boolean {
     if (!matchesPendingDianxuan(this.state, year)) return false; // 无/announce/错年/已决(陈旧) → 不动、不 emit
-    this.state = {
-      ...this.state,
-      flags: { ...this.state.flags, [daxuanDianxuanFlagKey(year)]: true },
-      pendingDaxuan: undefined,
-    };
-    this.emit();
+    this.tracedSet(
+      { ...this.state, flags: { ...this.state.flags, [daxuanDianxuanFlagKey(year)]: true }, pendingDaxuan: undefined },
+      { kind: "system", sourceId: "resolveDaxuanDianxuan", label: `resolveDaxuanDianxuan: year ${year}` },
+    );
     return true;
   }
 
@@ -362,28 +360,27 @@ export class GameStore {
   /** 清除待消费的大选事件（陈旧 dianxuan pending 调和用）。 */
   clearPendingDaxuan(): void {
     if (this.state.pendingDaxuan === undefined) return;
-    this.state = { ...this.state, pendingDaxuan: undefined };
-    this.emit();
+    this.tracedSet({ ...this.state, pendingDaxuan: undefined },
+      { kind: "system", sourceId: "clearPendingDaxuan", label: "clearPendingDaxuan" });
   }
 
   /** 施恩免请安（不耗行动点）。 */
   applyExcuseGreeting(db: ContentDB, charId: string): void {
-    this.state = excuseFromGreeting(this.state, db, charId);
-    this.emit();
+    this.tracedSet(excuseFromGreeting(this.state, db, charId),
+      { kind: "action", sourceId: "applyExcuseGreeting", label: `excuseGreeting: ${charId}` });
   }
 
   /** 「不说」：清留宿，侍君照常请安。 */
   dismissOvernight(): void {
-    this.state = dismissOvernight(this.state);
-    this.emit();
+    this.tracedSet(dismissOvernight(this.state),
+      { kind: "action", sourceId: "dismissOvernight", label: "dismissOvernight" });
   }
 
   /** 子时侍寝/对话滚旬后记留宿（条件不满足则无副作用）。 */
   recordOvernight(db: ContentDB, charId: string, rolledOver: boolean): void {
     const next = recordOvernight(this.state, db, charId, rolledOver);
     if (next !== this.state) {
-      this.state = next;
-      this.emit();
+      this.tracedSet(next, { kind: "action", sourceId: "recordOvernight", label: `recordOvernight: ${charId}` });
     }
   }
 
@@ -406,8 +403,7 @@ export class GameStore {
   commitDaxuanSelections(db: ContentDB, kept: KeptConsort[]): Result<void, GameError> {
     const batch = this.applyConsortBatch(db, kept);
     if (!batch.ok) return batch;
-    this.state = batch.value;
-    this.emit();
+    this.tracedSet(batch.value, { kind: "system", sourceId: "commitDaxuanSelections", label: `commitDaxuanSelections (${kept.length})` });
     return ok(undefined);
   }
 
@@ -422,12 +418,10 @@ export class GameStore {
     }
     const batch = this.applyConsortBatch(db, kept);
     if (!batch.ok) return batch;
-    this.state = {
-      ...batch.value,
-      flags: { ...batch.value.flags, [daxuanDianxuanFlagKey(year)]: true },
-      pendingDaxuan: undefined,
-    };
-    this.emit();
+    this.tracedSet(
+      { ...batch.value, flags: { ...batch.value.flags, [daxuanDianxuanFlagKey(year)]: true }, pendingDaxuan: undefined },
+      { kind: "system", sourceId: "resolveDaxuanByDelegate", label: `resolveDaxuanByDelegate: year ${year}` },
+    );
     return ok(undefined);
   }
 
@@ -436,8 +430,7 @@ export class GameStore {
     const granted = grantItem(this.state, itemId, 1);
     const result = bestow(granted, db, itemId, recipient);
     if (!result.ok) return false;
-    this.state = result.state;
-    this.emit();
+    this.tracedSet(result.state, { kind: "action", sourceId: "giftTribute", label: `giftTribute: ${itemId}` });
     return true;
   }
 
@@ -906,8 +899,7 @@ export class GameStore {
    */
   commitDialogueState(expected: GameState, next: GameState): boolean {
     if (this.state !== expected) return false;
-    this.state = next;
-    this.emit();
+    this.tracedSet(next, { kind: "action", sourceId: "commitDialogueState", label: "commitDialogueState" });
     return true;
   }
 

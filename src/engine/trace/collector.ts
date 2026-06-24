@@ -54,6 +54,34 @@ export class TraceCollector {
   }
 
   /**
+   * Attribute all diffs produced by one effect to that effect.
+   * Called with the per-effect diff (structuredClone before → state after).
+   * All entries are classified as "direct" with the effect's type and index.
+   */
+  captureEffectDiff(
+    effectType: string,
+    effectIndex: number,
+    diffs: readonly StateDiffEntry[],
+  ): void {
+    for (const d of diffs) {
+      const delta =
+        typeof d.before === "number" && typeof d.after === "number"
+          ? d.after - d.before
+          : undefined;
+      this._mutations.push({
+        effectType,
+        effectIndex,
+        path: d.path,
+        before: d.before,
+        after: d.after,
+        delta,
+        classification: "direct",
+        phase: this._phase,
+      });
+    }
+  }
+
+  /**
    * Record a single field mutation. Call before AND after the mutation, passing
    * before/after values. Skips semantic no-ops (equal values).
    */

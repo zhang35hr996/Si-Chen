@@ -15,6 +15,7 @@
  *     the caller keeps the original state reference
  */
 import type { TraceCollector } from "../trace/collector";
+import { diffGameState } from "../trace/diff";
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
@@ -479,129 +480,59 @@ export function applyEffects(
 
   for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
     const effect = effects[effectIndex]!;
+    // Per-effect snapshot (dev-only): captures ALL mutations for this effect.
+    const beforeEffect = collector ? (structuredClone(next) as GameState) : undefined;
     switch (effect.type) {
       case "favor": {
         const target = next.standing[effect.char]!;
-        const before = target.favor;
         const applied = cappedDelta(`favor:${effect.char}`, effect.delta);
         target.favor = clampPct(target.favor + applied);
-        collector?.record({
-          effectType: "favor", effectIndex,
-          path: `standing.${effect.char}.favor`,
-          before, after: target.favor, delta: target.favor - before,
-          reason: `favor ${effect.delta >= 0 ? "+" : ""}${effect.delta}${applied !== effect.delta ? ` (capped from ${effect.delta > 0 ? "+" : ""}${effect.delta})` : ""}`,
-        });
         break;
       }
       case "resource": {
         const applied = cappedDelta(`res:${effect.pillar}:${effect.field}`, effect.delta);
         if (effect.pillar === "sovereign") {
-          const before = next.resources.sovereign[effect.field];
           next.resources.sovereign[effect.field] = clampPct(next.resources.sovereign[effect.field] + applied);
-          collector?.record({
-            effectType: "resource", effectIndex,
-            path: `resources.sovereign.${effect.field}`,
-            before, after: next.resources.sovereign[effect.field], delta: next.resources.sovereign[effect.field] - before,
-            reason: `sovereign.${effect.field} ${effect.delta >= 0 ? "+" : ""}${effect.delta}${applied !== effect.delta ? " (capped)" : ""}`,
-          });
         } else {
-          const before = next.resources.nation[effect.field];
           next.resources.nation[effect.field] = clampPct(next.resources.nation[effect.field] + applied);
-          collector?.record({
-            effectType: "resource", effectIndex,
-            path: `resources.nation.${effect.field}`,
-            before, after: next.resources.nation[effect.field], delta: next.resources.nation[effect.field] - before,
-            reason: `nation.${effect.field} ${effect.delta >= 0 ? "+" : ""}${effect.delta}${applied !== effect.delta ? " (capped)" : ""}`,
-          });
         }
         break;
       }
       case "set_bloodline_status": {
-        const before = next.resources.bloodline.menstrualStatus;
         next.resources.bloodline.menstrualStatus = effect.value;
-        collector?.record({
-          effectType: "set_bloodline_status", effectIndex,
-          path: "resources.bloodline.menstrualStatus",
-          before, after: effect.value,
-        });
         break;
       }
       case "flag": {
-        const before = next.flags[effect.key];
         next.flags[effect.key] = effect.value;
-        collector?.record({
-          effectType: "flag", effectIndex,
-          path: `flags.${effect.key}`,
-          before, after: effect.value,
-        });
         break;
       }
       case "set_rank": {
-        const before = next.standing[effect.char]!.rank;
         next.standing[effect.char]!.rank = effect.rank;
-        collector?.record({
-          effectType: "set_rank", effectIndex,
-          path: `standing.${effect.char}.rank`,
-          before, after: effect.rank,
-          reason: `${before} → ${effect.rank}`,
-        });
         break;
       }
       case "set_title": {
-        const before = next.standing[effect.char]!.title;
         next.standing[effect.char]!.title = effect.title;
-        collector?.record({
-          effectType: "set_title", effectIndex,
-          path: `standing.${effect.char}.title`,
-          before, after: effect.title,
-        });
         break;
       }
       case "remove_title": {
-        const before = next.standing[effect.char]!.title;
         delete next.standing[effect.char]!.title;
-        collector?.record({
-          effectType: "remove_title", effectIndex,
-          path: `standing.${effect.char}.title`,
-          before, after: undefined,
-        });
         break;
       }
       case "relocate": {
         const target = next.standing[effect.char]!;
-        const beforeRes = target.residence;
-        const beforeCh = target.chamber;
         target.residence = effect.location;
         target.chamber = effect.chamber;
-        collector?.record({
-          effectType: "relocate", effectIndex,
-          path: `standing.${effect.char}.residence`,
-          before: beforeRes, after: effect.location,
-        });
-        collector?.record({
-          effectType: "relocate", effectIndex,
-          path: `standing.${effect.char}.chamber`,
-          before: beforeCh, after: effect.chamber,
-        });
         break;
       }
       case "bedchamber": {
-        const before = next.bedchamber[effect.char]!.encounters.length;
         next.bedchamber[effect.char]!.encounters.push({
           at: now,
           mode: effect.mode,
-        });
-        collector?.record({
-          effectType: "bedchamber", effectIndex,
-          path: `bedchamber.${effect.char}.encounters`,
-          before, after: before + 1, delta: 1,
-          reason: `mode=${effect.mode}`,
         });
         break;
       }
       case "pregnancy": {
         const p = next.resources.bloodline.pregnancy;
-        const beforeStatus = p.status;
         if (effect.op === "begin") {
           next.resources.bloodline.pregnancy = { status: "pending", conceivedAt: now, candidateIds: [] };
         } else if (effect.op === "carry") {
@@ -622,31 +553,17 @@ export function applyEffects(
             (g) => g.carrier !== "sovereign",
           );
         }
-        collector?.record({
-          effectType: "pregnancy", effectIndex,
-          path: "resources.bloodline.pregnancy.status",
-          before: beforeStatus, after: next.resources.bloodline.pregnancy.status,
-          reason: `op=${effect.op}`,
-        });
         break;
       }
       case "heir_designate": {
-        const beforeCandidates = [...next.resources.bloodline.pregnancy.candidateIds];
         // reset any prior candidate no longer in the designated set
         resetCandidateAnnotations(next, effect.charIds);
         for (const id of effect.charIds) next.standing[id]!.lifecycle = "candidate";
         next.resources.bloodline.pregnancy.candidateIds = [...effect.charIds];
-        collector?.record({
-          effectType: "heir_designate", effectIndex,
-          path: "resources.bloodline.pregnancy.candidateIds",
-          before: beforeCandidates, after: [...effect.charIds],
-        });
         break;
       }
       case "heir_candidate": {
         const preg = next.resources.bloodline.pregnancy;
-        const beforeLifecycle = next.standing[effect.char]!.lifecycle;
-        const beforeCandidates = [...preg.candidateIds];
         if (effect.op === "add") {
           // 同时段只能有一位候选：先清除旧候选注释。
           resetCandidateAnnotations(next);
@@ -658,23 +575,10 @@ export function applyEffects(
           }
           preg.candidateIds = preg.candidateIds.filter((id) => id !== effect.char);
         }
-        collector?.record({
-          effectType: "heir_candidate", effectIndex,
-          path: `standing.${effect.char}.lifecycle`,
-          before: beforeLifecycle, after: next.standing[effect.char]!.lifecycle,
-          reason: `op=${effect.op}`,
-        });
-        collector?.record({
-          effectType: "heir_candidate", effectIndex,
-          path: "resources.bloodline.pregnancy.candidateIds",
-          before: beforeCandidates, after: [...preg.candidateIds],
-        });
         break;
       }
       case "pregnancy_transfer": {
         const sov = next.resources.bloodline.gestations.find((g) => g.carrier === "sovereign")!;
-        const beforeGestations = next.resources.bloodline.gestations.length;
-        const beforeLifecycle = next.standing[effect.carrierId]!.lifecycle;
         // 传嗣：除最终承嗣者外，清除所有候选承嗣注释。
         resetCandidateAnnotations(next, [effect.carrierId]);
         next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
@@ -688,60 +592,27 @@ export function applyEffects(
           transferredAtMonth: effect.atMonth,
         });
         next.standing[effect.carrierId]!.lifecycle = "carrying";
-        collector?.record({
-          effectType: "pregnancy_transfer", effectIndex,
-          path: "resources.bloodline.gestations",
-          before: beforeGestations, after: next.resources.bloodline.gestations.length,
-          reason: `transfer → ${effect.carrierId}`,
-        });
-        collector?.record({
-          effectType: "pregnancy_transfer", effectIndex,
-          path: `standing.${effect.carrierId}.lifecycle`,
-          before: beforeLifecycle, after: "carrying",
-        });
         break;
       }
       case "pregnancy_abort": {
         // 流产：清除帝王自身胎息与所有候选承嗣注释；侍君承嗣不受影响。
-        const beforeAbortStatus = next.resources.bloodline.pregnancy.status;
         resetCandidateAnnotations(next);
         next.resources.bloodline.pregnancy = { status: "none", candidateIds: [] };
         next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter(
           (g) => g.carrier !== "sovereign",
         );
-        collector?.record({
-          effectType: "pregnancy_abort", effectIndex,
-          path: "resources.bloodline.pregnancy.status",
-          before: beforeAbortStatus, after: "none",
-        });
         break;
       }
       case "consort_miscarriage": {
         // 侍君小产：仅断该侍君那条承嗣胎息，位分生命周期回 normal；帝王自孕不受影响。
         const bl = next.resources.bloodline;
-        const beforeMiscarriageLen = bl.gestations.length;
-        const beforeMiscarriageLifecycle = next.standing[effect.carrierId]?.lifecycle;
         bl.gestations = bl.gestations.filter((g) => g.carrier !== effect.carrierId);
         const st = next.standing[effect.carrierId];
         if (st && st.lifecycle === "carrying") st.lifecycle = "normal";
-        collector?.record({
-          effectType: "consort_miscarriage", effectIndex,
-          path: "resources.bloodline.gestations",
-          before: beforeMiscarriageLen, after: bl.gestations.length,
-          reason: `miscarriage: ${effect.carrierId}`,
-        });
-        if (beforeMiscarriageLifecycle === "carrying") {
-          collector?.record({
-            effectType: "consort_miscarriage", effectIndex,
-            path: `standing.${effect.carrierId}.lifecycle`,
-            before: "carrying", after: "normal",
-          });
-        }
         break;
       }
       case "birth": {
         const bl = next.resources.bloodline;
-        const beforeHeirsLen = bl.heirs.length;
         const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";
         if (childSurvives) {
           bl.heirs.push({
@@ -785,186 +656,81 @@ export function applyEffects(
         if (effect.bearer === "sovereign") {
           bl.pregnancy = { status: "none", candidateIds: [] };
         }
-        collector?.record({
-          effectType: "birth", effectIndex,
-          path: "resources.bloodline.heirs",
-          before: beforeHeirsLen, after: bl.heirs.length, delta: bl.heirs.length - beforeHeirsLen,
-          reason: `${effect.sex}, bearer=${effect.bearer}, outcome=${effect.bearerOutcome}`,
-        });
         break;
       }
       case "heir_name": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const beforeName = effect.field === "pet" ? heir.petName : heir.givenName;
         if (effect.field === "pet") heir.petName = effect.name;
         else heir.givenName = effect.name;
-        collector?.record({
-          effectType: "heir_name", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.${effect.field === "pet" ? "petName" : "givenName"}`,
-          before: beforeName, after: effect.name,
-        });
         break;
       }
       case "heir_summon": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const before = heir.favor;
         heir.favor = clampPct(heir.favor + 20);
-        collector?.record({
-          effectType: "heir_summon", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.favor`,
-          before, after: heir.favor, delta: heir.favor - before,
-        });
         break;
       }
       case "heir_educate": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const beforeAttr = heir.education[effect.subject];
-        const beforeFavor = heir.favor;
         heir.education[effect.subject] = clampPct(heir.education[effect.subject] + effect.attrDelta);
         heir.favor = clampPct(heir.favor + effect.favorDelta);
-        collector?.record({
-          effectType: "heir_educate", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.education.${effect.subject}`,
-          before: beforeAttr, after: heir.education[effect.subject], delta: heir.education[effect.subject] - beforeAttr,
-        });
-        collector?.record({
-          effectType: "heir_educate", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.favor`,
-          before: beforeFavor, after: heir.favor, delta: heir.favor - beforeFavor,
-        });
         break;
       }
       case "heir_adopt": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const before = heir.adoptiveFatherId;
         heir.adoptiveFatherId = effect.fatherId;
-        collector?.record({
-          effectType: "heir_adopt", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.adoptiveFatherId`,
-          before, after: effect.fatherId,
-        });
         break;
       }
       case "child_favor": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const before = heir.favor;
         const applied = cappedDelta(`heir:${effect.heirId}`, effect.delta);
         heir.favor = clampPct(heir.favor + applied);
-        collector?.record({
-          effectType: "child_favor", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.favor`,
-          before, after: heir.favor, delta: heir.favor - before,
-          reason: `${effect.delta >= 0 ? "+" : ""}${effect.delta}${applied !== effect.delta ? " (capped)" : ""}`,
-        });
         break;
       }
       case "heir_died": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const before = heir.lifecycle;
         heir.lifecycle = "deceased";
         heir.deceasedAt = now;
-        collector?.record({
-          effectType: "heir_died", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.lifecycle`,
-          before, after: "deceased",
-        });
         break;
       }
       case "set_sovereign_health": {
-        const beforeH = next.resources.sovereign.health;
-        const beforeSt = next.resources.sovereign.healthStatus;
         if (effect.healthDelta !== undefined) next.resources.sovereign.health = clampPct(next.resources.sovereign.health + effect.healthDelta);
         if (effect.healthStatus !== undefined) next.resources.sovereign.healthStatus = effect.healthStatus;
-        if (effect.healthDelta !== undefined) collector?.record({
-          effectType: "set_sovereign_health", effectIndex,
-          path: "resources.sovereign.health",
-          before: beforeH, after: next.resources.sovereign.health, delta: next.resources.sovereign.health - beforeH,
-        });
-        if (effect.healthStatus !== undefined) collector?.record({
-          effectType: "set_sovereign_health", effectIndex,
-          path: "resources.sovereign.healthStatus",
-          before: beforeSt, after: next.resources.sovereign.healthStatus,
-        });
         break;
       }
       case "set_consort_health": {
         const st = next.standing[effect.char]!;
-        const beforeH = st.health;
-        const beforeSt = st.healthStatus;
         if (effect.healthDelta !== undefined) st.health = clampPct((st.health ?? 100) + effect.healthDelta);
         if (effect.healthStatus !== undefined) st.healthStatus = effect.healthStatus;
-        if (effect.healthDelta !== undefined) collector?.record({
-          effectType: "set_consort_health", effectIndex,
-          path: `standing.${effect.char}.health`,
-          before: beforeH, after: st.health, delta: (st.health ?? 0) - (beforeH ?? 100),
-        });
-        if (effect.healthStatus !== undefined) collector?.record({
-          effectType: "set_consort_health", effectIndex,
-          path: `standing.${effect.char}.healthStatus`,
-          before: beforeSt, after: st.healthStatus,
-        });
         break;
       }
       case "set_taihou_health": {
-        const beforeH = next.taihou.health;
-        const beforeSt = next.taihou.healthStatus;
         if (effect.healthDelta !== undefined) next.taihou.health = clampPct(next.taihou.health + effect.healthDelta);
         if (effect.healthStatus !== undefined) next.taihou.healthStatus = effect.healthStatus;
-        if (effect.healthDelta !== undefined) collector?.record({
-          effectType: "set_taihou_health", effectIndex,
-          path: "taihou.health",
-          before: beforeH, after: next.taihou.health, delta: next.taihou.health - beforeH,
-        });
-        if (effect.healthStatus !== undefined) collector?.record({
-          effectType: "set_taihou_health", effectIndex,
-          path: "taihou.healthStatus",
-          before: beforeSt, after: next.taihou.healthStatus,
-        });
         break;
       }
       case "set_heir_health": {
         const h = next.resources.bloodline.heirs.find((x) => x.id === effect.heirId);
         if (h) {
-          const beforeH = h.health;
-          const beforeSt = h.healthStatus;
           if (effect.healthDelta !== undefined) h.health = clampPct(h.health + effect.healthDelta);
           if (effect.healthStatus !== undefined) h.healthStatus = effect.healthStatus;
-          if (effect.healthDelta !== undefined) collector?.record({
-            effectType: "set_heir_health", effectIndex,
-            path: `resources.bloodline.heirs.${effect.heirId}.health`,
-            before: beforeH, after: h.health, delta: h.health - beforeH,
-          });
-          if (effect.healthStatus !== undefined) collector?.record({
-            effectType: "set_heir_health", effectIndex,
-            path: `resources.bloodline.heirs.${effect.heirId}.healthStatus`,
-            before: beforeSt, after: h.healthStatus,
-          });
         }
         break;
       }
       case "record_physician_visit": {
         const sub = effect.subject;
         if (sub.kind === "sovereign") {
-          const before = next.resources.sovereign.lastPhysicianVisitMonthKey;
           next.resources.sovereign.lastPhysicianVisitMonthKey = effect.monthKey;
-          collector?.record({ effectType: "record_physician_visit", effectIndex, path: "resources.sovereign.lastPhysicianVisitMonthKey", before, after: effect.monthKey });
         } else if (sub.kind === "taihou") {
-          const before = next.taihou.lastPhysicianVisitMonthKey;
           next.taihou.lastPhysicianVisitMonthKey = effect.monthKey;
-          collector?.record({ effectType: "record_physician_visit", effectIndex, path: "taihou.lastPhysicianVisitMonthKey", before, after: effect.monthKey });
         } else if (sub.kind === "consort") {
           const st = next.standing[sub.id];
           if (st) {
-            const before = st.lastPhysicianVisitMonthKey;
             st.lastPhysicianVisitMonthKey = effect.monthKey;
-            collector?.record({ effectType: "record_physician_visit", effectIndex, path: `standing.${sub.id}.lastPhysicianVisitMonthKey`, before, after: effect.monthKey });
           }
         } else {
           const h = next.resources.bloodline.heirs.find((x) => x.id === sub.id);
           if (h) {
-            const before = h.lastPhysicianVisitMonthKey;
             h.lastPhysicianVisitMonthKey = effect.monthKey;
-            collector?.record({ effectType: "record_physician_visit", effectIndex, path: `resources.bloodline.heirs.${sub.id}.lastPhysicianVisitMonthKey`, before, after: effect.monthKey });
           }
         }
         break;
@@ -973,14 +739,10 @@ export function applyEffects(
         const st = next.standing[effect.char]!;
         if (st.deathRecord) {
           if (effect.posthumousRankId !== undefined) {
-            const before = st.deathRecord.posthumousRankId;
             st.deathRecord.posthumousRankId = effect.posthumousRankId;
-            collector?.record({ effectType: "set_consort_posthumous", effectIndex, path: `standing.${effect.char}.deathRecord.posthumousRankId`, before, after: effect.posthumousRankId });
           }
           if (effect.posthumousEpithet !== undefined) {
-            const before = st.deathRecord.posthumousEpithet;
             st.deathRecord.posthumousEpithet = effect.posthumousEpithet;
-            collector?.record({ effectType: "set_consort_posthumous", effectIndex, path: `standing.${effect.char}.deathRecord.posthumousEpithet`, before, after: effect.posthumousEpithet });
           }
         }
         break;
@@ -1006,12 +768,6 @@ export function applyEffects(
           };
         }
         // Canonical path: statusEffects.<id> — matches ID-aligned boundary diff.
-        collector?.record({
-          effectType: "confine", effectIndex,
-          path: `statusEffects.${newSe.id}`,
-          before: undefined, after: newSe,
-          reason: `confine ${effect.char}${effect.endTurnExclusive !== null ? `, until turn ${effect.endTurnExclusive}` : " (indefinite)"}`,
-        });
         break;
       }
       case "lift_confinement": {
@@ -1025,50 +781,26 @@ export function applyEffects(
               se.liftedAt = effect.at;
               se.liftReason = "term_expired";
               // Canonical path: statusEffects.<id>.liftedTurn — matches ID-aligned boundary diff.
-              collector?.record({
-                effectType: "lift_confinement", effectIndex,
-                path: `statusEffects.${se.id}.liftedTurn`,
-                before: undefined, after: se.liftedTurn, reason: "term_expired",
-              });
             }
           } else if (turn >= se.startTurn && (se.endTurnExclusive === null || turn < se.endTurnExclusive)) {
             // 皇帝下旨解除：收掉当旬活跃记录，当旬立即失效。
             se.liftedTurn = turn;
             se.liftedAt = effect.at;
             se.liftReason = "lifted_by_emperor";
-            collector?.record({
-              effectType: "lift_confinement", effectIndex,
-              path: `statusEffects.${se.id}.liftedTurn`,
-              before: undefined, after: se.liftedTurn, reason: "lifted_by_emperor",
-            });
           }
         }
         // 凤后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
-        const beforeAdminMode = next.haremAdministration.mode;
         if (next.standing[effect.char]?.rank === "fenghou" && next.haremAdministration.mode !== "empress") {
           next.haremAdministration = { mode: "empress" };
         }
-        if (beforeAdminMode !== next.haremAdministration.mode) collector?.record({
-          effectType: "lift_confinement", effectIndex,
-          path: "haremAdministration.mode",
-          before: beforeAdminMode, after: next.haremAdministration.mode,
-          reason: "empress confinement lifted → administration restored",
-        });
         break;
       }
       case "set_harem_administration": {
-        const before = next.haremAdministration.mode;
         next.haremAdministration = effect.state;
-        collector?.record({
-          effectType: "set_harem_administration", effectIndex,
-          path: "haremAdministration.mode",
-          before, after: effect.state.mode,
-        });
         break;
       }
       case "consort_decease": {
         const st = next.standing[effect.char];
-        const beforeLifecycle = st?.lifecycle;
         if (st && st.lifecycle !== "deceased") {       // idempotent: skip if already dead
           st.lifecycle = "deceased";
           delete st.recoverUntilMonth; // 清陈旧休养截止月（顺产/child_dies 先写 recoverUntilMonth，成本随后致死时勿留「已故仍在休养」状态）
@@ -1094,41 +826,22 @@ export function applyEffects(
             charIds: next.excusedFromGreeting.charIds.filter((id) => id !== effect.char),
           };
         }
-        if (beforeLifecycle !== "deceased") collector?.record({
-          effectType: "consort_decease", effectIndex,
-          path: `standing.${effect.char}.lifecycle`,
-          before: beforeLifecycle, after: "deceased",
-          reason: `cause=${effect.cause}`,
-        });
         break;
       }
       case "heir_decease": {
         const h = next.resources.bloodline.heirs.find((x) => x.id === effect.heirId);
-        const beforeHD = h?.lifecycle;
         if (h && h.lifecycle !== "deceased") { h.lifecycle = "deceased"; h.deceasedAt = effect.at; }
-        if (beforeHD !== "deceased") collector?.record({
-          effectType: "heir_decease", effectIndex,
-          path: `resources.bloodline.heirs.${effect.heirId}.lifecycle`,
-          before: beforeHD, after: "deceased",
-        });
         break;
       }
       case "taihou_decease": {
-        const beforeDec = next.taihou.deceased;
         if (!next.taihou.deceased) {
           next.taihou.deceased = true;
           next.taihou.diedAt = effect.at;
           next.taihou.mourningUntilDayExclusive = effect.at.dayIndex + 3; // 死亡当日计第1日，独占上界
         }
-        if (!beforeDec) collector?.record({
-          effectType: "taihou_decease", effectIndex,
-          path: "taihou.deceased",
-          before: false, after: true,
-        });
         break;
       }
       case "enqueue_aftermath": {
-        const beforeLen = next.pendingAftermath.length;
         if (!next.pendingAftermath.some((a) => a.id === effect.id)) {
           next.pendingAftermath.push({
             id: effect.id,
@@ -1138,12 +851,6 @@ export function applyEffects(
             resolved: false,
           });
         }
-        collector?.record({
-          effectType: "enqueue_aftermath", effectIndex,
-          path: "pendingAftermath",
-          before: beforeLen, after: next.pendingAftermath.length, delta: next.pendingAftermath.length - beforeLen,
-          reason: `kind=${effect.kind}, subject=${effect.subjectId}`,
-        });
         break;
       }
       case "memory": {
@@ -1167,14 +874,11 @@ export function applyEffects(
         store.entries.push(newEntry);
         store.nextSeq += 1;
         // Record with full entry payload so the trace panel can inspect memory content.
-        collector?.record({
-          effectType: "memory", effectIndex,
-          path: `memories.${effect.char}.entries.${newEntry.id}`,
-          before: undefined, after: newEntry,
-          reason: d.summary.length > 60 ? d.summary.slice(0, 60) + "…" : d.summary,
-        });
         break;
       }
+    }
+    if (beforeEffect !== undefined) {
+      collector!.captureEffectDiff(effect.type, effectIndex, diffGameState(beforeEffect, next));
     }
   }
 
@@ -1184,19 +888,11 @@ export function applyEffects(
     const adminId = next.haremAdministration.charId;
     const eligible = eligibleHaremAdministrators(db, next);
     if (!eligible.some((c) => c.id === adminId)) {
-      const beforeMode = next.haremAdministration.mode;
       next.haremAdministration = {
         mode: "neiwu_proxy",
         appointedAt: toGameTime(next.calendar),
         reason: "no_eligible_consort",
       };
-      collector?.record({
-        effectType: undefined,
-        path: "haremAdministration.mode",
-        before: beforeMode, after: "neiwu_proxy",
-        reason: "post-batch invariant: acting_consort no longer eligible",
-        classification: "derived",
-      });
     }
   }
 

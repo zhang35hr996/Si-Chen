@@ -9,26 +9,23 @@ interface Props {
 }
 
 export function TraceTab({ history }: Props) {
-  const [selected, setSelected] = useState<TraceTransaction | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const txs = useSyncExternalStore(
     (cb) => history.subscribe(cb),
     () => history.getAll(),
   );
 
+  const selected: TraceTransaction | null = txs.find((tx) => tx.id === selectedId) ?? null;
+
   const handleClear = useCallback(() => {
     history.clear();
-    setSelected(null);
+    setSelectedId(null);
   }, [history]);
 
   if (selected) {
-    const stillExists = txs.some((t) => t.id === selected.id);
-    if (!stillExists) {
-      setSelected(null);
-      return null;
-    }
-    return <TraceDetails tx={selected} onBack={() => setSelected(null)} />;
+    return <TraceDetails tx={selected} onBack={() => setSelectedId(null)} />;
   }
 
-  return <TraceHistoryList txs={txs} onSelect={setSelected} onClear={handleClear} />;
+  return <TraceHistoryList txs={txs} onSelect={(tx) => setSelectedId(tx.id)} onClear={handleClear} />;
 }

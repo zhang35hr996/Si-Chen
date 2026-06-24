@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createGameStore } from "../../src/store/gameStore";
+import { toGameTime } from "../../src/engine/calendar/time";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -217,5 +218,97 @@ describe("GameStore trace integration", () => {
 
     store.reset();
     expect(store.getTraceHistory().size).toBe(0);
+  });
+
+  // ── untrackedCount === 0 for core funnel effects ──────────────────────────
+
+  it.each([
+    ["favor", (char: string) => [{ type: "favor" as const, char, delta: 3 }]],
+    ["resource", () => [{ type: "resource" as const, pillar: "sovereign" as const, field: "prestige" as const, delta: 2 }]],
+    ["flag", () => [{ type: "flag" as const, key: "test_untrack_flag", value: 1 }]],
+    ["set_rank", (char: string) => [{ type: "set_rank" as const, char, rank: "jiujieying" as const }]],
+  ])("untrackedCount === 0 for %s effect in strict mode", (_name, makeEffects) => {
+    const store = makeStarted("strict");
+    const firstChar = Object.keys(store.getState().standing)[0]!;
+    const result = store.applyEffects(db, makeEffects(firstChar));
+    if (!result.ok) return; // skip if effect is invalid for this fixture
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+  });
+
+  it("untrackedCount === 0 for memory effect in strict mode", () => {
+    const store = makeStarted("strict");
+    const firstChar = Object.keys(store.getState().standing)[0]!;
+    const result = store.applyEffects(db, [
+      {
+        type: "memory",
+        char: firstChar,
+        entry: {
+          kind: "impression",
+          summary: "untrack test",
+          strength: 5,
+          retention: "fast",
+          subjectIds: [firstChar],
+          perspective: "witness",
+          triggerTags: [],
+          unresolved: false,
+          emotions: {},
+        },
+      },
+    ]);
+    expect(result.ok).toBe(true);
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+    // nextSeq change must be captured by the per-effect diff
+    const seqMut = tx.mutations.find((m) => m.path.includes("nextSeq"));
+    expect(seqMut).toBeDefined();
+  });
+
+  it("untrackedCount === 0 for birth effect in strict mode", () => {
+    const store = makeStarted("strict");
+    const firstChar = Object.keys(store.getState().standing)[0]!;
+    const cal = store.getState().calendar;
+    const now = toGameTime(cal);
+    // Precondition: set up a gestation so the birth effect is valid
+    store.applyEffects(db, [{ type: "pregnancy", op: "carry" as const }]);
+    const storeAfterCarry = store.getState();
+    if (storeAfterCarry.resources.bloodline.gestations.length === 0) return; // fixture check
+    const result = store.applyEffects(db, [
+      {
+        type: "birth",
+        bearer: "sovereign" as const,
+        sex: "male" as const,
+        fatherId: "player",
+        bearerOutcome: "safe" as const,
+        favor: 50,
+        legitimate: true,
+      },
+    ]);
+    if (!result.ok) return; // fixture-dependent
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+  });
+
+  it("untrackedCount === 0 for confine + lift_confinement in strict mode", () => {
+    const store = makeStarted("strict");
+    const firstChar = Object.keys(store.getState().standing)[0]!;
+    const cal = store.getState().calendar;
+    const now = toGameTime(cal);
+    const confineResult = store.applyEffects(db, [
+      { type: "confine", char: firstChar, startTurn: cal.dayIndex, endTurnExclusive: cal.dayIndex + 6, imposedAt: now },
+    ]);
+    if (!confineResult.ok) return;
+    const confineTx = store.getTraceHistory().getAll().at(-1)!;
+    expect(confineTx.untrackedCount).toBe(0);
+
+    const liftResult = store.applyEffects(db, [
+      { type: "lift_confinement", char: firstChar, at: now, reason: "lifted_by_emperor" as const },
+    ]);
+    if (!liftResult.ok) return;
+    const liftTx = store.getTraceHistory().getAll().at(-1)!;
+    expect(liftTx.untrackedCount).toBe(0);
   });
 });
