@@ -19,7 +19,7 @@ import {
 export interface RemoteKnowledgeClientOptions {
   /** Base URL of the knowledge API (e.g. "http://localhost:3001"). */
   readonly baseUrl: string;
-  /** Abort timeout in milliseconds. Default 10000. */
+  /** Abort timeout in milliseconds covering the full request lifecycle. Default 10000. */
   readonly timeoutMs?: number;
 }
 
@@ -34,58 +34,72 @@ export class RemoteKnowledgeClient implements KnowledgeRetriever {
 
   async retrieve(query: KnowledgeHybridQuery): Promise<KnowledgeHybridResult> {
     const body = buildRequestBody(query);
-    // Validate locally so we never send invalid requests (Zod schema is shared)
     const parsed = remoteKnowledgeRetrieveRequestSchema.safeParse(body);
     if (!parsed.success) {
       throw new Error(`RemoteKnowledgeClient: invalid request shape: ${parsed.error.message}`);
     }
 
-    const controller = new AbortController();
-    // Forward external abort signal alongside our own timeout
-    if (query.signal) {
-      query.signal.addEventListener("abort", () => controller.abort(query.signal?.reason));
+    // Check if already aborted before allocating resources
+    if (query.signal?.aborted) {
+      throw new Error("RemoteKnowledgeClient: aborted before start");
     }
+
+    const controller = new AbortController();
+
+    // Forward external abort signal; addEventListener so we can remove it in finally
+    let externalAbortListener: (() => void) | undefined;
+    if (query.signal) {
+      externalAbortListener = () => controller.abort(query.signal?.reason);
+      query.signal.addEventListener("abort", externalAbortListener);
+    }
+
+    // Timer covers the full lifecycle: fetch + body parsing + schema validation
     const timer = setTimeout(() => controller.abort(new Error("knowledge retrieval timeout")), this.timeoutMs);
 
-    let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/knowledge/retrieve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-        signal: controller.signal,
-      });
-    } catch (err) {
+      let res: Response;
+      try {
+        res = await fetch(`${this.baseUrl}/knowledge/retrieve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed.data),
+          signal: controller.signal,
+        });
+      } catch {
+        // Never expose raw fetch error — may contain URL, cert details, etc.
+        throw new Error("RemoteKnowledgeClient: network error during retrieval");
+      }
+
+      if (!res.ok) {
+        throw new Error(`RemoteKnowledgeClient: server returned ${res.status}`);
+      }
+
+      let json: unknown;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error("RemoteKnowledgeClient: invalid JSON response");
+      }
+
+      const validated = remoteKnowledgeRetrieveResponseSchema.safeParse(json);
+      if (!validated.success) {
+        throw new Error("RemoteKnowledgeClient: response schema mismatch");
+      }
+
+      const data = validated.data;
+      const hits: KnowledgeHybridHit[] = data.hits.map(remoteHitToHybridHit);
+      return {
+        hits,
+        vectorDegradation: data.vectorDegradation
+          ? { reason: data.vectorDegradation.reason, message: "" }
+          : undefined,
+      };
+    } finally {
       clearTimeout(timer);
-      // Never expose raw error message from server or network — wrap it
-      throw new Error(`RemoteKnowledgeClient: network error during retrieval`);
+      if (externalAbortListener && query.signal) {
+        query.signal.removeEventListener("abort", externalAbortListener);
+      }
     }
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      throw new Error(`RemoteKnowledgeClient: server returned ${res.status}`);
-    }
-
-    let json: unknown;
-    try {
-      json = await res.json();
-    } catch {
-      throw new Error(`RemoteKnowledgeClient: invalid JSON response`);
-    }
-
-    const validated = remoteKnowledgeRetrieveResponseSchema.safeParse(json);
-    if (!validated.success) {
-      throw new Error(`RemoteKnowledgeClient: response schema mismatch`);
-    }
-
-    const data = validated.data;
-    const hits: KnowledgeHybridHit[] = data.hits.map(remoteHitToHybridHit);
-    return {
-      hits,
-      vectorDegradation: data.vectorDegradation
-        ? { reason: data.vectorDegradation.reason, message: "" }
-        : undefined,
-    };
   }
 }
 
@@ -95,7 +109,6 @@ function buildRequestBody(query: KnowledgeHybridQuery): unknown {
     limit: query.limit,
   };
   if (query.visibilityCeiling !== undefined) q.visibilityCeiling = query.visibilityCeiling;
-  // currentTime: send all GameTime fields (year, month, period, dayIndex)
   if (query.currentTime !== undefined) q.currentTime = {
     year: query.currentTime.year,
     month: query.currentTime.month,
@@ -103,7 +116,6 @@ function buildRequestBody(query: KnowledgeHybridQuery): unknown {
     dayIndex: query.currentTime.dayIndex,
   };
   if (query.sourceTypes !== undefined) q.sourceTypes = [...query.sourceTypes];
-  // KnowledgeMetadataFilter: { values, mode } — pass through as-is
   if (query.tagFilter !== undefined) q.tagFilter = { values: [...query.tagFilter.values], mode: query.tagFilter.mode };
   if (query.entityFilter !== undefined) q.entityFilter = { values: [...query.entityFilter.values], mode: query.entityFilter.mode };
   if (query.locationFilter !== undefined) q.locationFilter = { values: [...query.locationFilter.values], mode: query.locationFilter.mode };
@@ -111,6 +123,10 @@ function buildRequestBody(query: KnowledgeHybridQuery): unknown {
   if (query.vectorFailureMode !== undefined && query.vectorFailureMode !== "fail") {
     q.vectorFailureMode = query.vectorFailureMode;
   }
+  // RRF tuning — only send when caller explicitly overrides defaults
+  if (query.rrfK !== undefined) q.rrfK = query.rrfK;
+  if (query.keywordWeight !== undefined) q.keywordWeight = query.keywordWeight;
+  if (query.vectorWeight !== undefined) q.vectorWeight = query.vectorWeight;
   return { query: q };
 }
 

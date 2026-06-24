@@ -59,18 +59,23 @@ function readBody(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> 
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
+    let tooLarge = false;
 
     req.on("data", (chunk: Buffer) => {
       total += chunk.length;
       if (total > maxBytes) {
-        reject(new Error("too_large"));
-        req.destroy();
+        if (!tooLarge) {
+          tooLarge = true;
+          chunks.length = 0; // free collected memory
+          reject(new Error("too_large"));
+        }
+        // Keep draining so the connection stays open for the 413 response
         return;
       }
       chunks.push(chunk);
     });
 
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
+    req.on("end", () => { if (!tooLarge) resolve(Buffer.concat(chunks)); });
+    req.on("error", (err) => { if (!tooLarge) reject(err); });
   });
 }

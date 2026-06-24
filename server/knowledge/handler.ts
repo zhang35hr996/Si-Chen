@@ -5,7 +5,9 @@
  *   - Request validated against strict Zod schema; unknown fields rejected
  *   - Response sanitized: no sourcePath, no embedding vectors, no stack traces,
  *     no API keys, no absolute file paths
- *   - Errors must be logged (never silently ignored)
+ *   - Errors MUST be logged (silent ignore is forbidden) — logger is required
+ *   - Raw error.message MUST NOT be logged (may contain API keys, file paths,
+ *     SQLite stack traces). Only safe, structured classifications are logged.
  *   - Error text must NOT reach the LLM — error is sanitized before response
  *   - vectorDegradation.reason is passed (machine-readable), message is omitted
  */
@@ -15,17 +17,25 @@ import {
   type RemoteKnowledgeRetrieveResponse,
   type RemoteKnowledgeHit,
 } from "../../src/engine/knowledge/remote/schemas";
-import type { KnowledgeHybridHit, KnowledgeHybridResult } from "../../src/engine/knowledge/retrieval/types";
-import type { KnowledgeHybridRetriever } from "../../src/engine/knowledge/retrieval/hybrid-retriever";
+import type { KnowledgeHybridHit, KnowledgeHybridResult, KnowledgeHybridQuery } from "../../src/engine/knowledge/retrieval/types";
 
 export type { RemoteKnowledgeRetrieveRequest };
 
+/** Minimal retrieval service interface — avoids binding to the concrete class. */
+export interface KnowledgeRetrievalService {
+  retrieve(query: KnowledgeHybridQuery): Promise<KnowledgeHybridResult>;
+}
+
+/** Logger that accepts only structured, safe context (no raw error messages). */
+export interface KnowledgeHandlerLogger {
+  warn(message: string, context?: Record<string, string | number | boolean>): void;
+  error(message: string, context?: Record<string, string | number | boolean>): void;
+}
+
 export interface KnowledgeHandlerDeps {
-  readonly retriever: KnowledgeHybridRetriever;
-  readonly logger?: {
-    warn(message: string, context?: Record<string, unknown>): void;
-    error(message: string, context?: Record<string, unknown>): void;
-  };
+  readonly retriever: KnowledgeRetrievalService;
+  /** Required — handler must log failures; caller provides a no-op if needed. */
+  readonly logger: KnowledgeHandlerLogger;
 }
 
 export interface KnowledgeHandlerResult {
@@ -43,7 +53,6 @@ export async function handleKnowledgeRetrieve(
   rawInput: unknown,
   deps: KnowledgeHandlerDeps,
 ): Promise<KnowledgeHandlerResult> {
-  // Validate request
   const parsed = remoteKnowledgeRetrieveRequestSchema.safeParse(rawInput);
   if (!parsed.success) {
     return {
@@ -52,28 +61,30 @@ export async function handleKnowledgeRetrieve(
     };
   }
 
-  const req = parsed.data;
+  const q = parsed.data.query;
 
   let result: KnowledgeHybridResult;
   try {
-    const q = req.query;
     result = await deps.retriever.retrieve({
       text: q.text,
       limit: q.limit,
       visibilityCeiling: q.visibilityCeiling,
-      // GameTime fields are identical between DTO schema and internal type
       currentTime: q.currentTime as import("../../src/engine/calendar/time").GameTime | undefined,
       sourceTypes: q.sourceTypes as import("../../src/engine/knowledge/model").KnowledgeSourceType[] | undefined,
       tagFilter: q.tagFilter as import("../../src/engine/knowledge/model").KnowledgeMetadataFilter | undefined,
       entityFilter: q.entityFilter as import("../../src/engine/knowledge/model").KnowledgeMetadataFilter | undefined,
       locationFilter: q.locationFilter as import("../../src/engine/knowledge/model").KnowledgeMetadataFilter | undefined,
       vectorFailureMode: q.vectorFailureMode ?? "fail",
+      rrfK: q.rrfK,
+      keywordWeight: q.keywordWeight,
+      vectorWeight: q.vectorWeight,
     });
   } catch (err) {
-    // Error must be logged — silent ignore is forbidden
-    const message = err instanceof Error ? err.message : String(err);
-    deps.logger?.error("knowledge retrieval failed", { message });
-    // Error text must NOT reach the LLM and must NOT be returned to browser
+    // Log a safe classification — NEVER log err.message (may contain API keys, paths, stacks).
+    deps.logger.error("knowledge retrieval failed", {
+      code: "KNOWLEDGE_RETRIEVAL_FAILED",
+      errorType: classifyError(err),
+    });
     return {
       status: 500,
       body: { error: "retrieval_failed", code: "INTERNAL_ERROR" },
@@ -90,6 +101,20 @@ export async function handleKnowledgeRetrieve(
   };
 
   return { status: 200, body: responseBody };
+}
+
+/**
+ * Classify an error into a safe, non-sensitive type label for logging.
+ *
+ * Rules: never return any string derived from err.message. SQLite error codes
+ * (e.g. "SQLITE_BUSY") are machine-readable enum values, not sensitive data.
+ */
+function classifyError(err: unknown): string {
+  if (!(err instanceof Error)) return "non_error";
+  if (err.name === "AbortError") return "aborted";
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === "string" && /^SQLITE_[A-Z_]+$/.test(code)) return `sqlite:${code}`;
+  return "error";
 }
 
 /** Strip server-only fields (sourcePath, embedding vectors, etc.) from a hit. */

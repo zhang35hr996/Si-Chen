@@ -152,6 +152,45 @@ describe("RemoteKnowledgeClient", () => {
     expect(result.hits).toHaveLength(0);
     expect(result.vectorDegradation).toBeUndefined();
   });
+
+  it("P2: throws immediately when signal is already aborted before retrieve()", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const controller = new AbortController();
+    controller.abort(new Error("pre-aborted"));
+    const client = makeClient();
+    const err = await client.retrieve({ text: "x", limit: 5, signal: controller.signal }).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("P2: RRF params are included in the request body when provided", async () => {
+    let capturedBody: unknown;
+    vi.stubGlobal("fetch", async (_url: string, opts: RequestInit) => {
+      capturedBody = JSON.parse(opts.body as string);
+      return { ok: true, status: 200, json: async () => ({ hits: [] }) };
+    });
+    const client = makeClient();
+    await client.retrieve({ text: "x", limit: 5, rrfK: 30, keywordWeight: 2, vectorWeight: 0.5 });
+    const q = (capturedBody as { query: Record<string, unknown> }).query;
+    expect(q.rrfK).toBe(30);
+    expect(q.keywordWeight).toBe(2);
+    expect(q.vectorWeight).toBe(0.5);
+  });
+
+  it("P2: default RRF params are NOT sent (not serialized when undefined)", async () => {
+    let capturedBody: unknown;
+    vi.stubGlobal("fetch", async (_url: string, opts: RequestInit) => {
+      capturedBody = JSON.parse(opts.body as string);
+      return { ok: true, status: 200, json: async () => ({ hits: [] }) };
+    });
+    const client = makeClient();
+    await client.retrieve(VALID_QUERY);
+    const q = (capturedBody as { query: Record<string, unknown> }).query;
+    expect(q).not.toHaveProperty("rrfK");
+    expect(q).not.toHaveProperty("keywordWeight");
+    expect(q).not.toHaveProperty("vectorWeight");
+  });
 });
 
 describe("Browser boundary: client.ts contains no Node-only imports", () => {

@@ -51,6 +51,10 @@ export const remoteKnowledgeRetrieveRequestSchema = z.object({
     entityFilter: knowledgeMetadataFilterSchema.optional(),
     locationFilter: knowledgeMetadataFilterSchema.optional(),
     vectorFailureMode: z.enum(["fail", "keyword_only"]).optional(),
+    // RRF fusion tuning — must match KnowledgeHybridRetriever validation constraints
+    rrfK: z.number().positive().finite().optional(),
+    keywordWeight: z.number().nonnegative().finite().optional(),
+    vectorWeight: z.number().nonnegative().finite().optional(),
   }).strict(),
 }).strict();
 
