@@ -1,5 +1,21 @@
 /** 官员系统显示文案（UI 专用；引擎不依赖）。 */
-import type { FamilyMemberRole, OfficialDepartment, OfficialStatus } from "../../engine/state/types";
+import type { CandidateStatus, FamilyMemberRole, OfficialDepartment, OfficialStatus } from "../../engine/state/types";
+
+/** 候补状态文案（PR3B）。 */
+export const CANDIDATE_STATUS_LABEL: Record<CandidateStatus, string> = {
+  eligible: "候补",
+  appointed: "已授官",
+  expired: "逾期",
+  withdrawn: "退出",
+};
+
+/** 候补四维能力文案（PR3B）。 */
+export const APTITUDE_LABEL: Record<"governance" | "scholarship" | "military" | "integrity", string> = {
+  governance: "政略",
+  scholarship: "才学",
+  military: "军事",
+  integrity: "清正",
+};
 
 export const DEPARTMENT_LABEL: Record<OfficialDepartment, string> = {
   chancellery: "政事堂",
