@@ -4164,3 +4164,156 @@ button:active:enabled {
   opacity: 0.6;
   font-size: 12px;
 }
+
+/* ── 官员名册/任免（宣政殿 → 官员名册；PR2B） ─────────────────────────── */
+.officials-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 24px;
+  overflow-y: auto;
+  max-height: 100%;
+  color: #f3ece0;
+}
+.officials-screen__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.officials-screen__back,
+.official-detail__back {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.85;
+  cursor: pointer;
+  padding: 6px 0;
+  font-size: 14px;
+}
+.officials-screen__title { margin: 0; font-size: 17px; }
+.officials-screen__vacancy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.16);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  font-size: 14px;
+}
+.officials-screen__vacancy-actions { display: flex; gap: 8px; }
+.officials-screen__vacancy button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: inherit;
+  border-radius: 6px;
+  padding: 4px 12px;
+  min-height: 36px;
+  cursor: pointer;
+}
+.officials-screen__tabs,
+.officials-screen__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.officials-screen__tabs button,
+.officials-screen__filters button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: inherit;
+  border-radius: 16px;
+  padding: 6px 14px;
+  min-height: 40px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.officials-screen__tabs button.is-active,
+.officials-screen__filters button.is-active {
+  background: rgba(212, 175, 55, 0.28);
+  border-color: rgba(212, 175, 55, 0.5);
+}
+.officials-screen__group { margin-top: 6px; }
+.officials-screen__group-title { margin: 4px 0; font-size: 13px; opacity: 0.75; }
+.officials-screen__list { list-style: none; margin: 0; padding: 0; }
+.officials-screen__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+}
+.officials-screen__row:hover { background: rgba(255, 255, 255, 0.09); }
+.officials-screen__row-name { font-weight: 600; }
+.officials-screen__row-post { opacity: 0.9; }
+.officials-screen__row-meta { opacity: 0.6; font-size: 12px; margin-left: auto; }
+.officials-screen__post-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 10px;
+  min-height: 40px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.officials-screen__post-row.is-vacant-high { background: rgba(212, 175, 55, 0.12); }
+.officials-screen__post-name { font-weight: 600; }
+.officials-screen__post-occ { opacity: 0.85; }
+.officials-screen__post-vacant {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(212, 175, 55, 0.25);
+}
+.officials-screen__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.officials-screen__action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.officials-screen__action-hint { opacity: 0.7; font-size: 13px; }
+.officials-screen__actions button,
+.officials-screen__transfer button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: inherit;
+  border-radius: 6px;
+  padding: 6px 14px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.officials-screen__transfer { margin-top: 4px; }
+.officials-screen__empty { opacity: 0.6; font-size: 13px; }
+.officials-screen__notice {
+  margin-top: 8px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.action-btn__badge {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 18px;
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 9px;
+  background: #c9433f;
+  color: #fff;
+}

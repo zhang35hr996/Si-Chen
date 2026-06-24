@@ -95,7 +95,26 @@ UI 留 PR2B。
 **去职（post→null）保留上次任职时刻、不清除**（是否在任看 postId/status，非 appointedAt）。所有
 GameStore 调用方传 `toGameTime(state.calendar)`。
 
-## 七、下一阶段（PR2B）
+## 七、PR2B：空缺处理与基础任免 UI（已实现）
 
-空缺处理与基础任免 UI：名册按状态筛选、官位表按部门展示、免职/调任/恢复/准告老/挽留操作、高位空缺
-进 pending 提醒队列。升迁规则属 Phase 3。
+玩家面向只读 UI + 基础任免，入口在**宣政殿**（议程态）「官员名册」按钮（带高位空缺角标）。
+UI 不承担业务计算——只读 state 与 selector、只调 store 命令；移动端整行可点、列表/分组而非密集小卡。
+**不含升迁规则**（属 Phase 3）。
+
+- `ui/officials/OfficialsScreen`（App view `"officials"`，挂于宣政殿）：
+  - 名册：状态筛选 chips（在任默认 / 致仕 / 系狱 / 流放 / 已故，带人数），按部门分组、品级降序。
+  - 官位表：按部门列官职，显示占用人/空缺 / `N/M 在任`（多席返回剩余席位数），高位空缺高亮。
+  - 详情：复用只读 `OfficialDetail`（家族/核心成员/宫中侍君亲属/状态）+ 任免操作区。
+  - 高位空缺提醒：`getHighVacancyPosts`（gradeOrder ≥ `HIGH_POST_GRADE_ORDER`=13）→ 顶部 banner
+    「N 处要职现空缺」+ 立即处理（切官位表）/ 稍后（本次会话 snooze）。**不弹紫宸殿、不持久队列**
+    （取舍：保持 PR2B 聚焦任免 UI；乘风/司礼叙事化播报与持久队列留后续）。
+- 玩家基础操作（经 store 命令，复用 PR2A 引擎服务，返回 Result）：
+  - 免职 `GameStore.dismissOfficial`（在任去职、保留可任用）；调任/任命经 `assignOfficialPost`（空缺选择）；
+    起复 `GameStore.restoreOfficial`（retired/imprisoned/exiled→active）；准告老 `approveRetirement` /
+    挽留 `retainRetirement`（仅未决告老时显示）。已故无可操作。
+  - 失败显示 notice、不改 state。**不在此做升迁**（调到更高品级暂为手动任命，完整升迁资格属 Phase 3）。
+- 新增 selector：`getOfficialsByStatus` / `getHighVacancyPosts` / `hasPendingRetirement`（UI 只调 selector）。
+
+## 八、再下一阶段
+
+Phase 3：科举、候补官员池、任命、升迁与降职。

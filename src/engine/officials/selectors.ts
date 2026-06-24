@@ -9,6 +9,7 @@ import type {
   KinshipRelation,
   Official,
   OfficialFamily,
+  OfficialStatus,
   PersonSex,
 } from "../state/types";
 
@@ -105,6 +106,36 @@ export function getVacantPosts(state: GameState, db: ContentDB): { postId: strin
     .filter((p) => p.gradeOrder > 0)
     .map((p) => ({ postId: p.id, vacantSeatCount: getVacantSeatCount(state, db, p.id) }))
     .filter((v) => v.vacantSeatCount > 0);
+}
+
+/** 高位官职门槛（gradeOrder ≥ 此值视为高位；从三品=13 起，含尚书/丞相等要职）。 */
+export const HIGH_POST_GRADE_ORDER = 13;
+
+/** 当前有空席的高位官职（用于空缺提醒；低品官职不强制提醒）。 */
+export function getHighVacancyPosts(state: GameState, db: ContentDB): { postId: string; vacantSeatCount: number }[] {
+  return getVacantPosts(state, db).filter((v) => (db.officialPosts[v.postId]?.gradeOrder ?? 0) >= HIGH_POST_GRADE_ORDER);
+}
+
+/** 按状态筛选官员（名册分页用）。 */
+export function getOfficialsByStatus(state: GameState, status: OfficialStatus): Official[] {
+  return Object.values(state.officials).filter((o) => o.status === status);
+}
+
+/** 该官员是否有未决告老请求（驱动「准告老/挽留」按钮）。 */
+export function hasPendingRetirement(state: GameState, officialId: string): boolean {
+  return state.pendingRetirements.some((p) => p.officialId === officialId);
+}
+
+/**
+ * 该官员最近一次离任所释放的官职（从 officialHistory 倒序找首个 vacatedPostId）。
+ * 用于非在任官员的「原任官职/部门」只读展示；从未任职则 undefined。
+ */
+export function getLastHeldPostId(state: GameState, officialId: string): string | undefined {
+  for (let i = state.officialHistory.length - 1; i >= 0; i--) {
+    const h = state.officialHistory[i]!;
+    if (h.officialId === officialId && h.vacatedPostId !== undefined) return h.vacatedPostId;
+  }
+  return undefined;
 }
 
 /** 某家族出身、当前在宫的侍君 charId（按 standing.birthFamilyId）。 */

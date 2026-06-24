@@ -9,6 +9,7 @@ import {
   getPalaceRelativesOfOfficial,
   resolvePerson,
 } from "../../engine/officials/selectors";
+import { officialPostView } from "./postDisplay";
 import { MEMBER_ROLE_LABEL, OFFICIAL_STATUS_LABEL } from "./labels";
 
 export interface OfficialDetailProps {
@@ -29,7 +30,7 @@ export function OfficialDetail({ db, state, officialId, onBack }: OfficialDetail
     );
   }
 
-  const post = official.postId ? db.officialPosts[official.postId] : undefined;
+  const postLabel = officialPostView(db, state, official).label; // 当前职 / 无职待任 / 原任某职
   const family = state.officialFamilies[official.familyId];
   const members = getFamilyMembers(state, official.familyId);
   const palaceKin = getPalaceRelativesOfOfficial(state, officialId);
@@ -40,7 +41,7 @@ export function OfficialDetail({ db, state, officialId, onBack }: OfficialDetail
 
       <h3 className="official-detail__name">{official.surname}{official.givenName}</h3>
       <p className="official-detail__line">
-        {post ? `${post.grade}·${post.name}` : "（空缺）"} · 年{official.age} · 忠心 {official.loyalty} ·{" "}
+        {postLabel} · 年{official.age} · 忠心 {official.loyalty} ·{" "}
         状态 {OFFICIAL_STATUS_LABEL[official.status]}
       </p>
 

@@ -224,7 +224,6 @@ describe("applyPunitiveRankChangeWithConsequences – demotion", () => {
 describe("generated consort as bystander — memory funnel transaction", () => {
   function makeGeneratedConsort(id: string): CharacterContent {
     const template = Object.values(db.characters).find((c) => c.kind === "consort")!;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { maternalClan: _mc, ...rest } = template;
     // Strip maternalClan so this reads as a 良家子 (no official mother required).
     return { ...rest, id, profile: { ...rest.profile, name: `测试${id}` } };

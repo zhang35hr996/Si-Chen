@@ -23,6 +23,10 @@ export interface XuanzhengdianScreenProps {
   summary?: CourtSummaryView | null;
   onBackToHall: () => void;
   onBackToMap: () => void;
+  /** 打开官员名册/任免（PR2B）。 */
+  onOpenOfficials?: () => void;
+  /** 高位空缺数（>0 时官员名册按钮带提醒角标）。 */
+  highVacancyCount?: number;
 }
 
 function deltaText(delta: number): string {
@@ -140,6 +144,12 @@ export function XuanzhengdianScreen(props: XuanzhengdianScreenProps) {
             升朝
           </button>
           {!props.holdGate.ok && <span className="court-agenda__reason" role="note">{props.holdGate.reason}</span>}
+          {props.onOpenOfficials && (
+            <button type="button" className="action-btn" onClick={props.onOpenOfficials}>
+              官员名册
+              {props.highVacancyCount ? <span className="action-btn__badge">{props.highVacancyCount}</span> : null}
+            </button>
+          )}
           <button type="button" className="action-btn" onClick={props.onLeave}>
             返回
           </button>

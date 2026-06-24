@@ -26,7 +26,7 @@ import { applyBatch, applyCommand, type CommandResult } from "../engine/state/re
 import type { GameState, PendingDaxuan } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { assignOfficialPost } from "../engine/officials/assign";
-import { retireOfficial } from "../engine/officials/lifecycle";
+import { dismissOfficial, restoreOfficialToActive, retireOfficial } from "../engine/officials/lifecycle";
 import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
@@ -160,6 +160,24 @@ export class GameStore {
       ...this.state,
       pendingRetirements: this.state.pendingRetirements.filter((p) => p.officialId !== officialId),
     };
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 罢免：在任且有职官员去职（保留为可再任用）；写历史。 */
+  dismissOfficial(officialId: string): Result<void, GameError> {
+    const result = dismissOfficial(this.state, officialId, toGameTime(this.state.calendar));
+    if (!result.ok) return result;
+    this.state = result.value;
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 恢复为可任用：retired/imprisoned/exiled → active（postId 仍 null，须再 assignOfficialPost）。 */
+  restoreOfficial(officialId: string): Result<void, GameError> {
+    const result = restoreOfficialToActive(this.state, officialId, toGameTime(this.state.calendar));
+    if (!result.ok) return result;
+    this.state = result.value;
     this.emit();
     return ok(undefined);
   }
