@@ -280,8 +280,7 @@ export class GameStore {
     }
     const result = retireOfficial(this.state, officialId, toGameTime(this.state.calendar));
     if (!result.ok) return result;
-    this.state = result.value; // retireOfficial 内部已撤回该 pending
-    this.emit();
+    this.tracedSet(result.value, { kind: "action", sourceId: "approveRetirement", label: `approveRetirement: ${officialId}` });
     return ok(undefined);
   }
 
@@ -290,11 +289,8 @@ export class GameStore {
     if (!this.state.pendingRetirements.some((p) => p.officialId === officialId)) {
       return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
     }
-    this.state = {
-      ...this.state,
-      pendingRetirements: this.state.pendingRetirements.filter((p) => p.officialId !== officialId),
-    };
-    this.emit();
+    const next = { ...this.state, pendingRetirements: this.state.pendingRetirements.filter((p) => p.officialId !== officialId) };
+    this.tracedSet(next, { kind: "action", sourceId: "retainRetirement", label: `retainRetirement: ${officialId}` });
     return ok(undefined);
   }
 
@@ -556,6 +552,7 @@ export class GameStore {
       return err(applied.error);
     }
     let candidate = applied.value;
+    const beforeChronicle = candidate;
     for (const draft of plan.chronicle) {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
@@ -569,6 +566,7 @@ export class GameStore {
       }
       candidate = ap.value.state;
     }
+    collector?.capturePhaseScheduled("chronicle_append", diffGameState(beforeChronicle, candidate));
     if (collector) {
       // Build trace BEFORE committing state — strict mode may throw here.
       const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
@@ -616,6 +614,7 @@ export class GameStore {
       return err(applied.error);
     }
     let candidate = applied.value;
+    const beforeChronicle2 = candidate;
     for (const draft of plan.chronicle) {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
@@ -629,6 +628,7 @@ export class GameStore {
       }
       candidate = ap.value.state;
     }
+    collector?.capturePhaseScheduled("chronicle_append", diffGameState(beforeChronicle2, candidate));
     if (collector) {
       const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
       this.state = candidate;
@@ -651,23 +651,44 @@ export class GameStore {
     effects: readonly EventEffect[],
     chronicle: Omit<CourtEvent, "id">[],
     reactionBeats: ReactionBeat[],
+    source: TraceSource,
   ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
-    const applied = applyEffects(db, this.state, effects);
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const applied = applyEffects(db, this.state, effects, collector ? { collector } : {});
     if (!applied.ok) {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: [...effects], outcome: "rejected", errors: applied.error };
+      if (collector) {
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          applied.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
       return err(applied.error);
     }
     let candidate = applied.value;
+    const beforeChronicle = candidate;
     for (const draft of chronicle) {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
+        if (collector) {
+          const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+            ap.error.map((e) => e.message).join("; "));
+          this.traceHistory.push(tx);
+        }
         return err(ap.error); // this.state untouched — atomic
       }
       candidate = ap.value.state;
     }
-    this.state = candidate;
+    collector?.capturePhaseScheduled("chronicle_append", diffGameState(beforeChronicle, candidate));
+    if (collector) {
+      const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
+      this.state = candidate;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = candidate;
+    }
     this.lastEffectReport = { effects: [...effects], outcome: "applied", errors: [] };
     this.emit();
     return ok({ reactionBeats });
@@ -736,6 +757,7 @@ export class GameStore {
       [...base.effects, ...conseq.effects],
       [...punishmentChronicle, ...conseq.chronicle],
       conseq.reactionBeats,
+      { kind: "imperial_command", sourceId: command.type, label: `punishment: ${command.type} ${command.targetId}` },
     );
     if (!txResult.ok) return txResult;
     return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: base.lines });
@@ -816,6 +838,7 @@ export class GameStore {
       [...op.effects, ...conseq.effects],
       chronicle,
       conseq.reactionBeats,
+      { kind: "imperial_command", sourceId: "punitive_rank_change", label: `punitive rank: ${op.kind} ${targetId}` },
     );
     if (!txResult.ok) return txResult;
     return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: op.lines });
@@ -846,9 +869,13 @@ export class GameStore {
       }
       return result;
     }
+    // 1b) Capture the engine-resolved changes (apCost, calendar, eventLog, sceneHistory).
+    //     These are only the paths the funnel didn't already attribute via collector.
+    const engineState = result.value.state;
+    collector?.capturePhaseScheduled("event_resolution", diffGameState(beforeState, engineState));
     // 2) 统一边界结算：事件 apCost 若跨月/跨年，照常跑健康/增龄/死亡/告老/大选/禁足，
     //    杜绝事件流绕过结算。失败 → 整体回滚（state 不变、不 emit）。
-    const settled = this.settlePostAdvance(db, this.state, result.value.state, collector ?? undefined);
+    const settled = this.settlePostAdvance(db, this.state, engineState, collector ?? undefined);
     if (!settled.ok) {
       for (const error of settled.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: settled.error };
@@ -1030,7 +1057,9 @@ export class GameStore {
 
     // 跨入正月（新年第一月）→ 官员年度 tick（增龄/死亡/告老请求）。
     if (monthChanged && candidate.calendar.month === 1) {
+      const beforeOfficialTick = candidate;
       candidate = buildOfficialYearlyTick(candidate, db, toGameTime(candidate.calendar));
+      collector?.capturePhaseScheduled("official_yearly_tick", diffGameState(beforeOfficialTick, candidate));
     }
 
     // 5) Daxuan calendar event detection.

@@ -489,6 +489,7 @@ function describeEffect(effect: EventEffect): string {
     case "set_harem_administration": return `set_harem_administration mode=${effect.state.mode}`;
     case "enqueue_aftermath": return `enqueue_aftermath kind=${effect.kind} subject=${effect.subjectId}`;
     case "record_physician_visit": return `record_physician_visit month=${effect.monthKey}`;
+    case "adjust_consort_attr": return `adjust_consort_attr ${effect.char}.${effect.field} ${effect.delta >= 0 ? "+" : ""}${effect.delta}`;
     default: return (effect as { type: string }).type;
   }
 }

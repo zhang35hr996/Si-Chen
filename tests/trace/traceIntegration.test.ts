@@ -376,19 +376,101 @@ describe("GameStore trace integration", () => {
     expect(store.getTraceHistory().getAll().at(-1)!.untrackedCount).toBe(0);
   });
 
+  // ── P1 strict-mode coverage for newly-attributed paths ──────────────────
+
+  it("strict mode: resolveEvent produces untrackedCount === 0", () => {
+    const store = makeStarted("strict");
+    const result = store.resolveEvent(db, "ev_menses_rite", []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.map((e) => e.message).join("; "));
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+    // The event_resolution phase must be present (apCost/calendar/eventLog attribution).
+    const phaseMut = tx.mutations.find((m) => m.phase === "event_resolution");
+    expect(phaseMut, "event_resolution phase mutation must exist").toBeDefined();
+  });
+
+  it("strict mode: applyImperialCommand with chronicle produces untrackedCount === 0", () => {
+    const store = makeStarted("strict");
+    // confine an eligible non-empress consort so the command produces chronicle entries.
+    const consortId = Object.keys(store.getState().standing).find(
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+    );
+    expect(consortId, "fixture must have a non-empress consort").toBeDefined();
+    if (!consortId) throw new Error("no eligible consort in fixture");
+
+    const result = store.applyImperialCommand(db, {
+      type: "impose_confinement",
+      targetId: consortId,
+      durationTurns: 6,
+    });
+    expect(result.ok, "impose_confinement must succeed").toBe(true);
+    if (!result.ok) throw new Error(result.error.map((e) => e.message).join("; "));
+
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+    // Chronicle append must have a phase attribution.
+    const chronicleMut = tx.mutations.find((m) => m.phase === "chronicle_append");
+    expect(chronicleMut, "chronicle_append phase mutation must exist").toBeDefined();
+  });
+
+  it("strict mode: approveRetirement produces untrackedCount === 0", () => {
+    const store = makeStarted("strict");
+    const s = store.getState();
+    const officialId = Object.keys(s.officials)[0];
+    if (!officialId) return; // no officials in fixture
+
+    const T = toGameTime(s.calendar);
+    store.loadState({ ...s, pendingRetirements: [{ officialId, requestedAt: T }] });
+    const result = store.approveRetirement(officialId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+  });
+
+  it("strict mode: retainRetirement produces untrackedCount === 0", () => {
+    const store = makeStarted("strict");
+    const s = store.getState();
+    const officialId = Object.keys(s.officials)[0];
+    if (!officialId) return; // no officials in fixture
+
+    const T = toGameTime(s.calendar);
+    store.loadState({ ...s, pendingRetirements: [{ officialId, requestedAt: T }] });
+    const result = store.retainRetirement(officialId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+  });
+
   it("post-batch invariant (acting_consort invalidation) classified as derived, untrackedCount === 0", () => {
     const store = makeStarted("strict");
     const chars = Object.keys(store.getState().standing);
     // Find a character eligible to act as harem administrator.
+    const fuRankOrder = db.ranks["fu"]?.order ?? 140;
     const consort = chars.find((id) => {
       const st = store.getState().standing[id];
-      return st && st.lifecycle === "normal" && st.rank !== "fenghou";
+      if (!st || db.characters[id]?.kind !== "consort") return false;
+      if (st.lifecycle === "deceased" || st.rank === "fenghou") return false;
+      const rankMeta = db.ranks[st.rank];
+      if (!rankMeta || rankMeta.order < fuRankOrder) return false;
+      const home = st.residence ?? db.characters[id]?.defaultLocation;
+      return home !== "changmengong";
     });
-    if (!consort) return; // no eligible consort in fixture
+    expect(consort, "fixture must have an eligible non-empress consort").toBeDefined();
+    if (!consort) throw new Error("no eligible consort in fixture");
 
     // Empress must be confined before acting_consort mode is valid.
     const empress = chars.find((id) => store.getState().standing[id]?.rank === "fenghou");
-    if (!empress) return;
+    expect(empress, "fixture must have an empress (fenghou)").toBeDefined();
+    if (!empress) throw new Error("no empress in fixture");
 
     const cal = store.getState().calendar;
     const now = toGameTime(cal);
@@ -396,7 +478,8 @@ describe("GameStore trace integration", () => {
     const confineEmpressResult = store.applyEffects(db, [
       { type: "confine", char: empress, startTurn: cal.dayIndex, endTurnExclusive: null, imposedAt: now },
     ]);
-    if (!confineEmpressResult.ok) return; // fixture can't reach this scenario
+    expect(confineEmpressResult.ok, "confining empress must succeed").toBe(true);
+    if (!confineEmpressResult.ok) throw new Error(confineEmpressResult.error.map((e) => e.message).join("; "));
 
     // Set up acting_consort administration via the funnel.
     const adminResult = store.applyEffects(db, [
@@ -405,7 +488,8 @@ describe("GameStore trace integration", () => {
         state: { mode: "acting_consort", charId: consort, appointedAt: now, reason: "empress_confined" },
       },
     ]);
-    if (!adminResult.ok) return; // fixture doesn't support this
+    expect(adminResult.ok, "set_harem_administration must succeed").toBe(true);
+    if (!adminResult.ok) throw new Error(adminResult.error.map((e) => e.message).join("; "));
 
     // Confine the acting consort — they become ineligible, triggering the post-batch invariant.
     const cal2 = store.getState().calendar;
