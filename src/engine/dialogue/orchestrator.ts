@@ -19,7 +19,7 @@ import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
 import {
   buildDialogueKnowledgeQuery,
-  extractKnowledgeProvenance,
+  extractProvenance,
   packPromptKnowledge,
   resolveVisibilityCeiling,
 } from "./knowledge/index";
@@ -437,9 +437,10 @@ export function validateDialogueProviderResult(
       ? response.expression
       : "neutral";
 
-  const provenance = extractKnowledgeProvenance(
+  const provenance = extractProvenance(
     claimResult.acceptedClaims,
     response.mentionedContextRefs ?? [],
+    policy.offeredRefKeys,
     request.promptContext.knowledgeContext,
     policy.knowledgeVectorDegraded ?? false,
   );
@@ -570,15 +571,13 @@ export async function produceDialogueTurn(
   }
 
   // ── Knowledge retrieval (PR3) ─────────────────────────────────────────────────
-  // Runs before provider call for both scripted and generative paths so tests
-  // exercise the full pipeline.  Only injects knowledgeContext on the generative
-  // path (scripted lines are authored and need no advisory context).
+  // Only runs on the generative path — scripted lines are authored and do not
+  // need advisory context.
   let finalRequest = request;
   let vectorDegraded = false;
   if (options?.retriever && provider.kind === "generative") {
-    const speakerKind = db.characters[request.speakerId]?.kind ?? "consort";
-    const ceiling = resolveVisibilityCeiling(speakerKind);
-    const query = buildDialogueKnowledgeQuery(request, request.time, ceiling);
+    const ceiling = resolveVisibilityCeiling(request.speakerId, db, state);
+    const query = buildDialogueKnowledgeQuery(request, ceiling);
     try {
       const result = await options.retriever.retrieve(query);
       vectorDegraded = result.vectorDegradation !== undefined;
@@ -588,12 +587,23 @@ export async function produceDialogueTurn(
         promptContext: { ...request.promptContext, knowledgeContext: chunks },
       };
     } catch (e: unknown) {
+      const errMsg = String(e);
       logger?.logGameError(
-        aiError("KNOWLEDGE_RETRIEVAL_FAILED", String(e), {
+        aiError("KNOWLEDGE_RETRIEVAL_FAILED", errMsg, {
           severity: "warn",
           context: { speakerId: request.speakerId },
         }),
       );
+      const failureMode = options.knowledgeFailureMode ?? "continue_without_knowledge";
+      if (failureMode === "fail_turn") {
+        return err(aiError("KNOWLEDGE_RETRIEVAL_FAILED", errMsg, { context: { speakerId: request.speakerId } }));
+      }
+      // continue_without_knowledge: inject empty array so provenance knows retrieval ran
+      finalRequest = {
+        ...request,
+        promptContext: { ...request.promptContext, knowledgeContext: [] },
+      };
+      vectorDegraded = true; // mark as degraded — fatal failure is the worst degradation
     }
   }
 

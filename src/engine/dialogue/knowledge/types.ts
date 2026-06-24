@@ -1,12 +1,15 @@
-import type { KnowledgeVisibility, KnowledgeSourceType } from "../../knowledge/model";
+import type { KnowledgeSourceType } from "../../knowledge/model";
 
-/** A knowledge chunk as seen by the LLM — no sourcePath, no internal metadata. */
+/**
+ * A knowledge chunk as seen by the LLM.
+ * Intentionally excludes: sourcePath, visibility, temporal bounds, scores,
+ * vectors, hashes, model keys. Only safe display fields reach the model.
+ */
 export interface PromptKnowledgeChunk {
   readonly id: string;
   readonly title: string;
   readonly text: string;
   readonly sourceType: KnowledgeSourceType;
-  readonly visibility: KnowledgeVisibility;
 }
 
 /**

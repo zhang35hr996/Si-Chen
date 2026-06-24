@@ -142,6 +142,16 @@ export interface DialogueTurnOptions {
   logger?: import("../infra/logger").RingBufferLogger;
   /** When provided, performs knowledge retrieval and injects results into the prompt. */
   retriever?: import("./knowledge/types").KnowledgeRetriever;
+  /**
+   * Controls behaviour when the retriever throws a fatal error.
+   *
+   * - `"continue_without_knowledge"` (default): provider call proceeds with
+   *   `knowledgeContext: []`. The returned `meta.knowledge` records the failure
+   *   as degraded. The error text is never sent to the LLM.
+   * - `"fail_turn"`: provider is NOT called. `produceDialogueTurn` returns an
+   *   error. State remains unchanged (reference-equal to the input state).
+   */
+  knowledgeFailureMode?: "continue_without_knowledge" | "fail_turn";
 }
 
 export interface DialogueProvider {
