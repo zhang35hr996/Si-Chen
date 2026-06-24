@@ -7,6 +7,7 @@ import {
   settleAnnualExamination,
 } from "../../src/engine/officials/examination";
 import { getVacantPostsForCandidate } from "../../src/engine/officials/candidateAppointmentSelectors";
+import { getVacantPosts } from "../../src/engine/officials/selectors";
 import { appointedOfficialId } from "../../src/engine/officials/appointment";
 import { validateOfficialWorld } from "../../src/engine/officials/validation";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -71,6 +72,52 @@ describe("appointment survives official lifecycle aging (P1 regression)", () => 
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, store.getState(), "slot1")));
     expect(readSlot(storage, db, "slot1", { now: () => 1 }).ok).toBe(true);
+  });
+});
+
+describe("appointment provenance survives transfer / re-appointment (P1 regression)", () => {
+  const seatVacantPostFor = (store: GameStore, exclude: string) =>
+    getVacantPosts(store.getState(), db).find((v) => v.postId !== exclude)!.postId;
+
+  it("transferring an appointed official updates appointedAt but keeps provenance.at; world stays valid + save/load", () => {
+    const store = storeWithExam();
+    const c = getEligibleOfficialCandidates(store.getState())[0]!;
+    const firstPost = getVacantPostsForCandidate(store.getState(), db, c.id)[0]!.postId;
+    expect(store.appointOfficialCandidate(db, c.id, firstPost).ok).toBe(true);
+    const offId = appointedOfficialId(c.id);
+    const provAt = store.getState().officialHistory.find((h) => h.appointment?.candidateId === c.id)!.at;
+
+    // 推进到次年，再经既有调任服务调任到另一官职 → appointedAt 更新。
+    const s = store.getState();
+    store.loadState({ ...s, calendar: { ...s.calendar, year: 2, month: 3, period: "early", dayIndex: dayIndexOf(2, 3, "early") } });
+    const newPost = seatVacantPostFor(store, firstPost);
+    expect(store.assignOfficialPost(db, offId, newPost).ok).toBe(true);
+
+    const off = store.getState().officials[offId]!;
+    expect(off.postId).toBe(newPost);
+    expect(off.appointedAt!.dayIndex).toBeGreaterThan(provAt.dayIndex); // appointedAt 已更新
+    const prov = store.getState().officialHistory.find((h) => h.appointment?.candidateId === c.id)!;
+    expect(prov.at).toEqual(provAt); // provenance.at 不变
+    expect(validateOfficialWorld(store.getState(), db)).toEqual([]); // 不再误判损坏
+
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, store.getState(), "slot1")));
+    expect(readSlot(storage, db, "slot1", { now: () => 1 }).ok).toBe(true);
+  });
+
+  it("dismiss then re-appoint keeps validity + save/load", () => {
+    const store = storeWithExam();
+    const c = getEligibleOfficialCandidates(store.getState())[0]!;
+    const firstPost = getVacantPostsForCandidate(store.getState(), db, c.id)[0]!.postId;
+    expect(store.appointOfficialCandidate(db, c.id, firstPost).ok).toBe(true);
+    const offId = appointedOfficialId(c.id);
+    expect(store.dismissOfficial(offId).ok).toBe(true); // 免职 → active 无职
+    expect(store.getState().officials[offId]!.postId).toBeNull();
+    expect(store.assignOfficialPost(db, offId, seatVacantPostFor(store, firstPost)).ok).toBe(true); // 重新授任
+    expect(validateOfficialWorld(store.getState(), db)).toEqual([]);
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, store.getState(), "slot1")));
+    expect(readSlot(storage, db, "slot1", { now: () => 2 }).ok).toBe(true);
   });
 });
 

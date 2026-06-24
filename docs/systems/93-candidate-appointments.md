@@ -81,8 +81,12 @@ schema/migration、trace source。不在 React 直接写 `state.officials`、不
 `SAVE_FORMAT_VERSION` 12→13；`MIGRATIONS[12]` 仅为 `officialHistory.appointment`（可选附加字段）重打版本，
 旧条目天然无此字段、无需补值。`validateOfficialWorld` 新增授官一致性：`appointedOfficialId` 指向存在官员、
 姓名继承一致、当前年龄不低于授官时年龄、familyId 一致（含寒门壳）、同一 official 不被两候补共指；每个
-`appointed` 候补**恰有一条** `appointment` 溯源（officialId/状态 active/`at===appointedAt`/年份/榜次/
-`ageAtAppointment`/有品级 postId 全一致），且每条溯源反向指回 appointed 候补。配合 PR3A 既有不变量。
+`appointed` 候补**恰有一条** `appointment` 溯源（officialId/状态 active/年份/榜次/`ageAtAppointment`/有品级
+postId 全一致），且每条溯源反向指回 appointed 候补。配合 PR3A 既有不变量。
+
+**`at` 语义**：溯源 `h.at` 是「首次进入正式官员体系」的历史快照；`official.appointedAt` 是「最近一次任职/
+调任」时刻，调任（PR2B）或免职后重新授官会更新后者。故 validator **只要求 `appointedAt.dayIndex >= h.at.dayIndex`，
+绝不要求二者相等**——否则候补出身官员一经正常调任即被误判存档损坏。
 
 ## 八、测试
 

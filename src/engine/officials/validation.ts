@@ -234,10 +234,12 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       const h = prov[0]!;
       const ap = h.appointment!;
       const post = db.officialPosts[ap.postId];
+      // h.at 是「首次进入正式官员体系」的历史快照；official.appointedAt 是「最近一次任职/调任」时刻，
+      // 调任/重新授官会更新后者。故只要求 appointedAt 不早于首次授官，绝不要求二者相等。
       const okEntry =
         h.officialId === c.appointedOfficialId &&
         h.status === "active" &&
-        JSON.stringify(h.at) === JSON.stringify(off.appointedAt) &&
+        !!off.appointedAt && off.appointedAt.dayIndex >= h.at.dayIndex &&
         ap.examinationYear === c.examinationYear &&
         ap.examinationRank === c.examinationRank &&
         ap.ageAtAppointment === c.age &&
