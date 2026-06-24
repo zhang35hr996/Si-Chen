@@ -6,7 +6,7 @@
 import type { ContentDB } from "../content/loader";
 import { stateError, type GameError } from "../infra/errors";
 import type { FamilyMemberRole, GameState, PersonSex } from "../state/types";
-import { isValidOfficialAge, isValidParentChildAge, isValidSpouseAge } from "./constraints";
+import { isValidParentChildAge, isValidSpouseAge } from "./constraints";
 
 /** 角色（FamilyMember.role）应有的性别。 */
 const ROLE_SEX: Record<FamilyMemberRole, PersonSex> = {
@@ -105,9 +105,42 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     if (o.status !== "active" && o.postId !== null) {
       e("OFFICIAL_INACTIVE_SEATED", `非在任官员「${o.id}」(${o.status}) 仍占官职「${o.postId}」`, { officialId: o.id, status: o.status });
     }
-    if (!isValidOfficialAge(o.age)) {
-      e("OFFICIAL_BAD_AGE", `官员「${o.id}」年龄不合规（${o.age}）`, { officialId: o.id, age: o.age });
+    // 运行期年龄只做合理性区间（入仕年龄上限仅约束「生成」，官员会逐年增龄，可超 62）。
+    if (!(o.age >= 1 && o.age <= 120)) {
+      e("OFFICIAL_BAD_AGE", `官员「${o.id}」年龄不合理（${o.age}）`, { officialId: o.id, age: o.age });
     }
+    // 状态↔原因/时刻一致性。
+    if (o.status === "active") {
+      if (o.statusReason !== undefined) e("OFFICIAL_ACTIVE_WITH_REASON", `在任官员「${o.id}」不应带 statusReason`, { officialId: o.id });
+      if (o.deathAt !== undefined) e("OFFICIAL_ACTIVE_WITH_DEATHAT", `在任官员「${o.id}」不应带 deathAt`, { officialId: o.id });
+    } else {
+      if (o.statusReason === undefined) e("OFFICIAL_STATUS_REASON_MISSING", `非在任官员「${o.id}」(${o.status}) 缺 statusReason`, { officialId: o.id });
+      if (o.statusChangedAt === undefined) e("OFFICIAL_STATUS_TIME_MISSING", `非在任官员「${o.id}」(${o.status}) 缺 statusChangedAt`, { officialId: o.id });
+    }
+    if (o.status === "dead" && o.deathAt === undefined) {
+      e("OFFICIAL_DEAD_NO_TIME", `已故官员「${o.id}」缺 deathAt`, { officialId: o.id });
+    }
+    if (o.status !== "dead" && o.deathAt !== undefined) {
+      e("OFFICIAL_LIVE_WITH_DEATHAT", `未死官员「${o.id}」(${o.status}) 带 deathAt`, { officialId: o.id });
+    }
+  }
+
+  // 待决告老：官员须存在且 active；不得重复。
+  const seenPending = new Set<string>();
+  for (const p of state.pendingRetirements) {
+    const o = state.officials[p.officialId];
+    if (!o) e("PENDING_RETIRE_BAD_OFFICIAL", `告老请求指向无效官员「${p.officialId}」`, { officialId: p.officialId });
+    else if (o.status !== "active") e("PENDING_RETIRE_NOT_ACTIVE", `告老请求对应官员「${p.officialId}」非在任（${o.status}）`, { officialId: p.officialId });
+    if (seenPending.has(p.officialId)) e("PENDING_RETIRE_DUP", `官员「${p.officialId}」存在重复告老请求`, { officialId: p.officialId });
+    seenPending.add(p.officialId);
+  }
+
+  // 官员历史：官员须存在；id 唯一。
+  const seenHist = new Set<string>();
+  for (const h of state.officialHistory) {
+    if (!state.officials[h.officialId]) e("OFFICIAL_HISTORY_BAD_REF", `历史条目指向无效官员「${h.officialId}」`, { id: h.id });
+    if (seenHist.has(h.id)) e("OFFICIAL_HISTORY_DUP_ID", `重复历史条目 id「${h.id}」`, { id: h.id });
+    seenHist.add(h.id);
   }
   for (const [postId, used] of Object.entries(seatUse)) {
     const cap = db.officialPosts[postId]?.seatCount ?? 1;
@@ -121,6 +154,10 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     }
     if (ROLE_SEX[m.role] !== m.sex) {
       e("MEMBER_SEX_ROLE", `家族成员「${m.id}」身份「${m.role}」与性别「${m.sex}」不一致`, { memberId: m.id, role: m.role, sex: m.sex });
+    }
+    // 运行期年龄合理性（与官员同一 1–120 规则，避免两套漂移）。
+    if (!(m.age >= 1 && m.age <= 120)) {
+      e("MEMBER_BAD_AGE", `家族成员「${m.id}」年龄不合理（${m.age}）`, { memberId: m.id, age: m.age });
     }
   }
 
@@ -204,12 +241,9 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       if (cfChild !== undefined && cfMom !== undefined && cfChild !== cfMom) {
         e("KIN_FAMILY_MISMATCH", `母子家族不一致：「${child}」(${cfChild}) vs 母「${mom}」(${cfMom})`, { edge: k });
       }
-
-      const childAge = ageOf(state, db, child);
-      const motherAge = ageOf(state, db, mom);
-      if (childAge !== undefined && motherAge !== undefined && !isValidParentChildAge(motherAge, childAge)) {
-        e("KIN_BAD_AGE", `母「${mom}」(${motherAge}) 与子女「${child}」(${childAge}) 年龄关系不合理`, { edge: k });
-      }
+      // 注：母女/配偶的「数值年龄差」属生成期合理性，不是持久不变量——官员逐年增龄、
+      // 侍君用独立静态年龄系统、死者冻结年龄，运行中差值会合法漂移，故只在生成期校验
+      // （见 validateGeneratedAges），绝不在 load/persist 路径上判定，以免误隔离合法老档。
     }
     if (k.type === "daughter" || k.type === "son") {
       // {from: parent, to: child}：child 性别须与边类型匹配，且有反向 mother 边。
@@ -229,6 +263,27 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
         e("KIN_NOT_SYMMETRIC", `${k.type} 边不对称（缺 ${k.toPersonId} → ${k.fromPersonId}）`, { edge: k });
       }
     }
+  }
+
+  return errors;
+}
+
+/**
+ * 生成期年龄合理性（KIN_BAD_AGE / KIN_BAD_SPOUSE_AGE）。仅用于「开局生成」断言，不进入
+ * load/persist 路径——运行中官员增龄、侍君静态年龄、死者冻结会令差值合法漂移。
+ */
+export function validateGeneratedAges(state: GameState, db: ContentDB): GameError[] {
+  const errors: GameError[] = [];
+  const e = (code: string, message: string, context?: Record<string, unknown>) =>
+    errors.push(stateError(code, message, context ? { context } : undefined));
+  for (const k of state.kinship) {
+    if (k.type === "mother") {
+      const childAge = ageOf(state, db, k.fromPersonId);
+      const motherAge = ageOf(state, db, k.toPersonId);
+      if (childAge !== undefined && motherAge !== undefined && !isValidParentChildAge(motherAge, childAge)) {
+        e("KIN_BAD_AGE", `母「${k.toPersonId}」(${motherAge}) 与子女「${k.fromPersonId}」(${childAge}) 年龄关系不合理`, { edge: k });
+      }
+    }
     if (k.type === "spouse") {
       const a = ageOf(state, db, k.fromPersonId);
       const b = ageOf(state, db, k.toPersonId);
@@ -237,6 +292,14 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       }
     }
   }
-
   return errors;
+}
+
+/**
+ * 开局建档的完整性断言 = 持久不变量（validateOfficialWorld）+ 生成期年龄合理性
+ * （validateGeneratedAges）。createNewGameState 的**唯一**自检入口（fail-fast）；load/import
+ * 路径只跑 validateOfficialWorld，绝不把母子/配偶年龄差放回读档校验。
+ */
+export function assertGeneratedOfficialWorld(state: GameState, db: ContentDB): GameError[] {
+  return [...validateOfficialWorld(state, db), ...validateGeneratedAges(state, db)];
 }

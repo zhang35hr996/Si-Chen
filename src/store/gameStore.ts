@@ -22,6 +22,8 @@ import { applyBatch, applyCommand, type CommandResult } from "../engine/state/re
 import type { GameState, PendingDaxuan } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { assignOfficialPost } from "../engine/officials/assign";
+import { retireOfficial } from "../engine/officials/lifecycle";
+import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
@@ -54,6 +56,13 @@ export interface GameStoreOptions {
   initial?: InitialStateOverrides;
 }
 
+/** 推进日历的命令——必须经统一时间入口（带边界结算），不可裸 dispatch。 */
+const isTimeCommand = (c: GameCommand): boolean => c.type === "SPEND_AP" || c.type === "SKIP_REMAINDER";
+const rawTimeDispatchError: GameError = stateError(
+  "RAW_TIME_DISPATCH",
+  "time commands (SPEND_AP/SKIP_REMAINDER) must route through advanceTime/resolveTimedAction/travelAndAdvance",
+);
+
 export class GameStore {
   private state: GameState;
   private readonly listeners = new Set<() => void>();
@@ -72,10 +81,20 @@ export class GameStore {
   };
 
   dispatch(command: GameCommand): CommandResult {
+    if (isTimeCommand(command)) {
+      this.logger?.logGameError(rawTimeDispatchError); // 拒绝绝不静默
+      return err(rawTimeDispatchError);
+    }
     return this.commit(applyCommand(this.state, command));
   }
 
   dispatchBatch(commands: readonly GameCommand[]): CommandResult {
+    // 时间命令必须走统一入口（advanceTime/resolveTimedAction/travelAndAdvance）以保证边界结算；
+    // 裸 dispatch 会绕过 settleCalendarAdvance，一律拒绝。
+    if (commands.some(isTimeCommand)) {
+      this.logger?.logGameError(rawTimeDispatchError);
+      return err(rawTimeDispatchError);
+    }
     return this.commit(applyBatch(this.state, commands));
   }
 
@@ -109,9 +128,34 @@ export class GameStore {
    * 仅在 ok 时落库；返回 Result 供调用方处理错误（v1 无 UI 调用方，仅留接口）。
    */
   assignOfficialPost(db: ContentDB, officialId: string, newPostId: string | null): Result<void, GameError> {
-    const result = assignOfficialPost(this.state, db, officialId, newPostId);
+    const result = assignOfficialPost(this.state, db, officialId, newPostId, toGameTime(this.state.calendar));
     if (!result.ok) return result;
     this.state = result.value;
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 准其告老：消费一条未决告老请求 → retireOfficial（状态 retired、释放席位、写历史）。 */
+  approveRetirement(officialId: string): Result<void, GameError> {
+    if (!this.state.pendingRetirements.some((p) => p.officialId === officialId)) {
+      return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
+    }
+    const result = retireOfficial(this.state, officialId, toGameTime(this.state.calendar));
+    if (!result.ok) return result;
+    this.state = result.value; // retireOfficial 内部已撤回该 pending
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 挽留一年：撤回该未决告老请求（来年可再请）。官员保持在任。 */
+  retainRetirement(officialId: string): Result<void, GameError> {
+    if (!this.state.pendingRetirements.some((p) => p.officialId === officialId)) {
+      return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
+    }
+    this.state = {
+      ...this.state,
+      pendingRetirements: this.state.pendingRetirements.filter((p) => p.officialId !== officialId),
+    };
     this.emit();
     return ok(undefined);
   }
@@ -408,16 +452,26 @@ export class GameStore {
     eventId: string,
     effects: readonly EventEffect[],
   ): Result<EventResolution, GameError[]> {
+    // 1) effects + apCost 推进（引擎事务；含 affordability / firedAt / eventLog）。
     const result = resolveEvent(db, this.state, eventId, effects);
-    if (result.ok) {
-      this.state = result.value.state;
-      this.lastEffectReport = { effects, outcome: "applied", errors: [] };
-      this.emit();
-    } else {
+    if (!result.ok) {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
+      return result;
     }
-    return result;
+    // 2) 统一边界结算：事件 apCost 若跨月/跨年，照常跑健康/增龄/死亡/告老/大选/禁足，
+    //    与 advanceCandidate 同一套，杜绝事件流绕过结算。失败 → 整体回滚（state 不变、不 emit）。
+    const settled = this.settleCalendarAdvance(db, this.state, result.value.state);
+    if (!settled.ok) {
+      for (const error of settled.error) this.logger?.logGameError(error);
+      this.lastEffectReport = { effects, outcome: "rejected", errors: settled.error };
+      return err(settled.error);
+    }
+    // 3) 成功：一次 commit + emit。
+    this.state = settled.value.state;
+    this.lastEffectReport = { effects, outcome: "applied", errors: [] };
+    this.emit();
+    return ok({ state: settled.value.state, rolledOver: result.value.rolledOver });
   }
 
   /**
@@ -472,23 +526,22 @@ export class GameStore {
   }
 
   /**
-   * Shared core: advance the calendar on `candidate`, run the cross-month health
-   * tick, write gameOver on sovereign death, then commit ONCE. Atomic: any
-   * failure returns err and leaves `this.state` untouched.
+   * 统一日历边界结算（Phase 2 review §1）：根据 before→advanced 的日历跨越执行所有时间后处理——
+   * 跨月健康 tick、sovereign death→gameOver、跨入正月→官员年度 tick（增龄/死亡/告老）、
+   * pendingDaxuan 调和 + catch-up、到期禁足 sweep。
+   *
+   * 凡「会推进日历」的入口（advanceCandidate / resolveEvent）必须复用本 helper，否则事件 apCost
+   * 跨年/跨月会漏跑这些结算。纯粹基于传入的 before/advanced（不自行推进日历）；任一步失败返回
+   * err，调用方据此整体回滚（不 commit、不 emit）。
    */
-  private advanceCandidate(
+  private settleCalendarAdvance(
     db: ContentDB,
-    candidateIn: GameState,
-    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
-  ): Result<TimedOutcome, GameError[]> {
-    let candidate = candidateIn;
-    // 2) advance the calendar (pure reducer) on the candidate
-    const before = monthOrdinal(candidate.calendar);
-    const cmd = applyCommand(candidate, command);
-    if (!cmd.ok) return err([cmd.error]);
-    candidate = cmd.value.state;
-    const monthChanged = monthOrdinal(candidate.calendar) !== before;
-    // 3) cross-month health tick (the tick may throw on an unresolvable subject)
+    before: GameState,
+    advanced: GameState,
+  ): Result<{ state: GameState; monthChanged: boolean; healthOutcome: MonthlyTickResult | null }, GameError[]> {
+    let candidate = advanced;
+    const monthChanged = monthOrdinal(advanced.calendar) !== monthOrdinal(before.calendar);
+    // 跨月健康 tick（可能在不可解析对象上抛错）。
     let healthOutcome: MonthlyTickResult | null = null;
     if (monthChanged) {
       try {
@@ -499,14 +552,15 @@ export class GameStore {
       const h = applyEffects(db, candidate, healthOutcome.effects);
       if (!h.ok) return err(h.error);
       candidate = h.value;
-      // 4) emperor death → gameOver in the SAME transaction (App must not write it)
       if (healthOutcome.sovereignDied) {
         candidate = { ...candidate, gameOver: { cause: "sovereign_death", at: toGameTime(candidate.calendar) } };
       }
     }
-    // 5) 统一探测/调和大选日历事件，使触发与具体行动路径（SPEND_AP / SKIP_REMAINDER /
-    //    travel / resolveTimedAction）解耦。先调和陈旧（对应 flag 已置）以免 sticky 永久
-    //    阻塞下一大选年；再于无待消费态时按到点（catch-up）置位。sticky：未决则保留。
+    // 跨入正月（新年第一月）→ 官员年度 tick（增龄/死亡/告老请求）。
+    if (monthChanged && candidate.calendar.month === 1) {
+      candidate = buildOfficialYearlyTick(candidate, db, toGameTime(candidate.calendar));
+    }
+    // 大选日历事件：先调和陈旧（flag 已置）再 catch-up 置位；未决则保留。每次推进都跑。
     if (candidate.pendingDaxuan && isPendingDaxuanResolved(candidate, candidate.pendingDaxuan)) {
       candidate = { ...candidate, pendingDaxuan: undefined };
     }
@@ -514,14 +568,31 @@ export class GameStore {
       const pd = nextPendingDaxuan(candidate);
       if (pd) candidate = { ...candidate, pendingDaxuan: pd };
     }
-    // 6) 有期限禁足自动到期：在新旬开始时（早于一切候选生成）结案并记一次史。
+    // 有期限禁足自动到期 sweep。
     const swept = this.sweepExpiredConfinements(db, candidate);
     if (!swept.ok) return err(swept.error);
     candidate = swept.value;
+    return ok({ state: candidate, monthChanged, healthOutcome });
+  }
+
+  /**
+   * Shared core: advance the calendar on `candidate`, then run the unified boundary
+   * settlement, then commit ONCE. Atomic: any failure returns err and leaves
+   * `this.state` untouched.
+   */
+  private advanceCandidate(
+    db: ContentDB,
+    candidateIn: GameState,
+    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+  ): Result<TimedOutcome, GameError[]> {
+    const cmd = applyCommand(candidateIn, command);
+    if (!cmd.ok) return err([cmd.error]);
+    const settled = this.settleCalendarAdvance(db, candidateIn, cmd.value.state);
+    if (!settled.ok) return err(settled.error);
     // single commit + single notify — only after every step succeeded
-    this.state = candidate;
+    this.state = settled.value.state;
     this.emit();
-    return ok({ rolledOver: cmd.value.rolledOver, monthChanged, healthOutcome });
+    return ok({ rolledOver: cmd.value.rolledOver, monthChanged: settled.value.monthChanged, healthOutcome: settled.value.healthOutcome });
   }
 
   /**

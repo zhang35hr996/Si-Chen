@@ -172,16 +172,14 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
   const [, bumpReport] = useState(0);
 
   const spendAp = (amount: number) => {
-    if (db) {
-      // Route through the unified time entry so the monthly health tick / gameOver run.
-      const result = store.advanceTime(db, { type: "SPEND_AP", amount });
-      setLastRejection(result.ok ? null : result.error.map((e) => `${formatErrorTag(e)} — ${e.message}`).join("; "));
-    } else {
-      // NOTE: intentional raw dispatch — debug AP does NOT run the monthly health tick
-      // (db not yet loaded; advanceTime requires a ContentDB).
-      const result = store.dispatch({ type: "SPEND_AP", amount });
-      setLastRejection(result.ok ? null : `${formatErrorTag(result.error)} — ${result.error.message}`);
+    // 时间推进必须走统一入口（含边界结算）；裸 dispatch 时间命令已被 store 拒绝。
+    // db 未加载（开局前，无官员/侍君）时调试推进无意义，直接提示而非绕过结算。
+    if (!db) {
+      setLastRejection("需先开始新游戏（加载内容）后才能推进时间。");
+      return;
     }
+    const result = store.advanceTime(db, { type: "SPEND_AP", amount });
+    setLastRejection(result.ok ? null : result.error.map((e) => `${formatErrorTag(e)} — ${e.message}`).join("; "));
   };
 
   const gameStarted = Object.keys(state.standing).length > 0;
