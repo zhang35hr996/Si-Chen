@@ -138,6 +138,8 @@ import { FreeViewScreen } from "./screens/FreeViewScreen";
 import { LocationScreen } from "./screens/LocationScreen";
 import { GardenOverviewScreen, type GardenSubAreaView } from "./screens/GardenOverviewScreen";
 import { XuanzhengdianScreen } from "./screens/XuanzhengdianScreen";
+import { OfficialsScreen } from "./officials/OfficialsScreen";
+import { getHighVacancyPosts } from "../engine/officials/selectors";
 import { pickSubLocationEvent, subLocationEventAffordable } from "../engine/map/subLocations";
 import { presentBarItems, focusedCharacterView, reconcileSelection } from "./sceneView";
 import { courtAgendaPreview, snapshotCourtMetrics, diffCourtMetrics, type CourtMetrics, type CourtMetricsDiff } from "../engine/court/agenda";
@@ -150,7 +152,7 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian" | "officials";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -1873,10 +1875,26 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
               summary={summary}
               onBackToHall={() => setCourtResult(null)}
               onBackToMap={leaveXuan}
+              onOpenOfficials={() => setView("officials")}
+              highVacancyCount={getHighVacancyPosts(liveState, db).length}
             />
           </GameShell>
         );
       })()}
+      {view === "officials" && (
+        <GameShell
+          calendar={liveState.calendar}
+          crumbs={breadcrumbFor(db, "xuanzhengdian")}
+          pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
+          onBack={() => setView("xuanzhengdian")}
+          onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          className="location-shell"
+        >
+          <OfficialsScreen db={db} store={store} onBack={() => setView("xuanzhengdian")} />
+        </GameShell>
+      )}
       {view === "map" && (
         <MapScreen
           db={db}
