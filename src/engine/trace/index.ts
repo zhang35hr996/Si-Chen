@@ -4,4 +4,4 @@ export { TraceCollector } from "./collector";
 export { TraceHistory, DEFAULT_TRACE_HISTORY_LIMIT } from "./history";
 export { diffGameState } from "./diff";
 export { deriveQueueTraceEvents } from "./queueDiff";
-export { captureEligibilityTransitions } from "./eligibilityDiff";
+export { captureEligibilityTransitions, explainEventEligibility } from "./eligibilityDiff";

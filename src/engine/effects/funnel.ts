@@ -914,6 +914,13 @@ export function applyEffects(
             at: effect.at,
             resolved: false,
           });
+          collector?.recordQueueEvent({
+            queue: "pendingAftermath",
+            operation: "enqueued",
+            itemId: effect.id,
+            itemType: effect.kind,
+            phase: collector.currentPhase,
+          });
         }
         break;
       }

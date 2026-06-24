@@ -145,7 +145,7 @@ export class TraceCollector {
   }
 
   recordDomainEvent(event: TraceDomainEvent): void {
-    this._domainEvents.push(event);
+    this._domainEvents.push(cloneDomainEvent(event));
   }
 
   recordMemoryEvent(event: Omit<MemoryTraceEvent, "kind">): void {
@@ -157,7 +157,12 @@ export class TraceCollector {
   }
 
   recordEligibilityEvent(event: Omit<EligibilityTraceEvent, "kind">): void {
-    this._domainEvents.push({ kind: "eligibility", ...event });
+    this._domainEvents.push({
+      kind: "eligibility",
+      ...event,
+      failedBefore: [...event.failedBefore],
+      failedAfter: [...event.failedAfter],
+    });
   }
 
   /** Record a rollback with phase attribution and counts of attempted work. */
@@ -196,6 +201,13 @@ export class TraceCollector {
   getDomainEvents(): readonly TraceDomainEvent[] {
     return this._domainEvents;
   }
+}
+
+function cloneDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
+  if (event.kind === "eligibility") {
+    return { ...event, failedBefore: [...event.failedBefore], failedAfter: [...event.failedAfter] };
+  }
+  return { ...event };
 }
 
 /** Semantic equality: reference equality for primitives, JSON-compare for objects. */

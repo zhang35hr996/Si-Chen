@@ -225,6 +225,7 @@ export class GameStore {
     const collector = new TraceCollector();
     const nextState = result.ok ? result.value.state : beforeState;
     collector.capturePhaseScheduled("command_dispatch", diffGameState(beforeState, nextState));
+    if (!result.ok) collector.fail("command_dispatch", result.error);
     const tx = this.buildTrace(beforeState, nextState, source, collector,
       result.ok ? "committed" : "rolled_back",
       result.ok ? undefined : result.error.message);
@@ -248,6 +249,7 @@ export class GameStore {
     const collector = new TraceCollector();
     const nextState = result.ok ? result.value.state : beforeState;
     collector.capturePhaseScheduled("command_dispatch", diffGameState(beforeState, nextState));
+    if (!result.ok) collector.fail("command_batch_dispatch", result.error);
     const tx = this.buildTrace(beforeState, nextState, source, collector,
       result.ok ? "committed" : "rolled_back",
       result.ok ? undefined : result.error.message);
@@ -401,17 +403,30 @@ export class GameStore {
   consumeDaxuanAnnounce(_db: ContentDB): DecreeReaction[] {
     const pd = this.state.pendingDaxuan;
     if (pd?.kind !== "announce") return [];
+    const pdId = `${pd.kind}:${pd.year}`;
     if (this.state.flags[daxuanAnnounceFlagKey(pd.year)]) {
       this.tracedSet({ ...this.state, pendingDaxuan: undefined },
-        { kind: "system", sourceId: "consumeDaxuanAnnounce:stale", label: "consumeDaxuanAnnounce (stale reconcile)" });
+        { kind: "system", sourceId: "consumeDaxuanAnnounce:stale", label: "consumeDaxuanAnnounce (stale reconcile)" },
+        [{ kind: "queue", queue: "pendingDaxuan", operation: "cancelled", itemId: pdId, itemType: pd.kind, reason: "stale_reconcile", phase: "direct_mutation" }]);
       return [];
     }
     const flags = { ...this.state.flags, [daxuanAnnounceFlagKey(pd.year)]: true };
     const chained: PendingDaxuan | undefined = daxuanDianxuanDueForYear({ ...this.state, flags }, pd.year)
       ? { kind: "dianxuan", year: pd.year }
       : undefined;
-    this.tracedSet({ ...this.state, flags, pendingDaxuan: chained },
-      { kind: "system", sourceId: "consumeDaxuanAnnounce", label: `consumeDaxuanAnnounce: year ${pd.year}` });
+    if (chained) {
+      const chainedId = `${chained.kind}:${chained.year}`;
+      this.tracedSet({ ...this.state, flags, pendingDaxuan: chained },
+        { kind: "system", sourceId: "consumeDaxuanAnnounce", label: `consumeDaxuanAnnounce: year ${pd.year}` },
+        [
+          { kind: "queue", queue: "pendingDaxuan", operation: "replaced", itemId: pdId, itemType: pd.kind, reason: "chained_to_dianxuan", phase: "direct_mutation" },
+          { kind: "queue", queue: "pendingDaxuan", operation: "enqueued", itemId: chainedId, itemType: chained.kind, phase: "direct_mutation" },
+        ]);
+    } else {
+      this.tracedSet({ ...this.state, flags, pendingDaxuan: undefined },
+        { kind: "system", sourceId: "consumeDaxuanAnnounce", label: `consumeDaxuanAnnounce: year ${pd.year}` },
+        [{ kind: "queue", queue: "pendingDaxuan", operation: "resolved", itemId: pdId, itemType: pd.kind, reason: "announce_consumed", phase: "direct_mutation" }]);
+    }
     return daxuanAnnounceBeats();
   }
 
@@ -423,9 +438,12 @@ export class GameStore {
    */
   resolveDaxuanDianxuan(year: number): boolean {
     if (!matchesPendingDianxuan(this.state, year)) return false; // 无/announce/错年/已决(陈旧) → 不动、不 emit
+    const pd = this.state.pendingDaxuan!;
+    const pdId = `${pd.kind}:${pd.year}`;
     this.tracedSet(
       { ...this.state, flags: { ...this.state.flags, [daxuanDianxuanFlagKey(year)]: true }, pendingDaxuan: undefined },
       { kind: "system", sourceId: "resolveDaxuanDianxuan", label: `resolveDaxuanDianxuan: year ${year}` },
+      [{ kind: "queue", queue: "pendingDaxuan", operation: "resolved", itemId: pdId, itemType: pd.kind, reason: "dianxuan_entered", phase: "direct_mutation" }],
     );
     return true;
   }
@@ -451,8 +469,11 @@ export class GameStore {
   /** 清除待消费的大选事件（陈旧 dianxuan pending 调和用）。 */
   clearPendingDaxuan(): void {
     if (this.state.pendingDaxuan === undefined) return;
+    const pd = this.state.pendingDaxuan;
+    const pdId = `${pd.kind}:${pd.year}`;
     this.tracedSet({ ...this.state, pendingDaxuan: undefined },
-      { kind: "system", sourceId: "clearPendingDaxuan", label: "clearPendingDaxuan" });
+      { kind: "system", sourceId: "clearPendingDaxuan", label: "clearPendingDaxuan" },
+      [{ kind: "queue", queue: "pendingDaxuan", operation: "cancelled", itemId: pdId, itemType: pd.kind, reason: "stale_reconcile", phase: "direct_mutation" }]);
   }
 
   /** 施恩免请安（不耗行动点）。 */
@@ -773,6 +794,14 @@ export class GameStore {
     if (!planned.ok) {
       const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
       this.logger?.logGameError(error);
+      const collector = this.makeCollector();
+      if (collector) {
+        collector.fail("imperial_punishment_plan", error);
+        const tx = this.buildTrace(this.state, this.state,
+          { kind: "imperial_command", sourceId: command.type, label: `punishment: ${command.type} ${command.targetId}` },
+          collector, "rolled_back", error.message);
+        this.traceHistory.push(tx);
+      }
       return err([error]);
     }
     const base = planned.plan;
@@ -839,15 +868,26 @@ export class GameStore {
     request: RankOpRequest,
     meta: PunishmentMeta,
   ): Result<{ punishmentId: string; reactionBeats: ReactionBeat[]; baseLines: string[] }, GameError[]> {
+    const punitiveRankSource: TraceSource = { kind: "imperial_command", sourceId: "punitive_rank_change", label: `punitive rank: ${targetId}` };
     const op = buildRankOp(db, this.state, targetId, request, { kind: "sovereign", actorId: "player" });
     if (!op) {
       const error = stateError("RANK_OP_INVALID", "rank change is a no-op or target has no standing");
       this.logger?.logGameError(error);
+      const collector = this.makeCollector();
+      if (collector) {
+        collector.fail("punitive_rank_plan", error);
+        this.traceHistory.push(this.buildTrace(this.state, this.state, punitiveRankSource, collector, "rolled_back", error.message));
+      }
       return err([error]);
     }
     if (op.kind !== "demote" && op.kind !== "strip_title") {
       const error = stateError("RANK_OP_INVALID", `punitive entry requires demote or strip_title, got: ${op.kind}`);
       this.logger?.logGameError(error);
+      const collector = this.makeCollector();
+      if (collector) {
+        collector.fail("punitive_rank_plan", error);
+        this.traceHistory.push(this.buildTrace(this.state, this.state, punitiveRankSource, collector, "rolled_back", error.message));
+      }
       return err([error]);
     }
 
@@ -925,6 +965,14 @@ export class GameStore {
     if (!planned.ok) {
       const error = stateError("HAREM_TRANSFER_REJECTED", planned.reason);
       this.logger?.logGameError(error);
+      const collector = this.makeCollector();
+      if (collector) {
+        collector.fail("harem_administration_transfer_plan", error);
+        const tx = this.buildTrace(this.state, this.state,
+          { kind: "imperial_command", sourceId: "transfer_harem_administration", label: "harem admin transfer (rejected)" },
+          collector, "rolled_back", error.message);
+        this.traceHistory.push(tx);
+      }
       return err([error]);
     }
     const plan = planned.plan;
