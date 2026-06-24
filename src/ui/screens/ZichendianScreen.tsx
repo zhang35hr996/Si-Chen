@@ -68,6 +68,7 @@ export interface ZichendianScreenProps {
   onRelocate: () => void;
   onBestow: () => void;
   onPhysician: () => void;
+  onTransferHaremAdministration?: () => void;
 }
 
 /** 单一前景 surface 判别联合：至多一个前景对话存在。 */
@@ -102,6 +103,7 @@ export function ZichendianScreen({
   onRelocate,
   onBestow,
   onPhysician,
+  onTransferHaremAdministration,
 }: ZichendianScreenProps) {
   const [foreground, setForeground] = useState<ZichendianForeground>({ kind: "none" });
   const reasonId = useId();
@@ -263,6 +265,7 @@ export function ZichendianScreen({
           onRelocate={() => handoff(onRelocate)}
           onBestow={() => handoff(onBestow)}
           onPhysician={() => handoff(onPhysician)}
+          onTransferHaremAdministration={onTransferHaremAdministration ? () => handoff(onTransferHaremAdministration) : undefined}
           onClose={closeForeground}
         />
       )}

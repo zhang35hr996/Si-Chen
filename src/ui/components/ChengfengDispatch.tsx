@@ -23,6 +23,7 @@ export interface ChengfengDispatchProps {
   onRelocate: () => void;
   onBestow: () => void;
   onPhysician: () => void;
+  onTransferHaremAdministration?: () => void;
   onClose: () => void;
 }
 
@@ -39,6 +40,7 @@ export function ChengfengDispatch({
   onRelocate,
   onBestow,
   onPhysician,
+  onTransferHaremAdministration,
   onClose,
 }: ChengfengDispatchProps) {
   const [dispatched, setDispatched] = useState(false);
@@ -80,6 +82,7 @@ export function ChengfengDispatch({
     { label: "安排迁居", run: onRelocate },
     { label: "赏赐", run: onBestow },
     { label: "传太医", run: onPhysician },
+    ...(onTransferHaremAdministration ? [{ label: "交付六宫主理权", run: onTransferHaremAdministration }] : []),
   ];
 
   // Effect A：仅 mount/unmount——记下原焦点元素，卸载时按归还策略还焦。取消路径还焦给开启者；

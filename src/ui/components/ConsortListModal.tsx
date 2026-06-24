@@ -6,6 +6,7 @@ import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/fav
 import { listHeirsBySex } from "../../engine/characters/heirs";
 import { inPalaceConsorts } from "../../engine/characters/presence";
 import { activeConfinement } from "../../engine/characters/confinement";
+import { eligibleHaremAdministrators } from "../../engine/characters/haremAdministration";
 import { describeActiveConfinement } from "../format/confinement";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
@@ -30,6 +31,7 @@ export function ConsortListModal({
   onSummon,
   onAddCandidate,
   onRemoveCandidate,
+  onTransferHaremAdmin,
   onClose,
 }: {
   db: ContentDB;
@@ -44,9 +46,12 @@ export function ConsortListModal({
   onSummon: (charId: string) => void;
   onAddCandidate: (charId: string) => void;
   onRemoveCandidate: (charId: string) => void;
+  /** 六宫主理权委任（传乘风）：若提供，对合格侍君显示「委以六宫」按钮。 */
+  onTransferHaremAdmin?: (charId: string) => void;
   onClose: () => void;
 }) {
   const consorts = inPalaceConsorts(db, state);
+  const eligibleAdminIds = new Set(eligibleHaremAdministrators(db, state).map((c) => c.id));
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const selected = consorts.find((c) => c.id === selectedId) ?? null;
 
@@ -166,6 +171,11 @@ export function ConsortListModal({
             {!isEmpress && st.lifecycle !== "deceased" && onPunish && (
               <button type="button" className="consort-detail__punish" onClick={() => onPunish(c.id)}>
                 惩罚
+              </button>
+            )}
+            {onTransferHaremAdmin && eligibleAdminIds.has(c.id) && (
+              <button type="button" onClick={() => onTransferHaremAdmin(c.id)}>
+                委以六宫
               </button>
             )}
             {sovereignPregnant && lc === "candidate" && (
