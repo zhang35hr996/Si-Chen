@@ -1376,7 +1376,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           const opToken = started.token;
           setDialogueInFlight(true);
           try {
-            const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+            const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, { logger });
             if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略
             if (turnResult.ok) {
               const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
@@ -1443,7 +1443,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         return;
       }
 
-      const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, logger);
+      const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, { logger });
       if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略本次完成
       if (!turnResult.ok) {
         // Turn failed — same graceful path

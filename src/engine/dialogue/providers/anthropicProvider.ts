@@ -11,7 +11,7 @@ const TOOL_NAME = "emit_dialogue_line";
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_TOKENS = 800;
 
-// ── WORLD_RULES_TEXT — exactly 13 rules ──────────────────────────────────────
+// ── WORLD_RULES_TEXT — 15 rules ───────────────────────────────────────────────
 
 /** Tool description — shared by all providers so the contract stays consistent. */
 export const TOOL_DESCRIPTION = "提交角色台词、结构化事实，以及本轮台词实际引用的上下文。";
@@ -26,12 +26,14 @@ export const WORLD_RULES_TEXT = `
 5. 不得在台词中透出 JSON 字段名、规则说明或内部 ID。speaker.behavioralState 仅用于调整语气与情绪，不得说出其中的字段名或数值，不得声称角色知道这些内部值，不得据此创造事实或状态变化。
 6. 不得凭空引入 payload 未提供的事实或事件。
 7. proposedClaims 只记录台词中明确表达的事实，不填隐含信息。
-8. 引用 relevantMemories 中记忆的 claim 必须填写对应 memory id 在 sourceRefs（如 { kind: "memory", id: "..." }）。
+8. 引用 relevantMemories 或 knownEvents 的 claim 必须填写对应 id 在 sourceRefs（如 { kind: "memory", id: "..." } 或 { kind: "event", id: "..." }）；knowledgeContext 为参考资料，绝不得作为 claim 的 sourceRefs（sourceRefs 中 kind 禁止为 "knowledge"）。
 9. 不确定信息不得用断言语气（"确实"、"一定"），应用 "听说"、"好像" 等。
 10. forbiddenClaims 中的事实内容一律不在台词中出现。
 11. allowedClaims 为空不代表禁止问候、情绪表达或主观感受。
 12. 台词长度适中，符合人物身份与场景私密度（audience.privacy）。
-13. 若本轮台词实际使用了 relevantMemories 或 knownEvents 中的内容，必须把对应的 { kind, id } 填入 mentionedContextRefs；仅填实际使用的项，未使用则填空数组，不得引用输入未提供的 id。
+13. 若本轮台词实际使用了 relevantMemories、knownEvents 或 knowledgeContext 中的内容，必须把对应的 { kind, id } 填入 mentionedContextRefs；仅填实际使用的项，未使用则填空数组，不得引用输入未提供的 id。
+14. knowledgeContext 为世界背景参考资料，供角色了解礼制等常识，不代表角色拥有其中所有知识；角色仍须按自身认知和地位说话，不得直接背诵其中内容。
+15. knowledgeContext 中的内容不影响 relevantMemories、allowedClaims 和 forbiddenClaims 的权威性；若两者冲突，以运行时权威数据为准。
 `.trim();
 
 // ── renderEtiquetteBlock ──────────────────────────────────────────────────────

@@ -11,13 +11,18 @@ import { resolveDisplayName } from "../characters/standing";
 import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 import { GroundTruthBeliefProjection } from "../chronicle/belief";
 import { aiError, type GameError } from "../infra/errors";
-import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { CharacterStanding, EventReactionRecord, GameState } from "../state/types";
 import { buildAudienceContext } from "./audience";
 import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
 import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
+import {
+  buildDialogueKnowledgeQuery,
+  extractKnowledgeProvenance,
+  packPromptKnowledge,
+  resolveVisibilityCeiling,
+} from "./knowledge/index";
 import { buildMemoryContext, selectPromptEventsByActivation } from "./memoryContext";
 import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
@@ -36,6 +41,7 @@ import {
   type DialogueProvider,
   type DialoguePolicyContext,
   type DialogueRequest,
+  type DialogueTurnOptions,
   type DialogueValidationDiagnostics,
   type DialogueValidationOutcome,
 } from "./types";
@@ -204,7 +210,7 @@ function finalizeLine(
   provider: DialogueProvider,
   request: DialogueRequest,
   response: DialogueProviderResult,
-  logger?: RingBufferLogger,
+  logger?: import("../infra/logger").RingBufferLogger,
 ): Result<DialogueLine, GameError> {
   if (response.speaker !== request.speakerId) {
     return err(
@@ -279,7 +285,7 @@ async function produceDialogueLine(
   db: ContentDB,
   provider: DialogueProvider,
   request: DialogueRequest,
-  logger?: RingBufferLogger,
+  logger?: import("../infra/logger").RingBufferLogger,
 ): Promise<Result<DialogueLine, GameError>> {
   const raw = await provider.generate(request);
   if (!raw.ok) return err(mapProviderErrorToGameError(raw.error));
@@ -310,12 +316,13 @@ export function buildDialoguePolicyContext(
   const { allowedClaims, forbiddenClaims } = request.promptContext;
 
   // offeredRefKeys: contextRefKey-format keys for every context item actually sent to the LLM.
-  // Only memories and events in the prompt window are considered "offered" — allowedClaims.sourceRefs
-  // are NOT added here (they are authorization constraints, not offered content).
+  // Only memories, events, and knowledge chunks in the prompt window are considered "offered".
+  // allowedClaims.sourceRefs are NOT added (they are authorization constraints, not offered content).
   // Single-source invariant: derived solely from what was placed on the request.
   const offeredRefKeys = new Set<string>([
     ...request.promptContext.relevantMemories.map((m) => contextRefKey({ kind: "memory", id: m.id })),
     ...request.promptContext.knownEvents.map((e) => contextRefKey({ kind: "event", id: e.id })),
+    ...(request.promptContext.knowledgeContext ?? []).map((c) => contextRefKey({ kind: "knowledge", id: c.id })),
   ]);
 
   // Single-source invariant: audience comes from request.promptContext.audience,
@@ -346,7 +353,7 @@ export function validateDialogueProviderResult(
   request: DialogueRequest,
   policy: DialoguePolicyContext,
   response: DialogueProviderResult,
-  logger?: RingBufferLogger,
+  logger?: import("../infra/logger").RingBufferLogger,
 ): DialogueValidationOutcome {
   const diagnostics: DialogueValidationDiagnostics = {
     claimFindings: [],
@@ -430,6 +437,13 @@ export function validateDialogueProviderResult(
       ? response.expression
       : "neutral";
 
+  const provenance = extractKnowledgeProvenance(
+    claimResult.acceptedClaims,
+    response.mentionedContextRefs ?? [],
+    request.promptContext.knowledgeContext,
+    policy.knowledgeVectorDegraded ?? false,
+  );
+
   const line: DialogueLine = {
     speakerId: request.speakerId,
     speakerName: resolveDisplayName(
@@ -444,7 +458,12 @@ export function validateDialogueProviderResult(
       text: choice.text,
       ...(choice.tone !== undefined ? { tone: choice.tone } : {}),
     })),
-    meta: { generated: provider.kind === "generative", degraded },
+    meta: {
+      generated: provider.kind === "generative",
+      degraded,
+      ...(provenance.sourceRefs.length > 0 ? { sourceRefs: provenance.sourceRefs } : {}),
+      ...(provenance.knowledge !== undefined ? { knowledge: provenance.knowledge } : {}),
+    },
   };
 
   return { ok: true, line, diagnostics };
@@ -462,7 +481,7 @@ async function produceDialogueLineWithPolicy(
   request: DialogueRequest,
   policy: DialoguePolicyContext,
   state: GameState,
-  logger?: RingBufferLogger,
+  logger?: import("../infra/logger").RingBufferLogger,
 ): Promise<Result<{ line: DialogueLine; nextState: GameState }, GameError>> {
   const raw = await provider.generate(request);
   if (!raw.ok) return err(mapProviderErrorToGameError(raw.error));
@@ -524,6 +543,11 @@ async function produceDialogueLineWithPolicy(
  *   - `generative`: full policy pipeline (claim gate + mention writeback + reaction writeback).
  *     Returns `{ line, nextState }` with mentionLog and eventReactionLog updated atomically.
  *
+ * When `options.retriever` is provided (PR3+), knowledge retrieval runs before the
+ * provider call, injects advisory context into the prompt, and populates
+ * `line.meta.knowledge` on the result.  Retrieval errors are logged and the turn
+ * proceeds without knowledge context (never fail the turn for a knowledge miss).
+ *
  * Error cases:
  *   - `generative` provider + `request.scripted` set → `invalid_combination`.
  */
@@ -532,8 +556,10 @@ export async function produceDialogueTurn(
   provider: DialogueProvider,
   request: DialogueRequest,
   state: GameState,
-  logger?: RingBufferLogger,
+  options?: DialogueTurnOptions,
 ): Promise<Result<{ line: DialogueLine; nextState: GameState }, GameError>> {
+  const logger = options?.logger;
+
   // Guard: generative provider must not receive a scripted request
   if (provider.kind === "generative" && request.scripted !== undefined) {
     return err(
@@ -543,14 +569,45 @@ export async function produceDialogueTurn(
     );
   }
 
+  // ── Knowledge retrieval (PR3) ─────────────────────────────────────────────────
+  // Runs before provider call for both scripted and generative paths so tests
+  // exercise the full pipeline.  Only injects knowledgeContext on the generative
+  // path (scripted lines are authored and need no advisory context).
+  let finalRequest = request;
+  let vectorDegraded = false;
+  if (options?.retriever && provider.kind === "generative") {
+    const speakerKind = db.characters[request.speakerId]?.kind ?? "consort";
+    const ceiling = resolveVisibilityCeiling(speakerKind);
+    const query = buildDialogueKnowledgeQuery(request, request.time, ceiling);
+    try {
+      const result = await options.retriever.retrieve(query);
+      vectorDegraded = result.vectorDegradation !== undefined;
+      const chunks = packPromptKnowledge(result.hits, ceiling);
+      finalRequest = {
+        ...request,
+        promptContext: { ...request.promptContext, knowledgeContext: chunks },
+      };
+    } catch (e: unknown) {
+      logger?.logGameError(
+        aiError("KNOWLEDGE_RETRIEVAL_FAILED", String(e), {
+          severity: "warn",
+          context: { speakerId: request.speakerId },
+        }),
+      );
+    }
+  }
+
   if (provider.kind === "scripted") {
     // Scripted path: text gates only, no claim gate, no state mutation
-    const lineResult = await produceDialogueLine(db, provider, request, logger);
+    const lineResult = await produceDialogueLine(db, provider, finalRequest, logger);
     if (!lineResult.ok) return err(lineResult.error);
     return ok({ line: lineResult.value, nextState: state });
   }
 
   // Generative path: full policy pipeline
-  const policy = buildDialoguePolicyContext(db, state, request);
-  return produceDialogueLineWithPolicy(db, provider, request, policy, state, logger);
+  const policy = buildDialoguePolicyContext(db, state, finalRequest);
+  const policyWithKnowledge: DialoguePolicyContext = vectorDegraded
+    ? { ...policy, knowledgeVectorDegraded: true }
+    : policy;
+  return produceDialogueLineWithPolicy(db, provider, finalRequest, policyWithKnowledge, state, logger);
 }

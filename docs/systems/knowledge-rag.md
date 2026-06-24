@@ -296,13 +296,68 @@ GEMINI_API_KEY=... npm run smoke:knowledge:gemini
 
 ---
 
-## PR3 Extension Points
+## PR3: Dialogue Runtime Wiring (implemented)
 
-PR3 will:
-1. Wire `KnowledgeChunk[]` into the `promptPayload` as a `knowledgeContext` field.
-2. Emit `sourceRefs` pointing to knowledge chunks used in a response.
-3. Add claim-level support validation: retrieved knowledge never bypasses claim gates.
-4. Add the `runtime query builder` that always passes `currentTime` and `visibilityCeiling`.
+The dialogue pipeline now supports advisory knowledge context.
+
+### Bridge module: `src/engine/dialogue/knowledge/`
+
+| File | Responsibility |
+|------|---------------|
+| `types.ts` | `PromptKnowledgeChunk` (model-safe, no `sourcePath`); `KnowledgeRetriever` interface |
+| `queryBuilder.ts` | `buildDialogueKnowledgeQuery` — deterministic query from request context; always passes `currentTime` + `visibilityCeiling` |
+| `visibility.ts` | `resolveVisibilityCeiling(speakerKind)` — elder→restricted, others→public |
+| `promptKnowledge.ts` | `packPromptKnowledge(hits, ceiling)` — budget packer: ≤4 chunks, ≤3200 chars, drops above-ceiling chunks |
+| `provenance.ts` | `extractKnowledgeProvenance` — collects knowledge refs from accepted claims + mentionedContextRefs |
+
+### `produceDialogueTurn` options
+
+```typescript
+type DialogueTurnOptions = {
+  logger?: RingBufferLogger;
+  retriever?: KnowledgeRetriever;  // PR3+: injects advisory knowledge context
+};
+
+await produceDialogueTurn(db, provider, request, state, { retriever, logger });
+```
+
+When `retriever` is provided (generative path only):
+1. `resolveVisibilityCeiling(speaker.kind)` → ceiling
+2. `buildDialogueKnowledgeQuery(request, time, ceiling)` → query
+3. `retriever.retrieve(query)` → hits + optional vectorDegradation
+4. `packPromptKnowledge(hits, ceiling)` → up to 4 PromptKnowledgeChunk objects
+5. Injected into `request.promptContext.knowledgeContext`
+6. Knowledge chunk IDs added to `policy.offeredRefKeys` (so gate sees them)
+7. `extractKnowledgeProvenance(...)` populates `line.meta.knowledge`
+
+Retrieval errors never fail the turn — logged via `logger`, turn proceeds without knowledge context.
+
+### Claim gate invariant
+
+`knowledge_not_claim_authority` — new violation code.  Knowledge chunks are advisory context only; any `ProposedClaim` with a `kind: "knowledge"` `sourceRef` is rejected before other claim checks.
+
+Knowledge refs ARE permitted in `mentionedContextRefs` (tracks which advisory chunks the model drew on). `recordMentionedContext` ignores them (no cooldown for knowledge).
+
+### `DialogueLine.meta` additions
+
+```typescript
+meta: {
+  generated: boolean;
+  degraded: boolean;
+  sourceRefs?: ContextRef[];                              // knowledge kind only
+  knowledge?: { chunkIds: string[]; degraded: boolean }; // present when retriever wired
+}
+```
+
+`meta.knowledge.degraded = true` when `vectorFailureMode: "keyword_only"` was triggered.
+
+### System rules (all 3 providers updated)
+
+Rules 8, 13–15 updated:
+- Rule 8: explicitly prohibits `kind: "knowledge"` in `sourceRefs`.
+- Rule 13: extends `mentionedContextRefs` to include `knowledgeContext` items.
+- Rule 14: advisory nature of `knowledgeContext` — character speaks from their perspective, not verbatim from lore.
+- Rule 15: runtime authoritative data (`allowedClaims`, `forbiddenClaims`) takes precedence over `knowledgeContext`.
 
 ---
 

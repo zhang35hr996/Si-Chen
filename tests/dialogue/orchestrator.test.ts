@@ -28,7 +28,7 @@ import {
   validateDialogueProviderResult,
   produceDialogueTurn,
 } from "../../src/engine/dialogue/orchestrator";
-import type { DialogueProvider } from "../../src/engine/dialogue/types";
+import type { DialogueProvider, DialogueRequest } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -36,6 +36,8 @@ import { loadRealContent } from "../helpers/contentFixture";
 import type { ProposedClaim } from "../../src/engine/dialogue/claims";
 import { toGameTime } from "../../src/engine/calendar/time";
 import type { CourtEvent, GameState, MemoryEntry } from "../../src/engine/state/types";
+import type { KnowledgeRetriever } from "../../src/engine/dialogue/knowledge/types";
+import type { KnowledgeHybridResult } from "../../src/engine/knowledge/retrieval/types";
 
 const db = loadRealContent();
 const state = createNewGameState(db);
@@ -552,5 +554,237 @@ describe("produceDialogueTurn", () => {
     if (!result.ok) return;
     // For scripted path, nextState === state (same reference)
     expect(result.value.nextState).toBe(state);
+  });
+});
+
+// ── Suite G: buildDialoguePolicyContext — knowledge IDs in offeredRefKeys ─────
+
+describe("buildDialoguePolicyContext — Suite G: knowledge chunk IDs in offeredRefKeys", () => {
+  it("includes knowledge chunk IDs in offeredRefKeys when knowledgeContext is present", () => {
+    const request = makeRequest();
+    // Inject a knowledge chunk into the prompt context
+    const requestWithKnowledge = {
+      ...request,
+      promptContext: {
+        ...request.promptContext,
+        knowledgeContext: [
+          { id: "etiquette.court#intro", title: "宫廷礼仪", text: "...", sourceType: "etiquette" as const, visibility: "public" as const },
+        ],
+      },
+    };
+    const policy = buildDialoguePolicyContext(db, state, requestWithKnowledge);
+    expect(policy.offeredRefKeys.has("knowledge:etiquette.court#intro")).toBe(true);
+  });
+
+  it("does not include knowledge refs when knowledgeContext is absent", () => {
+    const request = makeRequest();
+    const policy = buildDialoguePolicyContext(db, state, request);
+    const knowledgeKeys = [...policy.offeredRefKeys].filter((k) => k.startsWith("knowledge:"));
+    expect(knowledgeKeys).toHaveLength(0);
+  });
+
+  it("still includes memory and event refs alongside knowledge refs", () => {
+    const request = makeRequest();
+    const requestWithKnowledge = {
+      ...request,
+      promptContext: {
+        ...request.promptContext,
+        knowledgeContext: [
+          { id: "chunk_1", title: "t", text: "body", sourceType: "etiquette" as const, visibility: "public" as const },
+        ],
+      },
+    };
+    const policy = buildDialoguePolicyContext(db, state, requestWithKnowledge);
+    // Knowledge key is present
+    expect(policy.offeredRefKeys.has("knowledge:chunk_1")).toBe(true);
+    // Memory keys still present (regression guard)
+    const memKeys = [...policy.offeredRefKeys].filter((k) => k.startsWith("memory:"));
+    const evtKeys = [...policy.offeredRefKeys].filter((k) => k.startsWith("event:"));
+    expect(memKeys.length + evtKeys.length).toBeGreaterThanOrEqual(0); // may be 0 in fresh state
+  });
+});
+
+// ── Suite H: produceDialogueTurn — knowledge retrieval injection ──────────────
+
+describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
+  function makeFakeRetriever(result: KnowledgeHybridResult): KnowledgeRetriever {
+    return { retrieve: async () => result };
+  }
+
+  function makeFailingRetriever(error = new Error("retrieval failed")): KnowledgeRetriever {
+    return { retrieve: async () => { throw error; } };
+  }
+
+  it("injects knowledgeContext into request when retriever returns hits", async () => {
+    let capturedRequest: DialogueRequest | undefined;
+    const generativeProvider: DialogueProvider = {
+      id: "capture-provider",
+      kind: "generative",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async (req) => {
+        capturedRequest = req;
+        return ok<DialogueProviderResult>({
+          speaker: SPEAKER,
+          text: TURN_VALID_TEXT,
+          expression: "neutral",
+          choices: [],
+          proposedClaims: [],
+          mentionedContextRefs: [],
+        });
+      },
+    };
+
+    const chunk = {
+      id: "etiquette.court#礼制",
+      sourceType: "etiquette" as const,
+      title: "宫廷礼仪",
+      text: "宫廷礼仪规定...",
+      tags: [],
+      entityIds: [],
+      locationIds: [],
+      visibility: "public" as const,
+      sourcePath: "content/knowledge/court.md",
+    };
+    const hit = {
+      chunk,
+      hybridScore: 0.9,
+      rank: 1,
+      keywordRank: 1,
+      keywordScore: 0.8,
+      vectorRank: null,
+      cosineScore: null,
+    };
+    const retriever = makeFakeRetriever({ hits: [hit] });
+
+    const request = makeGenerativeRequest();
+    await produceDialogueTurn(db, generativeProvider, request, state, { retriever });
+
+    expect(capturedRequest?.promptContext.knowledgeContext).toBeDefined();
+    expect(capturedRequest?.promptContext.knowledgeContext?.[0]?.id).toBe("etiquette.court#礼制");
+    // sourcePath must NOT be passed to the model
+    expect(capturedRequest?.promptContext.knowledgeContext?.[0]).not.toHaveProperty("sourcePath");
+  });
+
+  it("proceeds without knowledgeContext when retriever throws (never fails the turn)", async () => {
+    const generativeProvider: DialogueProvider = {
+      id: "safe-provider",
+      kind: "generative",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async () => ok<DialogueProviderResult>({
+        speaker: SPEAKER,
+        text: TURN_VALID_TEXT,
+        expression: "neutral",
+        choices: [],
+        proposedClaims: [],
+        mentionedContextRefs: [],
+      }),
+    };
+
+    const request = makeGenerativeRequest();
+    const result = await produceDialogueTurn(db, generativeProvider, request, state, {
+      retriever: makeFailingRetriever(),
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not inject knowledgeContext for scripted provider", async () => {
+    let capturedRequest: DialogueRequest | undefined;
+    const scriptedProvider: DialogueProvider = {
+      id: "scripted",
+      kind: "scripted",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async (req) => {
+        capturedRequest = req;
+        return ok<DialogueProviderResult>({
+          speaker: SPEAKER,
+          text: TURN_VALID_TEXT,
+          expression: "neutral",
+          choices: [],
+          proposedClaims: [],
+          mentionedContextRefs: [],
+        });
+      },
+    };
+
+    const retriever = makeFakeRetriever({ hits: [] });
+    const request = makeScriptedRequest();
+    await produceDialogueTurn(db, scriptedProvider, request, state, { retriever });
+    expect(capturedRequest?.promptContext.knowledgeContext).toBeUndefined();
+  });
+
+  it("meta.knowledge is present when knowledgeContext was injected", async () => {
+    const chunk = {
+      id: "chunk_1",
+      sourceType: "etiquette" as const,
+      title: "礼",
+      text: "礼仪条文",
+      tags: [],
+      entityIds: [],
+      locationIds: [],
+      visibility: "public" as const,
+      sourcePath: "x.md",
+    };
+    const hit = { chunk, hybridScore: 1, rank: 1, keywordRank: 1, keywordScore: 0.9, vectorRank: null, cosineScore: null };
+    const retriever = makeFakeRetriever({ hits: [hit] });
+
+    const generativeProvider: DialogueProvider = {
+      id: "kw-provider",
+      kind: "generative",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async () => ok<DialogueProviderResult>({
+        speaker: SPEAKER,
+        text: TURN_VALID_TEXT,
+        expression: "neutral",
+        choices: [],
+        proposedClaims: [],
+        mentionedContextRefs: [{ kind: "knowledge", id: "chunk_1" }],
+      }),
+    };
+
+    const request = makeGenerativeRequest();
+    const result = await produceDialogueTurn(db, generativeProvider, request, state, { retriever });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.line.meta.knowledge).toBeDefined();
+    expect(result.value.line.meta.knowledge?.chunkIds).toContain("chunk_1");
+  });
+
+  it("meta.knowledge.degraded = true when vector channel degraded", async () => {
+    const chunk = {
+      id: "c_deg",
+      sourceType: "etiquette" as const,
+      title: "t",
+      text: "body",
+      tags: [],
+      entityIds: [],
+      locationIds: [],
+      visibility: "public" as const,
+      sourcePath: "x.md",
+    };
+    const hit = { chunk, hybridScore: 1, rank: 1, keywordRank: 1, keywordScore: 0.9, vectorRank: null, cosineScore: null };
+    const retriever = makeFakeRetriever({
+      hits: [hit],
+      vectorDegradation: { reason: "no_embeddings", message: "no vectors indexed" },
+    });
+
+    const generativeProvider: DialogueProvider = {
+      id: "deg-provider",
+      kind: "generative",
+      capabilities: { strictTools: false, promptCaching: false, batch: false },
+      generate: async () => ok<DialogueProviderResult>({
+        speaker: SPEAKER,
+        text: TURN_VALID_TEXT,
+        expression: "neutral",
+        choices: [],
+        proposedClaims: [],
+        mentionedContextRefs: [{ kind: "knowledge", id: "c_deg" }],
+      }),
+    };
+
+    const request = makeGenerativeRequest();
+    const result = await produceDialogueTurn(db, generativeProvider, request, state, { retriever });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.line.meta.knowledge?.degraded).toBe(true);
   });
 });

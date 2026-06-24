@@ -21,9 +21,10 @@ import type { DialogueClaim, ClaimModality } from "./claims";
 /**
  * A typed reference to a context item offered to the LLM in this turn.
  * `kind` + `id` uniquely identify the source.
+ * "knowledge" refs may appear in mentionedContextRefs but NEVER in claim sourceRefs.
  */
 export interface ContextRef {
-  kind: "memory" | "event" | "fact";
+  kind: "memory" | "event" | "fact" | "knowledge";
   id: string;
 }
 
@@ -134,6 +135,15 @@ export interface DialogueGenerationOptions {
   maxTokens?: number;
 }
 
+/**
+ * Options for produceDialogueTurn — replaces the former positional `logger?` param.
+ */
+export interface DialogueTurnOptions {
+  logger?: import("../infra/logger").RingBufferLogger;
+  /** When provided, performs knowledge retrieval and injects results into the prompt. */
+  retriever?: import("./knowledge/types").KnowledgeRetriever;
+}
+
 export interface DialogueProvider {
   readonly id: string;
   /** scripted providers echo authored content; generative ones invent it. */
@@ -150,7 +160,14 @@ export interface DialogueLine {
   /** Resolved against the character's expression list (neutral fallback). */
   expression: string;
   choices: { id: string; text: string; tone?: string }[];
-  meta: { generated: boolean; degraded: boolean };
+  meta: {
+    generated: boolean;
+    degraded: boolean;
+    /** Knowledge chunk refs the model drew on this turn (knowledge kind only). */
+    sourceRefs?: ContextRef[];
+    /** Knowledge retrieval diagnostic. Present only when a retriever was wired. */
+    knowledge?: { chunkIds: string[]; degraded: boolean };
+  };
 }
 
 export interface DialoguePolicyContext {
@@ -164,6 +181,8 @@ export interface DialoguePolicyContext {
   allowedClaims: readonly AuthorizedClaim[];
   /** Claims the speaker must not make this turn. */
   forbiddenClaims: readonly DialogueClaim[];
+  /** True when knowledge retrieval ran this turn but the vector channel degraded. */
+  knowledgeVectorDegraded?: boolean;
 }
 
 // Re-export ProposedClaim so callers can import from types without reaching into claims
