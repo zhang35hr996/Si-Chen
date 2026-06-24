@@ -31,7 +31,11 @@
     "eval:export": "tsx tools/eval-export.ts",
     "eval:report": "tsx tools/eval-report.ts",
     "knowledge:build": "tsx tools/knowledge-build.ts",
-    "knowledge:inspect": "tsx tools/knowledge-inspect.ts"
+    "knowledge:inspect": "tsx tools/knowledge-inspect.ts",
+    "knowledge:embed": "tsx tools/knowledge-embed.ts",
+    "knowledge:hybrid-inspect": "tsx tools/knowledge-hybrid-inspect.ts",
+    "smoke:knowledge:openai": "tsx tools/knowledge-embed.ts --provider openai --model text-embedding-3-small",
+    "smoke:knowledge:gemini": "tsx tools/knowledge-embed.ts --provider gemini --model gemini-embedding-2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

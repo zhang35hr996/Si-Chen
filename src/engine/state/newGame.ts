@@ -29,12 +29,22 @@ export function memoryEntryId(charId: string, seq: number): string {
  * 测试对象字面量触发 excess-property error / 平行类型漂移。
  */
 export function consortStandingExtras(
-  character: { kind: string; hidden?: { affection: number }; initialStanding?: Partial<CharacterStanding>; attributes?: { health: number } },
+  character: {
+    kind: string;
+    hidden?: { affection?: number; fear?: number; ambition?: number; loyalty?: number };
+    initialStanding?: Partial<CharacterStanding>;
+    attributes?: { health: number };
+  },
   startTime: GameTime,
 ): Partial<CharacterStanding> {
   if (character.kind !== "consort") return {};
   return {
-    ...(character.hidden ? { affection: character.hidden.affection } : {}),
+    ...(character.hidden ? {
+      affection: character.hidden.affection ?? 50,
+      fear:      character.hidden.fear      ?? 30,
+      ambition:  character.hidden.ambition  ?? 35,
+      loyalty:   character.hidden.loyalty   ?? 50,
+    } : {}),
     palaceEnteredAt: character.initialStanding?.palaceEnteredAt ?? startTime,
     health: (character as { attributes?: { health: number } }).attributes?.health ?? 100,
     healthStatus: "healthy",

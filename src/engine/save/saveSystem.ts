@@ -174,6 +174,8 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   },
   // v10 → v11: 官员生命周期（pendingRetirements / officialHistory + Official 状态原因/时刻
   // 可选字段）。旧档补空数组即可（官员既有字段形状不变；新增 official 字段均 optional）。
+  // 同时引入侍君 fear/ambition/loyalty/haremFactionId——均 optional，resolver 提供回退，
+  // 无需物化，可搭官员迁移一同完成。
   10: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as GameState & Record<string, unknown>;
