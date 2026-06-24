@@ -50,8 +50,7 @@ function domainKey(d: TraceDomainEvent): string {
   if (d.kind === "queue") return `queue|${d.queue}|${d.operation}|${d.itemId}`;
   if (d.kind === "eligibility") return `eligibility|${d.eventId}|${d.transition}`;
   if (d.kind === "rollback") return `rollback|${d.failedPhase}|${d.errorCode ?? ""}|${d.message}`;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return `unknown|${(d as any).kind}`;
+  return `unknown|${(d as { kind: string }).kind}`;
 }
 
 // ── Metadata comparison ──────────────────────────────────────────────────────
