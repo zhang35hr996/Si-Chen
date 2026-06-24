@@ -120,6 +120,14 @@ const officialHistorySchema = z.strictObject({
   reason: officialStatusReasonSchema.optional(),
   at: gameTimeSchema,
   vacatedPostId: idSchema.optional(),
+  appointment: z
+    .strictObject({
+      candidateId: idSchema,
+      examinationYear: z.number().int().min(1),
+      examinationRank: z.number().int().min(1),
+      postId: idSchema,
+    })
+    .optional(),
 });
 
 const candidateAptitudeSchema = z.strictObject({

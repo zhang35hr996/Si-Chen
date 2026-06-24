@@ -261,6 +261,17 @@ export interface OfficialHistoryEntry {
   at: GameTime;
   /** 此次变迁释放的官职（离任前所占）；无则不设。 */
   vacatedPostId?: string;
+  /** 由候补授官转正而来的溯源（status=active 的授官条目专有；其它条目不设）。 */
+  appointment?: OfficialAppointmentProvenance;
+}
+
+/** 候补授官转正的可追溯溯源（写入 officialHistory，留存科举出身）。 */
+export interface OfficialAppointmentProvenance {
+  candidateId: string;
+  examinationYear: number;
+  examinationRank: number;
+  /** 授任到的官职。 */
+  postId: string;
 }
 
 // ── 候补官员（科举/荐举人才池；Phase 3 PR3A） ─────────────────────────────
