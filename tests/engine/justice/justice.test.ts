@@ -187,7 +187,8 @@ describe("applyJusticeMutations — case lifecycle", () => {
 
   it("CL3. append charge to open case", () => {
     const state = makeState();
-    const advancedState = { ...state, justice: { ...state.justice, nextSeq: { ...state.justice.nextSeq, case: 2 } } };
+    // Advance case and charge counters for all IDs that will be used.
+    const advancedState = { ...state, justice: { ...state.justice, nextSeq: { ...state.justice.nextSeq, case: 2, charge: 2 } } };
     const record = makeCase(state);
     const withCase = applyJusticeMutations(advancedState, [{ type: "create_case", record }]);
     expect(withCase.ok).toBe(true);
@@ -231,7 +232,8 @@ describe("applyJusticeMutations — case lifecycle", () => {
     const record = makeCase(state);
     const charge = { id: "chg_000001" as const, summary: "x", allegedAt: now, allegedBy: "p", status: "alleged" as const };
     const caseWithCharge = { ...record, charges: [charge] };
-    const advancedState = { ...state, justice: { ...state.justice, nextSeq: { ...state.justice.nextSeq, case: 2 } } };
+    // Advance case, charge, and verdict counters for all IDs used.
+    const advancedState = { ...state, justice: { ...state.justice, nextSeq: { ...state.justice.nextSeq, case: 2, charge: 2, verdict: 2 } } };
     const withCase = applyJusticeMutations(advancedState, [{ type: "create_case", record: caseWithCharge }]);
     expect(withCase.ok).toBe(true);
     if (!withCase.ok) return;
@@ -270,7 +272,8 @@ describe("applyJusticeMutations — case lifecycle", () => {
     const record = makeCase(state);
     const verdict1 = { id: "vdt_000001" as const, decidedAt: now, decidedBy: "player", findings: [] };
     const verdict2 = { id: "vdt_000002" as const, decidedAt: now, decidedBy: "player", findings: [] };
-    const advancedState = { ...state, justice: { ...state.justice, nextSeq: { ...state.justice.nextSeq, case: 2 } } };
+    // Advance case and verdict counters.
+    const advancedState = { ...state, justice: { ...state.justice, nextSeq: { ...state.justice.nextSeq, case: 2, verdict: 3 } } };
     const withVerdict1 = applyJusticeMutations(advancedState, [
       { type: "create_case", record },
       { type: "record_verdict", caseId: record.id, verdict: verdict1 },

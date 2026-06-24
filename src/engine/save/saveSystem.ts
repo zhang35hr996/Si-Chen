@@ -346,6 +346,15 @@ function validateSave(
       quarantineWorthy: false,
     });
   }
+  // v11 saves are explicitly rejected (not quarantined as corrupt).
+  // Per no-save-backcompat policy: v11 lacks JusticeState. Adding empty justice would
+  // leave active confinements with no PunishmentRecord — half-migration is worse than rejection.
+  if (save.formatVersion === 11) {
+    return err({
+      error: saveError("OBSOLETE_VERSION", `save format v11 is no longer supported (current: v${SAVE_FORMAT_VERSION}). Start a new game.`),
+      quarantineWorthy: false,
+    });
+  }
   for (let v = save.formatVersion; v < SAVE_FORMAT_VERSION; v++) {
     const migrate = MIGRATIONS[v];
     if (!migrate) {

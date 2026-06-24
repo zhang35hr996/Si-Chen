@@ -145,6 +145,14 @@ export interface JusticeState {
   nextSeq: JusticeNextSeq;
 }
 
+export function createEmptyJusticeState(): JusticeState {
+  return {
+    cases: {},
+    punishments: {},
+    nextSeq: { case: 1, punishment: 1, charge: 1, evidence: 1, confession: 1, verdict: 1 },
+  };
+}
+
 // ── Justice chronicle links (typed provenance) ────────────────────────────────
 
 export interface JusticeLinks {

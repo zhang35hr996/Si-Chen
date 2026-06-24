@@ -47,7 +47,7 @@ import {
 import { deriveQueueTraceEvents } from "../engine/trace/queueDiff";
 import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
 import type { QueueTraceEvent } from "../engine/trace/domainEvents";
-import { applyJusticeMutations, type JusticeMutation } from "../engine/justice/mutations";
+import { applyJusticePlan, type JusticePlan } from "../engine/justice/mutations";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -747,7 +747,7 @@ export class GameStore {
     chronicle: Omit<CourtEvent, "id">[],
     reactionBeats: ReactionBeat[],
     source: TraceSource,
-    justiceMutations?: JusticeMutation[],
+    justicePlan?: JusticePlan,
   ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
     const collector = this.makeCollector();
     const beforeState = this.state;
@@ -765,9 +765,9 @@ export class GameStore {
     }
     let candidate = applied.value;
 
-    // Apply justice mutations before chronicle (chronicle entries may reference new IDs).
-    if (justiceMutations && justiceMutations.length > 0) {
-      const justiceResult = applyJusticeMutations(candidate, justiceMutations);
+    // Apply justice plan before chronicle (chronicle entries may reference new IDs).
+    if (justicePlan) {
+      const justiceResult = applyJusticePlan(candidate, justicePlan);
       if (!justiceResult.ok) {
         for (const e of justiceResult.error) this.logger?.logGameError(e);
         if (collector) {

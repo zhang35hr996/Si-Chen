@@ -12,6 +12,7 @@ import {
 } from "../content/schemas";
 
 import type { GameState } from "../state/types";
+import { validateJusticeState } from "../justice/validation";
 
 const nonEmpty = z.string().min(1);
 
@@ -52,7 +53,9 @@ const memoryEntrySchema = z.strictObject({
   id: z.string().min(1),
   ownerId: idSchema,
   kind: memoryKindSchema,
-  sourceEventId: courtEventIdSchema.optional(), // PR1 已在本文件定义并导出
+  sourceEventId: courtEventIdSchema.optional(),
+  sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
+  sourceCaseId: z.string().regex(/^case_\d{6}$/).optional(),
 
   subjectIds: z.array(z.string()).min(1),
   perspective: z.enum(["actor","target","witness","parent","ally","enemy","relative"]),
@@ -303,6 +306,11 @@ const justiceStateSchema = z.strictObject({
   cases: z.record(z.string(), caseRecordSchema),
   punishments: z.record(z.string(), punishmentRecordSchema),
   nextSeq: justiceNextSeqSchema,
+}).superRefine((data, ctx) => {
+  const errs = validateJusticeState(data as Parameters<typeof validateJusticeState>[0]);
+  for (const e of errs) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });
+  }
 });
 
 export const gameStateSchema = z.strictObject({
@@ -456,6 +464,14 @@ export const gameStateSchema = z.strictObject({
       publicSalience: percent,
       retention: z.enum(["fast", "slow", "permanent"]),
       tags: z.array(z.string()),
+      links: z.strictObject({
+        caseId: z.string().regex(/^case_\d{6}$/).optional(),
+        punishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
+        sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
+      }).refine(
+        (l) => l.caseId !== undefined || l.punishmentId !== undefined || l.sourcePunishmentId !== undefined,
+        { message: "links must contain at least one field" },
+      ).optional(),
     }),
   ),
   statusEffects: z.array(statusEffectSchema).default([]),
