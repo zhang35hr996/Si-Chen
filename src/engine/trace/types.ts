@@ -1,4 +1,5 @@
 /** Development Effect Inspector – shared types (dev-only, tree-shaken in prod). */
+import type { TraceDomainEvent } from "./domainEvents";
 
 export type DebugTraceMode = "off" | "record" | "strict";
 
@@ -64,6 +65,8 @@ export interface TraceTransaction {
   directCount: number;
   /** Total untracked mutations detected by boundary diff. */
   untrackedCount: number;
+  /** Semantic domain events (memory lifecycle, queue operations, eligibility transitions, rollback). */
+  domainEvents: readonly TraceDomainEvent[];
 }
 
 /** A single entry from the boundary diff. */

@@ -42,6 +42,9 @@ import {
   planHaremAdministrationTransfer,
   type TransferHaremAdministrationCommand,
 } from "./haremAdminTransfer";
+import { deriveQueueTraceEvents } from "../engine/trace/queueDiff";
+import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
+import type { QueueTraceEvent } from "../engine/trace/domainEvents";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -147,6 +150,22 @@ export class GameStore {
     const directCount = allMutations.filter(
       (m) => m.classification === "direct" || m.classification === "derived",
     ).length;
+
+    // Merge explicit domain events with auto-derived queue events.
+    // Explicit collector events take precedence; auto-derived fills in the rest.
+    const collectedDomainEvents = [...collector.getDomainEvents()];
+    const derivedQueue = deriveQueueTraceEvents(beforeState, afterState);
+    const explicitQueueKeys = new Set(
+      collectedDomainEvents
+        .filter((e): e is QueueTraceEvent => e.kind === "queue")
+        .map((e) => `${e.queue}:${e.itemId}`),
+    );
+    for (const e of derivedQueue) {
+      if (!explicitQueueKeys.has(`${e.queue}:${e.itemId}`)) {
+        collectedDomainEvents.push(e);
+      }
+    }
+
     return {
       id: this.traceHistory.nextId(),
       timestamp: Date.now(),
@@ -158,6 +177,7 @@ export class GameStore {
       gameTime: formatGameTime(afterState.calendar),
       directCount,
       untrackedCount: untracked.length,
+      domainEvents: collectedDomainEvents,
     };
   }
 
@@ -171,9 +191,10 @@ export class GameStore {
    * All mutations are labeled "scheduled" since no funnel is involved.
    * Used for store methods that bypass the effect funnel (setFlag, setEraName, etc.).
    */
-  private tracedSet(nextState: GameState, source: TraceSource): void {
+  private tracedSet(nextState: GameState, source: TraceSource, extraDomainEvents?: readonly import("../engine/trace/domainEvents").TraceDomainEvent[]): void {
     if (this.traceMode !== "off") {
       const collector = new TraceCollector();
+      if (extraDomainEvents) for (const e of extraDomainEvents) collector.recordDomainEvent(e);
       const beforeState = this.state;
       collector.capturePhaseScheduled("direct_mutation", diffGameState(beforeState, nextState));
       const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
@@ -284,7 +305,9 @@ export class GameStore {
     }
     const result = retireOfficial(this.state, officialId, toGameTime(this.state.calendar));
     if (!result.ok) return result;
-    this.tracedSet(result.value, { kind: "action", sourceId: "approveRetirement", label: `approveRetirement: ${officialId}` });
+    this.tracedSet(result.value, { kind: "action", sourceId: "approveRetirement", label: `approveRetirement: ${officialId}` }, [
+      { kind: "queue", queue: "pendingRetirements", operation: "resolved", itemId: officialId, resolution: "approved", reason: "approved", phase: "direct_mutation" },
+    ]);
     return ok(undefined);
   }
 
@@ -294,7 +317,9 @@ export class GameStore {
       return err(stateError("NO_PENDING_RETIREMENT", `官员「${officialId}」无未决告老请求`, { context: { officialId } }));
     }
     const next = { ...this.state, pendingRetirements: this.state.pendingRetirements.filter((p) => p.officialId !== officialId) };
-    this.tracedSet(next, { kind: "action", sourceId: "retainRetirement", label: `retainRetirement: ${officialId}` });
+    this.tracedSet(next, { kind: "action", sourceId: "retainRetirement", label: `retainRetirement: ${officialId}` }, [
+      { kind: "queue", queue: "pendingRetirements", operation: "resolved", itemId: officialId, resolution: "retained", reason: "retained_by_sovereign", phase: "direct_mutation" },
+    ]);
     return ok(undefined);
   }
 
@@ -527,6 +552,7 @@ export class GameStore {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
       if (collector) {
+        collector.fail("effects", result.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           result.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -682,6 +708,7 @@ export class GameStore {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: [...effects], outcome: "rejected", errors: applied.error };
       if (collector) {
+        collector.fail("effects", applied.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           applied.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -695,6 +722,7 @@ export class GameStore {
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
         if (collector) {
+          collector.fail("chronicle_append", ap.error);
           const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
             ap.error.map((e) => e.message).join("; "));
           this.traceHistory.push(tx);
@@ -705,6 +733,7 @@ export class GameStore {
     }
     collector?.capturePhaseScheduled("chronicle_append", diffGameState(beforeChronicle, candidate));
     if (collector) {
+      captureEligibilityTransitions(db, beforeState, candidate, collector);
       const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
       this.state = candidate;
       this.traceHistory.push(tx);
@@ -951,6 +980,7 @@ export class GameStore {
       for (const error of result.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
       if (collector) {
+        collector.fail("event_resolution", result.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           result.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -968,6 +998,7 @@ export class GameStore {
       for (const error of settled.error) this.logger?.logGameError(error);
       this.lastEffectReport = { effects, outcome: "rejected", errors: settled.error };
       if (collector) {
+        collector.fail("settle_post_advance", settled.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           settled.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -977,6 +1008,7 @@ export class GameStore {
     // 3) 成功：commit + emit。
     const finalState = settled.value.state;
     if (collector) {
+      captureEligibilityTransitions(db, beforeState, finalState, collector);
       const tx = this.buildTrace(beforeState, finalState, source, collector, "committed");
       this.state = finalState;
       this.traceHistory.push(tx);
@@ -1015,6 +1047,7 @@ export class GameStore {
       const a = applyEffects(db, candidate, actionEffects, collector ? { collector } : {});
       if (!a.ok) {
         if (collector) {
+          collector.fail("effects", a.error);
           const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
             a.error.map((e) => e.message).join("; "));
           this.traceHistory.push(tx);
@@ -1026,6 +1059,7 @@ export class GameStore {
     const advance = this.advanceCandidate(db, candidate, command, collector);
     if (!advance.ok) {
       if (collector) {
+        collector.fail("advance_candidate", advance.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           advance.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -1034,6 +1068,7 @@ export class GameStore {
     }
     const { rolledOver, monthChanged, healthOutcome, nextState } = advance.value;
     if (collector) {
+      captureEligibilityTransitions(db, beforeState, nextState, collector);
       // Build and validate trace BEFORE committing — strict mode may throw here.
       const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
       this.state = nextState;
@@ -1074,6 +1109,7 @@ export class GameStore {
     const advance = this.advanceCandidate(db, candidate, advanceCommand, collector);
     if (!advance.ok) {
       if (collector) {
+        collector.fail("advance_candidate", advance.error);
         const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
           advance.error.map((e) => e.message).join("; "));
         this.traceHistory.push(tx);
@@ -1082,6 +1118,7 @@ export class GameStore {
     }
     const { rolledOver, monthChanged, healthOutcome, nextState } = advance.value;
     if (collector) {
+      captureEligibilityTransitions(db, beforeState, nextState, collector);
       const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
       this.state = nextState;
       this.traceHistory.push(tx);
