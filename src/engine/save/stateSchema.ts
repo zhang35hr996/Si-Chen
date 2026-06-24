@@ -65,12 +65,61 @@ const memoryEntrySchema = z.strictObject({
   createdAt: gameTimeSchema,
 });
 
+const officialStatusReasonSchema = z.enum([
+  "retirement", "dismissal", "imprisonment", "exile", "natural_death", "execution",
+]);
+
 const officialSchema = z.strictObject({
   id: idSchema,
   surname: z.string().min(1),
   givenName: z.string().min(1),
-  postId: idSchema,
+  postId: idSchema.nullable(),
   loyalty: percent,
+  age: z.number().int().min(1),
+  familyId: idSchema,
+  status: z.enum(["active", "retired", "imprisoned", "exiled", "dead"]),
+  appointedAt: gameTimeSchema.optional(),
+  statusChangedAt: gameTimeSchema.optional(),
+  statusReason: officialStatusReasonSchema.optional(),
+  deathAt: gameTimeSchema.optional(),
+});
+
+const officialFamilySchema = z.strictObject({
+  id: idSchema,
+  surname: z.string().min(1),
+  influence: percent,
+  imperialFavor: percent,
+});
+
+const familyMemberSchema = z.strictObject({
+  id: idSchema,
+  familyId: idSchema,
+  name: z.string().min(1),
+  surname: z.string().min(1),
+  sex: z.enum(["female", "male"]),
+  age: z.number().int().min(1),
+  role: z.enum(["matriarch", "consort_in", "daughter", "son", "sister"]),
+  deceasedAt: gameTimeSchema.optional(),
+});
+
+const kinshipSchema = z.strictObject({
+  fromPersonId: z.string().min(1),
+  toPersonId: z.string().min(1),
+  type: z.enum(["mother", "daughter", "son", "sibling", "spouse", "close_relative"]),
+});
+
+const pendingRetirementSchema = z.strictObject({
+  officialId: idSchema,
+  requestedAt: gameTimeSchema,
+});
+
+const officialHistorySchema = z.strictObject({
+  id: z.string().min(1),
+  officialId: idSchema,
+  status: z.enum(["active", "retired", "imprisoned", "exiled", "dead"]),
+  reason: officialStatusReasonSchema.optional(),
+  at: gameTimeSchema,
+  vacatedPostId: idSchema.optional(),
 });
 
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
@@ -192,6 +241,11 @@ export const gameStateSchema = z.strictObject({
   standing: z.record(idSchema, characterStandingSchema),
   generatedConsorts: z.record(idSchema, characterSchema),
   officials: z.record(z.string(), officialSchema),
+  officialFamilies: z.record(idSchema, officialFamilySchema),
+  familyMembers: z.record(idSchema, familyMemberSchema),
+  kinship: z.array(kinshipSchema),
+  pendingRetirements: z.array(pendingRetirementSchema),
+  officialHistory: z.array(officialHistorySchema),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),

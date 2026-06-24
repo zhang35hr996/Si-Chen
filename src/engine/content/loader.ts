@@ -269,8 +269,9 @@ function checkCharacterRefs(
   officialPosts: Record<string, OfficialPost>,
   errors: GameError[],
 ): void {
-  // surname → first-seen postId; checked across all characters for consistency.
-  const surnamePost = new Map<string, string>();
+  // familyId → first-seen {surname, postId}; a family is a stable explicit id, NOT a surname.
+  // Different families may share a surname; within one familyId surname + head postId must agree.
+  const familyDef = new Map<string, { surname: string; postId: string; source: string }>();
 
   for (const { value: character, source } of characters.items) {
     if (character.initialStanding) {
@@ -309,25 +310,73 @@ function checkCharacterRefs(
       }
     }
     if (character.maternalClan) {
-      const { postId } = character.maternalClan;
+      const { familyId, postId } = character.maternalClan;
       if (!officialPosts[postId]) {
         errors.push(missingRef(source, "officialPost", postId));
       }
+      // 母家侍君须有姓（其家族 surname 由此确立）。
       const surname = character.profile.surname;
-      if (surname) {
-        const prev = surnamePost.get(surname);
+      if (!surname) {
+        errors.push(
+          contentError("BAD_REF", `${source}: 带 maternalClan 的侍君必须声明 profile.surname`, {
+            context: { file: source, characterId: character.id },
+          }),
+        );
+      } else {
+        const prev = familyDef.get(familyId);
         if (prev === undefined) {
-          surnamePost.set(surname, postId);
-        } else if (prev !== postId) {
-          errors.push(
-            contentError(
-              "BAD_REF",
-              `${source}: 同姓「${surname}」母家官职冲突（${prev} vs ${postId}）`,
-              { context: { file: source } },
-            ),
-          );
+          familyDef.set(familyId, { surname, postId, source });
+        } else {
+          if (prev.surname !== surname) {
+            errors.push(
+              contentError(
+                "BAD_REF",
+                `${source}: 家族「${familyId}」surname 冲突（${prev.surname} @ ${prev.source} vs ${surname}）`,
+                { context: { file: source, familyId } },
+              ),
+            );
+          }
+          if (prev.postId !== postId) {
+            errors.push(
+              contentError(
+                "BAD_REF",
+                `${source}: 家族「${familyId}」初始官职冲突（${prev.postId} @ ${prev.source} vs ${postId}）`,
+                { context: { file: source, familyId } },
+              ),
+            );
+          }
         }
       }
+    }
+  }
+
+  // ── 母家官职席位：每个 postId 的「不同 authored familyId 数」不得超过 seatCount ──
+  // 同一 familyId 多名侍君只计一个席位（按 familyDef 去重）；平民非官职席位，不可作母家。
+  const seatRequests = new Map<string, string[]>(); // postId → familyIds
+  for (const [familyId, def] of familyDef) {
+    const post = officialPosts[def.postId];
+    if (post && post.gradeOrder === 0) {
+      errors.push(
+        contentError("BAD_REF", `${def.source}: 家族「${familyId}」母家官职「${def.postId}」是平民，不是官职席位`, {
+          context: { file: def.source, familyId, postId: def.postId },
+        }),
+      );
+      continue;
+    }
+    const list = seatRequests.get(def.postId) ?? [];
+    list.push(familyId);
+    seatRequests.set(def.postId, list);
+  }
+  for (const [postId, familyIds] of seatRequests) {
+    const post = officialPosts[postId];
+    if (post && familyIds.length > post.seatCount) {
+      errors.push(
+        contentError(
+          "SEAT_OVERFLOW",
+          `官职「${postId}」(${post.name}) 席位 ${post.seatCount}，但 ${familyIds.length} 个家族声明为母家初始官职：${familyIds.join("、")}`,
+          { context: { postId, seatCount: post.seatCount, familyIds } },
+        ),
+      );
     }
   }
 }

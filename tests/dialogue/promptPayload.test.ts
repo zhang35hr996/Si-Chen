@@ -422,7 +422,7 @@ describe("resolvePromptEntityName", () => {
 
   it("returns surname+givenName for official", () => {
     const s = makeMinimalState();
-    s.officials["wei_qinghe"] = { id: "wei_qinghe", surname: "魏", givenName: "清和", postId: "shangshu", loyalty: 60 };
+    s.officials["wei_qinghe"] = { id: "wei_qinghe", surname: "魏", givenName: "清和", postId: "shangshu", loyalty: 60, age: 45, familyId: "fam_0001", status: "active" };
     const d = makeMinimalDB();
     expect(resolvePromptEntityName("wei_qinghe", d, s)).toBe("魏清和");
   });

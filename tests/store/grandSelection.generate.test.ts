@@ -22,7 +22,7 @@ describe("generateCandidates", () => {
       expect(c.content.kind).toBe("consort");
       expect(characterSchema.safeParse(c.content).success).toBe(true);
       expect(c.announce.length).toBeGreaterThan(0);
-      if (c.fatherOfficialId) expect(s.officials[c.fatherOfficialId]).toBeDefined();
+      if (c.motherOfficialId) expect(s.officials[c.motherOfficialId]).toBeDefined();
     }
   });
 

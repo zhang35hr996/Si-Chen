@@ -36,6 +36,8 @@ function makeRaw(): RawContent {
     ],
     officialPosts: [
       { id: "commoner", name: "平民", grade: "无", gradeOrder: 0 },
+      { id: "post_single", name: "测试单席", grade: "正五品", gradeOrder: 5 },
+      { id: "post_double", name: "测试双席", grade: "正五品", gradeOrder: 5, seatCount: 2 },
     ],
   };
   const lexicon = {
@@ -213,6 +215,7 @@ describe("cross-reference checks", () => {
       surname: "林",
     };
     (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_test",
       postId: "post_ghost",
       legitimate: true,
       birthOrder: 1,
@@ -220,34 +223,110 @@ describe("cross-reference checks", () => {
     expectErrors(raw, "MISSING_REF", "post_ghost");
   });
 
-  it("two same-surname consorts with conflicting maternalClan.postId is reported", () => {
+  /** 在 raw 上追加一个带 maternalClan 的侍君（复用 char_0 模板）。 */
+  const pushConsort = (raw: RawContent, id: string, surname: string, familyId: string, postId: string, birthOrder: number) => {
+    const c = structuredClone(raw.characters[0]!);
+    (c.data as Record<string, unknown>)["id"] = id;
+    (c.data as Record<string, unknown>)["profile"] = {
+      ...(c.data as { profile: Record<string, unknown> }).profile,
+      surname,
+    };
+    (c.data as Record<string, unknown>)["maternalClan"] = { familyId, postId, legitimate: true, birthOrder };
+    c.source = `characters/${id}.json`;
+    raw.characters.push(c);
+  };
+
+  it("same familyId with conflicting postId is reported", () => {
     const raw = makeRaw();
-    // Add a second officialPost to the world fixture so both postIds are "valid" individually
-    (raw.world.data as Record<string, unknown>)["officialPosts"] = [
-      { id: "commoner", name: "平民", grade: "无", gradeOrder: 0 },
-      { id: "post_b", name: "侍郎", grade: "正四品", gradeOrder: 4 },
-    ];
-    // Give char_a surname + maternalClan pointing to "commoner"
     (charData(raw) as Record<string, unknown>)["profile"] = {
       ...(charData(raw)["profile"] as Record<string, unknown>),
       surname: "林",
     };
     (charData(raw) as Record<string, unknown>)["maternalClan"] = {
-      postId: "commoner",
-      legitimate: true,
-      birthOrder: 1,
+      familyId: "fam_lin", postId: "post_single", legitimate: true, birthOrder: 1,
     };
-    // Push a second character with the same surname but a different postId
-    const char2 = structuredClone(raw.characters[0]!);
-    (char2.data as Record<string, unknown>)["id"] = "char_b";
-    (char2.data as Record<string, unknown>)["maternalClan"] = {
-      postId: "post_b",
-      legitimate: false,
-      birthOrder: 2,
+    pushConsort(raw, "char_b", "林", "fam_lin", "post_double", 2); // 同族不同官职 → 冲突
+    expectErrors(raw, "BAD_REF", "fam_lin");
+  });
+
+  it("same familyId with conflicting surname is reported", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
     };
-    char2.source = "characters/char_b.json";
-    raw.characters.push(char2);
-    expectErrors(raw, "BAD_REF", "林");
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin", postId: "post_single", legitimate: true, birthOrder: 1,
+    };
+    pushConsort(raw, "char_b", "陈", "fam_lin", "post_single", 2); // 同族不同姓 → 冲突
+    expectErrors(raw, "BAD_REF", "fam_lin");
+  });
+
+  it("different familyId may share a surname (no error)", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    // 两个不同家族同姓，分占 post_double 的两个席位 → 合法。
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin_a", postId: "post_double", legitimate: true, birthOrder: 1,
+    };
+    pushConsort(raw, "char_b", "林", "fam_lin_b", "post_double", 2);
+    expect(loadContent(raw).ok).toBe(true);
+  });
+
+  it("maternalClan pointing at commoner (gradeOrder 0) is rejected", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin", postId: "commoner", legitimate: true, birthOrder: 1,
+    };
+    expectErrors(raw, "BAD_REF", "平民");
+  });
+
+  it("two families on the same single-seat post overflow", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_a", postId: "post_single", legitimate: true, birthOrder: 1,
+    };
+    pushConsort(raw, "char_b", "陈", "fam_b", "post_single", 1);
+    expectErrors(raw, "SEAT_OVERFLOW", "post_single");
+  });
+
+  it("seatCount=2 admits two families; a third overflows", () => {
+    const ok = makeRaw();
+    (charData(ok) as Record<string, unknown>)["profile"] = { ...(charData(ok)["profile"] as Record<string, unknown>), surname: "林" };
+    (charData(ok) as Record<string, unknown>)["maternalClan"] = { familyId: "fam_a", postId: "post_double", legitimate: true, birthOrder: 1 };
+    pushConsort(ok, "char_b", "陈", "fam_b", "post_double", 1);
+    expect(loadContent(ok).ok).toBe(true);
+
+    const over = makeRaw();
+    (charData(over) as Record<string, unknown>)["profile"] = { ...(charData(over)["profile"] as Record<string, unknown>), surname: "林" };
+    (charData(over) as Record<string, unknown>)["maternalClan"] = { familyId: "fam_a", postId: "post_double", legitimate: true, birthOrder: 1 };
+    pushConsort(over, "char_b", "陈", "fam_b", "post_double", 1);
+    pushConsort(over, "char_c", "王", "fam_c", "post_double", 1);
+    expectErrors(over, "SEAT_OVERFLOW", "post_double");
+  });
+
+  it("multiple consorts of the SAME familyId count as one seat", () => {
+    const raw = makeRaw();
+    (charData(raw) as Record<string, unknown>)["profile"] = {
+      ...(charData(raw)["profile"] as Record<string, unknown>),
+      surname: "林",
+    };
+    (charData(raw) as Record<string, unknown>)["maternalClan"] = {
+      familyId: "fam_lin", postId: "post_single", legitimate: true, birthOrder: 1,
+    };
+    pushConsort(raw, "char_b", "林", "fam_lin", "post_single", 2); // 同族第二子，仍占一席
+    expect(loadContent(raw).ok).toBe(true);
   });
 });
 

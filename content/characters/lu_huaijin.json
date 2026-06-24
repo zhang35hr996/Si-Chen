@@ -1,45 +1,100 @@
 {
   "id": "lu_huaijin",
   "kind": "consort",
-  "attributes": { "appearance": 75, "health": 64, "nurture": 58, "specialty": "古筝", "likes": ["古籍", "琴谱"] },
-  "hidden": { "affection": 55, "fear": 45, "ambition": 35 },
+  "attributes": {
+    "appearance": 75,
+    "health": 64,
+    "nurture": 58,
+    "specialty": "古筝",
+    "likes": [
+      "古籍",
+      "琴谱"
+    ]
+  },
+  "hidden": {
+    "affection": 55,
+    "fear": 45,
+    "ambition": 35
+  },
   "profile": {
     "name": "陆怀瑾",
     "surname": "陆",
     "age": 20,
     "role": "出身书香陆氏，通音律，近来渐被冷落",
     "appearance": "眉目清婉，体态纤秀，常着月白衣衫，鬓边一支素银簪。",
-    "personalityTraits": ["敏感", "细腻", "倔强", "口不对心"],
-    "reactionTraits": ["compassionate", "proud", "discreet"],
-    "coreFacts": ["入宫两年，初时颇得召幸，近来渐被冷落", "出身书香陆氏，通音律"],
-    "goals": ["重得陛下垂顾", "不让旁人看出自己的失落"],
+    "personalityTraits": [
+      "敏感",
+      "细腻",
+      "倔强",
+      "口不对心"
+    ],
+    "reactionTraits": [
+      "compassionate",
+      "proud",
+      "discreet"
+    ],
+    "coreFacts": [
+      "入宫两年，初时颇得召幸，近来渐被冷落",
+      "出身书香陆氏，通音律"
+    ],
+    "goals": [
+      "重得陛下垂顾",
+      "不让旁人看出自己的失落"
+    ],
     "speechStyle": "语调轻软，温柔体贴；动情时声音发颤。"
   },
   "defaultLocation": "zhongcui_gong",
   "portraitSet": "lu_huaijin",
-  "expressions": ["neutral"],
+  "expressions": [
+    "neutral"
+  ],
   "voice": {
     "register": "poetic",
-    "quirks": ["自称『侍身』", "称玩家『陛下』", "失落时偶尔会脱口而出『曾经』"],
-    "tabooTopics": ["家中来信催问恩宠之事"]
+    "quirks": [
+      "自称『侍身』",
+      "称玩家『陛下』",
+      "失落时偶尔会脱口而出『曾经』"
+    ],
+    "tabooTopics": [
+      "家中来信催问恩宠之事"
+    ]
   },
-  "initialStanding": { "rank": "chenghui", "favor": 30 },
+  "initialStanding": {
+    "rank": "chenghui",
+    "favor": 30
+  },
   "initialMemories": [
     {
       "kind": "episodic",
       "summary": "陛下已有三旬不曾召我，连御花园偶遇也只是颔首而过。",
       "strength": 70,
       "retention": "permanent",
-      "subjectIds": ["player", "lu_huaijin"],
+      "subjectIds": [
+        "player",
+        "lu_huaijin"
+      ],
       "perspective": "witness",
-      "triggerTags": ["neglect"],
+      "triggerTags": [
+        "neglect"
+      ],
       "unresolved": true,
-      "emotions": { "grief": 40 }
+      "emotions": {
+        "grief": 40
+      }
     }
   ],
   "secrets": [],
   "stances": [
-    { "charId": "shen_zhibai", "stance": "competitive", "attitude": "敬畏凤后掌印之威，又暗怨其规矩繁苛" }
+    {
+      "charId": "shen_zhibai",
+      "stance": "competitive",
+      "attitude": "敬畏凤后掌印之威，又暗怨其规矩繁苛"
+    }
   ],
-  "maternalClan": { "postId": "guozijian_jijiu", "legitimate": true, "birthOrder": 3 }
+  "maternalClan": {
+    "familyId": "fam_lu_main",
+    "postId": "guozijian_jijiu",
+    "legitimate": true,
+    "birthOrder": 3
+  }
 }

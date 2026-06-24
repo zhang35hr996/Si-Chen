@@ -1567,12 +1567,18 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
       setView("dianxuan");
       doAutosave(); // 殿选已决落盘（避免重载重弹 prompt）
     } else if (action.type === "daxuanDelegate") {
-      // 仅当真正消费了「该年未决」pending 才执行委托业务，杜绝陈旧/重复点击二次留牌/重播。
-      const resolved = store.resolveDaxuanDianxuan(action.year);
-      setDaxuanPrompt(null);
-      if (!resolved) return;
+      // NPC 留牌（纯，基于当前 state 确定性算出），随后一次性原子提交：
+      // [校验该年未决 pending → 落库 → 置 flag → 清 pending]，杜绝部分状态。
       const kept = npcKeepOnDelegate(db, store.getState(), action.year);
-      if (kept.length > 0) store.commitDaxuanKept(db, kept);
+      const res = store.resolveDaxuanByDelegate(db, action.year, kept);
+      if (!res.ok) {
+        // NO_PENDING（陈旧/重复/错年）静默关闭 prompt；真正的落库冲突保留 prompt 允许原地重试，
+        // 且不播成功文案、不 autosave。仅 Result.ok 才关界面。
+        if (res.error.code === "NO_PENDING_DAXUAN") setDaxuanPrompt(null);
+        else setNotice("殿选留牌出了岔子，本次未能留牌，请稍后再试。");
+        return;
+      }
+      setDaxuanPrompt(null);
       const beats: DecreeReaction[] = kept.length > 0
         ? kept.map((k) => ({
             speakerId: "cheng_feng",
@@ -1592,21 +1598,29 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     reviewedCount: number,
   ) => {
     const year = dianxuan?.year ?? store.getState().calendar.year;
-    for (const k of kept) store.commitDaxuanConsort(db, k.candidate, k.rank);
+    // 玩家所选 + 早退场 NPC 留牌合并为同一批，整批原子提交（任一冲突全不落、界面不结束）。
+    const batch: { candidate: Candidate; rank: string }[] = [...kept];
     const beats: DecreeReaction[] = [];
+    let npcKept: { candidate: Candidate; rank: string } | null = null;
     if (leftEarly && dianxuan) {
       const reviewedIds = new Set(kept.map((k) => k.candidate.content.id));
       const remaining = dianxuan.candidates
         .slice(reviewedCount)
         .filter((c) => !reviewedIds.has(c.content.id));
-      const npc = npcKeepOnLeave(remaining, store.getState(), year);
-      if (npc) {
-        store.commitDaxuanKept(db, [npc]);
-        beats.push({
-          speakerId: "cheng_feng",
-          lines: [`陛下留步——有一位${npc.candidate.announce.replace(/，年.*$/, "")}颇得太后青眼，太后留了他的牌子，封为${db.ranks[npc.rank]?.name ?? ""}。`],
-        });
-      }
+      npcKept = npcKeepOnLeave(remaining, store.getState(), year);
+      if (npcKept) batch.push(npcKept);
+    }
+    const res = store.commitDaxuanSelections(db, batch);
+    if (!res.ok) {
+      // 失败：保留殿选界面、不 autosave、不返回紫宸殿，提示重试/调整。
+      setNotice("殿选留牌出了岔子（人选或位分冲突），尚未留牌，请重试或调整选择。");
+      return;
+    }
+    if (npcKept) {
+      beats.push({
+        speakerId: "cheng_feng",
+        lines: [`陛下留步——有一位${npcKept.candidate.announce.replace(/，年.*$/, "")}颇得太后青眼，太后留了他的牌子，封为${db.ranks[npcKept.rank]?.name ?? ""}。`],
+      });
     }
     setDianxuan(null);
     doAutosave();

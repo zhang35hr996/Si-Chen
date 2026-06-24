@@ -12,6 +12,8 @@ import { resolveConsortRuntimeAttrs } from "../../engine/characters/consortAttrs
 import type { GameState } from "../../engine/state/types";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { OfficialRoster } from "../officials/OfficialRoster";
+import { OfficialDetail } from "../officials/OfficialDetail";
 
 export interface DebugPanelProps {
   store: GameStore;
@@ -128,6 +130,22 @@ function ConsortAttrsBrowser({ db, state }: { db?: ContentDB; state: GameState }
   );
 }
 
+/** 官员名册浏览器（只读开发者入口）：名册 ⇄ 详情。生产 UI 化留待后续阶段，本阶段以
+ *  调试面板入口承载——底层 selector/数据已完备，promotion 到正式界面只需换挂载点。 */
+function OfficialsBrowser({ db, state }: { db: ContentDB; state: GameState }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  if (Object.keys(state.officials).length === 0) return null;
+  return (
+    <section className="debug-panel__officials">
+      {selected ? (
+        <OfficialDetail db={db} state={state} officialId={selected} onBack={() => setSelected(null)} />
+      ) : (
+        <OfficialRoster db={db} state={state} onSelect={setSelected} />
+      )}
+    </section>
+  );
+}
+
 /** Recent warn/error diagnostics from the ring buffer (gate rejections, save
  * failures, asset misses…). Read on demand — the buffer mutates outside React. */
 function Diagnostics({ logger }: { logger: RingBufferLogger }) {
@@ -195,16 +213,14 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
   const [, bumpReport] = useState(0);
 
   const spendAp = (amount: number) => {
-    if (db) {
-      // Route through the unified time entry so the monthly health tick / gameOver run.
-      const result = store.advanceTime(db, { type: "SPEND_AP", amount });
-      setLastRejection(result.ok ? null : result.error.map((e) => `${formatErrorTag(e)} — ${e.message}`).join("; "));
-    } else {
-      // NOTE: intentional raw dispatch — debug AP does NOT run the monthly health tick
-      // (db not yet loaded; advanceTime requires a ContentDB).
-      const result = store.dispatch({ type: "SPEND_AP", amount });
-      setLastRejection(result.ok ? null : `${formatErrorTag(result.error)} — ${result.error.message}`);
+    // 时间推进必须走统一入口（含边界结算）；裸 dispatch 时间命令已被 store 拒绝。
+    // db 未加载（开局前，无官员/侍君）时调试推进无意义，直接提示而非绕过结算。
+    if (!db) {
+      setLastRejection("需先开始新游戏（加载内容）后才能推进时间。");
+      return;
     }
+    const result = store.advanceTime(db, { type: "SPEND_AP", amount });
+    setLastRejection(result.ok ? null : result.error.map((e) => `${formatErrorTag(e)} — ${e.message}`).join("; "));
   };
 
   const gameStarted = Object.keys(state.standing).length > 0;
@@ -294,6 +310,7 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
       {db && <ContentSummary db={db} />}
       {gameStarted && <ConsortAttrsBrowser db={db} state={state} />}
       {gameStarted && <MemoryBrowser db={db} state={state} />}
+      {db && <OfficialsBrowser db={db} state={state} />}
       <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
     </aside>
   );

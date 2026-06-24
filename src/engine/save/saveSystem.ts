@@ -10,6 +10,7 @@
  * never serialized.
  */
 import type { ContentDB } from "../content/loader";
+import { validateOfficialWorld } from "../officials/validation";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
@@ -117,6 +118,11 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   // v5 → v6、v6 → v7 迁移均按 no-save-backcompat 政策省略。
   // 旧档命中缺失的 MIGRATIONS[v] 即 quarantine（pre-release，不保旧档）。
 
+  // 官员家族系统（officialFamilies/familyMembers/kinship + Official 形状扩展 + standing.birthFamilyId）
+  // 随 v9 schema 引入：按 no-save-backcompat 政策（pre-release）**不写官员世界 backfill**——旧档前向
+  // 迁移到 v10 后仍缺这些字段，由 gameStateSchema 拒绝并 quarantine，绝不在加载旧档时重随机官员世界。
+  // 新档以当前 schema round-trip 稳定。
+
   // v7 → v8: 引入 eventReactionLog 字段（T10）。旧档若缺失此字段补空数组。
   7: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
@@ -166,21 +172,20 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       checksum: checksumOf(state as GameState),
     };
   },
-  // v10 → v11: 引入侍君 fear/ambition/loyalty 运行时属性和 haremFactionId。
-  // fear/ambition 保持 undefined（由 resolveConsortRuntimeAttrs 回退到 authored hidden 值）。
-  // loyalty 保持 undefined（resolver 回退到 hidden.loyalty ?? 50）。
-  // haremFactionId 初始化为 undefined（无阵营）。
-  // standing schema 新增这 4 个 optional 字段，无需在 migration 中物化。
+  // v10 → v11: 官员生命周期（pendingRetirements / officialHistory + Official 状态原因/时刻
+  // 可选字段）。旧档补空数组即可（官员既有字段形状不变；新增 official 字段均 optional）。
+  // 同时引入侍君 fear/ambition/loyalty/haremFactionId——均 optional，resolver 提供回退，
+  // 无需物化，可搭官员迁移一同完成。
   10: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
-    const state = structuredClone(env.state) as GameState;
-    // No mutations needed: all new fields are optional with resolver fallbacks.
-    // The migration exists to bump the format version and recompute the checksum.
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!Array.isArray(state.pendingRetirements)) state.pendingRetirements = [];
+    if (!Array.isArray(state.officialHistory)) state.officialHistory = [];
     return {
       ...env,
       formatVersion: 11,
-      state,
-      checksum: checksumOf(state),
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
     };
   },
 };
@@ -347,7 +352,8 @@ function validateSave(
     ...Object.keys(state.standing),
     ...Object.keys(state.memories),
   ]) {
-    if (!db.characters[charId]) missing.push(`character:${charId}`);
+    // 动态侍君（殿选落库）存于 generatedConsorts，不在 db.characters——两处都查方为缺失。
+    if (!db.characters[charId] && !state.generatedConsorts[charId]) missing.push(`character:${charId}`);
   }
   for (const entry of state.eventLog) {
     if (!db.events[entry.eventId]) missing.push(`event:${entry.eventId}`);
@@ -362,6 +368,19 @@ function validateSave(
     return err({
       error: saveError("MISSING_REF", `存档引用了当前内容不存在的对象（${refs.join("、")}），已隔离`, {
         context: { missing: refs },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // Official-world cross-collection invariants (官员/家族/亲缘)。Zod 只校验形状；跨集合不变量
+  // 由 world validator 负责。任一 error 级诊断 → 拒绝并 quarantine（绝不静默载入损坏官员图）。
+  const worldErrors = validateOfficialWorld(state, db);
+  if (worldErrors.length > 0) {
+    const first = worldErrors[0]!;
+    return err({
+      error: saveError("OFFICIAL_INTEGRITY", `存档官员数据完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: worldErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });
