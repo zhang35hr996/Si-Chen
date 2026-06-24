@@ -39,6 +39,7 @@ export function punishmentSeverity(kind: PunishmentKind): PunishmentSeverity {
     case "indefinite_confinement": return "severe";
     case "cold_palace": return "severe";
     case "execution": return "terminal";
+    case "strip_harem_authority": return "moderate";
   }
 }
 

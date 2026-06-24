@@ -178,6 +178,133 @@ const statusEffectSchema = z.strictObject({
   liftReason: z.enum(["lifted_by_emperor", "term_expired"]).optional(),
 });
 
+// ── Justice state schemas ─────────────────────────────────────────────────────
+
+const caseIdSchema = z.string().regex(/^case_\d{6}$/);
+const punishmentIdSchema = z.string().regex(/^pun_\d{6}$/);
+const chargeIdSchema = z.string().regex(/^chg_\d{6}$/);
+const evidenceIdSchema = z.string().regex(/^evi_\d{6}$/);
+const confessionIdSchema = z.string().regex(/^cnf_\d{6}$/);
+const verdictIdSchema = z.string().regex(/^vdt_\d{6}$/);
+
+const chargeRecordSchema = z.strictObject({
+  id: chargeIdSchema,
+  summary: z.string(),
+  allegedAt: gameTimeSchema,
+  allegedBy: z.string(),
+  status: z.enum(["alleged", "proven", "dismissed"]),
+});
+
+const evidenceRecordSchema = z.strictObject({
+  id: evidenceIdSchema,
+  kind: z.enum(["testimony", "document", "physical", "medical", "observation", "intelligence"]),
+  summary: z.string(),
+  discoveredAt: gameTimeSchema,
+  discoveredBy: z.string(),
+  sourceIds: z.array(z.string()),
+  reliability: z.number().int().min(0).max(100),
+});
+
+const confessionRecordSchema = z.strictObject({
+  id: confessionIdSchema,
+  byId: z.string(),
+  recordedAt: gameTimeSchema,
+  summary: z.string(),
+  voluntary: z.boolean(),
+  retractedAt: gameTimeSchema.optional(),
+});
+
+const verdictRecordSchema = z.strictObject({
+  id: verdictIdSchema,
+  decidedAt: gameTimeSchema,
+  decidedBy: z.string(),
+  findings: z.array(z.strictObject({
+    chargeId: chargeIdSchema,
+    result: z.enum(["proven", "not_proven", "dismissed"]),
+  })),
+  summary: z.string().optional(),
+});
+
+const caseRecordSchema = z.strictObject({
+  id: caseIdSchema,
+  status: z.enum(["open", "decided", "closed"]),
+  subjectIds: z.array(z.string()),
+  openedAt: gameTimeSchema,
+  openedBy: z.string(),
+  source: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("imperial") }),
+    z.strictObject({ kind: z.literal("investigation"), investigationId: z.string().optional() }),
+    z.strictObject({ kind: z.literal("scripted"), sourceId: z.string() }),
+  ]),
+  publicity: z.enum(["secret", "palace", "public"]),
+  charges: z.array(chargeRecordSchema),
+  evidence: z.array(evidenceRecordSchema),
+  confessions: z.array(confessionRecordSchema),
+  verdict: verdictRecordSchema.optional(),
+  punishmentIds: z.array(punishmentIdSchema),
+  closedAt: gameTimeSchema.optional(),
+});
+
+const punishmentLifecycleSchema = z.discriminatedUnion("status", [
+  z.strictObject({ status: z.literal("active") }),
+  z.strictObject({
+    status: z.literal("completed"),
+    resolvedAt: gameTimeSchema,
+    resolution: z.enum(["immediate", "expired", "target_deceased"]),
+  }),
+  z.strictObject({
+    status: z.literal("lifted"),
+    resolvedAt: gameTimeSchema,
+    resolution: z.enum(["lifted_by_decree", "authority_restored", "pardoned"]),
+  }),
+]);
+
+const punishmentBaseSchema = z.object({
+  id: punishmentIdSchema,
+  caseId: caseIdSchema.optional(),
+  targetId: z.string(),
+  actorId: z.string(),
+  severity: z.enum(["minor", "moderate", "severe", "terminal"]),
+  imposedAt: gameTimeSchema,
+  sourceLocation: z.string().optional(),
+  publicity: z.enum(["secret", "palace", "public"]),
+  lifecycle: punishmentLifecycleSchema,
+});
+
+const punishmentRecordSchema = z.discriminatedUnion("kind", [
+  punishmentBaseSchema.extend({ kind: z.literal("rank_demotion"), details: z.strictObject({ fromRankId: z.string(), toRankId: z.string() }) }),
+  punishmentBaseSchema.extend({ kind: z.literal("strip_title"), details: z.strictObject({ removedTitle: z.string() }) }),
+  punishmentBaseSchema.extend({ kind: z.literal("finite_confinement"), details: z.strictObject({ statusEffectId: z.string(), endTurnExclusive: z.number().int() }) }),
+  punishmentBaseSchema.extend({ kind: z.literal("indefinite_confinement"), details: z.strictObject({ statusEffectId: z.string() }) }),
+  punishmentBaseSchema.extend({ kind: z.literal("cold_palace"), details: z.strictObject({ previousResidenceId: z.string(), coldPalaceResidenceId: z.string() }) }),
+  punishmentBaseSchema.extend({ kind: z.literal("execution"), details: z.strictObject({ deathCause: z.literal("imperial_execution") }) }),
+  punishmentBaseSchema.extend({
+    kind: z.literal("strip_harem_authority"),
+    details: z.strictObject({
+      fromMode: z.literal("empress"),
+      initialTarget: z.discriminatedUnion("mode", [
+        z.strictObject({ mode: z.literal("acting_consort"), charId: z.string() }),
+        z.strictObject({ mode: z.literal("neiwu_proxy") }),
+      ]),
+    }),
+  }),
+]);
+
+const justiceNextSeqSchema = z.strictObject({
+  case: z.number().int().min(1),
+  punishment: z.number().int().min(1),
+  charge: z.number().int().min(1),
+  evidence: z.number().int().min(1),
+  confession: z.number().int().min(1),
+  verdict: z.number().int().min(1),
+});
+
+const justiceStateSchema = z.strictObject({
+  cases: z.record(z.string(), caseRecordSchema),
+  punishments: z.record(z.string(), punishmentRecordSchema),
+  nextSeq: justiceNextSeqSchema,
+});
+
 export const gameStateSchema = z.strictObject({
   calendar: calendarStateSchema,
   playerLocation: z.string(),
@@ -387,6 +514,7 @@ export const gameStateSchema = z.strictObject({
       ]),
     }),
   ]).default({ mode: "empress" }),
+  justice: justiceStateSchema,
   rngSeed: z.number(),
 }) satisfies z.ZodType<GameState>;
 
