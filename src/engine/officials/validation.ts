@@ -67,6 +67,7 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     ["generatedConsort", Object.keys(state.generatedConsorts)],
     ["official", Object.keys(state.officials)],
     ["familyMember", Object.keys(state.familyMembers)],
+    ["candidate", Object.keys(state.officialCandidates)],
   ];
   const idOwner = new Map<string, string>();
   for (const [ns, ids] of namespaces) {
@@ -141,6 +142,51 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     if (!state.officials[h.officialId]) e("OFFICIAL_HISTORY_BAD_REF", `历史条目指向无效官员「${h.officialId}」`, { id: h.id });
     if (seenHist.has(h.id)) e("OFFICIAL_HISTORY_DUP_ID", `重复历史条目 id「${h.id}」`, { id: h.id });
     seenHist.add(h.id);
+  }
+
+  // ── 候补官员池 + 科举榜单（Phase 3 PR3A） ────────────────────────────────
+  const curYear = state.calendar.year;
+  const ranksByYear = new Map<number, Set<number>>();
+  for (const [key, c] of Object.entries(state.officialCandidates)) {
+    if (c.id !== key) e("CANDIDATE_KEY_MISMATCH", `officialCandidates["${key}"].id = "${c.id}"（键不一致）`, { key, id: c.id });
+    if (state.officials[c.id]) e("CANDIDATE_IS_OFFICIAL", `候补者「${c.id}」与官员 id 冲突（不得占官位/复用 id）`, { id: c.id });
+    if (!(c.age >= 1 && c.age <= 120)) e("CANDIDATE_BAD_AGE", `候补者「${c.id}」年龄不合理（${c.age}）`, { id: c.id, age: c.age });
+    if (c.familyId !== null && !state.officialFamilies[c.familyId]) {
+      e("CANDIDATE_BAD_FAMILY", `候补者「${c.id}」familyId「${c.familyId}」无对应家族`, { id: c.id });
+    }
+    if (c.examinationRank < 1) e("CANDIDATE_BAD_RANK", `候补者「${c.id}」榜次非法（${c.examinationRank}）`, { id: c.id });
+    const set = ranksByYear.get(c.examinationYear) ?? new Set<number>();
+    if (set.has(c.examinationRank)) e("CANDIDATE_DUP_RANK", `${c.examinationYear} 年榜次「${c.examinationRank}」重复`, { id: c.id });
+    set.add(c.examinationRank);
+    ranksByYear.set(c.examinationYear, set);
+    // appointed 须可追溯到正式官员。
+    if (c.status === "appointed") {
+      if (!c.appointedOfficialId || !state.officials[c.appointedOfficialId]) {
+        e("CANDIDATE_APPOINTED_NO_OFFICIAL", `已授官候补「${c.id}」缺有效 appointedOfficialId`, { id: c.id });
+      }
+    }
+    // eligible 不得已过有效期。
+    if (c.status === "eligible" && curYear >= c.expiresAtYear) {
+      e("CANDIDATE_EXPIRED_STILL_ELIGIBLE", `候补「${c.id}」已过有效期（${c.expiresAtYear}）却仍 eligible`, { id: c.id });
+    }
+  }
+  // 同年榜次须 1..N 连续。
+  for (const [year, set] of ranksByYear) {
+    const n = set.size;
+    for (let r = 1; r <= n; r++) {
+      if (!set.has(r)) { e("CANDIDATE_RANK_GAP", `${year} 年榜次不连续（缺第 ${r}）`, { year }); break; }
+    }
+  }
+  // 科举结果：每年至多一份；引用候补须存在且年份一致。
+  const seenExamYears = new Set<number>();
+  for (const res of state.examinationResults) {
+    if (seenExamYears.has(res.year)) e("EXAM_DUP_YEAR", `${res.year} 年存在多份科举结果`, { year: res.year });
+    seenExamYears.add(res.year);
+    for (const cid of res.candidateIds) {
+      const c = state.officialCandidates[cid];
+      if (!c) e("EXAM_BAD_CANDIDATE_REF", `${res.year} 年榜单引用了不存在的候补「${cid}」`, { year: res.year, id: cid });
+      else if (c.examinationYear !== res.year) e("EXAM_YEAR_MISMATCH", `候补「${cid}」年份(${c.examinationYear}) 与榜单(${res.year}) 不符`, { id: cid });
+    }
   }
   for (const [postId, used] of Object.entries(seatUse)) {
     const cap = db.officialPosts[postId]?.seatCount ?? 1;

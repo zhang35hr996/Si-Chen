@@ -263,6 +263,54 @@ export interface OfficialHistoryEntry {
   vacatedPostId?: string;
 }
 
+// ── 候补官员（科举/荐举人才池；Phase 3 PR3A） ─────────────────────────────
+/** 候补来源。 */
+export type CandidateOrigin = "examination" | "recommendation";
+
+/** 候补生命周期状态。eligible=在池可授官；appointed=已转正式官员（仅留史）；expired=逾年限退出；
+ *  withdrawn=死亡/身体或其它合法退出。非 eligible 者绝不被可任命 selector 选中。 */
+export type CandidateStatus = "eligible" | "appointed" | "expired" | "withdrawn";
+
+/** 候补能力（0–100）。任命时按官职类型匹配（匹配评分留 PR3B），PR3A 只生成保存。 */
+export interface CandidateAptitude {
+  governance: number; // 政略/治理
+  scholarship: number; // 才学
+  military: number; // 军事
+  integrity: number; // 清正
+}
+
+/**
+ * 候补者**不是官员**：不占官位、不入官员名册、不参与官员年度告老、不被在任官员 selector 选中、
+ * 不因入池获得 structured official claim。女性限定（无 sex 字段即女性）。
+ */
+export interface OfficialCandidate {
+  id: string; // "cand_<year>_<index>"，全局唯一，与官员/角色/成员 id 命名空间隔离
+  surname: string;
+  givenName: string;
+  age: number;
+  /** 关联已有官员家族 id；寒门/无背景则 null。关联时绝不伪造新亲缘边。 */
+  familyId: string | null;
+  origin: CandidateOrigin;
+  examinationYear: number;
+  /** 本年榜次（1 起，同年唯一且连续）。 */
+  examinationRank: number;
+  aptitude: CandidateAptitude;
+  status: CandidateStatus;
+  enteredPoolAt: GameTime;
+  /** 逾此年（含）未授官则 expired。 */
+  expiresAtYear: number;
+  /** appointed 后指向转正的正式官员 id（可追溯）。 */
+  appointedOfficialId?: string;
+}
+
+/** 一年一度的科举结果（榜单）。acknowledged 由 PR3B 玩家查看后置 true。 */
+export interface ExaminationResult {
+  year: number;
+  generatedAt: GameTime;
+  candidateIds: string[];
+  acknowledged: boolean;
+}
+
 /** 官员所属部门（官职归类；驱动名册分组，本阶段不参与数值）。 */
 export type OfficialDepartment =
   | "chancellery" // 相/政事堂（丞相、三公）
@@ -633,6 +681,10 @@ export interface GameState {
   pendingRetirements: PendingRetirement[];
   /** 官员状态变迁历史（append-only，可见历史）。 */
   officialHistory: OfficialHistoryEntry[];
+  /** 候补官员池（科举/荐举；与正式 officials 隔离）。 */
+  officialCandidates: Record<string, OfficialCandidate>;
+  /** 历年科举结果（append-only 榜单）。 */
+  examinationResults: ExaminationResult[];
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

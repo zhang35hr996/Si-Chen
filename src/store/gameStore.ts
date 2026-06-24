@@ -29,6 +29,7 @@ import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { assignOfficialPost } from "../engine/officials/assign";
 import { dismissOfficial, restoreOfficialToActive, retireOfficial } from "../engine/officials/lifecycle";
 import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
+import { EXAM_MONTH, hasGeneratedExaminationForYear, settleAnnualExamination } from "../engine/officials/examination";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
@@ -1078,6 +1079,13 @@ export class GameStore {
       const beforeOfficialTick = candidate;
       candidate = buildOfficialYearlyTick(candidate, db, toGameTime(candidate.calendar));
       collector?.capturePhaseScheduled("official_yearly_tick", diffGameState(beforeOfficialTick, candidate));
+    }
+
+    // 二月（或其后首次推进，catch-up）→ 候补池增龄/退出 + 生成本年科举（幂等，本年仅一次）。
+    if (monthChanged && candidate.calendar.month >= EXAM_MONTH && !hasGeneratedExaminationForYear(candidate, candidate.calendar.year)) {
+      const beforeExam = candidate;
+      candidate = settleAnnualExamination(candidate, db, candidate.calendar.year, toGameTime(candidate.calendar));
+      collector?.capturePhaseScheduled("annual_examination", diffGameState(beforeExam, candidate));
     }
 
     // 5) Daxuan calendar event detection.
