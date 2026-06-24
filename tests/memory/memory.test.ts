@@ -26,7 +26,7 @@ const startedStore = (): GameStore => {
 
 /** Play ev_shen_neglect to completion through the real runner + commit. */
 async function playNeglect(store: GameStore, choiceId: string): Promise<void> {
-  const runner = new SceneRunner(db, mockProvider);
+  const runner = new SceneRunner(db, { provider: mockProvider });
   const first = await runner.start(store.getState(), "ev_shen_neglect");
   if (!first.ok) throw new Error(first.error.message);
   const second = await runner.advance(choiceId);

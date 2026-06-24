@@ -59,7 +59,7 @@ export function DialogueScreen({
   };
 
   useEffect(() => {
-    const runner = new SceneRunner(db, mockProvider, logger);
+    const runner = new SceneRunner(db, { provider: mockProvider, logger });
     runnerRef.current = runner;
     void runner.start(store.getState(), eventId).then(handleStep);
     return () => runner.abandon();

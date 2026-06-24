@@ -16,10 +16,20 @@ import { OfficialRoster } from "../officials/OfficialRoster";
 import { OfficialDetail } from "../officials/OfficialDetail";
 import { TraceTab } from "./trace/TraceTab";
 
+/** Non-persistent debug snapshot of the most recent dialogue knowledge retrieval. */
+export interface DialogueKnowledgeDiagnostic {
+  configured: boolean;
+  chunkIds: string[];
+  degraded: boolean;
+  degradationKind?: "vector_degraded" | "fatal_degraded";
+  degradationReason?: string;
+}
+
 export interface DebugPanelProps {
   store: GameStore;
   db?: ContentDB;
   logger?: RingBufferLogger;
+  recentKnowledge?: DialogueKnowledgeDiagnostic;
   /** Force-fire an event, bypassing trigger conditions (plan §13 #10). */
   onForceEvent?: (eventId: string) => void;
 }
@@ -210,7 +220,7 @@ function ForceTrigger({ db, onForceEvent }: { db: ContentDB; onForceEvent: (even
 
 type PanelTab = "state" | "trace";
 
-function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
+function DebugPanelBody({ store, db, logger, recentKnowledge, onForceEvent }: DebugPanelProps) {
   const state = useGameState(store);
   const [lastRejection, setLastRejection] = useState<string | null>(null);
   const [, bumpReport] = useState(0);
@@ -333,6 +343,7 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
           )}
           {db && onForceEvent && <ForceTrigger db={db} onForceEvent={onForceEvent} />}
           {logger && <Diagnostics logger={logger} />}
+          {recentKnowledge !== undefined && <KnowledgeDiagnosticView diag={recentKnowledge} />}
           {db && <ContentSummary db={db} />}
           {gameStarted && <ConsortAttrsBrowser db={db} state={state} />}
           {gameStarted && <MemoryBrowser db={db} state={state} />}
@@ -341,5 +352,24 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
         </>
       )}
     </aside>
+  );
+}
+
+function KnowledgeDiagnosticView({ diag }: { diag: DialogueKnowledgeDiagnostic }) {
+  return (
+    <section className="debug-panel__section">
+      <h3 className="debug-panel__section-title">Knowledge retrieval</h3>
+      <p>
+        configured: {diag.configured ? "yes" : "no"}&nbsp;|&nbsp;
+        chunks: {diag.chunkIds.length}&nbsp;|&nbsp;
+        degraded: {diag.degraded ? (diag.degradationKind ?? "yes") : "no"}
+        {diag.degradationReason ? ` (${diag.degradationReason})` : ""}
+      </p>
+      {diag.chunkIds.length > 0 && (
+        <ul>
+          {diag.chunkIds.map((id) => <li key={id}>{id}</li>)}
+        </ul>
+      )}
+    </section>
   );
 }
