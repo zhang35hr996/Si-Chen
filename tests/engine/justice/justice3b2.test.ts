@@ -17,6 +17,7 @@ import { loadRealContent } from "../../helpers/contentFixture";
 import type { ImperialCommand } from "../../../src/store/imperialCommands";
 import { PUNISHMENT_ID_REGEX } from "../../../src/engine/justice/types";
 import type { CaseRecord } from "../../../src/engine/justice/types";
+import type { CharacterStatusEffect } from "../../../src/engine/state/types";
 import { allocateJusticeIds } from "../../../src/engine/justice/ids";
 import { applyJusticePlan } from "../../../src/engine/justice/mutations";
 import { toGameTime } from "../../../src/engine/calendar/time";
@@ -118,7 +119,7 @@ describe("PunishmentRecord created for each kind", () => {
     expect((pun.details as Record<string, unknown>)["endTurnExclusive"]).toBeUndefined();
   });
 
-  it("KIND3. execution: PunishmentRecord with lifecycle=completed/target_deceased", () => {
+  it("KIND3. execution: PunishmentRecord with lifecycle=completed/immediate", () => {
     const store = makeStore();
     const cmd: ImperialCommand = { type: "execute", targetId: TARGET };
     store.applyImperialPunishmentWithConsequences(db, cmd, {});
@@ -126,7 +127,7 @@ describe("PunishmentRecord created for each kind", () => {
     expect(pun.kind).toBe("execution");
     expect(pun.lifecycle.status).toBe("completed");
     if (pun.lifecycle.status === "completed") {
-      expect(pun.lifecycle.resolution).toBe("target_deceased");
+      expect(pun.lifecycle.resolution).toBe("immediate");
     }
   });
 
@@ -217,48 +218,85 @@ describe("punishment lifecycle transitions", () => {
     expect(store.getState().justice.nextSeq.punishment).toBe(2);
   });
 
-  it("LIFE2. lift_confinement without sourcePunishmentId (legacy confinement) does not error", () => {
+  it("LIFE2. legacy confinement (no sourcePunishmentId) lifts without error", () => {
     const store = makeStore();
-    // Impose via applyImperialCommand (no PunishmentRecord created — legacy path).
-    const impose: ImperialCommand = { type: "impose_confinement", targetId: TARGET, durationTurns: 5 };
-    store.applyImperialCommand(db, impose);
-    expect(store.getState().statusEffects.some((e) => e.kind === "confinement" && e.characterId === TARGET)).toBe(true);
-    // No PunishmentRecord was created.
-    expect(Object.keys(store.getState().justice.punishments)).toHaveLength(0);
+    // Inject a confinement effect directly (no PunishmentRecord) to simulate pre-3B2 state.
+    const baseState = store.getState();
+    const legacyConfinement: CharacterStatusEffect = {
+      id: "status_lu_huaijin_000001",
+      kind: "confinement",
+      characterId: TARGET,
+      imposedAt: toGameTime(baseState.calendar),
+      imposedBy: "emperor" as const,
+      startTurn: baseState.calendar.dayIndex,
+      endTurnExclusive: baseState.calendar.dayIndex + 10,
+      // No sourcePunishmentId
+    };
+    store.loadState({ ...baseState, statusEffects: [legacyConfinement] });
 
-    const lift: ImperialCommand = { type: "lift_confinement", targetId: TARGET };
-    const liftResult = store.applyImperialCommand(db, lift);
-    expect(liftResult.ok).toBe(true);
-    // Still no PunishmentRecord.
-    expect(Object.keys(store.getState().justice.punishments)).toHaveLength(0);
+    const result = store.applyImperialCommand(db, { type: "lift_confinement", targetId: TARGET });
+    expect(result.ok).toBe(true);
+    expect(store.getState().justice.punishments).toEqual({});
   });
 
   it("LIFE3. term_expired sweep resolves PunishmentRecord with expired", () => {
     const store = makeStore();
-    const impose: ImperialCommand = { type: "impose_confinement", targetId: TARGET, durationTurns: 1 };
+    const impose: ImperialCommand = { type: "impose_confinement", targetId: TARGET, durationTurns: 2 };
     store.applyImperialPunishmentWithConsequences(db, impose, {});
     expect(store.getState().justice.punishments["pun_000001"]!.lifecycle.status).toBe("active");
+    const seqBeforeExpiry = store.getState().justice.nextSeq.punishment;
 
-    // Advance time enough for the confinement to expire (1 turn).
+    // Advance time enough turns for the confinement to expire (durationTurns: 2, so advance 3 times).
     store.advanceTime(db, { type: "SKIP_REMAINDER" });
     store.advanceTime(db, { type: "SKIP_REMAINDER" });
+    store.advanceTime(db, { type: "SKIP_REMAINDER" });
 
-    const pun = store.getState().justice.punishments["pun_000001"]!;
-    if (pun.lifecycle.status === "completed") {
-      expect(pun.lifecycle.resolution).toBe("expired");
-    }
-    // Either expired (completed) or still active if not enough turns passed yet.
-    expect(["active", "completed"]).toContain(pun.lifecycle.status);
-  });
-
-  it("LIFE4. execution PunishmentRecord has target_deceased immediately", () => {
-    const store = makeStore();
-    const cmd: ImperialCommand = { type: "execute", targetId: TARGET };
-    store.applyImperialPunishmentWithConsequences(db, cmd, {});
     const pun = store.getState().justice.punishments["pun_000001"]!;
     expect(pun.lifecycle.status).toBe("completed");
     if (pun.lifecycle.status === "completed") {
-      expect(pun.lifecycle.resolution).toBe("target_deceased");
+      expect(pun.lifecycle.resolution).toBe("expired");
+    }
+
+    // nextSeq.punishment should not have advanced (no new ID allocated during expiry resolution).
+    expect(store.getState().justice.nextSeq.punishment).toBe(seqBeforeExpiry);
+
+    // The ConfinementEffect should be lifted.
+    const se = store.getState().statusEffects.find((e) => e.kind === "confinement" && e.characterId === TARGET);
+    expect(se?.liftedTurn).toBeDefined();
+
+    // The confinement_expired chronicle entry should have links.sourcePunishmentId.
+    const expiredEntry = store.getState().chronicle.find((e) => {
+      const dec = (e.payload as { decree?: string }).decree;
+      return dec === "confinement_expired";
+    });
+    if (expiredEntry) {
+      expect(expiredEntry.links?.sourcePunishmentId).toBe("pun_000001");
+    }
+  });
+
+  it("LIFE4. execution PunishmentRecord is completed/immediate; prior active punishments close as target_deceased", () => {
+    const store = makeStore();
+    // First impose a confinement (pun_000001).
+    const confineCmd: ImperialCommand = { type: "impose_confinement", targetId: TARGET, durationTurns: 5 };
+    const confineResult = store.applyImperialPunishmentWithConsequences(db, confineCmd, {});
+    expect(confineResult.ok).toBe(true);
+    expect(store.getState().justice.punishments["pun_000001"]!.lifecycle.status).toBe("active");
+
+    // Execute the same target (pun_000002).
+    const execCmd: ImperialCommand = { type: "execute", targetId: TARGET };
+    store.applyImperialPunishmentWithConsequences(db, execCmd, {});
+    const execPun = store.getState().justice.punishments["pun_000002"]!;
+    expect(execPun.kind).toBe("execution");
+    expect(execPun.lifecycle.status).toBe("completed");
+    if (execPun.lifecycle.status === "completed") {
+      // The execution itself resolves as "immediate"
+      expect(execPun.lifecycle.resolution).toBe("immediate");
+    }
+    // The prior confinement is resolved as "target_deceased"
+    const confinePun = store.getState().justice.punishments["pun_000001"]!;
+    expect(confinePun.lifecycle.status).toBe("completed");
+    if (confinePun.lifecycle.status === "completed") {
+      expect(confinePun.lifecycle.resolution).toBe("target_deceased");
     }
   });
 });

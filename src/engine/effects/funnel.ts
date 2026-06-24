@@ -933,6 +933,8 @@ export function applyEffects(
           ownerId: effect.char,
           kind: d.kind,
           ...(d.sourceEventId !== undefined ? { sourceEventId: d.sourceEventId } : {}),
+          ...(d.sourcePunishmentId !== undefined ? { sourcePunishmentId: d.sourcePunishmentId } : {}),
+          ...(d.sourceCaseId !== undefined ? { sourceCaseId: d.sourceCaseId } : {}),
           subjectIds: [...d.subjectIds],
           perspective: d.perspective,
           summary: d.summary,

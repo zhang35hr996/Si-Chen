@@ -15,7 +15,7 @@ import { expiredUnrecordedConfinements, nextStatusEffectId } from "../engine/cha
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
 import { allocateJusticeIds } from "../engine/justice/ids";
-import type { PunishmentRecord } from "../engine/justice/types";
+import type { PunishmentRecord, PunishmentId, CaseId } from "../engine/justice/types";
 import { planHaremAdminRankCommand, type HaremAdminRankCommand, type HaremAdminCommandPlan } from "./haremAdminCommands";
 import { planPunishmentConsequences } from "../engine/punishments/consequencePlanner";
 import { buildRankOp, type RankOpRequest } from "./rankOps";
@@ -615,6 +615,13 @@ export class GameStore {
     db: ContentDB,
     command: ImperialCommand,
   ): Result<ImperialCommandPlan, GameError[]> {
+    // Route punitive commands through the formal record-creation path.
+    if (command.type === "impose_confinement" || command.type === "execute") {
+      const r = this.applyImperialPunishmentWithConsequences(db, command, {});
+      if (!r.ok) return r;
+      return ok({ command, charId: command.targetId, effects: [], chronicle: [], lines: r.value.baseLines });
+    }
+
     const collector = this.makeCollector();
     const beforeState = this.state;
     const source: TraceSource = { kind: "imperial_command", sourceId: command.type, label: `imperial: ${command.type}` };
@@ -674,8 +681,21 @@ export class GameStore {
       }
     }
 
+    // lift_confinement: inject sourcePunishmentId into chronicle links if available.
+    const liftSourcePunishmentId = command.type === "lift_confinement"
+      ? this.state.statusEffects.find(
+          (e) => e.kind === "confinement" && e.characterId === command.targetId && e.liftedTurn === undefined,
+        )?.sourcePunishmentId
+      : undefined;
+    const adjustedChronicle = liftSourcePunishmentId
+      ? plan.chronicle.map((draft) => ({
+          ...draft,
+          links: { ...draft.links, sourcePunishmentId: liftSourcePunishmentId },
+        }))
+      : plan.chronicle;
+
     const beforeChronicle = candidate;
-    for (const draft of plan.chronicle) {
+    for (const draft of adjustedChronicle) {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
@@ -902,7 +922,7 @@ export class GameStore {
       imposedAt: now,
       publicity: meta.publicity ?? "palace",
       lifecycle: kind === "execution"
-        ? { status: "completed", resolvedAt: now, resolution: "target_deceased" }
+        ? { status: "completed", resolvedAt: now, resolution: "immediate" }
         : { status: "active" },
       ...(meta.caseId ? { caseId: meta.caseId } : {}),
       ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
@@ -913,8 +933,20 @@ export class GameStore {
           : { details: { deathCause: "imperial_execution" as const } }),
     } as PunishmentRecord;
 
+    // Resolve all other active punishments for the same target when executing.
+    const priorActivePunishments = kind === "execution"
+      ? Object.values(this.state.justice.punishments).filter(
+          (p) => p.targetId === command.targetId && p.lifecycle.status === "active",
+        )
+      : [];
+    const resolveDeceased = priorActivePunishments.map((p) => ({
+      type: "resolve_punishment" as const,
+      punishmentId: p.id,
+      lifecycle: { status: "completed" as const, resolvedAt: now, resolution: "target_deceased" as const },
+    }));
+
     const justicePlan: JusticePlan = {
-      mutations: [{ type: "create_punishment", record: punishmentRecord }],
+      mutations: [...resolveDeceased, { type: "create_punishment", record: punishmentRecord }],
       nextSeq: alloc.nextSeq,
     };
 
@@ -948,12 +980,17 @@ export class GameStore {
       return { ...draft, payload: { ...draft.payload, ...payloadExtra }, links };
     });
 
-    // Thread sourcePunishmentId into the confine effect for statusEffect linkage.
-    const effects = base.effects.map((e) =>
-      e.type === "confine" && (e as { char?: string }).char === command.targetId
-        ? { ...e, sourcePunishmentId: punishmentId }
-        : e,
-    );
+    // Thread sourcePunishmentId into the confine effect for statusEffect linkage,
+    // and into memory effects for provenance tracking.
+    const effects = base.effects.map((e) => {
+      if (e.type === "confine" && (e as { char?: string }).char === command.targetId) {
+        return { ...e, sourcePunishmentId: punishmentId };
+      }
+      if (e.type === "memory") {
+        return { ...e, entry: { ...e.entry, sourcePunishmentId: punishmentId } };
+      }
+      return e;
+    });
 
     const txResult = this.commitPlannedTransaction(
       db,
@@ -1073,9 +1110,14 @@ export class GameStore {
       ...conseq.chronicle,
     ];
 
+    // Inject sourcePunishmentId into memory effects for provenance tracking.
+    const rankEffectsWithProvenance = conseq.effects.map((e) =>
+      e.type === "memory" ? { ...e, entry: { ...e.entry, sourcePunishmentId: punishmentId } } : e,
+    );
+
     const txResult = this.commitPlannedTransaction(
       db,
-      [...op.effects, ...conseq.effects],
+      [...op.effects, ...rankEffectsWithProvenance],
       chronicle,
       conseq.reactionBeats,
       { kind: "imperial_command", sourceId: "punitive_rank_change", label: `punitive rank: ${op.kind} ${targetId}` },
@@ -1121,12 +1163,40 @@ export class GameStore {
     let allEffects = plan.effects;
     let allChronicle = plan.chronicle;
     let allReactionBeats = plan.reactionBeats;
+    let haremJusticePlan: JusticePlan | undefined;
 
     if (plan.isPunitive) {
-      // Generate punishmentId and inject into chronicle before commit.
-      punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
+      // Allocate a formal pun_000001 ID from justice nextSeq.
+      const haremAlloc = allocateJusticeIds(this.state.justice, { punishments: 1 });
+      punishmentId = haremAlloc.punishments[0]!;
+      const now = toGameTime(this.state.calendar);
       // plan.empressId is set by the planner when isPunitive=true; use it directly to avoid TOCTOU re-search.
       const targetId = plan.empressId ?? "unknown";
+
+      const haremPunishmentRecord: PunishmentRecord = {
+        id: punishmentId as PunishmentId,
+        kind: "strip_harem_authority",
+        targetId,
+        actorId: "player",
+        severity: punishmentSeverity("strip_harem_authority"),
+        imposedAt: now,
+        sourceLocation: "zichendian",
+        publicity: "palace",
+        lifecycle: { status: "active" },
+        ...(command.caseId ? { caseId: command.caseId as CaseId } : {}),
+        details: {
+          fromMode: "empress" as const,
+          initialTarget: command.target.kind === "consort"
+            ? { mode: "acting_consort" as const, charId: command.target.charId }
+            : { mode: "neiwu_proxy" as const },
+        },
+      };
+
+      haremJusticePlan = {
+        mutations: [{ type: "create_punishment", record: haremPunishmentRecord }],
+        nextSeq: haremAlloc.nextSeq,
+      };
+
       const ctx: PunishmentOutcomeContext = {
         punishmentId,
         ...(command.caseId ? { caseId: command.caseId } : {}),
@@ -1134,18 +1204,48 @@ export class GameStore {
         actorId: "player",
         kind: "strip_harem_authority",
         severity: punishmentSeverity("strip_harem_authority"),
-        occurredAt: toGameTime(this.state.calendar),
+        occurredAt: now,
         sourceLocation: "zichendian",
       };
       const conseq = planPunishmentConsequences(db, this.state, ctx);
       // Inject punishmentId into the plan chronicle (the harem_administration_changed entry).
       allChronicle = plan.chronicle.map((draft) => ({
         ...draft,
-        payload: { ...draft.payload, punishmentId },
+        payload: { ...draft.payload, punishmentId, sourcePunishmentId: punishmentId },
+        links: { ...draft.links, sourcePunishmentId: punishmentId },
       }));
-      allEffects = [...plan.effects, ...conseq.effects];
+      // Inject sourcePunishmentId into memory effects.
+      const conseqEffectsWithProvenance = conseq.effects.map((e) =>
+        e.type === "memory" ? { ...e, entry: { ...e.entry, sourcePunishmentId: punishmentId } } : e,
+      );
+      allEffects = [...plan.effects, ...conseqEffectsWithProvenance];
       allChronicle = [...allChronicle, ...conseq.chronicle];
       allReactionBeats = [...plan.reactionBeats, ...conseq.reactionBeats];
+    } else if (command.target.kind === "empress") {
+      // Restoration: find active strip_harem_authority for the empress and lift it.
+      const activePun = Object.values(this.state.justice.punishments).find(
+        (p) =>
+          p.kind === "strip_harem_authority" &&
+          p.lifecycle.status === "active" &&
+          this.state.standing[p.targetId]?.rank === "fenghou",
+      );
+      if (activePun) {
+        const restoreAlloc = allocateJusticeIds(this.state.justice, {});
+        const now = toGameTime(this.state.calendar);
+        haremJusticePlan = {
+          mutations: [{
+            type: "resolve_punishment",
+            punishmentId: activePun.id,
+            lifecycle: { status: "lifted", resolvedAt: now, resolution: "authority_restored" },
+          }],
+          nextSeq: restoreAlloc.nextSeq,
+        };
+        // Add sourcePunishmentId to restoration chronicle entries.
+        allChronicle = plan.chronicle.map((draft) => ({
+          ...draft,
+          links: { ...draft.links, sourcePunishmentId: activePun.id },
+        }));
+      }
     }
 
     const txResult = this.commitPlannedTransaction(
@@ -1154,6 +1254,7 @@ export class GameStore {
       allChronicle,
       allReactionBeats,
       { kind: "imperial_command", sourceId: "transfer_harem_administration", label: `harem admin transfer${punishmentId ? ` (punitive: ${punishmentId})` : ""}` },
+      haremJusticePlan,
     );
     if (!txResult.ok) return txResult;
     return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, lines: plan.lines });
@@ -1497,11 +1598,13 @@ export class GameStore {
           reason: "term_expired",
           startTurn: e.startTurn,
           endTurnExclusive: e.endTurnExclusive,
+          ...(e.sourcePunishmentId ? { sourcePunishmentId: e.sourcePunishmentId } : {}),
         },
         publicity: { scope: "palace", persistence: "institutional" },
         publicSalience: 40,
         retention: "slow",
         tags: ["imperial_decree", "confinement_expired"],
+        ...(e.sourcePunishmentId ? { links: { sourcePunishmentId: e.sourcePunishmentId } } : {}),
       };
       const ap = appendCourtEvent(cur, draft);
       if (!ap.ok) return err(ap.error);
