@@ -8,6 +8,7 @@ import { toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import type { CharacterRank } from "../content/schemas";
 import { resolveDisplayName } from "../characters/standing";
+import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 import { GroundTruthBeliefProjection } from "../chronicle/belief";
 import { aiError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
@@ -150,6 +151,10 @@ export function assembleDialogueRequest(
     forbiddenClaims: db.characters[speakerId]?.dialoguePolicy?.forbiddenClaims,  // NEW
   });
 
+  const behavioralState = character.kind === "consort"
+    ? resolveConsortRuntimeAttrs(db, state, speakerId)
+    : undefined;
+
   const promptContext: DialoguePromptContext = {
     speakerDisplayName: resolveDisplayName(character, contextStanding, rank),
     rankDisplay,
@@ -161,6 +166,7 @@ export function assembleDialogueRequest(
     allowedClaims: assembled.allowed,
     forbiddenClaims: assembled.forbidden,
     choiceCandidates: [],
+    ...(behavioralState !== undefined ? { behavioralState } : {}),
   };
   const { scripted, sceneDirective, transcript } = options;
   return ok({

@@ -27,6 +27,7 @@ import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import { memoryEntryId } from "../state/newGame";
 import type { GameState } from "../state/types";
+import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 
 /** Max |cumulative delta| per axis (char×field / pillar×field) per batch. */
 export const AXIS_CAP = 10;
@@ -60,15 +61,21 @@ export function validateEffects(
     const e = parsed.data;
     switch (e.type) {
       case "favor":
-        if (!db.characters[e.char] || !state.standing[e.char]) {
-          bad(index, "BAD_EFFECT_TARGET", `unknown standing target "${e.char}"`, { char: e.char });
+      case "adjust_consort_attr": {
+        const ch = e.char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        if (!c || c.kind !== "consort" || !state.standing[ch]) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown consort standing target "${ch}"`, { char: ch });
         }
         break;
-      case "memory":
-        if (!db.characters[e.char] || !state.memories[e.char]) {
+      }
+      case "memory": {
+        const memChar = db.characters[e.char] ?? state.generatedConsorts[e.char];
+        if (!memChar || !state.memories[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `unknown memory target "${e.char}"`, { char: e.char });
         }
         break;
+      }
       case "resource":
       case "set_bloodline_status":
       case "flag":
@@ -478,6 +485,14 @@ export function applyEffects(
         const target = next.standing[effect.char]!;
         const applied = cappedDelta(`favor:${effect.char}`, effect.delta);
         target.favor = clampPct(target.favor + applied);
+        break;
+      }
+      case "adjust_consort_attr": {
+        // Bypasses AXIS_CAP — the punishment consequence planner is responsible
+        // for ensuring per-field aggregated deltas are reasonable.
+        const target = next.standing[effect.char]!;
+        const current = resolveConsortRuntimeAttrs(db, next, effect.char)[effect.field];
+        target[effect.field] = clampPct(current + effect.delta);
         break;
       }
       case "resource": {

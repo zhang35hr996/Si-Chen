@@ -14,6 +14,10 @@ import { expiredUnrecordedConfinements } from "../engine/characters/confinement"
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
 import { planHaremAdminRankCommand, type HaremAdminRankCommand, type HaremAdminCommandPlan } from "./haremAdminCommands";
+import { planPunishmentConsequences } from "../engine/punishments/consequencePlanner";
+import { buildRankOp, type RankOpRequest } from "./rankOps";
+import type { PunishmentOutcomeContext, PunishmentMeta, ReactionBeat } from "../engine/punishments/types";
+import { punishmentSeverity, type PunishmentKind } from "../engine/punishments/types";
 import type { CourtEvent } from "../engine/state/types";
 import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
@@ -440,6 +444,186 @@ export class GameStore {
     this.lastEffectReport = { effects: plan.effects, outcome: "applied", errors: [] };
     this.emit();
     return ok(plan);
+  }
+
+  /**
+   * Internal atomic helper shared by the two punitive entry points below.
+   * Applies effects → chronicle → single emit.  Returns the final plan + beats.
+   * On any failure the state is left unchanged.
+   */
+  private commitPlannedTransaction(
+    db: ContentDB,
+    effects: readonly EventEffect[],
+    chronicle: Omit<CourtEvent, "id">[],
+    reactionBeats: ReactionBeat[],
+  ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
+    const applied = applyEffects(db, this.state, effects);
+    if (!applied.ok) {
+      for (const e of applied.error) this.logger?.logGameError(e);
+      this.lastEffectReport = { effects: [...effects], outcome: "rejected", errors: applied.error };
+      return err(applied.error);
+    }
+    let candidate = applied.value;
+    for (const draft of chronicle) {
+      const ap = appendCourtEvent(candidate, draft);
+      if (!ap.ok) {
+        for (const e of ap.error) this.logger?.logGameError(e);
+        return err(ap.error); // this.state untouched — atomic
+      }
+      candidate = ap.value.state;
+    }
+    this.state = candidate;
+    this.lastEffectReport = { effects: [...effects], outcome: "applied", errors: [] };
+    this.emit();
+    return ok({ reactionBeats });
+  }
+
+  /**
+   * Punitive imperial command (confinement / execution) WITH consequence effects.
+   * Both base command effects and consequence effects are committed atomically.
+   *
+   * punishmentId is generated internally from (dayIndex:chronicle.length) to
+   * guarantee per-event uniqueness — callers must NOT supply it.
+   * kind / severity / occurredAt are also derived from the validated command.
+   *
+   * Ordinary non-punitive commands (lift_confinement) must use applyImperialCommand.
+   */
+  applyImperialPunishmentWithConsequences(
+    db: ContentDB,
+    command: ImperialCommand & { type: "impose_confinement" | "execute" },
+    meta: PunishmentMeta,
+  ): Result<{ punishmentId: string; reactionBeats: ReactionBeat[]; baseLines: string[] }, GameError[]> {
+    const planned = planImperialCommand(db, this.state, command);
+    if (!planned.ok) {
+      const error = stateError("IMPERIAL_COMMAND_REJECTED", planned.reason);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    const base = planned.plan;
+
+    // Derive context from the validated command — not from the caller.
+    const kind: PunishmentKind = command.type === "execute"
+      ? "execution"
+      : command.durationTurns === null
+        ? "indefinite_confinement"
+        : "finite_confinement";
+    // punishmentId is generated from (dayIndex:chronicle.length) — unique per event within a save.
+    const punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
+    const ctx: PunishmentOutcomeContext = {
+      punishmentId,
+      ...(meta.caseId ? { caseId: meta.caseId } : {}),
+      targetId: command.targetId,
+      actorId: "player",
+      kind,
+      severity: punishmentSeverity(kind),
+      occurredAt: toGameTime(this.state.calendar),
+      ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
+      ...(meta.publicity ? { publicity: meta.publicity } : {}),
+    };
+
+    const conseq = planPunishmentConsequences(db, this.state, ctx);
+
+    // Inject punishmentId into base.chronicle so it survives save/load.
+    // Primary punishment entries (decree matches the punishment type) get `punishmentId`;
+    // ancillary administration-transfer entries get `sourcePunishmentId` to avoid ambiguity
+    // when future code searches chronicle for the canonical punishment record.
+    const PUNITIVE_DECREES = new Set(["confinement_imposed", "execution"]);
+    const punishmentChronicle = base.chronicle.map((draft) => {
+      const decree = (draft.payload as { decree?: string }).decree;
+      const extra = PUNITIVE_DECREES.has(decree ?? "")
+        ? { punishmentId, ...(meta.caseId ? { caseId: meta.caseId } : {}) }
+        : { sourcePunishmentId: punishmentId };
+      return { ...draft, payload: { ...draft.payload, ...extra } };
+    });
+
+    const txResult = this.commitPlannedTransaction(
+      db,
+      [...base.effects, ...conseq.effects],
+      [...punishmentChronicle, ...conseq.chronicle],
+      conseq.reactionBeats,
+    );
+    if (!txResult.ok) return txResult;
+    return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: base.lines });
+  }
+
+  /**
+   * Punitive rank change (demotion / strip_title) WITH consequence effects.
+   * Rejects any request that would not produce a demotion or strip_title op.
+   *
+   * Product rule (locked): all sovereign-direct demotions and title strips are
+   * inherently punitive — there is no "administrative demotion" path at this scope.
+   *
+   * Ordinary 册封/晋升 and harem-admin rank changes must NOT call this.
+   * punishmentId / kind / severity / occurredAt are derived internally.
+   */
+  applyPunitiveRankChangeWithConsequences(
+    db: ContentDB,
+    targetId: string,
+    request: RankOpRequest,
+    meta: PunishmentMeta,
+  ): Result<{ punishmentId: string; reactionBeats: ReactionBeat[]; baseLines: string[] }, GameError[]> {
+    const op = buildRankOp(db, this.state, targetId, request, { kind: "sovereign", actorId: "player" });
+    if (!op) {
+      const error = stateError("RANK_OP_INVALID", "rank change is a no-op or target has no standing");
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    if (op.kind !== "demote" && op.kind !== "strip_title") {
+      const error = stateError("RANK_OP_INVALID", `punitive entry requires demote or strip_title, got: ${op.kind}`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+
+    const kind: PunishmentKind = op.kind === "strip_title" ? "strip_title" : "rank_demotion";
+    const occurredAt = toGameTime(this.state.calendar);
+    // punishmentId from (dayIndex:chronicle.length) — unique because each prior punishment
+    // appends at least one chronicle entry before the next one is issued.
+    const punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
+    // Rank change chronicle is built inline below and already includes punishmentId in payload.
+    const ctx: PunishmentOutcomeContext = {
+      punishmentId,
+      ...(meta.caseId ? { caseId: meta.caseId } : {}),
+      targetId,
+      actorId: "player",
+      kind,
+      severity: punishmentSeverity(kind),
+      occurredAt,
+      ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
+      ...(meta.publicity ? { publicity: meta.publicity } : {}),
+    };
+
+    const conseq = planPunishmentConsequences(db, this.state, ctx);
+    const chronicle: Omit<CourtEvent, "id">[] = [
+      {
+        type: "rank_changed",
+        occurredAt,
+        participants: [
+          { charId: "player", role: "actor" },
+          { charId: targetId, role: "demoted" },
+        ],
+        payload: {
+          decree: "imperial_punitive_rank_change",
+          targetId,
+          direction: op.kind,
+          punishmentId,
+          ...(meta.caseId ? { caseId: meta.caseId } : {}),
+        },
+        publicity: { scope: "palace", persistence: "institutional" },
+        publicSalience: 65,
+        retention: "slow",
+        tags: ["punitive", "rank_change", op.kind],
+      },
+      ...conseq.chronicle,
+    ];
+
+    const txResult = this.commitPlannedTransaction(
+      db,
+      [...op.effects, ...conseq.effects],
+      chronicle,
+      conseq.reactionBeats,
+    );
+    if (!txResult.ok) return txResult;
+    return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: op.lines });
   }
 
   /**
