@@ -1149,8 +1149,10 @@ export class GameStore {
       collector?.capturePhaseScheduled("official_yearly_tick", diffGameState(beforeOfficialTick, candidate));
     }
 
-    // 二月（或其后首次推进，catch-up）→ 候补池增龄/退出 + 生成本年科举（幂等，本年仅一次）。
-    if (monthChanged && candidate.calendar.month >= EXAM_MONTH && !hasGeneratedExaminationForYear(candidate, candidate.calendar.year)) {
+    // 二月（或其后首次推进，含本月内首次推进的 catch-up）→ 候补池增龄/退出 + 生成本年科举。
+    // 不依赖 monthChanged：settleCalendarAdvance 仅在成功时间事务后调用，hasGeneratedExaminationForYear
+    // 已保证本年幂等（同月再推进/事件 apCost 未跨月亦立即 catch-up，且不重复生成/增龄）。
+    if (candidate.calendar.month >= EXAM_MONTH && !hasGeneratedExaminationForYear(candidate, candidate.calendar.year)) {
       const beforeExam = candidate;
       candidate = settleAnnualExamination(candidate, db, candidate.calendar.year, toGameTime(candidate.calendar));
       collector?.capturePhaseScheduled("annual_examination", diffGameState(beforeExam, candidate));

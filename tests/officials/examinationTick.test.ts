@@ -86,14 +86,40 @@ describe("annual examination fires through the time transaction", () => {
     expect(validateOfficialWorld(store.getState(), db)).toEqual([]);
   });
 
-  it("catch-up: entering past 二月 without prior generation still generates once", () => {
+  /** 摆到某年某月上旬、留足 AP（不跨月）。 */
+  function storeAt(year: number, month: number): GameStore {
     const s = createNewGameState(db, 3);
     const store = new GameStore();
-    // 直接摆到三月上旬之前（二月下旬末），未生成本年科举。
-    store.loadState({ ...s, calendar: { ...s.calendar, year: 1, month: 2, period: "late", dayIndex: dayIndexOf(1, 2, "late"), ap: 1 }, examinationResults: [] });
+    store.loadState({ ...s, calendar: { ...s.calendar, year, month, period: "early", dayIndex: dayIndexOf(year, month, "early"), ap: 6 }, examinationResults: [] });
+    return store;
+  }
+
+  it("catch-up WITHIN the month: a SPEND_AP that does not cross a month boundary still generates", () => {
+    const store = storeAt(1, 2); // 二月上旬
     expect(hasGeneratedExaminationForYear(store.getState(), 1)).toBe(false);
-    store.advanceTime(db, { type: "SPEND_AP", amount: 1 }); // → 三月上旬
-    expect(store.getState().calendar.month).toBe(3);
+    const r = store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.monthChanged).toBe(false); // 未跨月
+    expect(hasGeneratedExaminationForYear(store.getState(), 1)).toBe(true); // 仍立即生成
+  });
+
+  it("catch-up at 六月中旬 (loaded mid-year, no month change) generates immediately, once", () => {
+    const store = storeAt(1, 6);
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
     expect(hasGeneratedExaminationForYear(store.getState(), 1)).toBe(true);
+    const eligible = getEligibleOfficialCandidates(store.getState()).length;
+    // 同月再推进不重复生成/增龄。
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    expect(store.getState().examinationResults.filter((e) => e.year === 1)).toHaveLength(1);
+    expect(getEligibleOfficialCandidates(store.getState()).length).toBe(eligible);
+  });
+
+  it("event apCost path (no month change) also catches up", () => {
+    const store = storeAt(1, 2);
+    const r = store.resolveEvent(db, "ev_chaohui", []); // apCost 1，不跨月
+    expect(r.ok).toBe(true);
+    expect(hasGeneratedExaminationForYear(store.getState(), 1)).toBe(true);
+    expect(validateOfficialWorld(store.getState(), db)).toEqual([]);
   });
 });
