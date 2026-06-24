@@ -34,9 +34,10 @@ describe("assertGeneratedOfficialWorld seam", () => {
     expect(assertGeneratedOfficialWorld(broken, db).map((e) => e.code)).toContain("KIN_BAD_AGE");
   });
 
-  it("createNewGameState fail-fasts when its generated world is integrity-invalid (seam is wired)", () => {
-    // 用一个会令生成结果违反生成不变量的内容/种子无法稳定构造；改为验证 seam 被建档调用：
-    // assertGeneratedOfficialWorld 对 createNewGameState 的产物为空，且其确为 persistent+gen 的并集。
+  it("the build-time seam is exactly persistent ∪ generation-age invariants (createNewGameState's fail-fast input)", () => {
+    // 说明：稳定地令 worldgen 产出非法世界来观测 throw 不可靠（需 mock content/worldgen）；
+    // 此处只断言 createNewGameState fail-fast 所用的 seam 之定义——它确为 persistent + 生成期年龄
+    // 两组不变量的并集（生产代码中 createNewGameState 直接调用此 seam，调用关系已明确）。
     const s = createNewGameState(db, 7);
     expect(assertGeneratedOfficialWorld(s, db)).toEqual([
       ...validateOfficialWorld(s, db),
