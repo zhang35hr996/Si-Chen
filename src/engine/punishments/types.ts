@@ -24,7 +24,8 @@ export type PunishmentKind =
   | "finite_confinement"
   | "indefinite_confinement"
   | "cold_palace"
-  | "execution";
+  | "execution"
+  | "strip_harem_authority";
 
 export type PunishmentSeverity = "minor" | "moderate" | "severe" | "terminal";
 
@@ -34,6 +35,7 @@ export function punishmentSeverity(kind: PunishmentKind): PunishmentSeverity {
     case "strip_title": return "minor";
     case "rank_demotion": return "moderate";
     case "finite_confinement": return "moderate";
+    case "strip_harem_authority": return "moderate";
     case "indefinite_confinement": return "severe";
     case "cold_palace": return "severe";
     case "execution": return "terminal";

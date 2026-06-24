@@ -38,6 +38,10 @@ import {
 } from "./grandSelection";
 import type { DecreeReaction } from "./empressDecree";
 import { excuseFromGreeting, dismissOvernight, recordOvernight } from "./greeting";
+import {
+  planHaremAdministrationTransfer,
+  type TransferHaremAdministrationCommand,
+} from "./haremAdminTransfer";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -860,6 +864,66 @@ export class GameStore {
     );
     if (!txResult.ok) return txResult;
     return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: op.lines });
+  }
+
+  /**
+   * Transfer or restore harem administration authority ("传乘风交付六宫主理权").
+   *
+   * Classification (at time of command):
+   *   empress → other (healthy empress)  → punitive `strip_harem_authority`; punishmentId generated
+   *   empress → other (sick/critical)    → administrative `empress_illness`; no punishment record
+   *   acting/neiwu → empress             → restore; no punishment record
+   *   acting/neiwu → different target    → reassignment; no punishment record
+   *   no-op                              → rejected, state unchanged
+   *
+   * Returns `{ punishmentId?, reactionBeats, lines }` on success.
+   * `punishmentId` is only present when the transfer was punitive.
+   */
+  transferHaremAdministration(
+    db: ContentDB,
+    command: TransferHaremAdministrationCommand,
+  ): Result<{ punishmentId?: string; reactionBeats: ReactionBeat[]; lines: string[] }, GameError[]> {
+    const planned = planHaremAdministrationTransfer(db, this.state, command);
+    if (!planned.ok) {
+      const error = stateError("HAREM_TRANSFER_REJECTED", planned.reason);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    const plan = planned.plan;
+    let punishmentId: string | undefined;
+    let allEffects = plan.effects;
+    let allChronicle = plan.chronicle;
+    let allReactionBeats = plan.reactionBeats;
+
+    if (plan.isPunitive) {
+      // Generate punishmentId and inject into chronicle before commit.
+      punishmentId = `pun:${this.state.calendar.dayIndex}:${this.state.chronicle.length}`;
+      // plan.empressId is set by the planner when isPunitive=true; use it directly to avoid TOCTOU re-search.
+      const targetId = plan.empressId ?? "unknown";
+      const ctx: PunishmentOutcomeContext = {
+        punishmentId,
+        ...(command.caseId ? { caseId: command.caseId } : {}),
+        targetId,
+        actorId: "player",
+        kind: "strip_harem_authority",
+        severity: punishmentSeverity("strip_harem_authority"),
+        occurredAt: toGameTime(this.state.calendar),
+        sourceLocation: "zichendian",
+      };
+      const conseq = planPunishmentConsequences(db, this.state, ctx);
+      // Inject punishmentId into the plan chronicle (the harem_administration_changed entry).
+      allChronicle = plan.chronicle.map((draft) => ({
+        ...draft,
+        payload: { ...draft.payload, punishmentId },
+      }));
+      allEffects = [...plan.effects, ...conseq.effects];
+      allChronicle = [...allChronicle, ...conseq.chronicle];
+      allReactionBeats = [...plan.reactionBeats, ...conseq.reactionBeats];
+    }
+
+    const txResult = this.commitPlannedTransaction(db, allEffects, allChronicle, allReactionBeats);
+    if (!txResult.ok) return txResult;
+    return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, lines: plan.lines });
   }
 
   /**

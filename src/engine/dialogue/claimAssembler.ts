@@ -229,6 +229,7 @@ export function eventToAuthorizedClaims(
     case "conflict":
     case "promise":
     case "secret_discovered":
+    case "harem_administration_changed":
       return [];
 
     default: {

@@ -17,7 +17,7 @@ import type { EventEffect } from "../content/schemas";
 import type { CourtEvent, GameState } from "../state/types";
 import { evaluateOtherConsortReactions } from "./otherConsortsReaction";
 import { getPersonalityModifier } from "./personalityModifiers";
-import type { PunishmentConsequencePlan, PunishmentOutcomeContext } from "./types";
+import type { PunishmentConsequencePlan, PunishmentKind, PunishmentOutcomeContext } from "./types";
 
 // ── Seeded roll ───────────────────────────────────────────────────────────────
 
@@ -33,18 +33,19 @@ type BaselineRange = [min: number, max: number];
 
 // Per PunishmentKind: [affectionDelta min, max] [fearDelta min, max] [loyaltyDelta min, max] [healthDelta min, max]
 // Following the spec tables (all negative affection/loyalty, positive fear)
-const BASELINES: Record<string, {
+const BASELINES: Record<PunishmentKind, {
   affection: BaselineRange;
   fear: BaselineRange;
   loyalty: BaselineRange;
   health: BaselineRange;
 }> = {
-  strip_title:          { affection: [-6, -3],   fear: [3, 8],    loyalty: [-4, -1], health: [0, 0] },
-  rank_demotion:        { affection: [-10, -5],  fear: [5, 12],   loyalty: [-6, -2], health: [0, 0] },
-  finite_confinement:   { affection: [-15, -8],  fear: [10, 20],  loyalty: [-8, -3], health: [-2, 0] },
-  indefinite_confinement:{ affection: [-25, -15], fear: [20, 35], loyalty: [-15, -8],health: [-4, -1] },
-  cold_palace:          { affection: [-40, -25], fear: [25, 45],  loyalty: [-30, -15],health: [-8, -3] },
-  execution:            { affection: [0, 0],     fear: [0, 0],    loyalty: [0, 0],   health: [0, 0] }, // death pipeline handles
+  strip_title:           { affection: [-6, -3],   fear: [3, 8],    loyalty: [-4, -1],  health: [0, 0] },
+  rank_demotion:         { affection: [-10, -5],  fear: [5, 12],   loyalty: [-6, -2],  health: [0, 0] },
+  finite_confinement:    { affection: [-15, -8],  fear: [10, 20],  loyalty: [-8, -3],  health: [-2, 0] },
+  indefinite_confinement:{ affection: [-25, -15], fear: [20, 35],  loyalty: [-15, -8], health: [-4, -1] },
+  cold_palace:           { affection: [-40, -25], fear: [25, 45],  loyalty: [-30, -15],health: [-8, -3] },
+  strip_harem_authority: { affection: [-8, -4],   fear: [5, 12],   loyalty: [-6, -2],  health: [0, 0] },
+  execution:             { affection: [0, 0],     fear: [0, 0],    loyalty: [0, 0],    health: [0, 0] }, // death pipeline handles
 };
 
 

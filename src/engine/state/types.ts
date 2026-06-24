@@ -553,7 +553,8 @@ export type CourtEventType =
   | "rewarded"
   | "conflict"
   | "promise"
-  | "secret_discovered";
+  | "secret_discovered"
+  | "harem_administration_changed";
 // claim_corrected 延后到【首个有错误信念/可证伪 claim 的 PR】——它需生产者+消费者；
 // 加入即死类型。
 
@@ -594,10 +595,25 @@ export interface CourtEvent {
 }
 
 /**
+ * 后宫主理权变动原因。
+ *   empress_confined      — 凤后被禁足，交由侍君或内务府代理。
+ *   empress_illness       — 凤后抱恙（sick/critical），暂交代理（行政性，非处罚）。
+ *   imperial_deprivation  — 凤后健康，皇帝主动收回主理权（处罚性）。
+ *   no_eligible_consort   — 无合格候选侍君，转内务府代理（常与上述原因共存）。
+ *   imperial_reassignment — 已有代理时，皇帝改派另一代理者（行政性重新委任）。
+ */
+export type HaremAdministrationReason =
+  | "empress_confined"
+  | "empress_illness"
+  | "imperial_deprivation"
+  | "no_eligible_consort"
+  | "imperial_reassignment";
+
+/**
  * 后宫主理权运行态。
  *   empress        — 凤后正常掌宫（默认）。
- *   acting_consort — 凤后禁足期间由某位侍君奉旨协理。
- *   neiwu_proxy    — 凤后禁足且无合格侍君，内务府暂代宫务。
+ *   acting_consort — 由某位侍君奉旨协理。
+ *   neiwu_proxy    — 无合格侍君，内务府暂代宫务。
  */
 export type HaremAdministrationState =
   | { mode: "empress" }
@@ -605,12 +621,12 @@ export type HaremAdministrationState =
       mode: "acting_consort";
       charId: string;
       appointedAt: GameTime;
-      reason: "empress_confined";
+      reason: HaremAdministrationReason;
     }
   | {
       mode: "neiwu_proxy";
       appointedAt: GameTime;
-      reason: "no_eligible_consort";
+      reason: HaremAdministrationReason;
     };
 
 export interface GameState {

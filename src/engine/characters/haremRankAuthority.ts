@@ -57,15 +57,18 @@ export function getHaremRankAuthority(db: ContentDB, state: GameState): RankAuth
 /**
  * 校验代理侍君能否对目标进行指定位分变更（含全部前置条件）。
  *
+ * 权威判据为 state.haremAdministration.mode === "acting_consort"，不再要求凤后禁足。
+ * PUNISH-3A 后合法委任包含 imperial_deprivation（健康凤后受罚）和 empress_illness（抱恙凤后）
+ * 两种不要求禁足的路径，凤后禁足不再是协理者权限的必要条件。
+ *
  * 必须同时满足：
  *  1. haremAdministration 为 acting_consort 且 actorId 匹配。
- *  2. 凤后仍在禁足（协理者有效的前提）。
- *  3. actor 存活、未禁足、仍达到驸级门槛。
- *  4. target 非 actor 本人。
- *  5. target 非凤后。
- *  6. target 当前 rank.order < actor rank.order（严格低于）。
- *  7. newRankId 的 order < actor rank.order（晋升后仍低于协理者）。
- *  8. newRankId 不为 fenghou。
+ *  2. actor 存活、未禁足、仍达到驸级门槛。
+ *  3. target 非 actor 本人。
+ *  4. target 非凤后。
+ *  5. target 当前 rank.order < actor rank.order（严格低于）。
+ *  6. newRankId 的 order < actor rank.order（晋升后仍低于协理者）。
+ *  7. newRankId 不为 fenghou。
  */
 export function canAdministratorAdjustRank(
   db: ContentDB,
@@ -80,17 +83,6 @@ export function canAdministratorAdjustRank(
   }
   if (actorId === targetId) {
     return { ok: false, reason: "协理者不能调整自己的位分。" };
-  }
-
-  // 凤后必须仍在禁足。
-  const fenghousId = Object.keys(state.standing).find(
-    (id) => state.standing[id]!.rank === "fenghou" && state.standing[id]!.lifecycle !== "deceased",
-  );
-  if (!fenghousId) {
-    return { ok: false, reason: "当前宫中无凤后，协理权限异常。" };
-  }
-  if (!isConfined(state, fenghousId)) {
-    return { ok: false, reason: "凤后已恢复主理，协理者位分处分权失效。" };
   }
 
   // actor 自身状态。

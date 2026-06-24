@@ -407,13 +407,18 @@ export function validateEffects(
         const effectivelyConfined = (alreadyConfined && !liftedInBatch) || confinedinBatch;
 
         const ns = e.state;
+        // PUNISH-3A: empress_confined and no_eligible_consort require empress confinement (existing
+        // behaviour). New reasons (imperial_deprivation, empress_illness, imperial_reassignment) are
+        // triggered without confinement — sovereign administrative transfer or illness delegation.
+        const CONFINEMENT_REASONS = new Set(["empress_confined", "no_eligible_consort"]);
+        const requiresConfinement = "reason" in ns && CONFINEMENT_REASONS.has(ns.reason);
         if (ns.mode === "empress") {
           if (effectivelyConfined) {
             bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is confined", {});
           }
         } else if (ns.mode === "acting_consort") {
-          if (!effectivelyConfined) {
-            bad(index, "BAD_EFFECT", "acting_consort mode requires empress to be confined", {});
+          if (requiresConfinement && !effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "acting_consort mode with reason=empress_confined requires empress to be confined", {});
           } else {
             const c = db.characters[ns.charId] ?? state.generatedConsorts[ns.charId];
             const st = state.standing[ns.charId];
@@ -427,8 +432,8 @@ export function validateEffects(
           }
         } else {
           // neiwu_proxy
-          if (!effectivelyConfined) {
-            bad(index, "BAD_EFFECT", "neiwu_proxy mode requires empress to be confined", {});
+          if (requiresConfinement && !effectivelyConfined) {
+            bad(index, "BAD_EFFECT", "neiwu_proxy mode with reason=empress_confined requires empress to be confined", {});
           }
         }
         break;
