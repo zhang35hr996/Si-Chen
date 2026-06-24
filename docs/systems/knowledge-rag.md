@@ -416,6 +416,149 @@ Rules 8, 13–15 updated:
 
 ---
 
+## Application Wiring (PR4)
+
+### DialogueRuntimeDeps
+
+All generative dialogue entry points share a single `DialogueRuntimeDeps` bundle:
+
+```typescript
+// src/engine/dialogue/runtimeDeps.ts
+interface DialogueRuntimeDeps {
+  readonly provider: DialogueProvider;
+  readonly logger?: RingBufferLogger;
+  readonly knowledgeRetriever?: KnowledgeRetriever;
+  readonly knowledgeFailureMode?: "continue_without_knowledge" | "fail_turn";
+}
+```
+
+`toDialogueTurnOptions(deps)` maps the bundle to `DialogueTurnOptions` — omitting any fields that are `undefined` so they don't override orchestrator defaults.
+
+### Entry points wired
+
+| Entry point | File | Uses runtime? |
+|---|---|---|
+| Converse first turn | `src/ui/App.tsx` | ✅ |
+| Choice continuation | `src/ui/App.tsx` | ✅ |
+| Scene line (future generative) | `src/engine/scenes/runner.ts` | ✅ |
+
+`SceneRunner` constructor changed from `(db, provider, logger?)` to `(db, dialogueRuntime)`. Scripted provider invariant: the orchestrator skips retrieval when `provider.kind === "scripted"`.
+
+### Failure mode behavior
+
+| Mode | Provider called | State mutated | Meta |
+|---|---|---|---|
+| `continue_without_knowledge` | Yes | Yes | `meta.knowledge.degraded = true, degradationKind = "fatal_degraded"` |
+| `fail_turn` | No | No | Turn returns `Err`, UI falls through to scripted fallback |
+
+### DebugPanel knowledge diagnostic
+
+`DialogueKnowledgeDiagnostic` (in `src/ui/debug/DebugPanel.tsx`) is captured into App-local state after each successful generative turn. It shows:
+- `configured` — whether a retriever is wired
+- `chunkIds` — which chunks were used (provenance from `meta.knowledge.chunkIds`)
+- `degraded / degradationKind / degradationReason` — degradation status
+
+This is non-persistent — never written to `GameState` or save files.
+
+### Browser boundary
+
+```
+Browser                              Node (PR5 / server)
+─────────────────────────────────    ────────────────────────────────
+DialogueRuntimeDeps (interface)      KnowledgeHybridRetriever (class)
+toDialogueTurnOptions (pure fn)      better-sqlite3
+RemoteKnowledgeClient (fetch only)   sqlite-fts5, sqlite-vec
+KnowledgeRetriever (interface)       embedding providers
+src/ui/**                            .knowledge.db
+```
+
+`src/engine/dialogue/runtimeDeps.ts` and `src/engine/knowledge/remote/client.ts` import only TypeScript interfaces and Zod — verified by source-scan tests.
+
+---
+
+## Remote Retrieval (PR5 skeleton)
+
+### Wire protocol
+
+`POST /knowledge/retrieve` — JSON request/response. Schemas defined in:
+
+```
+src/engine/knowledge/remote/schemas.ts  ← shared browser+server
+server/knowledge/handler.ts             ← transport-neutral handler
+server/knowledge/relay.ts               ← HTTP adapter
+```
+
+### Request DTO
+
+```typescript
+{
+  query: {
+    text: string;              // 1–2000 chars
+    limit: number;             // 1–20
+    visibilityCeiling?: "public" | "restricted" | "imperial";
+    currentTime?: GameTime;
+    sourceTypes?: KnowledgeSourceType[];
+    tagFilter?: KnowledgeMetadataFilter;
+    entityFilter?: KnowledgeMetadataFilter;
+    locationFilter?: KnowledgeMetadataFilter;
+    vectorFailureMode?: "fail" | "keyword_only";
+  }
+}
+```
+
+### Response DTO
+
+```typescript
+{
+  hits: Array<{
+    id: string;
+    sourceType: KnowledgeSourceType;
+    title: string;
+    text: string;
+    tags: string[];
+    entityIds: string[];
+    locationIds: string[];
+    visibility: "public" | "restricted" | "imperial";
+    validFrom?: GameTime;
+    validUntil?: GameTime;
+    // Scores (for client-side packer)
+    hybridScore: number;
+    rank: number;
+    keywordRank: number | null;
+    keywordScore: number | null;
+    vectorRank: number | null;
+    cosineScore: number | null;
+  }>;
+  vectorDegradation?: { reason: "provider_error" | "no_embeddings" | "invalid_embedding" | "search_error" };
+}
+```
+
+**Intentionally absent from response:** `sourcePath`, embedding vectors, error stack traces, API keys.
+
+### Error sanitization
+
+The handler catches all retriever errors, logs them via `deps.logger.error`, and returns `{ error: "retrieval_failed", code: "INTERNAL_ERROR" }` to the client. The raw error text (which may contain file paths, API keys, or stack traces) never reaches the browser.
+
+### PR5 composition root (pending)
+
+`server/knowledge/host.ts` — creates a `KnowledgeHybridRetriever` backed by `.knowledge.db` and wires it into `createKnowledgeRequestHandler`. Not yet implemented; this is the next integration step after `npm run knowledge:build` for the production database.
+
+To add the retriever client to the browser runtime:
+
+```typescript
+// In src/main.tsx (after PR5 host is implemented):
+import { RemoteKnowledgeClient } from "./engine/knowledge/remote/client";
+
+const dialogueRuntime: DialogueRuntimeDeps = {
+  provider: createDialogueProvider({ ... }),
+  logger,
+  knowledgeRetriever: new RemoteKnowledgeClient({ baseUrl: "http://localhost:3001" }),
+  knowledgeFailureMode: "continue_without_knowledge",
+};
+```
+
+---
+
 ## Author Checklist — Adding New Lore
 
 - [ ] File goes in `content/knowledge/` (for production lore) or `tests/knowledge/fixtures/` (for test-only content).
