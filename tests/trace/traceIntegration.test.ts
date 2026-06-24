@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createGameStore } from "../../src/store/gameStore";
-import { toGameTime } from "../../src/engine/calendar/time";
+import { dayIndexOf, toGameTime } from "../../src/engine/calendar/time";
+import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -420,7 +421,8 @@ describe("GameStore trace integration", () => {
     const store = makeStarted("strict");
     const s = store.getState();
     const officialId = Object.keys(s.officials)[0];
-    if (!officialId) return; // no officials in fixture
+    expect(officialId, "fixture must contain an official").toBeDefined();
+    if (!officialId) throw new Error("no official in fixture");
 
     const T = toGameTime(s.calendar);
     store.loadState({ ...s, pendingRetirements: [{ officialId, requestedAt: T }] });
@@ -437,7 +439,8 @@ describe("GameStore trace integration", () => {
     const store = makeStarted("strict");
     const s = store.getState();
     const officialId = Object.keys(s.officials)[0];
-    if (!officialId) return; // no officials in fixture
+    expect(officialId, "fixture must contain an official").toBeDefined();
+    if (!officialId) throw new Error("no official in fixture");
 
     const T = toGameTime(s.calendar);
     store.loadState({ ...s, pendingRetirements: [{ officialId, requestedAt: T }] });
@@ -510,5 +513,54 @@ describe("GameStore trace integration", () => {
     );
     expect(adminMut).toBeDefined();
     expect(adminMut?.after).toBe("neiwu_proxy");
+  });
+
+  it("strict mode: year-boundary advanceTime produces official_yearly_tick phase, untrackedCount === 0", () => {
+    const store = createGameStore({ traceMode: "strict" });
+    const base = createNewGameState(db, 1);
+    // Put the calendar at the last AP of year 1 / month 12 so that spending it rolls into month 1.
+    const apCost = 1; // SPEND_AP 1 is always enough to flip the period
+    store.loadState({
+      ...base,
+      calendar: { ...base.calendar, year: 1, month: 12, period: "late", dayIndex: dayIndexOf(1, 12, "late"), ap: apCost },
+    });
+    const result = store.advanceTime(db, { type: "SPEND_AP", amount: apCost });
+    expect(result.ok, "year-boundary advance must succeed").toBe(true);
+    if (!result.ok) throw new Error(result.error.map((e) => e.message).join("; "));
+    expect(store.getState().calendar.month).toBe(1); // rolled into new year
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+    // official_yearly_tick phase must be present if there are officials.
+    if (Object.keys(base.officials).length > 0) {
+      const tickMut = tx.mutations.find((m) => m.phase === "official_yearly_tick");
+      expect(tickMut, "official_yearly_tick phase mutation must exist on year-cross").toBeDefined();
+    }
+  });
+
+  it("strict mode: applyImperialPunishmentWithConsequences produces untrackedCount === 0", () => {
+    const store = createGameStore({ traceMode: "strict" });
+    store.newGame(db);
+    const consortId = Object.keys(store.getState().standing).find(
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+    );
+    expect(consortId, "fixture must have a non-empress consort").toBeDefined();
+    if (!consortId) throw new Error("no eligible consort in fixture");
+
+    const cal = store.getState().calendar;
+    const result = store.applyImperialPunishmentWithConsequences(
+      db,
+      { type: "impose_confinement", targetId: consortId, durationTurns: 6 },
+      {},
+    );
+    expect(result.ok, "punishment transaction must succeed").toBe(true);
+    if (!result.ok) throw new Error(result.error.map((e) => e.message).join("; "));
+
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+    // Chronicle entries must be attributed.
+    const chronicleMut = tx.mutations.find((m) => m.phase === "chronicle_append");
+    expect(chronicleMut, "chronicle_append phase mutation must exist").toBeDefined();
   });
 });
