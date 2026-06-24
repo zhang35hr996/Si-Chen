@@ -73,6 +73,9 @@ describe("ExaminationScreen — 候补池 + 授官", () => {
     expect(store.getState().officials[appointedOfficialId(c.id)]).toBeDefined();
     expect(store.getState().officialCandidates[c.id]!.status).toBe("appointed");
     expect(onCommitted).toHaveBeenCalled();
+    // 回到候补池且成功提示保留（P3）。
+    expect(screen.getByRole("button", { name: "候补池" })).toBeInTheDocument();
+    expect(screen.getByText(/已授任/)).toBeInTheDocument();
   });
 
   it("a failed appointment keeps the confirm panel and does not autosave", async () => {

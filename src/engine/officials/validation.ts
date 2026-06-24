@@ -199,7 +199,14 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       });
     }
   }
-  // 候补授官转正一致性（PR3B）：appointed 候补 ↔ 正式官员双向、继承一致、不被两候补共指。
+  // 候补授官转正一致性（PR3B）。先按候补归集授官 provenance 条目（每 appointed 候补须恰一条）。
+  const provByCandidate = new Map<string, typeof state.officialHistory>();
+  for (const h of state.officialHistory) {
+    if (!h.appointment) continue;
+    const arr = provByCandidate.get(h.appointment.candidateId) ?? [];
+    arr.push(h);
+    provByCandidate.set(h.appointment.candidateId, arr);
+  }
   const claimedOfficials = new Map<string, string>(); // appointedOfficialId → candidateId
   for (const c of Object.values(state.officialCandidates)) {
     if (c.status !== "appointed" || !c.appointedOfficialId) continue;
@@ -208,22 +215,43 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     const prev = claimedOfficials.get(c.appointedOfficialId);
     if (prev) e("CANDIDATE_OFFICIAL_DOUBLE_CLAIM", `官员「${c.appointedOfficialId}」被候补「${prev}」「${c.id}」同时指认`, { id: c.id });
     claimedOfficials.set(c.appointedOfficialId, c.id);
-    if (off.surname !== c.surname || off.givenName !== c.givenName || off.age !== c.age) {
-      e("CANDIDATE_OFFICIAL_INHERIT_MISMATCH", `候补「${c.id}」与转正官员姓名/年龄不一致`, { id: c.id });
+    // 继承：姓名永久一致；当前年龄不得低于授官时年龄（lifecycle 只增不减）。
+    if (off.surname !== c.surname || off.givenName !== c.givenName) {
+      e("CANDIDATE_OFFICIAL_INHERIT_MISMATCH", `候补「${c.id}」与转正官员姓名不一致`, { id: c.id });
+    }
+    if (off.age < c.age) {
+      e("CANDIDATE_OFFICIAL_AGE_BELOW_APPOINTMENT", `转正官员「${off.id}」当前年龄(${off.age}) 低于授官时(${c.age})`, { id: c.id });
     }
     const expectFamily = c.familyId !== null ? c.familyId : hanmenFamilyId(c.id);
     if (off.familyId !== expectFamily) {
       e("CANDIDATE_OFFICIAL_FAMILY_MISMATCH", `候补「${c.id}」转正官员 familyId「${off.familyId}」应为「${expectFamily}」`, { id: c.id });
     }
+    // 授官 provenance 必须存在且恰一条、并与候补/官员各项一致。
+    const prov = provByCandidate.get(c.id) ?? [];
+    if (prov.length !== 1) {
+      e("CANDIDATE_APPOINTMENT_PROVENANCE_MISSING", `appointed 候补「${c.id}」应恰有一条授官史（实有 ${prov.length}）`, { id: c.id });
+    } else {
+      const h = prov[0]!;
+      const ap = h.appointment!;
+      const post = db.officialPosts[ap.postId];
+      const okEntry =
+        h.officialId === c.appointedOfficialId &&
+        h.status === "active" &&
+        JSON.stringify(h.at) === JSON.stringify(off.appointedAt) &&
+        ap.examinationYear === c.examinationYear &&
+        ap.examinationRank === c.examinationRank &&
+        ap.ageAtAppointment === c.age &&
+        !!post && post.gradeOrder > 0;
+      if (!okEntry) e("HISTORY_APPOINTMENT_INCONSISTENT", `授官史条目「${h.id}」与候补/官员不一致`, { id: c.id });
+    }
   }
-  // officialHistory 授官溯源条目须与候补/官员相互一致。
+  // 反向：每条 provenance 都须指向一名 appointed 候补且 officialId 对应。
   for (const h of state.officialHistory) {
     if (!h.appointment) continue;
     const c = state.officialCandidates[h.appointment.candidateId];
     if (!c) { e("HISTORY_APPOINTMENT_BAD_CANDIDATE", `授官史条目「${h.id}」指向不存在候补`, { id: h.id }); continue; }
-    if (c.appointedOfficialId !== h.officialId) e("HISTORY_APPOINTMENT_INCONSISTENT", `授官史条目「${h.id}」与候补 appointedOfficialId 不符`, { id: h.id });
-    if (c.examinationYear !== h.appointment.examinationYear || c.examinationRank !== h.appointment.examinationRank) {
-      e("HISTORY_APPOINTMENT_INCONSISTENT", `授官史条目「${h.id}」科举年份/榜次与候补不符`, { id: h.id });
+    if (c.status !== "appointed" || c.appointedOfficialId !== h.officialId) {
+      e("HISTORY_APPOINTMENT_INCONSISTENT", `授官史条目「${h.id}」与候补状态/appointedOfficialId 不符`, { id: h.id });
     }
   }
   for (const [postId, used] of Object.entries(seatUse)) {

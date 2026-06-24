@@ -26,10 +26,20 @@ describe("appointment consistency invariants", () => {
     expect(validateOfficialWorld(appointed().s, db)).toEqual([]);
   });
 
-  it("name/age inheritance mismatch → CANDIDATE_OFFICIAL_INHERIT_MISMATCH", () => {
+  it("name inheritance mismatch → CANDIDATE_OFFICIAL_INHERIT_MISMATCH", () => {
     const { s, officialId } = appointed();
-    const bad = { ...s, officials: { ...s.officials, [officialId]: { ...s.officials[officialId]!, age: s.officials[officialId]!.age + 5 } } };
+    const bad = { ...s, officials: { ...s.officials, [officialId]: { ...s.officials[officialId]!, givenName: "改名" } } };
     expect(codes(bad)).toContain("CANDIDATE_OFFICIAL_INHERIT_MISMATCH");
+  });
+
+  it("official current age ABOVE appointment age is valid; BELOW it is rejected", () => {
+    const { s, officialId } = appointed();
+    // 增龄合法（lifecycle 增长）。
+    const older = { ...s, officials: { ...s.officials, [officialId]: { ...s.officials[officialId]!, age: s.officials[officialId]!.age + 3 } } };
+    expect(validateOfficialWorld(older, db)).toEqual([]);
+    // 低于授官时年龄非法。
+    const younger = { ...s, officials: { ...s.officials, [officialId]: { ...s.officials[officialId]!, age: s.officials[officialId]!.age - 1 } } };
+    expect(codes(younger)).toContain("CANDIDATE_OFFICIAL_AGE_BELOW_APPOINTMENT");
   });
 
   it("family mismatch → CANDIDATE_OFFICIAL_FAMILY_MISMATCH", () => {
@@ -60,5 +70,20 @@ describe("appointment consistency invariants", () => {
     const { s, officialId } = appointed();
     const rest = { ...s.officials }; delete rest[officialId];
     expect(codes({ ...s, officials: rest })).toContain("CANDIDATE_APPOINTED_NO_OFFICIAL");
+  });
+
+  it("appointed candidate whose provenance history was deleted → CANDIDATE_APPOINTMENT_PROVENANCE_MISSING", () => {
+    const { s } = appointed();
+    const noHistory = { ...s, officialHistory: s.officialHistory.filter((h) => !h.appointment) };
+    expect(codes(noHistory)).toContain("CANDIDATE_APPOINTMENT_PROVENANCE_MISSING");
+  });
+
+  it("provenance pointing at a non-graded post → HISTORY_APPOINTMENT_INCONSISTENT", () => {
+    const { s } = appointed();
+    const idx = s.officialHistory.findIndex((h) => h.appointment);
+    const h = s.officialHistory[idx]!;
+    const tampered = s.officialHistory.slice();
+    tampered[idx] = { ...h, appointment: { ...h.appointment!, postId: "post_ghost" } };
+    expect(codes({ ...s, officialHistory: tampered })).toContain("HISTORY_APPOINTMENT_INCONSISTENT");
   });
 });

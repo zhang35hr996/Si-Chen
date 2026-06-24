@@ -14,8 +14,17 @@
    `appointmentLoyalty`（`integrity*0.7 + governance*0.3`，确定性、不调随机流）派生。
 4. 候补 → `appointed` + 回填 `appointedOfficialId`。
 5. 写 `officialHistory`（`status: active` + `appointment` 溯源：candidateId/examinationYear/
-   examinationRank/postId；appointedAt 即条目 `at`）。
+   examinationRank/postId/**ageAtAppointment**；appointedAt 即条目 `at`）。
 6. 成功后由 UI `onCommitted` 落盘；`appointed` 候补不再出现在 eligible selector。**绝不删除候补记录。**
+
+**封闭规则**（唯一权威入口自检，不依赖 UI）：官职须存在且 `gradeOrder>0`（拒绝平民等非授官席位）；空席判定
+复用 `isPostVacant`（不另算一套占用）；派生 `officialId` 与寒门 `hanmenFamilyId` 须与所有人物/家族命名空间
+**全局不冲突**（character/generatedConsort/official/familyMember/candidate/officialFamily），否则 `OFFICIAL_BAD_POST`
+/`OFFICIAL_SEAT_FULL`/`OFFICIAL_ID_COLLISION`。
+
+**年龄语义**：候补 `appointed` 后其 `age` 永久冻结＝授官时年龄；正式官员每年正月随 lifecycle 增龄。故
+provenance 存 `ageAtAppointment` 快照，validator **不要求当前年龄相等**——只校验 `candidate.age===ageAtAppointment`
+且 `official.age >= ageAtAppointment`（增龄合法、永不变小）。姓名继承仍永久相等。
 
 **家族**：候补 `familyId !== null` 沿用既有家族（必须存在）；寒门（`null`）建**最小家族壳**——仅一个
 `OfficialFamily`（id `official_fam_appointed_<candidateId>`，surname 取候补，保守门第属性），**不生成母亲/
@@ -71,8 +80,9 @@ schema/migration、trace source。不在 React 直接写 `state.officials`、不
 
 `SAVE_FORMAT_VERSION` 12→13；`MIGRATIONS[12]` 仅为 `officialHistory.appointment`（可选附加字段）重打版本，
 旧条目天然无此字段、无需补值。`validateOfficialWorld` 新增授官一致性：`appointedOfficialId` 指向存在官员、
-姓名/年龄继承一致、familyId 一致（含寒门壳）、同一 official 不被两候补共指、history `appointment` 溯源与
-候补一致。配合 PR3A 既有候补/科举不变量。
+姓名继承一致、当前年龄不低于授官时年龄、familyId 一致（含寒门壳）、同一 official 不被两候补共指；每个
+`appointed` 候补**恰有一条** `appointment` 溯源（officialId/状态 active/`at===appointedAt`/年份/榜次/
+`ageAtAppointment`/有品级 postId 全一致），且每条溯源反向指回 appointed 候补。配合 PR3A 既有不变量。
 
 ## 八、测试
 

@@ -126,6 +126,7 @@ const officialHistorySchema = z.strictObject({
       examinationYear: z.number().int().min(1),
       examinationRank: z.number().int().min(1),
       postId: idSchema,
+      ageAtAppointment: z.number().int().min(1),
     })
     .optional(),
 });

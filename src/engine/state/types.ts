@@ -272,6 +272,8 @@ export interface OfficialAppointmentProvenance {
   examinationRank: number;
   /** 授任到的官职。 */
   postId: string;
+  /** 授官时的年龄快照（候补 age 自此冻结；正式官员当年龄后续随 lifecycle 增长，故只快照不约束相等）。 */
+  ageAtAppointment: number;
 }
 
 // ── 候补官员（科举/荐举人才池；Phase 3 PR3A） ─────────────────────────────

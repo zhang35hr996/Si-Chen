@@ -12,6 +12,7 @@ import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState, Official, OfficialFamily, OfficialHistoryEntry } from "../state/types";
 import { officialHistoryId } from "./lifecycle";
+import { isPostVacant } from "./selectors";
 
 /** 转正官员 id：稳定、可追溯候补、与既有 official_<famId> 命名空间隔离。 */
 export function appointedOfficialId(candidateId: string): string {
@@ -54,20 +55,26 @@ export function appointOfficialCandidate(
     return err(stateError("CANDIDATE_ALREADY_APPOINTED", `候补「${candidateId}」已授官`, { context: { candidateId } }));
   }
 
+  // 官职须存在且为有品级官职（gradeOrder>0）——拒绝平民等非官职席位（与 getVacantPosts 一致）。
   const post = db.officialPosts[postId];
-  if (!post) {
-    return err(stateError("OFFICIAL_BAD_POST", `无此官职「${postId}」`, { context: { candidateId, postId } }));
+  if (!post || post.gradeOrder <= 0) {
+    return err(stateError("OFFICIAL_BAD_POST", `无此官职或非授官席位「${postId}」`, { context: { candidateId, postId } }));
   }
-  const occupied = Object.values(state.officials).filter((o) => o.postId === postId).length;
-  if (occupied >= post.seatCount) {
-    return err(stateError("OFFICIAL_SEAT_FULL", `官职「${postId}」席位已满（${occupied}/${post.seatCount}）`, {
-      context: { candidateId, postId, occupied, seatCount: post.seatCount },
-    }));
+  // 复用 PR2A 空缺判定，不另算占用人数。
+  if (!isPostVacant(state, db, postId)) {
+    return err(stateError("OFFICIAL_SEAT_FULL", `官职「${postId}」无空席`, { context: { candidateId, postId, seatCount: post.seatCount } }));
   }
 
+  // 派生官员 id 须与所有人物命名空间全局唯一（与 validateOfficialWorld 的 id 唯一规则一致）。
   const officialId = appointedOfficialId(candidateId);
-  if (state.officials[officialId]) {
-    return err(stateError("OFFICIAL_ID_COLLISION", `转正官员 id「${officialId}」已存在`, { context: { candidateId, officialId } }));
+  const idTaken =
+    !!db.characters[officialId] ||
+    !!state.generatedConsorts[officialId] ||
+    !!state.officials[officialId] ||
+    !!state.familyMembers[officialId] ||
+    (officialId in state.officialCandidates);
+  if (idTaken) {
+    return err(stateError("OFFICIAL_ID_COLLISION", `转正官员 id「${officialId}」已被占用`, { context: { candidateId, officialId } }));
   }
 
   // 家族：有关联则沿用（必须存在）；寒门（null）则建最小家族壳（仅 OfficialFamily，无成员/亲缘）。
@@ -82,6 +89,9 @@ export function appointOfficialCandidate(
     familyId = cand.familyId;
   } else {
     familyId = hanmenFamilyId(candidateId);
+    if (state.officialFamilies[familyId]) {
+      return err(stateError("OFFICIAL_ID_COLLISION", `寒门家族壳 id「${familyId}」已存在`, { context: { candidateId, familyId } }));
+    }
     const shell: OfficialFamily = { id: familyId, surname: cand.surname, influence: HANMEN_INFLUENCE, imperialFavor: HANMEN_IMPERIAL_FAVOR };
     officialFamilies = { ...state.officialFamilies, [familyId]: shell };
   }
@@ -108,6 +118,7 @@ export function appointOfficialCandidate(
       examinationYear: cand.examinationYear,
       examinationRank: cand.examinationRank,
       postId,
+      ageAtAppointment: cand.age,
     },
   };
 

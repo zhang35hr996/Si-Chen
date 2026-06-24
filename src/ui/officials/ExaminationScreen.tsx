@@ -52,6 +52,7 @@ export function ExaminationScreen({ db, store, onBack, onCommitted }: Examinatio
           notice={notice}
           onBack={() => { setSelectedId(null); setNotice(null); }}
           onNotice={setNotice}
+          onAppointed={(msg) => { setSelectedId(null); setNotice(msg); }} // 回池但保留成功提示
           onCommitted={onCommitted}
         />
       </div>
@@ -188,7 +189,7 @@ function PoolTab({
 
 // ── 候补详情 + 授官（按适配度排空缺；确认后授官） ────────────────────────────
 function CandidateDetail({
-  db, store, candidate, familyName, notice, onBack, onNotice, onCommitted,
+  db, store, candidate, familyName, notice, onBack, onNotice, onAppointed, onCommitted,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -197,6 +198,7 @@ function CandidateDetail({
   notice: string | null;
   onBack: () => void;
   onNotice: (n: string) => void;
+  onAppointed: (msg: string) => void;
   onCommitted: () => void;
 }) {
   const state = useGameState(store);
@@ -210,8 +212,7 @@ function CandidateDetail({
       return;
     }
     onCommitted();
-    onNotice(`已授任 ${db.officialPosts[postId]?.name ?? postId}。`);
-    onBack(); // 候补已转正，回列表
+    onAppointed(`已授任 ${db.officialPosts[postId]?.name ?? postId}。`); // 回池并保留成功提示
   };
 
   return (

@@ -10,6 +10,9 @@ import { getVacantPostsForCandidate } from "../../src/engine/officials/candidate
 import { appointedOfficialId } from "../../src/engine/officials/appointment";
 import { validateOfficialWorld } from "../../src/engine/officials/validation";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { dayIndexOf } from "../../src/engine/calendar/time";
+import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
+import { createMemoryStorage } from "../../src/engine/save/storage";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -40,6 +43,46 @@ describe("appointOfficialCandidate command", () => {
     const r = store.appointOfficialCandidate(db, "cand_ghost", "post_ghost");
     expect(r.ok).toBe(false);
     expect(store.getState()).toBe(before);
+  });
+});
+
+describe("appointment survives official lifecycle aging (P1 regression)", () => {
+  it("after crossing into next 正月 the official ages but the candidate freezes; validator + save/load OK", () => {
+    // 年-1 二月授官，把日历摆到年-1 十二月下旬余 1 AP，推进跨入年-2 正月触发官员年度增龄。
+    const store = storeWithExam();
+    const c = getEligibleOfficialCandidates(store.getState())[0]!;
+    const postId = getVacantPostsForCandidate(store.getState(), db, c.id)[0]!.postId;
+    expect(store.appointOfficialCandidate(db, c.id, postId).ok).toBe(true);
+    const offId = appointedOfficialId(c.id);
+    const ageAtAppoint = store.getState().officials[offId]!.age;
+
+    const s = store.getState();
+    store.loadState({ ...s, calendar: { ...s.calendar, year: 1, month: 12, period: "late", dayIndex: dayIndexOf(1, 12, "late"), ap: 1 } });
+    const r = store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    expect(r.ok).toBe(true);
+    expect(store.getState().calendar.year).toBe(2);
+
+    const off = store.getState().officials[offId]!;
+    if (off.status === "active") expect(off.age).toBe(ageAtAppoint + 1); // 官员增龄
+    expect(store.getState().officialCandidates[c.id]!.age).toBe(ageAtAppoint); // 候补冻结
+    expect(store.getState().officialCandidates[c.id]!.status).toBe("appointed");
+    expect(validateOfficialWorld(store.getState(), db)).toEqual([]); // 不再误判损坏
+
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, store.getState(), "slot1")));
+    expect(readSlot(storage, db, "slot1", { now: () => 1 }).ok).toBe(true);
+  });
+});
+
+describe("appointOfficialCandidate — rejects non-graded posts (P2)", () => {
+  it("refuses a gradeOrder<=0 post even though it is not in getVacantPosts", () => {
+    const store = storeWithExam();
+    const c = getEligibleOfficialCandidates(store.getState())[0]!;
+    const commoner = Object.values(db.officialPosts).find((p) => p.gradeOrder <= 0);
+    if (!commoner) return; // 内容无平民席位则跳过
+    const r = store.appointOfficialCandidate(db, c.id, commoner.id);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("OFFICIAL_BAD_POST");
   });
 });
 

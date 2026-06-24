@@ -43,7 +43,7 @@ describe("appointOfficialCandidate — success", () => {
     expect(nc.status).toBe("appointed");
     expect(nc.appointedOfficialId).toBe(off.id);
     const h = r.value.officialHistory.at(-1)!;
-    expect(h.appointment).toEqual({ candidateId: c.id, examinationYear: c.examinationYear, examinationRank: c.examinationRank, postId });
+    expect(h.appointment).toEqual({ candidateId: c.id, examinationYear: c.examinationYear, examinationRank: c.examinationRank, postId, ageAtAppointment: c.age });
     expect(validateOfficialWorld(r.value, db)).toEqual([]);
     // appointed 不再 eligible
     expect(getEligibleOfficialCandidates(r.value).some((x) => x.id === c.id)).toBe(false);
