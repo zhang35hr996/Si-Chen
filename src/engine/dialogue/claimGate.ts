@@ -25,7 +25,8 @@ import { claimPolarity, claimFactKey, contextRefKey, MODALITY_STRENGTH } from ".
 export type ClaimViolationCode =
   | "contradicts_speaker_belief" | "reveals_unknown_fact" | "claims_excessive_certainty"
   | "violates_etiquette" | "identity_mismatch" | "unknown_source_context"
-  | "claim_not_allowed" | "claim_explicitly_forbidden" | "source_not_authorized";
+  | "claim_not_allowed" | "claim_explicitly_forbidden" | "source_not_authorized"
+  | "knowledge_not_claim_authority";
 
 export interface ClaimGateFinding { code: ClaimViolationCode; claimId: string; message: string; }
 
@@ -161,6 +162,18 @@ function findingsFor(pc: ProposedClaim, ctx: ClaimGateContext): ClaimGateFinding
   // ── §3 Step 1: sourceRefs.length === 0 → source_not_authorized ──────────────
   if (pc.sourceRefs.length === 0) {
     out.push({ code: "source_not_authorized", claimId: id, message: "claim 没有任何来源引用" });
+    return out;
+  }
+
+  // ── §3 Step 1b: knowledge refs in sourceRefs → knowledge_not_claim_authority ─
+  // Knowledge chunks are advisory context only; they can never serve as claim evidence.
+  const knowledgeRef = pc.sourceRefs.find((r) => r.kind === "knowledge");
+  if (knowledgeRef !== undefined) {
+    out.push({
+      code: "knowledge_not_claim_authority",
+      claimId: id,
+      message: `知识上下文（kind="knowledge"）不得作为 claim 的来源引用（id: "${knowledgeRef.id}"）`,
+    });
     return out;
   }
 

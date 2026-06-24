@@ -547,7 +547,6 @@ describe("GameStore trace integration", () => {
     expect(consortId, "fixture must have a non-empress consort").toBeDefined();
     if (!consortId) throw new Error("no eligible consort in fixture");
 
-    const cal = store.getState().calendar;
     const result = store.applyImperialPunishmentWithConsequences(
       db,
       { type: "impose_confinement", targetId: consortId, durationTurns: 6 },

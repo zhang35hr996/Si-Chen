@@ -569,3 +569,73 @@ describe("toPromptEvent", () => {
     expect(pe.locationId).toBe("zichendian");
   });
 });
+
+// ── Provider payload parity: knowledgeContext DTO shape ───────────────────────
+// All three providers (Anthropic, OpenAI, Gemini) use compilePromptPayload from
+// this module. Asserting exact keys here acts as a shared regression guard.
+
+describe("compilePromptPayload — knowledgeContext DTO parity (shared by all providers)", () => {
+  it("knowledgeContext absent from payload when not in request", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const payload = compilePromptPayload(r.value);
+    expect(payload).not.toHaveProperty("knowledgeContext");
+  });
+
+  it("knowledgeContext present in payload when provided in promptContext", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = {
+      ...r.value,
+      promptContext: {
+        ...r.value.promptContext,
+        knowledgeContext: [
+          { id: "k1", title: "礼仪", text: "宫廷礼仪条款", sourceType: "etiquette" as const },
+        ],
+      },
+    };
+    const payload = compilePromptPayload(req);
+    expect(payload.knowledgeContext).toBeDefined();
+  });
+
+  it("each serialized knowledgeContext chunk has exactly { id, sourceType, text, title } — no extra fields", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const req = {
+      ...r.value,
+      promptContext: {
+        ...r.value.promptContext,
+        knowledgeContext: [
+          { id: "k1", title: "礼", text: "礼仪", sourceType: "etiquette" as const },
+          { id: "k2", title: "制", text: "制度", sourceType: "official_system" as const },
+        ],
+      },
+    };
+    const payload = compilePromptPayload(req);
+    for (const chunk of payload.knowledgeContext ?? []) {
+      expect(Object.keys(chunk).sort()).toEqual(["id", "sourceType", "text", "title"]);
+      expect(chunk).not.toHaveProperty("visibility");
+      expect(chunk).not.toHaveProperty("sourcePath");
+    }
+  });
+
+  it("chunk content is passed through unmodified (id, title, text, sourceType preserved)", () => {
+    const r = assembleDialogueRequest(db, state, SPEAKER, LOC);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const inputChunk = { id: "k_test", title: "制度", text: "全文内容", sourceType: "world_rule" as const };
+    const req = {
+      ...r.value,
+      promptContext: { ...r.value.promptContext, knowledgeContext: [inputChunk] },
+    };
+    const payload = compilePromptPayload(req);
+    const out = payload.knowledgeContext?.[0];
+    expect(out?.id).toBe("k_test");
+    expect(out?.title).toBe("制度");
+    expect(out?.text).toBe("全文内容");
+    expect(out?.sourceType).toBe("world_rule");
+  });
+});

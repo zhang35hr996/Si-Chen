@@ -633,3 +633,62 @@ describe("validateDialogueClaims — multiple allowed entries for same fact+pola
 // These are in the dedicated mentionWriteback test, but we add a note here:
 // The gate itself doesn't write back — that's orchestrator/mentionWriteback's job.
 // The new sourceRefs shape lets mentionWriteback route by kind.
+
+// ── Suite E: knowledge_not_claim_authority ────────────────────────────────────
+
+describe("knowledge_not_claim_authority", () => {
+  const kwRef = (id: string): ContextRef => ({ kind: "knowledge", id });
+
+  it("rejects a claim whose sourceRefs contain a knowledge ref", () => {
+    const claim: ProposedClaim = {
+      claim: { id: "c_kw", predicate: "resides_at", subjectId: "shen_zhibai", object: "xianfu_palace", modality: "assert" },
+      sourceRefs: [kwRef("etiquette.confinement#intro")],
+      modality: "assert",
+      certainty: 80,
+    };
+    const offeredRefKeys = new Set(["knowledge:etiquette.confinement#intro"]);
+    const r = validateDialogueClaims(base({ proposedClaims: [claim], offeredRefKeys }));
+    expect(r.ok).toBe(false);
+    expect(r.findings.some((f) => f.code === "knowledge_not_claim_authority")).toBe(true);
+  });
+
+  it("rejects even when knowledge ref is mixed with a valid memory ref in sourceRefs", () => {
+    const claim: ProposedClaim = {
+      claim: { id: "c_mix", predicate: "resides_at", subjectId: "shen_zhibai", object: "xianfu_palace", modality: "assert" },
+      sourceRefs: [memRef("mem_1"), kwRef("etiquette.confinement#intro")],
+      modality: "assert",
+      certainty: 80,
+    };
+    const offeredRefKeys = new Set(["memory:mem_1", "knowledge:etiquette.confinement#intro"]);
+    const r = validateDialogueClaims(base({ proposedClaims: [claim], offeredRefKeys }));
+    expect(r.ok).toBe(false);
+    expect(r.findings.some((f) => f.code === "knowledge_not_claim_authority")).toBe(true);
+  });
+
+  it("does NOT reject claims whose sourceRefs are only memory/event refs (no regression)", () => {
+    const claim: ProposedClaim = {
+      claim: { id: "c_mem", predicate: "resides_at", subjectId: "shen_zhibai", object: "xianfu_palace", modality: "assert" },
+      sourceRefs: [memRef("mem_1")],
+      modality: "assert",
+      certainty: 80,
+    };
+    const offeredRefKeys = new Set(["memory:mem_1"]);
+    const r = validateDialogueClaims(base({ proposedClaims: [claim], offeredRefKeys }));
+    expect(r.findings.some((f) => f.code === "knowledge_not_claim_authority")).toBe(false);
+  });
+
+  it("knowledge_not_claim_authority is checked before forbidden/allowed claim checks", () => {
+    const forbidden = { id: "f1", predicate: "resides_at" as const, subjectId: "shen_zhibai", object: "xianfu_palace", modality: "assert" as const };
+    const claim: ProposedClaim = {
+      claim: { id: "c_kw2", predicate: "resides_at", subjectId: "shen_zhibai", object: "xianfu_palace", modality: "assert" },
+      sourceRefs: [kwRef("chunk_1")],
+      modality: "assert",
+      certainty: 80,
+    };
+    const offeredRefKeys = new Set(["knowledge:chunk_1"]);
+    const r = validateDialogueClaims(base({ proposedClaims: [claim], offeredRefKeys, forbiddenClaims: [forbidden] }));
+    expect(r.ok).toBe(false);
+    // Should return knowledge_not_claim_authority (checked at step 1b before step 2)
+    expect(r.findings.some((f) => f.code === "knowledge_not_claim_authority")).toBe(true);
+  });
+});

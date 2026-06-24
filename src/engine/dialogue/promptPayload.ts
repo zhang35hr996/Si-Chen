@@ -14,6 +14,7 @@ import type { DialogueAudienceContext } from "./audience";
 import type { DialogueClaim } from "./claims";
 import type { AuthorizedClaim } from "./types";
 import type { DialogueRequest } from "./types";
+import type { PromptKnowledgeChunk } from "./knowledge/types";
 
 // ── Scalar value type for structured facts ────────────────────────────────────
 
@@ -83,7 +84,12 @@ export interface DialoguePromptContext {
   choiceCandidates: DialogueChoiceCandidate[];    // [] until LLM-2
   /** Resolved hidden runtime attributes.  Only present for consorts. */
   behavioralState?: { affection: number; fear: number; ambition: number; loyalty: number };
+  /** Advisory world-knowledge chunks. Present only when a retriever is wired (PR3+). */
+  knowledgeContext?: PromptKnowledgeChunk[];
 }
+
+// Re-export so callers can import PromptKnowledgeChunk from promptPayload
+export type { PromptKnowledgeChunk };
 
 // ── Conversion helper ─────────────────────────────────────────────────────────
 
@@ -137,6 +143,8 @@ export interface DialoguePromptPayload {
   allowedClaims: readonly AuthorizedClaim[];
   forbiddenClaims: readonly DialogueClaim[];
   choiceCandidates: DialogueChoiceCandidate[];
+  /** Advisory world-knowledge chunks. Present only when a retriever is wired (PR3+). */
+  knowledgeContext?: PromptKnowledgeChunk[];
   currentScene: {
     location: string;
     directive?: string;             // present only when request.sceneDirective is set
@@ -262,6 +270,7 @@ export function compilePromptPayload(request: DialogueRequest): DialoguePromptPa
     allowedClaims: ctx.allowedClaims,
     forbiddenClaims: ctx.forbiddenClaims,
     choiceCandidates: ctx.choiceCandidates,
+    ...(ctx.knowledgeContext !== undefined ? { knowledgeContext: ctx.knowledgeContext } : {}),
     currentScene: {
       location: request.locationId,
       ...(request.sceneDirective ? { directive: request.sceneDirective } : {}),

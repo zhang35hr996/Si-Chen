@@ -21,9 +21,10 @@ import type { DialogueClaim, ClaimModality } from "./claims";
 /**
  * A typed reference to a context item offered to the LLM in this turn.
  * `kind` + `id` uniquely identify the source.
+ * "knowledge" refs may appear in mentionedContextRefs but NEVER in claim sourceRefs.
  */
 export interface ContextRef {
-  kind: "memory" | "event" | "fact";
+  kind: "memory" | "event" | "fact" | "knowledge";
   id: string;
 }
 
@@ -134,6 +135,25 @@ export interface DialogueGenerationOptions {
   maxTokens?: number;
 }
 
+/**
+ * Options for produceDialogueTurn — replaces the former positional `logger?` param.
+ */
+export interface DialogueTurnOptions {
+  logger?: import("../infra/logger").RingBufferLogger;
+  /** When provided, performs knowledge retrieval and injects results into the prompt. */
+  retriever?: import("./knowledge/types").KnowledgeRetriever;
+  /**
+   * Controls behaviour when the retriever throws a fatal error.
+   *
+   * - `"continue_without_knowledge"` (default): provider call proceeds with
+   *   `knowledgeContext: []`. The returned `meta.knowledge` records the failure
+   *   as degraded. The error text is never sent to the LLM.
+   * - `"fail_turn"`: provider is NOT called. `produceDialogueTurn` returns an
+   *   error. State remains unchanged (reference-equal to the input state).
+   */
+  knowledgeFailureMode?: "continue_without_knowledge" | "fail_turn";
+}
+
 export interface DialogueProvider {
   readonly id: string;
   /** scripted providers echo authored content; generative ones invent it. */
@@ -141,6 +161,22 @@ export interface DialogueProvider {
   readonly capabilities: ProviderCapabilities;
   generate(request: DialogueRequest, options?: DialogueGenerationOptions): Promise<ProviderResult<DialogueProviderResult>>;
 }
+
+/**
+ * Discriminated union representing the outcome of knowledge retrieval for a turn.
+ * Passed from the retrieval block into extractProvenance so the diagnostic is
+ * derived from the actual outcome, never inferred from the packed-chunk count.
+ *
+ * - `not_configured`: no retriever was provided → no knowledge context
+ * - `ok`:            retrieval succeeded (may have zero hits — that is NOT degraded)
+ * - `vector_degraded`: keyword fallback active; exact reason preserved
+ * - `fatal_degraded`:  retriever threw; turn continues (continue_without_knowledge)
+ */
+export type KnowledgeRetrievalStatus =
+  | { readonly kind: "not_configured" }
+  | { readonly kind: "ok" }
+  | { readonly kind: "vector_degraded"; readonly reason: import("../knowledge/retrieval/types").VectorDegradation["reason"] }
+  | { readonly kind: "fatal_degraded" };
 
 /** What the UI renders — it never sees scene nodes. */
 export interface DialogueLine {
@@ -150,7 +186,25 @@ export interface DialogueLine {
   /** Resolved against the character's expression list (neutral fallback). */
   expression: string;
   choices: { id: string; text: string; tone?: string }[];
-  meta: { generated: boolean; degraded: boolean };
+  meta: {
+    generated: boolean;
+    degraded: boolean;
+    /** All context refs (memory/event/knowledge kinds) the model drew on this turn. */
+    sourceRefs?: ContextRef[];
+    /**
+     * Knowledge retrieval diagnostic. Present when a retriever was wired.
+     * `degraded` is true only for vector_degraded and fatal_degraded status.
+     * Successful empty retrieval (status: "ok") sets degraded: false.
+     */
+    knowledge?: {
+      chunkIds: string[];
+      degraded: boolean;
+      /** Machine-readable degradation class. Absent when status is "ok". */
+      degradationKind?: "vector_degraded" | "fatal_degraded";
+      /** Specific reason from the vector channel failure. Absent when not vector_degraded. */
+      degradationReason?: import("../knowledge/retrieval/types").VectorDegradation["reason"];
+    };
+  };
 }
 
 export interface DialoguePolicyContext {
@@ -164,6 +218,8 @@ export interface DialoguePolicyContext {
   allowedClaims: readonly AuthorizedClaim[];
   /** Claims the speaker must not make this turn. */
   forbiddenClaims: readonly DialogueClaim[];
+  /** Outcome of knowledge retrieval for this turn. Absent when no retriever was wired. */
+  knowledgeRetrievalStatus?: KnowledgeRetrievalStatus;
 }
 
 // Re-export ProposedClaim so callers can import from types without reaching into claims
@@ -173,6 +229,16 @@ export type { ProposedClaim };
 
 import type { ClaimGateFinding } from "./claimGate";
 import type { GateFinding } from "./gates";
+
+/**
+ * A single provenance finding: a context ref returned by the model that was
+ * not in the offered ref set (hallucinated, stale, or out-of-scope).
+ * These refs are excluded from `DialogueLine.meta.sourceRefs`.
+ */
+export interface ProvenanceFinding {
+  code: "unknown_context_ref";
+  ref: ContextRef;
+}
 
 /**
  * Structured findings gathered during the shared validation pipeline.
@@ -186,6 +252,8 @@ export interface DialogueValidationDiagnostics {
   textFindings: GateFinding[];
   /** Claims accepted by the claim gate (empty on claim-gate failure). */
   acceptedClaims: import("./claims").ProposedClaim[];
+  /** Context refs returned by the model that were not offered in this turn. */
+  provenanceFindings: ProvenanceFinding[];
 }
 
 /**
