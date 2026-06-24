@@ -43,7 +43,8 @@ describe("compareTransactions — same transaction", () => {
     expect(result.mutationSummary.onlyComparison).toHaveLength(0);
     expect(result.mutationSummary.changed).toHaveLength(0);
     expect(result.mutationSummary.unchangedCount).toBe(1);
-    expect(result.domainSummary.matchedCount).toBe(1);
+    expect(result.domainSummary.unchangedCount).toBe(1);
+    expect(result.domainSummary.changed).toHaveLength(0);
     expect(result.domainSummary.onlyPrimary).toHaveLength(0);
     expect(result.domainSummary.onlyComparison).toHaveLength(0);
   });
@@ -127,11 +128,15 @@ describe("compareTransactions — duplicate paths", () => {
 // ── domain event matching ────────────────────────────────────────────────────
 
 describe("compareTransactions — domain events", () => {
-  it("matches memory events by operation+ownerId+entryId", () => {
+  it("matches identical memory events → unchangedCount=1", () => {
     const d = { kind: "memory" as const, operation: "created" as const, ownerId: "lu", entryId: "e1", phase: "effects" };
     const primary = makeTx({ domainEvents: [d] });
     const comparison = makeTx({ domainEvents: [d] });
-    expect(compareTransactions(primary, comparison).domainSummary.matchedCount).toBe(1);
+    const summary = compareTransactions(primary, comparison).domainSummary;
+    expect(summary.unchangedCount).toBe(1);
+    expect(summary.changed).toHaveLength(0);
+    expect(summary.onlyPrimary).toHaveLength(0);
+    expect(summary.onlyComparison).toHaveLength(0);
   });
 
   it("detects domain event only in primary", () => {
@@ -143,11 +148,49 @@ describe("compareTransactions — domain events", () => {
     expect(result.domainSummary.onlyComparison).toHaveLength(0);
   });
 
-  it("matches rollback events by failedPhase+errorCode+message", () => {
+  it("matches identical rollback events → unchangedCount=1", () => {
     const d = { kind: "rollback" as const, failedPhase: "effects", message: "err", attemptedMutationCount: 0, attemptedDomainEventCount: 0, phase: "effects" };
     const primary = makeTx({ domainEvents: [d] });
     const comparison = makeTx({ domainEvents: [d] });
-    expect(compareTransactions(primary, comparison).domainSummary.matchedCount).toBe(1);
+    const summary = compareTransactions(primary, comparison).domainSummary;
+    expect(summary.unchangedCount).toBe(1);
+    expect(summary.changed).toHaveLength(0);
+  });
+
+  it("detects payload difference for same-key domain events → changed bucket", () => {
+    // Two queue events with same semantic key (queue|pendingRetirements|resolved|official-x)
+    // but different resolution field — approved vs retained.
+    const approved = {
+      kind: "queue" as const, queue: "pendingRetirements", operation: "resolved" as const,
+      itemId: "official-x", resolution: "approved" as const, phase: "direct_mutation",
+    };
+    const retained = {
+      kind: "queue" as const, queue: "pendingRetirements", operation: "resolved" as const,
+      itemId: "official-x", resolution: "retained" as const, phase: "direct_mutation",
+    };
+    const primary = makeTx({ domainEvents: [approved] });
+    const comparison = makeTx({ domainEvents: [retained] });
+    const summary = compareTransactions(primary, comparison).domainSummary;
+    // Same semantic key → matched but payload differs → in changed, not unchanged
+    expect(summary.changed).toHaveLength(1);
+    expect(summary.changed[0]?.differs).toBe(true);
+    expect(summary.unchangedCount).toBe(0);
+    expect(summary.onlyPrimary).toHaveLength(0);
+    expect(summary.onlyComparison).toHaveLength(0);
+  });
+
+  it("detects eligibility payload difference when failedBefore arrays differ", () => {
+    const base = {
+      kind: "eligibility" as const, eventId: "evt_001", transition: "became_ineligible" as const,
+      phase: "boundary_diff",
+    };
+    const withFailure = { ...base, failedBefore: [], failedAfter: [{ conditionType: "flagSet", expected: true, actual: false }] };
+    const withoutFailure = { ...base, failedBefore: [], failedAfter: [] };
+    const primary = makeTx({ domainEvents: [withFailure] });
+    const comparison = makeTx({ domainEvents: [withoutFailure] });
+    const summary = compareTransactions(primary, comparison).domainSummary;
+    expect(summary.changed).toHaveLength(1);
+    expect(summary.unchangedCount).toBe(0);
   });
 });
 

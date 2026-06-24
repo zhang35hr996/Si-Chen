@@ -38,10 +38,25 @@ function mutationsDiffer(a: MutationRecord, b: MutationRecord): boolean {
 
 // ── Domain event comparison ──────────────────────────────────────────────────
 
+export interface DomainEventComparison {
+  key: string;
+  primary: TraceDomainEvent;
+  comparison: TraceDomainEvent;
+  /** True when payload fields beyond the semantic key differ. */
+  differs: boolean;
+}
+
 export interface DomainSummary {
   onlyPrimary: TraceDomainEvent[];
   onlyComparison: TraceDomainEvent[];
-  matchedCount: number;
+  /** Events paired by semantic key whose payload differs. */
+  changed: DomainEventComparison[];
+  unchangedCount: number;
+}
+
+/** Full payload comparison for paired domain events (beyond what the key encodes). */
+function domainEventsDiffer(a: TraceDomainEvent, b: TraceDomainEvent): boolean {
+  return !semanticEq(a, b);
 }
 
 /** Kind-specific semantic key for domain event matching. */
@@ -119,11 +134,18 @@ export function compareTransactions(
 
   const onlyPrimaryDom: TraceDomainEvent[] = [];
   const onlyComparisonDom: TraceDomainEvent[] = [];
-  let matchedCount = 0;
+  const changedDom: DomainEventComparison[] = [];
+  let domUnchangedCount = 0;
 
-  for (const [k, d] of domPrimaryMap) {
-    if (domComparisonMap.has(k)) matchedCount++;
-    else onlyPrimaryDom.push(d);
+  for (const [k, pd] of domPrimaryMap) {
+    const cd = domComparisonMap.get(k);
+    if (!cd) {
+      onlyPrimaryDom.push(pd);
+    } else if (domainEventsDiffer(pd, cd)) {
+      changedDom.push({ key: k, primary: pd, comparison: cd, differs: true });
+    } else {
+      domUnchangedCount++;
+    }
   }
   for (const [k, d] of domComparisonMap) {
     if (!domPrimaryMap.has(k)) onlyComparisonDom.push(d);
@@ -144,7 +166,7 @@ export function compareTransactions(
     primaryId: primary.id,
     comparisonId: comparison.id,
     mutationSummary: { onlyPrimary, onlyComparison, changed, unchangedCount },
-    domainSummary: { onlyPrimary: onlyPrimaryDom, onlyComparison: onlyComparisonDom, matchedCount },
+    domainSummary: { onlyPrimary: onlyPrimaryDom, onlyComparison: onlyComparisonDom, changed: changedDom, unchangedCount: domUnchangedCount },
     metadataChanges,
   };
 }

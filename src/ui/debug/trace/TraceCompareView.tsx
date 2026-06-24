@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import type { TraceComparison } from "../../../engine/trace/compare";
+import type { DomainEventComparison, TraceComparison } from "../../../engine/trace/compare";
 import { compareTransactions } from "../../../engine/trace/compare";
+import type { TraceDomainEvent } from "../../../engine/trace/domainEvents";
 import type { TraceTransaction } from "../../../engine/trace/types";
 import { TraceMutationRow } from "./TraceMutationRow";
 
@@ -8,6 +9,26 @@ interface Props {
   primary: TraceTransaction;
   comparison: TraceTransaction;
   onExit: () => void;
+}
+
+/** Format a value for display — avoids [object Object] for complex values. */
+function fmtValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "object") {
+    try { return JSON.stringify(v, null, 0).slice(0, 80); }
+    catch { return String(v); }
+  }
+  const s = String(v);
+  return s.length > 80 ? s.slice(0, 80) + "…" : s;
+}
+
+/** One-line label for a domain event showing its most meaningful fields. */
+function domainLabel(d: TraceDomainEvent): string {
+  if (d.kind === "memory") return `memory ${d.operation} owner=${d.ownerId} entry=${d.entryId}`;
+  if (d.kind === "queue") return `queue ${d.queue} ${d.operation} ${d.itemId}${d.resolution ? ` (${d.resolution})` : ""}`;
+  if (d.kind === "eligibility") return `eligibility ${d.eventId} → ${d.transition}`;
+  if (d.kind === "rollback") return `rollback ${d.failedPhase}: ${d.message.slice(0, 60)}`;
+  return `${(d as { kind: string }).kind}`;
 }
 
 export function TraceCompareView({ primary, comparison, onExit }: Props) {
@@ -75,8 +96,8 @@ export function TraceCompareView({ primary, comparison, onExit }: Props) {
               {ms.changed.map((c) => (
                 <li key={c.key} className="trace-compare__mut-changed">
                   <div className="trace-compare__mut-key">{c.primary.path} / {c.primary.phase}</div>
-                  <div><span className="trace-compare__label--primary">A</span>: {String(c.primary.before)} → {String(c.primary.after)}</div>
-                  <div><span className="trace-compare__label--comparison">B</span>: {String(c.comparison.before)} → {String(c.comparison.after)}</div>
+                  <div><span className="trace-compare__label--primary">A</span>: {fmtValue(c.primary.before)} → {fmtValue(c.primary.after)}</div>
+                  <div><span className="trace-compare__label--comparison">B</span>: {fmtValue(c.comparison.before)} → {fmtValue(c.comparison.after)}</div>
                 </li>
               ))}
             </ul>
@@ -106,14 +127,30 @@ export function TraceCompareView({ primary, comparison, onExit }: Props) {
       <div className="trace-compare__section">
         <h4>领域事件对比</h4>
         <p className="trace-compare__stat">
-          匹配: {ds.matchedCount} · 仅 A: {ds.onlyPrimary.length} · 仅 B: {ds.onlyComparison.length}
+          变化: {ds.changed.length} · 相同: {ds.unchangedCount} · 仅 A: {ds.onlyPrimary.length} · 仅 B: {ds.onlyComparison.length}
         </p>
+
+        {ds.changed.length > 0 && (
+          <>
+            <h5>载荷发生变化</h5>
+            <ul className="trace-compare__domain-list">
+              {ds.changed.map((c: DomainEventComparison) => (
+                <li key={c.key} className="trace-compare__domain-changed">
+                  <div className="trace-compare__mut-key">{c.key}</div>
+                  <div><span className="trace-compare__label--primary">A</span>: {domainLabel(c.primary)}</div>
+                  <div><span className="trace-compare__label--comparison">B</span>: {domainLabel(c.comparison)}</div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
         {ds.onlyPrimary.length > 0 && (
           <>
             <h5>仅在 A 中</h5>
             <ul className="trace-compare__domain-list">
               {ds.onlyPrimary.map((d, i) => (
-                <li key={`${d.kind}|${d.phase}|${i}`}><span className="trace-compare__label--primary">{d.kind}</span> / {d.phase}</li>
+                <li key={`${d.kind}|${d.phase}|${i}`}><span className="trace-compare__label--primary">{domainLabel(d)}</span></li>
               ))}
             </ul>
           </>
@@ -123,7 +160,7 @@ export function TraceCompareView({ primary, comparison, onExit }: Props) {
             <h5>仅在 B 中</h5>
             <ul className="trace-compare__domain-list">
               {ds.onlyComparison.map((d, i) => (
-                <li key={`${d.kind}|${d.phase}|${i}`}><span className="trace-compare__label--comparison">{d.kind}</span> / {d.phase}</li>
+                <li key={`${d.kind}|${d.phase}|${i}`}><span className="trace-compare__label--comparison">{domainLabel(d)}</span></li>
               ))}
             </ul>
           </>

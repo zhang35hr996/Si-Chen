@@ -7,7 +7,7 @@ export { deriveQueueTraceEvents } from "./queueDiff";
 export { captureEligibilityTransitions, explainEventEligibility } from "./eligibilityDiff";
 export type { TraceQuery, TraceFacets } from "./query";
 export { matchesTraceQuery, filterTraceTransactions, collectTraceFacets } from "./query";
-export type { TraceComparison, MutationSummary, DomainSummary, MetadataChanges, MutationComparison } from "./compare";
+export type { TraceComparison, MutationSummary, DomainSummary, DomainEventComparison, MetadataChanges, MutationComparison } from "./compare";
 export { compareTransactions } from "./compare";
 export type { TraceExportScope, TraceExportEnvelope } from "./export";
 export { buildTraceExport, serializeTraceExport, buildExportFilename, downloadTraceExport } from "./export";
