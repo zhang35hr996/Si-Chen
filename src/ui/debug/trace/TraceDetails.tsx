@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { EligibilityTraceEvent, MemoryTraceEvent, QueueTraceEvent, RollbackTraceEvent } from "../../../engine/trace/domainEvents";
 import type { TraceTransaction } from "../../../engine/trace/types";
-import { downloadTraceExport } from "../../../engine/trace/export";
+import { buildTraceExport, downloadTraceExport, serializeTraceExport } from "../../../engine/trace/export";
 import { formatTraceDiagnostic } from "../../../engine/trace/diagnostic";
 import { EligibilityTraceSection } from "./EligibilityTraceSection";
 import { MemoryTraceSection } from "./MemoryTraceSection";
@@ -10,7 +10,7 @@ import { RollbackTraceSection } from "./RollbackTraceSection";
 import { TraceMutationRow } from "./TraceMutationRow";
 
 function copyJson(tx: TraceTransaction) {
-  void navigator.clipboard.writeText(JSON.stringify(tx, null, 2));
+  void navigator.clipboard.writeText(serializeTraceExport(buildTraceExport([tx], "selected")));
 }
 
 function useCopyDiagnostic(tx: TraceTransaction) {

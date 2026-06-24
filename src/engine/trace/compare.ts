@@ -170,6 +170,16 @@ function semanticEq(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== "object" || typeof b !== "object") return false;
   if (a === null || b === null) return false;
-  try { return JSON.stringify(a) === JSON.stringify(b); }
+  // Sort keys before stringify to avoid false differences from different insertion order.
+  try { return stableStringify(a) === stableStringify(b); }
   catch { return false; }
+}
+
+function stableStringify(v: unknown): string {
+  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+  if (v !== null && typeof v === "object") {
+    const keys = Object.keys(v as object).sort();
+    return "{" + keys.map((k) => JSON.stringify(k) + ":" + stableStringify((v as Record<string, unknown>)[k])).join(",") + "}";
+  }
+  return JSON.stringify(v);
 }

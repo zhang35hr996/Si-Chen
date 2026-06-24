@@ -37,9 +37,15 @@ export function TraceFilterBar({ query, facets, filteredCount, onChange }: Props
     (query.text !== undefined && query.text.trim() !== "") ||
     (query.outcomes?.length ?? 0) > 0 ||
     (query.sourceKinds?.length ?? 0) > 0 ||
+    (query.sourceIds?.length ?? 0) > 0 ||
+    (query.phases?.length ?? 0) > 0 ||
+    (query.mutationClassifications?.length ?? 0) > 0 ||
     (query.domainKinds?.length ?? 0) > 0 ||
+    (query.paths?.length ?? 0) > 0 ||
     query.hasWarnings === true ||
-    query.hasUntracked === true;
+    query.hasUntracked === true ||
+    query.fromSequence !== undefined ||
+    query.toSequence !== undefined;
 
   const availableSourceKinds = Object.keys(facets.sourceKinds) as TraceSource["kind"][];
   const availableDomainKinds = Object.keys(facets.domainKinds) as TraceDomainEvent["kind"][];

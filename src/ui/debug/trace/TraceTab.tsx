@@ -1,4 +1,4 @@
-import { useState, useCallback, useSyncExternalStore, useMemo } from "react";
+import { useState, useCallback, useEffect, useSyncExternalStore, useMemo } from "react";
 import type { TraceHistory } from "../../../engine/trace/history";
 import { collectTraceFacets, filterTraceTransactions } from "../../../engine/trace/query";
 import type { TraceQuery } from "../../../engine/trace/query";
@@ -30,13 +30,24 @@ export function TraceTab({ history }: Props) {
   const facets = useMemo(() => collectTraceFacets(txs), [txs]);
   const filteredTxs = useMemo(() => filterTraceTransactions(txs, query), [txs, query]);
 
-  // Look up transactions by stable id.
   const findTx = useCallback((id: string) => txs.find((tx) => tx.id === id) ?? null, [txs]);
 
   const handleClear = useCallback(() => {
     history.clear();
     setMode({ kind: "list" });
   }, [history]);
+
+  // Eviction recovery: if the transaction the current mode refers to has been
+  // evicted from the ring buffer, reset to list. Runs after render, not during.
+  useEffect(() => {
+    if (mode.kind === "detail" && !findTx(mode.txId)) {
+      setMode({ kind: "list" });
+    } else if (mode.kind === "compare" && (!findTx(mode.primaryId) || !findTx(mode.comparisonId))) {
+      setMode({ kind: "list" });
+    } else if (mode.kind === "compare-pick" && !findTx(mode.primaryId)) {
+      setMode({ kind: "list" });
+    }
+  }, [mode, findTx]);
 
   // ── Render compare view ──
   if (mode.kind === "compare") {
@@ -51,8 +62,6 @@ export function TraceTab({ history }: Props) {
         />
       );
     }
-    // Evicted — fall through to list
-    setMode({ kind: "list" });
   }
 
   // ── Render detail view ──
@@ -67,17 +76,13 @@ export function TraceTab({ history }: Props) {
         />
       );
     }
-    // Evicted — fall through to list
-    setMode({ kind: "list" });
   }
 
   // ── Render compare picker ──
   if (mode.kind === "compare-pick") {
     const primaryId = mode.primaryId;
     const primary = findTx(primaryId);
-    if (!primary) {
-      setMode({ kind: "list" });
-    } else {
+    if (primary) {
       return (
         <section className="trace-compare-pick">
           <div className="trace-compare-pick__header">

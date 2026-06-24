@@ -103,7 +103,9 @@ function buildSearchDocument(tx: TraceTransaction): string {
 // ── Sequence id extraction ──────────────────────────────────────────────────
 
 function txSequence(tx: TraceTransaction): number {
-  return parseInt(tx.id.replace(/^#/, ""), 10);
+  const n = parseInt(tx.id.replace(/^#/, ""), 10);
+  if (!Number.isFinite(n)) throw new Error(`TraceQuery: cannot parse sequence from id "${tx.id}"`);
+  return n;
 }
 
 // ── Core matcher ───────────────────────────────────────────────────────────

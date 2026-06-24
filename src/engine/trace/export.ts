@@ -50,7 +50,12 @@ export function buildTraceExport(
         message: w.message,
         ...(w.path !== undefined ? { path: w.path } : {}),
       })),
-      domainEvents: tx.domainEvents.map((d) => ({ ...d })),
+      domainEvents: tx.domainEvents.map((d) => {
+        if (d.kind === "eligibility") {
+          return { ...d, failedBefore: [...d.failedBefore], failedAfter: [...d.failedAfter] };
+        }
+        return { ...d };
+      }),
     })),
   };
 }
