@@ -224,18 +224,21 @@ npm run knowledge:build
 
 # Then embed (reads chunks from .knowledge.db, writes vectors to same file)
 OPENAI_API_KEY=sk-... npm run knowledge:embed -- --provider openai --model text-embedding-3-small
-GEMINI_API_KEY=...    npm run knowledge:embed -- --provider gemini  --model text-embedding-004
+GEMINI_API_KEY=...    npm run knowledge:embed -- --provider gemini  --model gemini-embedding-2
 
 # Custom batch size and DB path
 OPENAI_API_KEY=... npm run knowledge:embed -- --provider openai --model text-embedding-3-small --batch-size 50 --db ./custom.db
 ```
 
+> **Note — Gemini gen2 HTTP call count**: `gemini-embedding-2` returns exactly one aggregated embedding per `embedContent()` call.  For N chunks in a batch, the provider makes N sequential HTTP requests.  `--batch-size` controls how many chunks are processed before each atomic DB write, not the number of simultaneous HTTP calls.
+
 `syncEmbeddings` contract:
 1. Compile embedding text + SHA-256 per chunk.
 2. Cache-check without holding a SQLite transaction.
 3. Provider is called **only for cache misses** (deduplicated by hash).
-4. All batch results are validated before any DB write.
-5. Cache writes + chunk mappings + stale-mapping pruning happen in **one atomic transaction**.
+4. Each batch's dimensions must match all prior batches (cross-batch consistency validated before any DB write).
+5. All batch results are validated before any DB write.
+6. Cache writes + chunk mappings + stale-mapping pruning happen in **one atomic transaction**.
 
 ### Hybrid Keyword + Vector Search
 
@@ -243,6 +246,7 @@ OPENAI_API_KEY=... npm run knowledge:embed -- --provider openai --model text-emb
 # Interactive hybrid search (embeds query inline)
 OPENAI_API_KEY=... npm run knowledge:hybrid-inspect -- "宫廷礼仪" --provider openai --model text-embedding-3-small
 OPENAI_API_KEY=... npm run knowledge:hybrid-inspect -- "禁足" --provider openai --model text-embedding-3-small --limit 5 --visibility imperial
+GEMINI_API_KEY=... npm run knowledge:hybrid-inspect -- "宫廷礼仪" --provider gemini --model gemini-embedding-2
 ```
 
 Output per hit: fused rank, hybrid score, keyword rank + BM25, vector rank + cosine, chunk metadata.
