@@ -10,7 +10,7 @@ function copyJson(tx: TraceTransaction) {
   void navigator.clipboard.writeText(JSON.stringify(tx, null, 2));
 }
 
-export function TraceDetails({ tx, onBack }: { tx: TraceTransaction; onBack: () => void }) {
+export function TraceDetails({ tx, onBack, onCompare }: { tx: TraceTransaction; onBack: () => void; onCompare?: () => void }) {
   const untracked = tx.mutations.filter((m) => m.classification === "untracked");
   const memoryEvents = tx.domainEvents.filter((e): e is MemoryTraceEvent => e.kind === "memory");
   const queueEvents = tx.domainEvents.filter((e): e is QueueTraceEvent => e.kind === "queue");
@@ -26,6 +26,7 @@ export function TraceDetails({ tx, onBack }: { tx: TraceTransaction; onBack: () 
           {tx.outcome === "committed" ? "已提交" : "已回滚"}
         </span>
         <button type="button" onClick={() => copyJson(tx)}>复制 JSON</button>
+        {onCompare && <button type="button" onClick={onCompare}>对比…</button>}
       </div>
       <p className="trace-details__meta">
         {new Date(tx.timestamp).toLocaleTimeString()} · {tx.source.label}
