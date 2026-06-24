@@ -577,6 +577,8 @@ export interface ConfinementEffect {
   /** 解除生效旬；未解除则 undefined。手动解除 = 当旬；到期 = endTurnExclusive。 */
   liftedTurn?: number;
   liftReason?: ConfinementLiftReason;
+  /** Links to PunishmentRecord.id for lifecycle reconciliation. */
+  sourcePunishmentId?: string;
 }
 
 /** 角色持续状态的判别联合（目前仅禁足；冷宫/下狱/守丧待扩展）。 */

@@ -821,6 +821,7 @@ export function applyEffects(
           imposedAt: effect.imposedAt,
           imposedBy: "emperor" as const,
           ...(effect.sourceLocation !== undefined ? { sourceLocation: effect.sourceLocation } : {}),
+          ...(effect.sourcePunishmentId !== undefined ? { sourcePunishmentId: effect.sourcePunishmentId } : {}),
         };
         next.statusEffects.push(newSe);
         // 取消与禁足冲突的留宿/免请安计划（角色被锁在本宫）。

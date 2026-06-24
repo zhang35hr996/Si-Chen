@@ -303,6 +303,7 @@ export const eventEffectSchema = z.union([
     endTurnExclusive: z.union([z.number().int().min(0), z.null()]),
     imposedAt: gameTimeShape,
     sourceLocation: idSchema.optional(),
+    sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
   }),
   z.strictObject({
     type: z.literal("lift_confinement"),

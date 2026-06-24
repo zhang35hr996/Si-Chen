@@ -179,6 +179,7 @@ const statusEffectSchema = z.strictObject({
   liftedAt: gameTimeSchema.optional(),
   liftedTurn: z.number().int().min(0).optional(),
   liftReason: z.enum(["lifted_by_emperor", "term_expired"]).optional(),
+  sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
 });
 
 // ── Justice state schemas ─────────────────────────────────────────────────────
