@@ -25,7 +25,7 @@ const asFrame = (s: RunnerStep) => {
 
 describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)", () => {
   it("start → intro line with 3 choices → effects accumulate → closing line → end batch", async () => {
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
     const state = fresh();
 
     const first = asFrame(unwrap(await runner.start(state, "ev_shen_neglect")));
@@ -59,7 +59,7 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
   });
 
   it("invalid choice id is rejected without advancing", async () => {
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
     unwrap(await runner.start(fresh(), "ev_shen_neglect"));
     const bad = await runner.advance("c_ghost");
     expect(bad.ok).toBe(false);
@@ -70,7 +70,7 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
 
   it("尊长对话路径：太后（elder，无位分）的脚本场景可经 orchestrator 渲染", async () => {
     // 回归：太后 kind=elder 无 standing，旧 assembleDialogueRequest 直接 BAD_SPEAKER。
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
     const first = asFrame(unwrap(await runner.start(fresh(), "ev_taihou_converse")));
     expect(first.awaiting).toBe("choice");
     expect(first.line.speakerId).toBe("taihou");
@@ -81,7 +81,7 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
   });
 
   it("start enforces affordability engine-side (行动点不足, no rollover) and once", async () => {
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
     const base = fresh();
     const broke: GameState = { ...base, calendar: { ...base.calendar, ap: 0 } };
     const blocked = await runner.start(broke, "ev_menses_rite"); // costs 1
@@ -106,7 +106,7 @@ describe("quit drill (acceptance §13 #6)", () => {
     const before = store.getState();
     const snapshot = structuredClone(before);
 
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
     unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
     unwrap(await runner.advance("c_cold")); // effects accumulated in session
     runner.abandon();
@@ -123,7 +123,7 @@ describe("quit drill (acceptance §13 #6)", () => {
   it("full commit path through the store: effects + AP + fired + sceneHistory land together", async () => {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
 
     unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
     unwrap(await runner.advance("c_comfort"));
@@ -162,7 +162,7 @@ describe("graph semantics (synthetic scenes)", () => {
         { type: "line", id: "n_no", speaker: "wei_sui", text: "未见旗标。" },
       ],
     };
-    const runner = new SceneRunner(sceneDb(scene), mockProvider);
+    const runner = new SceneRunner(sceneDb(scene), { provider: mockProvider });
     const frame = asFrame(unwrap(await runner.start(fresh(), "ev_t")));
     expect(frame.line.text).toBe("未见旗标。"); // pending effect not visible to the branch
   });
@@ -186,7 +186,7 @@ describe("graph semantics (synthetic scenes)", () => {
         { type: "line", id: "n_end", speaker: "wei_sui", text: "遵旨。" },
       ],
     };
-    const runner = new SceneRunner(sceneDb(scene), mockProvider);
+    const runner = new SceneRunner(sceneDb(scene), { provider: mockProvider });
     const frame = asFrame(unwrap(await runner.start(fresh(), "ev_t")));
     expect(frame.line.choices.map((c) => c.id)).toEqual(["c_open"]); // locked one hidden
     const picked = await runner.advance("c_locked"); // picking the hidden one fails
@@ -204,7 +204,7 @@ describe("graph semantics (synthetic scenes)", () => {
         { type: "effect", id: "n_b", effects: [{ type: "flag", key: "k", value: 2 }], next: "n_a" },
       ],
     };
-    const runner = new SceneRunner(sceneDb(scene), mockProvider);
+    const runner = new SceneRunner(sceneDb(scene), { provider: mockProvider });
     const result = await runner.start(fresh(), "ev_t");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("SCENE_LOOP");
@@ -218,7 +218,7 @@ describe("SceneRunner (scripted-only)", () => {
     // The mockProvider is a scripted provider. We verify it can service a real scene
     // (ev_shen_neglect has line nodes) by confirming every yielded frame has a line
     // where meta.generated === false (scripted, not generative).
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
     const state = fresh();
 
     const first = unwrap(await runner.start(state, "ev_shen_neglect"));
@@ -241,7 +241,7 @@ describe("SceneRunner (scripted-only)", () => {
   it("no reaction records written after scripted scene", async () => {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
 
     unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
     unwrap(await runner.advance("c_comfort"));
@@ -262,7 +262,7 @@ describe("SceneRunner (scripted-only)", () => {
     store.newGame(db);
     const stateBeforeAp = store.getState().calendar.ap;
 
-    const runner = new SceneRunner(db, mockProvider);
+    const runner = new SceneRunner(db, { provider: mockProvider });
     unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
     // Advance partway to accumulate pending effects
     unwrap(await runner.advance("c_cold"));

@@ -17,10 +17,10 @@ import type { ContentDB } from "../content/loader";
 import { MAX_NODE_STEPS } from "../content/loader";
 import type { EventEffect, SceneContent, SceneNode } from "../content/schemas";
 import { assembleDialogueRequest, produceDialogueTurn } from "../dialogue/orchestrator";
-import type { DialogueLine, DialogueProvider } from "../dialogue/types";
+import { toDialogueTurnOptions, type DialogueRuntimeDeps } from "../dialogue/runtimeDeps";
+import type { DialogueLine } from "../dialogue/types";
 import { evaluateCondition, hasEventFired } from "../events/conditions";
 import { stateError, type GameError } from "../infra/errors";
-import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState } from "../state/types";
 
@@ -56,8 +56,7 @@ export class SceneRunner {
 
   constructor(
     private readonly db: ContentDB,
-    private readonly provider: DialogueProvider,
-    private readonly logger?: RingBufferLogger,
+    private readonly dialogueRuntime: DialogueRuntimeDeps,
   ) {}
 
   getSession(): SceneSession | null {
@@ -181,7 +180,7 @@ export class SceneRunner {
             { scripted: { text: node.text, ...(node.expression !== undefined ? { expression: node.expression } : {}) } },
           );
           if (!request.ok) return this.fail(request.error);
-          const produced = await produceDialogueTurn(this.db, this.provider, request.value, this.preState!, { logger: this.logger });
+          const produced = await produceDialogueTurn(this.db, this.dialogueRuntime.provider, request.value, this.preState!, toDialogueTurnOptions(this.dialogueRuntime));
           if (!produced.ok) return this.fail(produced.error);
 
           let line = produced.value.line;

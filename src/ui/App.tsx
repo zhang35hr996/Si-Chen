@@ -36,7 +36,7 @@ import { AssetRegistry } from "../engine/assets/registry";
 import { loadGameContent } from "../engine/content/viteSource";
 import { pickAutoStartEvent } from "../engine/events/router";
 import { assetError, stateError } from "../engine/infra/errors";
-import type { RingBufferLogger } from "../engine/infra/logger";
+
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees } from "../engine/characters/greeting";
@@ -71,8 +71,9 @@ import {
 import { buildBedchamber, passionAllowed, type BedchamberPlan } from "../store/bedchamber";
 import { buildConversation } from "../store/conversation";
 import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue/orchestrator";
+import { toDialogueTurnOptions, type DialogueRuntimeDeps } from "../engine/dialogue/runtimeDeps";
 import { deriveConverseSceneContext, type ConverseSceneContext } from "./converseScene";
-import type { DialogueLine, DialogueProvider } from "../engine/dialogue/types";
+import type { DialogueLine } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
@@ -130,7 +131,7 @@ import { buildRelocate } from "../store/relocate";
 import { planPregnancyTransfer } from "../store/pregnancyCost";
 import { canHoldCourt, canBedchamber } from "../store/gating";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
-import { DebugPanel } from "./debug/DebugPanel";
+import { DebugPanel, type DialogueKnowledgeDiagnostic } from "./debug/DebugPanel";
 import { ResourcePanel } from "./components/ResourcePanel";
 import { BootErrorScreen } from "./screens/BootErrorScreen";
 import { pickCourtAffairs } from "../engine/court/affairs";
@@ -161,7 +162,8 @@ interface CourtSession {
   index: number;
 }
 
-export function App({ store, logger, dialogueProvider }: { store: GameStore; logger?: RingBufferLogger; dialogueProvider?: DialogueProvider }) {
+export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRuntime?: DialogueRuntimeDeps }) {
+  const logger = dialogueRuntime?.logger;
   const content = useMemo(() => loadGameContent(), []);
   const manifest = useMemo(() => assetManifestSchema.safeParse(rawManifest), []);
   const registry = useMemo(
@@ -219,6 +221,9 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   const [consortListReturnId, setConsortListReturnId] = useState<string | null>(null);
   // 传乘风「交付六宫主理权」：true 时 ConsortListModal 显示「委以六宫」选项。
   const [haremTransferPending, setHaremTransferPending] = useState(false);
+  // Non-persistent debug-only snapshot of the most recent dialogue knowledge retrieval.
+  // Never saved to GameState or localStorage.
+  const [recentKnowledge, setRecentKnowledge] = useState<DialogueKnowledgeDiagnostic | undefined>(undefined);
   const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
   const [physicianReaction, setPhysicianReaction] = useState<{ portraitSet: string; speakerName: string; lines: string[] } | null>(null);
   const [physicianConsortPickerOpen, setPhysicianConsortPickerOpen] = useState(false);
@@ -1362,7 +1367,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
     // Generative path: assemble request, snapshot expected state, produce turn, CAS。
     // 期间标记 in-flight（计入 atomicFlowInProgress，孕/产等全局中断不得插队）；以操作令牌防 stale async：
     // 若 await 期间发生新游戏/读档/驾崩（令牌自增），则丢弃本次完成，不串播、不结算。
-    if (dialogueProvider) {
+    if (dialogueRuntime) {
       const expectedState = store.getState();
       // Derive presence/privacy scene context once for this conversation; the same
       // object feeds the opening turn and every choice-driven continuation.
@@ -1376,9 +1381,17 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           const opToken = started.token;
           setDialogueInFlight(true);
           try {
-            const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, { logger });
+            const turnResult = await produceDialogueTurn(db, dialogueRuntime.provider, reqResult.value, expectedState, toDialogueTurnOptions(dialogueRuntime));
             if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略
             if (turnResult.ok) {
+              const kw = turnResult.value.line.meta.knowledge;
+              setRecentKnowledge({
+                configured: dialogueRuntime.knowledgeRetriever !== undefined,
+                chunkIds: kw?.chunkIds ?? [],
+                degraded: kw?.degraded ?? false,
+                degradationKind: kw?.degradationKind,
+                degradationReason: kw?.degradationReason,
+              });
               const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
               if (committed) {
                 doAutosave();
@@ -1407,7 +1420,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
   // Handles a player choice click during a generative conversation turn.
   // No extra AP is spent here — AP was already spent in converse().
   const onConverseChoice = useCallback(async (choice: { id: string; text: string; tone?: string }) => {
-    if (!dialogueProvider || !reaction?.generatedLine) return;
+    if (!dialogueRuntime || !reaction?.generatedLine) return;
     // 续接也是一次 provider request：纳入对话操作所有权。并发门只由 startDialogueOp 把守（activeOp!=null → 拒绝），
     // 不再用独立布尔（杜绝失效后旧布尔卡死新续接）。若 await 期间发生新游戏/读档/驾崩（invalidateDialogue 自增纪元、
     // 清 choice token），token 不再 current → 丢弃本次完成：不提交 state、不设反应、不清新会话的忙碌位与 UI pending。
@@ -1443,7 +1456,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         return;
       }
 
-      const turnResult = await produceDialogueTurn(db, dialogueProvider, reqResult.value, expectedState, { logger });
+      const turnResult = await produceDialogueTurn(db, dialogueRuntime.provider, reqResult.value, expectedState, toDialogueTurnOptions(dialogueRuntime));
       if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略本次完成
       if (!turnResult.ok) {
         // Turn failed — same graceful path
@@ -1460,6 +1473,14 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
 
       doAutosave();
       const nextLine = turnResult.value.line;
+      const kw2 = nextLine.meta.knowledge;
+      setRecentKnowledge({
+        configured: dialogueRuntime.knowledgeRetriever !== undefined,
+        chunkIds: kw2?.chunkIds ?? [],
+        degraded: kw2?.degraded ?? false,
+        degradationKind: kw2?.degradationKind,
+        degradationReason: kw2?.degradationReason,
+      });
       // Update reaction state with the new generated line; carry decree beats from the queue
       setReaction({ speakerId, lines: [nextLine.text], generatedLine: nextLine });
     } finally {
@@ -1472,7 +1493,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
         setChoicePendingToken(null);
       }
     }
-  }, [dialogueProvider, reaction, store, db, logger]);
+  }, [dialogueRuntime, reaction, store, db]);
 
   const transferTo = (carrierId: string) => {
     setSuccessorOpen(false);
@@ -2190,7 +2211,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           lines={reaction.lines}
           backgroundKey={reaction.backgroundKey}
           generatedLine={reaction.generatedLine}
-          onChoice={reaction?.generatedLine && dialogueProvider ? onConverseChoice : undefined}
+          onChoice={reaction?.generatedLine && dialogueRuntime ? onConverseChoice : undefined}
           choicePending={choicePendingToken !== null}
           onDone={() => {
             setReaction(null);
@@ -2583,7 +2604,7 @@ export function App({ store, logger, dialogueProvider }: { store: GameStore; log
           onSilent={silentLeave}
         />
       )}
-      <DebugPanel store={store} db={db} logger={logger} onForceEvent={(id) => startEvent(id, { kind: "map", atRoot: true })} />
+      <DebugPanel store={store} db={db} logger={logger} recentKnowledge={recentKnowledge} onForceEvent={(id) => startEvent(id, { kind: "map", atRoot: true })} />
     </>
   );
 }
