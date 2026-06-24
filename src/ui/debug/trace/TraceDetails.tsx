@@ -1,5 +1,6 @@
 import type { EligibilityTraceEvent, MemoryTraceEvent, QueueTraceEvent, RollbackTraceEvent } from "../../../engine/trace/domainEvents";
 import type { TraceTransaction } from "../../../engine/trace/types";
+import { downloadTraceExport } from "../../../engine/trace/export";
 import { EligibilityTraceSection } from "./EligibilityTraceSection";
 import { MemoryTraceSection } from "./MemoryTraceSection";
 import { QueueTraceSection } from "./QueueTraceSection";
@@ -26,6 +27,7 @@ export function TraceDetails({ tx, onBack, onCompare }: { tx: TraceTransaction; 
           {tx.outcome === "committed" ? "已提交" : "已回滚"}
         </span>
         <button type="button" onClick={() => copyJson(tx)}>复制 JSON</button>
+        <button type="button" onClick={() => downloadTraceExport([tx], "selected")}>导出</button>
         {onCompare && <button type="button" onClick={onCompare}>对比…</button>}
       </div>
       <p className="trace-details__meta">

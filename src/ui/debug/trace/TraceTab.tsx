@@ -2,6 +2,7 @@ import { useState, useCallback, useSyncExternalStore, useMemo } from "react";
 import type { TraceHistory } from "../../../engine/trace/history";
 import { collectTraceFacets, filterTraceTransactions } from "../../../engine/trace/query";
 import type { TraceQuery } from "../../../engine/trace/query";
+import { downloadTraceExport } from "../../../engine/trace/export";
 import { TraceFilterBar } from "./TraceFilterBar";
 import { TraceHistoryList } from "./TraceHistoryList";
 import { TraceDetails } from "./TraceDetails";
@@ -106,7 +107,6 @@ export function TraceTab({ history }: Props) {
   }
 
   // ── Render list (default) ──
-  // Reconcile selected-id filter: if no detail mode, just show filter list.
   return (
     <div className="trace-tab">
       <TraceFilterBar
@@ -115,6 +115,24 @@ export function TraceTab({ history }: Props) {
         filteredCount={filteredTxs.length}
         onChange={setQuery}
       />
+      <div className="trace-tab__export-bar">
+        <button
+          type="button"
+          disabled={filteredTxs.length === 0}
+          onClick={() => downloadTraceExport(filteredTxs, "filtered")}
+          title="导出筛选后事务"
+        >
+          导出筛选
+        </button>
+        <button
+          type="button"
+          disabled={txs.length === 0}
+          onClick={() => downloadTraceExport(txs, "history")}
+          title="导出全部历史"
+        >
+          导出全部
+        </button>
+      </div>
       <TraceHistoryList
         txs={filteredTxs}
         totalCount={txs.length}
