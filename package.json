@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:relay": "tsx server/llm/anthropicRelay.ts",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:relay\"",
+    "dev:server": "tsx server/appServer.ts",
+    "dev:relay": "npm run dev:server",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck:client": "tsc --noEmit",

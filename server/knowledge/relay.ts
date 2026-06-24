@@ -1,14 +1,11 @@
 /**
  * HTTP adapter for the knowledge retrieval handler.
  *
- * Mirrors the pattern used by server/llm/anthropicRelay.ts:
  *   - Reads body bytes, parses JSON, delegates to the handler
+ *   - Forwards a disconnect AbortSignal so embedding calls are cancelled on
+ *     client disconnect (PR6: T2 server-side cancellation)
  *   - Writes status + JSON body
  *   - Never exposes internal errors as plain text
- *
- * Note: This relay is a skeleton for PR5. It is not yet wired into
- * any running server. Connection to SQLite-backed KnowledgeHybridRetriever
- * is the composition root (host.ts), deferred to a follow-up PR.
  */
 import http from "node:http";
 import { handleKnowledgeRetrieve, type KnowledgeHandlerDeps } from "./handler";
@@ -41,7 +38,12 @@ export function createKnowledgeRequestHandler(
       return;
     }
 
-    const result = await handleKnowledgeRetrieve(parsed, deps);
+    // Forward client disconnect as AbortSignal so server-side embedding is cancelled
+    const controller = new AbortController();
+    req.on("aborted", () => controller.abort());
+    res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+
+    const result = await handleKnowledgeRetrieve(parsed, deps, controller.signal);
     writeJson(res, result.status, result.body);
   };
 }
