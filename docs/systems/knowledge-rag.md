@@ -230,7 +230,7 @@ GEMINI_API_KEY=...    npm run knowledge:embed -- --provider gemini  --model gemi
 OPENAI_API_KEY=... npm run knowledge:embed -- --provider openai --model text-embedding-3-small --batch-size 50 --db ./custom.db
 ```
 
-> **Note — Gemini gen2 HTTP call count**: `gemini-embedding-2` returns exactly one aggregated embedding per `embedContent()` call.  For N chunks in a batch, the provider makes N sequential HTTP requests.  `--batch-size` controls how many chunks are processed before each atomic DB write, not the number of simultaneous HTTP calls.
+> **Note — Gemini gen2 HTTP call count**: `gemini-embedding-2` returns exactly one aggregated embedding per `embedContent()` call.  `--batch-size` controls the number of cache-miss texts passed to each `EmbeddingProvider.embed()` invocation; for `gemini-embedding-2`, the provider expands that logical batch into sequential per-text HTTP requests.  SQLite is written once, atomically, after all provider batches complete and validate.
 
 `syncEmbeddings` contract:
 1. Compile embedding text + SHA-256 per chunk.
