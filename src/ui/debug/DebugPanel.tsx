@@ -14,6 +14,7 @@ import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { OfficialRoster } from "../officials/OfficialRoster";
 import { OfficialDetail } from "../officials/OfficialDetail";
+import { TraceTab } from "./trace/TraceTab";
 
 export interface DebugPanelProps {
   store: GameStore;
@@ -207,10 +208,14 @@ function ForceTrigger({ db, onForceEvent }: { db: ContentDB; onForceEvent: (even
   );
 }
 
+type PanelTab = "state" | "trace";
+
 function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
   const state = useGameState(store);
   const [lastRejection, setLastRejection] = useState<string | null>(null);
   const [, bumpReport] = useState(0);
+  const [activeTab, setActiveTab] = useState<PanelTab>("state");
+  const traceHistory = store.getTraceHistory();
 
   const spendAp = (amount: number) => {
     // 时间推进必须走统一入口（含边界结算）；裸 dispatch 时间命令已被 store 拒绝。
@@ -267,51 +272,74 @@ function DebugPanelBody({ store, db, logger, onForceEvent }: DebugPanelProps) {
           {formatGameTime(state.calendar)} · {formatAp(state.calendar)}
         </span>
       </header>
-      <div className="debug-panel__actions">
-        <button type="button" onClick={() => spendAp(1)}>
-          消耗 1 AP
-        </button>
-        <button type="button" onClick={() => spendAp(2)}>
-          消耗 2 AP
+      <div className="debug-panel__tabs">
+        <button
+          type="button"
+          className={activeTab === "state" ? "debug-panel__tab--active" : "debug-panel__tab"}
+          onClick={() => setActiveTab("state")}
+        >
+          状态
         </button>
         <button
           type="button"
-          onClick={() => {
-            store.reset();
-            setLastRejection(null);
-          }}
+          className={activeTab === "trace" ? "debug-panel__tab--active" : "debug-panel__tab"}
+          onClick={() => setActiveTab("trace")}
         >
-          重置状态
+          追踪{traceHistory.size > 0 && ` (${traceHistory.size})`}
         </button>
       </div>
-      {lastRejection && <p className="debug-panel__rejection">{lastRejection}</p>}
-      <div className="debug-panel__actions">
-        <button type="button" onClick={() => fireEffects(true)} disabled={!gameStarted || !db}>
-          合法效果批
-        </button>
-        <button type="button" onClick={() => fireEffects(false)} disabled={!gameStarted || !db}>
-          非法效果批
-        </button>
-      </div>
-      {!gameStarted && <p className="debug-panel__content">效果批演示需先开始新游戏。</p>}
-      {report && (
-        <p className={report.outcome === "applied" ? "debug-panel__content" : "debug-panel__rejection"}>
-          上一效果批：{report.outcome === "applied" ? "已应用" : "已整批拒绝"}（{report.effects.length} 个效果）
-          {report.errors.map((error, i) => (
-            <span key={i}>
-              <br />
-              {formatErrorTag(error)} — {error.message}
-            </span>
-          ))}
-        </p>
+
+      {activeTab === "trace" ? (
+        <TraceTab history={traceHistory} />
+      ) : (
+        <>
+          <div className="debug-panel__actions">
+            <button type="button" onClick={() => spendAp(1)}>
+              消耗 1 AP
+            </button>
+            <button type="button" onClick={() => spendAp(2)}>
+              消耗 2 AP
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                store.reset();
+                setLastRejection(null);
+              }}
+            >
+              重置状态
+            </button>
+          </div>
+          {lastRejection && <p className="debug-panel__rejection">{lastRejection}</p>}
+          <div className="debug-panel__actions">
+            <button type="button" onClick={() => fireEffects(true)} disabled={!gameStarted || !db}>
+              合法效果批
+            </button>
+            <button type="button" onClick={() => fireEffects(false)} disabled={!gameStarted || !db}>
+              非法效果批
+            </button>
+          </div>
+          {!gameStarted && <p className="debug-panel__content">效果批演示需先开始新游戏。</p>}
+          {report && (
+            <p className={report.outcome === "applied" ? "debug-panel__content" : "debug-panel__rejection"}>
+              上一效果批：{report.outcome === "applied" ? "已应用" : "已整批拒绝"}（{report.effects.length} 个效果）
+              {report.errors.map((error, i) => (
+                <span key={i}>
+                  <br />
+                  {formatErrorTag(error)} — {error.message}
+                </span>
+              ))}
+            </p>
+          )}
+          {db && onForceEvent && <ForceTrigger db={db} onForceEvent={onForceEvent} />}
+          {logger && <Diagnostics logger={logger} />}
+          {db && <ContentSummary db={db} />}
+          {gameStarted && <ConsortAttrsBrowser db={db} state={state} />}
+          {gameStarted && <MemoryBrowser db={db} state={state} />}
+          {db && <OfficialsBrowser db={db} state={state} />}
+          <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
+        </>
       )}
-      {db && onForceEvent && <ForceTrigger db={db} onForceEvent={onForceEvent} />}
-      {logger && <Diagnostics logger={logger} />}
-      {db && <ContentSummary db={db} />}
-      {gameStarted && <ConsortAttrsBrowser db={db} state={state} />}
-      {gameStarted && <MemoryBrowser db={db} state={state} />}
-      {db && <OfficialsBrowser db={db} state={state} />}
-      <pre className="debug-panel__dump">{JSON.stringify(state, null, 2)}</pre>
     </aside>
   );
 }

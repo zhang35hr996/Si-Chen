@@ -1,0 +1,69 @@
+import { describe, expect, it } from "vitest";
+import { diffGameState } from "../../src/engine/trace/diff";
+import { createGameStore } from "../../src/store/gameStore";
+import { applyEffects } from "../../src/engine/effects/funnel";
+import { loadRealContent } from "../helpers/contentFixture";
+
+const db = loadRealContent();
+
+const makeStarted = () => {
+  const store = createGameStore();
+  store.newGame(db);
+  return store.getState();
+};
+
+describe("diffGameState", () => {
+  it("returns empty array when before === after (same reference)", () => {
+    const state = makeStarted();
+    const diffs = diffGameState(state, state);
+    expect(diffs).toHaveLength(0);
+  });
+
+  it("detects favor change in standing", () => {
+    const before = makeStarted();
+    // favor only works on consort-kind characters; pick the first consort.
+    const consortId = Object.keys(before.standing).find((id) => db.characters[id]?.kind === "consort");
+    if (!consortId) return; // no consort in fixture
+    const result = applyEffects(db, before, [{ type: "favor", char: consortId, delta: 5 }]);
+    if (!result.ok) throw new Error("expected ok");
+    const after = result.value;
+    const diffs = diffGameState(before, after);
+    const favorDiff = diffs.find((d) => d.path === `standing.${consortId}.favor`);
+    expect(favorDiff).toBeDefined();
+    expect(favorDiff?.after).toBe((before.standing[consortId]?.favor ?? 0) + 5);
+  });
+
+  it("detects calendar AP change", () => {
+    const store = createGameStore();
+    store.newGame(db);
+    const before = store.getState();
+    // SPEND_AP must route through advanceTime (dispatch now rejects time commands).
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    const after = store.getState();
+    const diffs = diffGameState(before, after);
+    const apDiff = diffs.find((d) => d.path === "calendar.ap");
+    expect(apDiff).toBeDefined();
+    expect(apDiff?.before).toBe(6);
+    expect(apDiff?.after).toBe(5);
+  });
+
+  it("detects flag changes", () => {
+    const before = makeStarted();
+    const result = applyEffects(db, before, [{ type: "flag", key: "test_flag", value: 1 }]);
+    if (!result.ok) throw new Error("expected ok");
+    const diffs = diffGameState(before, result.value);
+    const flagDiff = diffs.find((d) => d.path === "flags.test_flag");
+    expect(flagDiff).toBeDefined();
+    expect(flagDiff?.before).toBeUndefined();
+    expect(flagDiff?.after).toBe(1);
+  });
+
+  it("detects resource sovereign changes", () => {
+    const before = makeStarted();
+    const result = applyEffects(db, before, [{ type: "resource", pillar: "sovereign", field: "prestige", delta: 3 }]);
+    if (!result.ok) throw new Error("expected ok");
+    const diffs = diffGameState(before, result.value);
+    const diff = diffs.find((d) => d.path === "resources.sovereign.prestige");
+    expect(diff).toBeDefined();
+  });
+});

@@ -11,7 +11,7 @@
 import { toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import type { EventEffect } from "../content/schemas";
-import { applyEffects } from "../effects/funnel";
+import { applyEffects, type EffectContext } from "../effects/funnel";
 import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import { applyCommand } from "../state/reducer";
@@ -29,6 +29,7 @@ export function resolveEvent(
   state: GameState,
   eventId: string,
   effects: readonly EventEffect[],
+  context?: Pick<EffectContext, "collector">,
 ): Result<EventResolution, GameError[]> {
   const event = db.events[eventId];
   if (!event) {
@@ -49,7 +50,7 @@ export function resolveEvent(
 
   // Effects through the one funnel. Rejection → nothing else happens.
   // The scene id rides along so memory entries carry their origin trace.
-  const applied = applyEffects(db, state, effects, { sceneId: event.sceneId });
+  const applied = applyEffects(db, state, effects, { sceneId: event.sceneId, ...context });
   if (!applied.ok) return err(applied.error);
 
   // The event "happened" on the action-day it was resolved — stamp before
