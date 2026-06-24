@@ -1,106 +1,153 @@
 /**
- * PR6 tests for the unified app server routing.
+ * PR6 tests for the unified app server (createAppServer).
  *
- * Starts a real HTTP server using the relay handler (simulates appServer routing).
- * Full appServer cannot be tested without real ANTHROPIC_API_KEY, so we test:
- *   - The routing layer's behavior for known + unknown paths
- *   - Health endpoint wired through a minimal server
+ * Uses the PRODUCTION `createAppServer()` from server/appServer.ts with
+ * injected fake deps — no real API keys or real SQLite paths needed.
+ *
+ * Covers:
+ *   - GET /api/health → 200 { ok, knowledge }
+ *   - health.knowledge is false when knowledgeService absent
+ *   - health.knowledge is true when knowledgeService present
  *   - Unknown route → 404
- *   - Knowledge GET → 405
- *   - One route failure does not crash the server (other routes still work)
- *   - Client disconnect aborts server-side embedding
+ *   - GET /api/knowledge/retrieve → 405 (method check in relay)
+ *   - POST /api/knowledge/retrieve without knowledgeService → 503
+ *   - POST /api/knowledge/retrieve with knowledgeService → 200
+ *   - POST /api/llm/anthropic → delegates to transport
+ *   - One route failure doesn't crash the server
+ *   - Knowledge route bad JSON → 400 (relay validation)
+ *   - Disconnect abort wired through to retriever signal
+ *   - Retry-After header forwarded from 429 response
  */
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rmSync } from "node:fs";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { SqliteKeywordIndex } from "../../../src/engine/knowledge/index/sqlite-fts5";
 import { SqliteVectorIndex } from "../../../src/engine/knowledge/vector/sqlite-vector-index";
 import { KnowledgeHybridRetriever } from "../../../src/engine/knowledge/retrieval/hybrid-retriever";
-import { createKnowledgeRequestHandler } from "../../../server/knowledge/relay";
 import { FakeEmbeddingProvider } from "../embedding/fake-provider";
+import { createAppServer } from "../../../server/appServer";
 import type { KnowledgeRetrievalService } from "../../../server/knowledge/handler";
+import type {
+  AnthropicTransport,
+  AnthropicTransportResult,
+} from "../../../src/engine/dialogue/providers/anthropicProvider";
 
-const NOOP_LOGGER = { warn: () => {}, error: () => {} };
+// ── Fake LLM transport ───────────────────────────────────────────────────────
+
+function makeFakeTransport(
+  result: Awaited<ReturnType<AnthropicTransport["send"]>>,
+): AnthropicTransport {
+  return { send: vi.fn().mockResolvedValue(result) };
+}
+
+const OK_RESULT: Awaited<ReturnType<AnthropicTransport["send"]>> = {
+  ok: true,
+  value: { message: { id: "msg_1", type: "message", role: "assistant", content: [], model: "claude-test", stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 } } } as AnthropicTransportResult,
+};
+
+// ── Fake knowledge service ────────────────────────────────────────────────────
+
+const NOOP_KW_LOGGER = { warn: () => {}, error: () => {} };
+
+// ── SQLite fixtures ───────────────────────────────────────────────────────────
 
 let dbPath: string;
 let kwIndex: SqliteKeywordIndex;
 let vecIndex: SqliteVectorIndex;
-let retriever: KnowledgeHybridRetriever;
-let baseUrl: string;
+let knowledgeService: KnowledgeRetrievalService;
+
+// ── Server lifecycle ──────────────────────────────────────────────────────────
+
 let server: http.Server;
+let baseUrl: string;
 
-// Minimal server that simulates the /api/knowledge and /api/health routes
-function createTestServer(knowledgeService: KnowledgeRetrievalService): http.Server {
-  const knowledgeHandler = createKnowledgeRequestHandler({
-    retriever: knowledgeService,
-    logger: NOOP_LOGGER,
-  });
-
-  return http.createServer((req, res) => {
-    const url = req.url ?? "";
-
-    if (url === "/api/health" && req.method === "GET") {
-      const json = JSON.stringify({ ok: true });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(json);
-      return;
-    }
-
-    if (url === "/api/knowledge/retrieve") {
-      knowledgeHandler(req, res);
-      return;
-    }
-
-    const json = JSON.stringify({ error: "not_found" });
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(json);
-  });
-}
-
-beforeAll(async () => {
-  dbPath = join(tmpdir(), `appserver-test-${Date.now()}.db`);
-  const fakeProvider = new FakeEmbeddingProvider({ dimensions: 4 });
-  kwIndex = new SqliteKeywordIndex(dbPath);
-  vecIndex = new SqliteVectorIndex(dbPath);
-  retriever = new KnowledgeHybridRetriever(kwIndex, vecIndex, fakeProvider);
-
-  server = createTestServer(retriever);
+async function startServer(deps: Parameters<typeof createAppServer>[0]): Promise<string> {
+  server = createAppServer(deps);
   await new Promise<void>((res, rej) => {
     server.listen(0, "127.0.0.1", () => res());
     server.on("error", rej);
   });
   const addr = server.address() as { port: number };
-  baseUrl = `http://127.0.0.1:${addr.port}`;
+  return `http://127.0.0.1:${addr.port}`;
+}
+
+async function stopServer(): Promise<void> {
+  await new Promise<void>((res) => server.close(() => res()));
+}
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+beforeAll(() => {
+  dbPath = join(tmpdir(), `appserver-test-${Date.now()}.db`);
+  kwIndex = new SqliteKeywordIndex(dbPath);
+  vecIndex = new SqliteVectorIndex(dbPath);
+  const fakeProvider = new FakeEmbeddingProvider({ dimensions: 4 });
+  knowledgeService = new KnowledgeHybridRetriever(kwIndex, vecIndex, fakeProvider);
 });
 
 afterAll(async () => {
-  await new Promise<void>((res) => server.close(() => res()));
   try { vecIndex.close(); } catch { /* ok */ }
   try { kwIndex.close(); } catch { /* ok */ }
   try { rmSync(dbPath); } catch { /* ok */ }
 });
 
-describe("unified server routing", () => {
-  it("GET /api/health → 200 { ok: true }", async () => {
+afterEach(async () => {
+  if (server?.listening) await stopServer();
+});
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+describe("GET /api/health", () => {
+  it("returns 200 { ok: true, knowledge: false } when no knowledge service", async () => {
+    baseUrl = await startServer({ llmTransport: makeFakeTransport(OK_RESULT), knowledgeHandlerLogger: NOOP_KW_LOGGER });
     const res = await fetch(`${baseUrl}/api/health`);
     expect(res.status).toBe(200);
-    const body = await res.json() as { ok: boolean };
+    const body = await res.json() as { ok: boolean; knowledge: boolean };
     expect(body.ok).toBe(true);
+    expect(body.knowledge).toBe(false);
   });
 
-  it("unknown route → 404", async () => {
+  it("returns knowledge: true when knowledge service is present", async () => {
+    baseUrl = await startServer({
+      llmTransport: makeFakeTransport(OK_RESULT),
+      knowledgeService,
+      knowledgeHandlerLogger: NOOP_KW_LOGGER,
+    });
+    const res = await fetch(`${baseUrl}/api/health`);
+    const body = await res.json() as { knowledge: boolean };
+    expect(body.knowledge).toBe(true);
+  });
+});
+
+describe("unknown route", () => {
+  it("returns 404", async () => {
+    baseUrl = await startServer({ llmTransport: makeFakeTransport(OK_RESULT), knowledgeHandlerLogger: NOOP_KW_LOGGER });
     const res = await fetch(`${baseUrl}/api/unknown`);
     expect(res.status).toBe(404);
   });
+});
 
-  it("GET /api/knowledge/retrieve → 405 (method not allowed)", async () => {
-    const res = await fetch(`${baseUrl}/api/knowledge/retrieve`);
-    expect(res.status).toBe(405);
+describe("POST /api/knowledge/retrieve", () => {
+  it("returns 503 when knowledge service is absent", async () => {
+    baseUrl = await startServer({ llmTransport: makeFakeTransport(OK_RESULT), knowledgeHandlerLogger: NOOP_KW_LOGGER });
+    const res = await fetch(`${baseUrl}/api/knowledge/retrieve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: { text: "礼仪", limit: 5 } }),
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("knowledge_unavailable");
   });
 
-  it("valid POST /api/knowledge/retrieve → 200", async () => {
+  it("returns 200 with hits when knowledge service is present", async () => {
+    baseUrl = await startServer({
+      llmTransport: makeFakeTransport(OK_RESULT),
+      knowledgeService,
+      knowledgeHandlerLogger: NOOP_KW_LOGGER,
+    });
     const res = await fetch(`${baseUrl}/api/knowledge/retrieve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -111,64 +158,131 @@ describe("unified server routing", () => {
     expect(Array.isArray(body.hits)).toBe(true);
   });
 
-  it("one knowledge failure does not crash the server (next request still works)", async () => {
-    // Bad request — should return 400, not crash
-    const badRes = await fetch(`${baseUrl}/api/knowledge/retrieve`, {
+  it("GET returns 405 (method check)", async () => {
+    baseUrl = await startServer({
+      llmTransport: makeFakeTransport(OK_RESULT),
+      knowledgeService,
+      knowledgeHandlerLogger: NOOP_KW_LOGGER,
+    });
+    const res = await fetch(`${baseUrl}/api/knowledge/retrieve`);
+    expect(res.status).toBe(405);
+  });
+
+  it("bad JSON returns 400", async () => {
+    baseUrl = await startServer({
+      llmTransport: makeFakeTransport(OK_RESULT),
+      knowledgeService,
+      knowledgeHandlerLogger: NOOP_KW_LOGGER,
+    });
+    const res = await fetch(`${baseUrl}/api/knowledge/retrieve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "not-json",
     });
-    expect(badRes.status).toBe(400);
+    expect(res.status).toBe(400);
+  });
 
-    // Server still works
-    const goodRes = await fetch(`${baseUrl}/api/health`);
-    expect(goodRes.status).toBe(200);
+  it("one knowledge failure doesn't crash the server (health still works)", async () => {
+    baseUrl = await startServer({
+      llmTransport: makeFakeTransport(OK_RESULT),
+      knowledgeService,
+      knowledgeHandlerLogger: NOOP_KW_LOGGER,
+    });
+    const bad = await fetch(`${baseUrl}/api/knowledge/retrieve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "bad",
+    });
+    expect(bad.status).toBe(400);
+    const health = await fetch(`${baseUrl}/api/health`);
+    expect(health.status).toBe(200);
   });
 });
 
-describe("client disconnect aborts server-side embedding", () => {
-  it("aborting the request controller triggers abort on the embedding signal", async () => {
+describe("POST /api/llm/anthropic", () => {
+  const validPayload = {
+    model: "claude-opus-4-8",
+    max_tokens: 100,
+    system: [],
+    messages: [{ role: "user", content: "hello" }],
+    tools: [],
+    tool_choice: { type: "auto" },
+  };
+
+  it("delegates to transport and returns 200 on success", async () => {
+    const transport = makeFakeTransport(OK_RESULT);
+    baseUrl = await startServer({ llmTransport: transport, knowledgeHandlerLogger: NOOP_KW_LOGGER });
+    const res = await fetch(`${baseUrl}/api/llm/anthropic`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validPayload),
+    });
+    expect(res.status).toBe(200);
+    expect(transport.send).toHaveBeenCalled();
+  });
+
+  it("returns 429 and Retry-After when transport returns 429", async () => {
+    const transport = makeFakeTransport({
+      ok: false,
+      error: { kind: "http", status: 429, retryAfterMs: 5000 },
+    });
+    baseUrl = await startServer({ llmTransport: transport, knowledgeHandlerLogger: NOOP_KW_LOGGER });
+    const res = await fetch(`${baseUrl}/api/llm/anthropic`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validPayload),
+    });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("5");
+  });
+
+  it("GET returns 405", async () => {
+    baseUrl = await startServer({ llmTransport: makeFakeTransport(OK_RESULT), knowledgeHandlerLogger: NOOP_KW_LOGGER });
+    const res = await fetch(`${baseUrl}/api/llm/anthropic`);
+    expect(res.status).toBe(405);
+  });
+
+  it("bad JSON body returns 400", async () => {
+    baseUrl = await startServer({ llmTransport: makeFakeTransport(OK_RESULT), knowledgeHandlerLogger: NOOP_KW_LOGGER });
+    const res = await fetch(`${baseUrl}/api/llm/anthropic`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not-json",
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("client disconnect aborts knowledge retriever signal", () => {
+  it("abort during retrieval fires the signal passed to retriever", async () => {
     const abortSpy = vi.fn();
-    const slowRetriever: KnowledgeRetrievalService = {
-      retrieve: async (_query) => {
-        // Simulate slow embedding — check if signal is present and fire spy when aborted
-        if (_query.signal) {
-          _query.signal.addEventListener("abort", abortSpy);
-        }
-        // Simulate a 100ms delay to allow the client to disconnect
+    const slowService: KnowledgeRetrievalService = {
+      retrieve: async (query) => {
+        query.signal?.addEventListener("abort", abortSpy);
         await new Promise((res) => setTimeout(res, 50));
         return { hits: [] };
       },
     };
 
-    const slowServer = createTestServer(slowRetriever);
-    await new Promise<void>((res, rej) => {
-      slowServer.listen(0, "127.0.0.1", () => res());
-      slowServer.on("error", rej);
+    baseUrl = await startServer({
+      llmTransport: makeFakeTransport(OK_RESULT),
+      knowledgeService: slowService,
+      knowledgeHandlerLogger: NOOP_KW_LOGGER,
     });
-    const slowAddr = slowServer.address() as { port: number };
 
     const controller = new AbortController();
-    // Start request and immediately abort it
-    const fetchPromise = fetch(`http://127.0.0.1:${slowAddr.port}/api/knowledge/retrieve`, {
+    const fetchPromise = fetch(`${baseUrl}/api/knowledge/retrieve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: { text: "礼仪", limit: 5 } }),
+      body: JSON.stringify({ query: { text: "礼仪", limit: 5, vectorFailureMode: "keyword_only" } }),
       signal: controller.signal,
-    }).catch(() => {}); // expected to throw AbortError
+    }).catch(() => {});
 
-    // Abort after a short delay to let the server start processing
     await new Promise((res) => setTimeout(res, 10));
     controller.abort();
     await fetchPromise;
-
-    // Give server time to propagate the abort signal
     await new Promise((res) => setTimeout(res, 100));
-    await new Promise<void>((res) => slowServer.close(() => res()));
 
-    // The abort should have fired (the relay sets up req/res close listeners)
-    // This test verifies the wiring exists; actual embedding cancellation is
-    // tested at the embedding provider level
     expect(abortSpy).toHaveBeenCalled();
   });
 });

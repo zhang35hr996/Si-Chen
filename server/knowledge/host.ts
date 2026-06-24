@@ -18,6 +18,8 @@ import { SqliteKeywordIndex } from "../../src/engine/knowledge/index/sqlite-fts5
 import { SqliteVectorIndex } from "../../src/engine/knowledge/vector/sqlite-vector-index";
 import { KnowledgeHybridRetriever } from "../../src/engine/knowledge/retrieval/hybrid-retriever";
 import { createEmbeddingProvider } from "../../src/engine/knowledge/embedding/provider-factory";
+import type { EmbeddingProvider } from "../../src/engine/knowledge/embedding/provider";
+import type { EmbeddingProviderConfig } from "../../src/engine/knowledge/embedding/provider-factory";
 import type { KnowledgeRetrievalService } from "./handler";
 
 export interface KnowledgeHostConfig {
@@ -34,6 +36,22 @@ export interface KnowledgeHost {
   /** Idempotent — safe to call multiple times. */
   close(): void;
 }
+
+/**
+ * Seam for dependency injection in tests.
+ * Production uses the defaults which call the real implementations.
+ */
+export interface KnowledgeHostFactories {
+  createProvider: (config: EmbeddingProviderConfig) => EmbeddingProvider;
+  createKeywordIndex: (dbPath: string) => SqliteKeywordIndex;
+  createVectorIndex: (dbPath: string) => SqliteVectorIndex;
+}
+
+const DEFAULT_FACTORIES: KnowledgeHostFactories = {
+  createProvider: createEmbeddingProvider,
+  createKeywordIndex: (p) => new SqliteKeywordIndex(p),
+  createVectorIndex: (p) => new SqliteVectorIndex(p),
+};
 
 /**
  * Parse and validate environment config for the knowledge host.
@@ -60,8 +78,14 @@ export function parseKnowledgeHostConfig(): KnowledgeHostConfig {
  * Create a KnowledgeHost from explicit config.
  *
  * On failure: any already-opened indexes are closed before the error propagates.
+ *
+ * Pass `factories` to inject test doubles (e.g. FakeEmbeddingProvider).
+ * Production callers omit `factories` to use the real implementations.
  */
-export function createKnowledgeHost(config: KnowledgeHostConfig): KnowledgeHost {
+export function createKnowledgeHost(
+  config: KnowledgeHostConfig,
+  factories: KnowledgeHostFactories = DEFAULT_FACTORIES,
+): KnowledgeHost {
   // Fail fast if DB file is absent — otherwise SQLite would silently create an empty DB.
   if (!existsSync(config.dbPath)) {
     throw new Error(`[knowledge-host] DB file not found`);
@@ -71,15 +95,15 @@ export function createKnowledgeHost(config: KnowledgeHostConfig): KnowledgeHost 
   let vectorIndex: SqliteVectorIndex | undefined;
 
   try {
-    // createEmbeddingProvider reads API key from env; throws if absent — before
-    // we open any SQLite handles, so no cleanup needed at that point.
-    const embeddingProvider = createEmbeddingProvider({
+    // Provider is created first (reads API key from env or factories override);
+    // throws if absent — before SQLite handles are opened, so no cleanup needed.
+    const embeddingProvider = factories.createProvider({
       provider: config.embeddingProvider,
       model: config.embeddingModel,
     });
 
-    keywordIndex = new SqliteKeywordIndex(config.dbPath);
-    vectorIndex = new SqliteVectorIndex(config.dbPath);
+    keywordIndex = factories.createKeywordIndex(config.dbPath);
+    vectorIndex = factories.createVectorIndex(config.dbPath);
 
     const retriever = new KnowledgeHybridRetriever(keywordIndex, vectorIndex, embeddingProvider);
 

@@ -2,26 +2,49 @@
  * Unified local development server — routes both LLM and knowledge requests.
  *
  * Routes:
- *   POST /api/llm/anthropic   — Anthropic API relay
+ *   POST /api/llm/anthropic      — Anthropic API relay
  *   POST /api/knowledge/retrieve — Knowledge retrieval
- *   GET  /api/health          — Liveness check
- *   *                         — 404
+ *   GET  /api/health             — Liveness check ({ ok: true, knowledge: bool })
+ *   *                            — 404
  *
- * Knowledge host is optional at startup: if KNOWLEDGE_DB_PATH is absent the
- * server starts anyway (LLM route still works) and knowledge requests return
- * 503 instead of crashing. This lets developers run without a built DB.
+ * Usage:
+ *   - Tests call `createAppServer(deps)` directly with injected fakes.
+ *   - CLI (`tsx server/appServer.ts`) calls `startAppServerFromEnv()` via the
+ *     isMain guard at the bottom.
  *
- * Client disconnect propagation:
- *   Both routes forward an AbortSignal derived from the request so that
- *   upstream embedding and LLM calls are cancelled on disconnect.
+ * Security:
+ *   - API keys are never logged or returned in responses.
+ *   - Knowledge host errors are classified (never raw message).
+ *   - `sourcePath` never reaches the browser (stripped in the knowledge handler).
  */
 import http from "node:http";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import { createAnthropicSdkTransport } from "./llm/anthropicSdkTransport";
 import { createKnowledgeRequestHandler } from "./knowledge/relay";
 import { createKnowledgeHost, parseKnowledgeHostConfig } from "./knowledge/host";
-import type { KnowledgeHost } from "./knowledge/host";
+import type { KnowledgeHandlerLogger, KnowledgeRetrievalService } from "./knowledge/handler";
+import type {
+  AnthropicTransport,
+  AnthropicTransportFailure,
+  AnthropicRequestPayload,
+} from "../src/engine/dialogue/providers/anthropicProvider";
 
-const PORT = parseInt(process.env["RELAY_PORT"] ?? "3001", 10);
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export interface AppServerDeps {
+  /** Anthropic API transport (required). */
+  readonly llmTransport: AnthropicTransport;
+  /**
+   * Knowledge service.  When absent the knowledge route returns 503 and
+   * health reports `{ knowledge: false }`.
+   */
+  readonly knowledgeService?: KnowledgeRetrievalService;
+  /** Logger forwarded to the knowledge handler. */
+  readonly knowledgeHandlerLogger: KnowledgeHandlerLogger;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function sendJson(
   res: http.ServerResponse,
@@ -38,62 +61,30 @@ function sendJson(
   res.end(json);
 }
 
-/** Build an AbortController that fires when the client disconnects. */
-function makeRequestSignal(req: http.IncomingMessage, res: http.ServerResponse): AbortController {
-  const controller = new AbortController();
-  req.on("aborted", () => controller.abort());
-  res.on("close", () => { if (!res.writableEnded) controller.abort(); });
-  return controller;
-}
+// ── createAppServer ───────────────────────────────────────────────────────────
 
-function startServer(): void {
-  // ── LLM relay ──────────────────────────────────────────────────────────────
-  const anthropicApiKey = process.env["ANTHROPIC_API_KEY"];
-  if (!anthropicApiKey) {
-    console.error("[app-server] ANTHROPIC_API_KEY is not set");
-    process.exit(1);
-  }
-  const llmTransport = createAnthropicSdkTransport(anthropicApiKey);
+/**
+ * Build the HTTP server from injected dependencies.
+ * Does NOT start listening — caller calls `server.listen(...)`.
+ */
+export function createAppServer(deps: AppServerDeps): http.Server {
+  const { llmTransport } = deps;
 
-  // ── Knowledge host (optional) ───────────────────────────────────────────────
-  let knowledgeHost: KnowledgeHost | null = null;
-  const knowledgeDbPath = process.env["KNOWLEDGE_DB_PATH"];
-  if (knowledgeDbPath) {
-    try {
-      const config = parseKnowledgeHostConfig();
-      knowledgeHost = createKnowledgeHost(config);
-      console.log("[app-server] knowledge host ready");
-    } catch (err) {
-      // Log classification only — never log API keys, paths, or raw messages
-      const kind = err instanceof Error ? err.name : "Error";
-      console.error(`[app-server] knowledge host failed to start (${kind}); knowledge route will return 503`);
-    }
-  } else {
-    console.warn("[app-server] KNOWLEDGE_DB_PATH not set — knowledge route disabled");
-  }
-
-  // ── Knowledge route handler (pre-built, avoids per-request closure alloc) ──
-  const knowledgeHandler = knowledgeHost
+  const knowledgeHandler = deps.knowledgeService
     ? createKnowledgeRequestHandler({
-        retriever: knowledgeHost.service,
-        logger: {
-          warn: (msg, ctx) => console.warn(`[knowledge] ${msg}`, ctx ?? ""),
-          error: (msg, ctx) => console.error(`[knowledge] ${msg}`, ctx ?? ""),
-        },
+        retriever: deps.knowledgeService,
+        logger: deps.knowledgeHandlerLogger,
       })
     : null;
 
-  // ── HTTP server ─────────────────────────────────────────────────────────────
-  const server = http.createServer(async (req, res) => {
+  return http.createServer(async (req, res) => {
     const url = req.url ?? "";
 
-    // Health
     if (url === "/api/health" && req.method === "GET") {
-      sendJson(res, 200, { ok: true, knowledge: knowledgeHost !== null });
+      sendJson(res, 200, { ok: true, knowledge: deps.knowledgeService !== undefined });
       return;
     }
 
-    // Knowledge
     if (url === "/api/knowledge/retrieve") {
       if (!knowledgeHandler) {
         sendJson(res, 503, { error: "knowledge_unavailable", code: "NO_KNOWLEDGE_HOST" });
@@ -103,7 +94,6 @@ function startServer(): void {
       return;
     }
 
-    // LLM — Anthropic
     if (url === "/api/llm/anthropic") {
       await handleLlmAnthropic(req, res, llmTransport);
       return;
@@ -111,30 +101,9 @@ function startServer(): void {
 
     sendJson(res, 404, { error: "not_found" });
   });
-
-  server.listen(PORT, "127.0.0.1", () => {
-    console.log(`[app-server] listening on http://127.0.0.1:${PORT}`);
-    console.log(`[app-server] routes: /api/llm/anthropic, /api/knowledge/retrieve, /api/health`);
-  });
-
-  // ── Graceful shutdown ───────────────────────────────────────────────────────
-  const shutdown = () => {
-    server.close(() => {
-      knowledgeHost?.close();
-      process.exit(0);
-    });
-  };
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
 }
 
-// ── LLM Anthropic handler (extracted from anthropicRelay.ts) ─────────────────
-import { z } from "zod";
-import type {
-  AnthropicTransport,
-  AnthropicTransportFailure,
-  AnthropicRequestPayload,
-} from "../src/engine/dialogue/providers/anthropicProvider";
+// ── LLM handler ───────────────────────────────────────────────────────────────
 
 const MAX_LLM_BODY_BYTES = 256 * 1024;
 
@@ -173,7 +142,9 @@ async function handleLlmAnthropic(
     return;
   }
 
-  const controller = makeRequestSignal(req, res);
+  const controller = new AbortController();
+  req.on("aborted", () => controller.abort());
+  res.on("close", () => { if (!res.writableEnded) controller.abort(); });
 
   let size = 0;
   const chunks: Buffer[] = [];
@@ -218,4 +189,63 @@ async function handleLlmAnthropic(
   sendJson(res, llmFailureToStatus(f), { error: "upstream error" }, extra);
 }
 
-startServer();
+// ── CLI entry point ───────────────────────────────────────────────────────────
+
+/**
+ * Wires the server from environment variables and starts listening.
+ * Called only when this module is the process entry point.
+ */
+export function startAppServerFromEnv(): void {
+  const PORT = parseInt(process.env["RELAY_PORT"] ?? "3001", 10);
+
+  const anthropicApiKey = process.env["ANTHROPIC_API_KEY"];
+  if (!anthropicApiKey) {
+    console.error("[app-server] ANTHROPIC_API_KEY is not set");
+    process.exit(1);
+  }
+  const llmTransport = createAnthropicSdkTransport(anthropicApiKey);
+
+  // Knowledge host is optional — absent KNOWLEDGE_DB_PATH → 503 on knowledge route
+  let knowledgeService: KnowledgeRetrievalService | undefined;
+  let knowledgeHostClose: (() => void) | undefined;
+
+  if (process.env["KNOWLEDGE_DB_PATH"]) {
+    try {
+      const host = createKnowledgeHost(parseKnowledgeHostConfig());
+      knowledgeService = host.service;
+      knowledgeHostClose = () => host.close();
+      console.log("[app-server] knowledge host ready");
+    } catch (err) {
+      const kind = err instanceof Error ? err.name : "Error";
+      console.error(`[app-server] knowledge host failed to start (${kind}); knowledge route will return 503`);
+    }
+  } else {
+    console.warn("[app-server] KNOWLEDGE_DB_PATH not set — knowledge route disabled");
+  }
+
+  const knowledgeHandlerLogger: KnowledgeHandlerLogger = {
+    warn: (msg, ctx) => console.warn(`[knowledge] ${msg}`, ctx ?? ""),
+    error: (msg, ctx) => console.error(`[knowledge] ${msg}`, ctx ?? ""),
+  };
+
+  const server = createAppServer({ llmTransport, knowledgeService, knowledgeHandlerLogger });
+
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`[app-server] listening on http://127.0.0.1:${PORT}`);
+    console.log(`[app-server] routes: /api/llm/anthropic, /api/knowledge/retrieve, /api/health`);
+  });
+
+  const shutdown = () => {
+    server.close(() => {
+      knowledgeHostClose?.();
+      process.exit(0);
+    });
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+}
+
+// Only run when invoked directly (e.g. `tsx server/appServer.ts`)
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  startAppServerFromEnv();
+}

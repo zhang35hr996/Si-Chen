@@ -21,30 +21,42 @@ export function createKnowledgeRequestHandler(
       return;
     }
 
-    let rawBody: Buffer;
-    try {
-      rawBody = await readBody(req, MAX_BODY_BYTES);
-    } catch (err) {
-      const code = err instanceof Error && err.message === "too_large" ? 413 : 400;
-      writeJson(res, code, { error: "bad_request" });
-      return;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawBody.toString("utf-8"));
-    } catch {
-      writeJson(res, 400, { error: "invalid_json" });
-      return;
-    }
-
-    // Forward client disconnect as AbortSignal so server-side embedding is cancelled
+    // Register disconnect listeners BEFORE reading the body — Node.js does not
+    // replay EventEmitter events, so a disconnect during upload would be missed
+    // if we waited until after readBody().
     const controller = new AbortController();
-    req.on("aborted", () => controller.abort());
-    res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+    const onAbort = () => controller.abort();
+    const onClose = () => { if (!res.writableEnded) controller.abort(); };
+    req.on("aborted", onAbort);
+    res.on("close", onClose);
 
-    const result = await handleKnowledgeRetrieve(parsed, deps, controller.signal);
-    writeJson(res, result.status, result.body);
+    try {
+      let rawBody: Buffer;
+      try {
+        rawBody = await readBody(req, MAX_BODY_BYTES);
+      } catch (err) {
+        const code = err instanceof Error && err.message === "too_large" ? 413 : 400;
+        writeJson(res, code, { error: "bad_request" });
+        return;
+      }
+
+      // Short-circuit if the client already disconnected during body read
+      if (controller.signal.aborted) return;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawBody.toString("utf-8"));
+      } catch {
+        writeJson(res, 400, { error: "invalid_json" });
+        return;
+      }
+
+      const result = await handleKnowledgeRetrieve(parsed, deps, controller.signal);
+      writeJson(res, result.status, result.body);
+    } finally {
+      req.off("aborted", onAbort);
+      res.off("close", onClose);
+    }
   };
 }
 
