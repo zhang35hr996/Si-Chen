@@ -149,7 +149,7 @@ describe("produceDialogueTurn text gates (PR 11)", () => {
 
   it("logs gate findings so they surface in debug diagnostics", async () => {
     const logger = new RingBufferLogger();
-    await produceDialogueTurn(db, speaking("圣上万安。"), requestForGen("shen_zhibai"), state, logger);
+    await produceDialogueTurn(db, speaking("圣上万安。"), requestForGen("shen_zhibai"), state, { logger });
     const entries = logger.entries();
     expect(entries.some((e) => e.message.includes("AiError:GATE_RANK_TITLE"))).toBe(true);
   });

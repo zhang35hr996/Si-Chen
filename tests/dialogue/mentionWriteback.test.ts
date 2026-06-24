@@ -226,3 +226,37 @@ describe("recordMentionedContext — mentionedContextRefs (no claim required)", 
     expect(s1.mentionLog.length).toBe(s0.mentionLog.length + 1);
   });
 });
+
+// ── Suite F: knowledge kind is a no-op for mentionWriteback ──────────────────
+
+describe("recordMentionedContext — knowledge refs are not written to mentionLog (Suite F)", () => {
+  const kwRef = (id: string): ContextRef => ({ kind: "knowledge", id });
+  const kwKey = (id: string) => `knowledge:${id}`;
+
+  it("does not write a mentionLog entry when mentionedContextRefs contains a knowledge ref", () => {
+    const s0 = createNewGameState(db);
+    const offered = new Set([kwKey("etiquette.confinement#intro")]);
+    const s1 = recordMentionedContext(
+      s0,
+      [],
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      offered,
+      [kwRef("etiquette.confinement#intro")],
+    );
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length);
+  });
+
+  it("memory refs still write back even when mixed with knowledge refs", () => {
+    const s0 = createNewGameState(db);
+    const offered = new Set([memKey("mem_1"), kwKey("chunk_1")]);
+    const s1 = recordMentionedContext(
+      s0,
+      [],
+      { speakerId: "shen_zhibai", audienceId: "player", now },
+      offered,
+      [memRef("mem_1"), kwRef("chunk_1")],
+    );
+    expect(s1.mentionLog.length).toBe(s0.mentionLog.length + 1);
+    expect(s1.mentionLog.some((m) => m.memoryId === "mem_1")).toBe(true);
+  });
+});

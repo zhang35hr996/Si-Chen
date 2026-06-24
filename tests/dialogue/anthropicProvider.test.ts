@@ -77,14 +77,14 @@ describe("anthropicProvider — usage normalization", () => {
 // ── WORLD_RULES_TEXT snapshot ─────────────────────────────────────────────────
 
 describe("WORLD_RULES_TEXT", () => {
-  it("contains all 13 rule markers", () => {
-    for (let i = 1; i <= 13; i++) {
+  it("contains all 15 rule markers", () => {
+    for (let i = 1; i <= 15; i++) {
       expect(WORLD_RULES_TEXT).toContain(`${i}.`);
     }
   });
 
-  it("does not contain rule 14", () => {
-    expect(WORLD_RULES_TEXT).not.toContain("14.");
+  it("does not contain rule 16", () => {
+    expect(WORLD_RULES_TEXT).not.toContain("16.");
   });
 
   it("instructs the model to fill mentionedContextRefs for used context", () => {

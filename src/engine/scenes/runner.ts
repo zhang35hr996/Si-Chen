@@ -181,7 +181,7 @@ export class SceneRunner {
             { scripted: { text: node.text, ...(node.expression !== undefined ? { expression: node.expression } : {}) } },
           );
           if (!request.ok) return this.fail(request.error);
-          const produced = await produceDialogueTurn(this.db, this.provider, request.value, this.preState!, this.logger);
+          const produced = await produceDialogueTurn(this.db, this.provider, request.value, this.preState!, { logger: this.logger });
           if (!produced.ok) return this.fail(produced.error);
 
           let line = produced.value.line;

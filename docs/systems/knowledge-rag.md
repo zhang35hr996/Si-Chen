@@ -296,13 +296,123 @@ GEMINI_API_KEY=... npm run smoke:knowledge:gemini
 
 ---
 
-## PR3 Extension Points
+## PR3: Dialogue Runtime Wiring (implemented)
 
-PR3 will:
-1. Wire `KnowledgeChunk[]` into the `promptPayload` as a `knowledgeContext` field.
-2. Emit `sourceRefs` pointing to knowledge chunks used in a response.
-3. Add claim-level support validation: retrieved knowledge never bypasses claim gates.
-4. Add the `runtime query builder` that always passes `currentTime` and `visibilityCeiling`.
+The dialogue pipeline now supports advisory knowledge context.
+
+### Bridge module: `src/engine/dialogue/knowledge/`
+
+| File | Responsibility |
+|------|---------------|
+| `types.ts` | `PromptKnowledgeChunk` (`{ id, title, text, sourceType }` — no `sourcePath`, no `visibility`); `KnowledgeRetriever` interface |
+| `queryBuilder.ts` | `buildDialogueKnowledgeQuery(request, ceiling)` — deterministic query; uses `request.time` directly, includes latest target transcript line; fixed field order; 300-char cap |
+| `visibility.ts` | `resolveVisibilityCeiling(speakerId, db, state)` — full access matrix (see below) |
+| `promptKnowledge.ts` | `packPromptKnowledge(hits, ceiling)` — ≤4 chunks, ≤3200 chars; skips oversize (never breaks early); deduplicates chunk IDs |
+| `provenance.ts` | `extractProvenance(...)` — stable first-seen union of all ref kinds (memory/event/knowledge); filters by `offeredRefKeys`; emits `unknownRefs` |
+
+### Visibility ceiling access matrix
+
+```text
+player / sovereign → "imperial"
+consort            → "restricted"
+official           → "restricted"
+elder              → "restricted"
+generated consort  → "restricted"   (looked up from state.generatedConsorts)
+unknown speaker    → "public"       (safe fallback — never elevate unknowns)
+```
+
+### `produceDialogueTurn` options
+
+```typescript
+type DialogueTurnOptions = {
+  logger?: RingBufferLogger;
+  retriever?: KnowledgeRetriever;
+  knowledgeFailureMode?: "continue_without_knowledge" | "fail_turn";
+};
+```
+
+When `retriever` is provided (generative path only):
+1. `resolveVisibilityCeiling(speakerId, db, state)` → ceiling
+2. `buildDialogueKnowledgeQuery(request, ceiling)` → query (currentTime = request.time)
+3. `retriever.retrieve(query)` → hits + optional vectorDegradation
+4. `packPromptKnowledge(hits, ceiling)` → up to 4 `PromptKnowledgeChunk` objects
+5. Injected into `request.promptContext.knowledgeContext`
+6. Knowledge chunk IDs added to `policy.offeredRefKeys`
+7. `extractProvenance(...)` populates `line.meta.sourceRefs` and `line.meta.knowledge`
+
+**Fatal retrieval errors:**
+- `"continue_without_knowledge"` (default): turn proceeds; prompt receives `knowledgeContext: []`; `meta.knowledge.degraded = true`, `degradationKind = "fatal_degraded"`. Error text never reaches the LLM.
+- `"fail_turn"`: provider is NOT called; turn returns an error; state unchanged.
+
+### `KnowledgeRetrievalStatus` — no boolean inference
+
+The `meta.knowledge` diagnostic is derived from an explicit `KnowledgeRetrievalStatus` union, never inferred from `knowledgeContext.length`:
+
+| Status kind | `degraded` | `degradationKind` | Notes |
+|-------------|-----------|-------------------|-------|
+| `not_configured` | — | — | `knowledge` field absent |
+| `ok` | `false` | absent | Successful retrieval (zero hits is fine) |
+| `vector_degraded` | `true` | `"vector_degraded"` | `degradationReason` carries exact VectorDegradation reason |
+| `fatal_degraded` | `true` | `"fatal_degraded"` | Exception during retriever.retrieve() |
+
+### Claim gate invariant
+
+`knowledge_not_claim_authority` — new violation code (step 1b). Knowledge chunks are advisory context only; any `ProposedClaim` with a `kind: "knowledge"` `sourceRef` is rejected before forbidden/allowed-claim checks.
+
+Knowledge refs ARE permitted in `mentionedContextRefs` (tracks which advisory chunks the model drew on). `recordMentionedContext` ignores them (no memory cooldown for knowledge).
+
+### `DialogueLine.meta` additions
+
+```typescript
+meta: {
+  generated: boolean;
+  degraded: boolean;
+  /** All context kinds (memory/event/knowledge) the model drew on this turn. */
+  sourceRefs?: ContextRef[];
+  /** Knowledge retrieval diagnostic. Present when a retriever was wired. */
+  knowledge?: {
+    chunkIds: string[];
+    degraded: boolean;
+    degradationKind?: "vector_degraded" | "fatal_degraded";
+    degradationReason?: VectorDegradation["reason"];
+  };
+}
+```
+
+### Provenance sanitization
+
+`extractProvenance` builds a stable first-seen union of all offered refs from:
+1. accepted claim `sourceRefs` (claim order, then ref order within each claim)
+2. `mentionedContextRefs` (in order)
+
+Refs NOT in `policy.offeredRefKeys` are excluded and collected as `unknownRefs`. Each unknown ref becomes a `ProvenanceFinding` (code `"unknown_context_ref"`) that is:
+- Added to `outcome.diagnostics.provenanceFindings`
+- Logged via logger as `UNKNOWN_CONTEXT_REF` warning
+- Absent from `DialogueLine.meta.sourceRefs`
+
+### `DialogueValidationDiagnostics` additions
+
+```typescript
+interface ProvenanceFinding {
+  code: "unknown_context_ref";
+  ref: ContextRef;
+}
+
+interface DialogueValidationDiagnostics {
+  claimFindings: ClaimGateFinding[];
+  textFindings: GateFinding[];
+  acceptedClaims: ProposedClaim[];
+  provenanceFindings: ProvenanceFinding[];  // NEW
+}
+```
+
+### System rules (all 3 providers updated)
+
+Rules 8, 13–15 updated:
+- Rule 8: explicitly prohibits `kind: "knowledge"` in `sourceRefs`.
+- Rule 13: extends `mentionedContextRefs` to include `knowledgeContext` items.
+- Rule 14: advisory nature of `knowledgeContext` — character speaks from their perspective, not verbatim from lore.
+- Rule 15: runtime authoritative data (`allowedClaims`, `forbiddenClaims`) takes precedence over `knowledgeContext`.
 
 ---
 

@@ -24,14 +24,16 @@ export interface DialogueClaim {
 /**
  * Typed reference to a context item the LLM used as evidence for a claim.
  * Matches ContextRef in types.ts — duplicated here to keep claims.ts self-contained.
+ * "knowledge" refs may appear in mentionedContextRefs but NEVER in claim sourceRefs
+ * (enforced by the claim gate's knowledge_not_claim_authority check).
  */
 export interface ContextRef {
-  kind: "memory" | "event" | "fact";
+  kind: "memory" | "event" | "fact" | "knowledge";
   id: string;
 }
 
 export const contextRefSchema = z.object({
-  kind: z.enum(["memory", "event", "fact"]),
+  kind: z.enum(["memory", "event", "fact", "knowledge"]),
   id: z.string().min(1),
 });
 
