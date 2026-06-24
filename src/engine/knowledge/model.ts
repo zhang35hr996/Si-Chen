@@ -86,6 +86,15 @@ export function visibilitiesAtOrBelow(
   );
 }
 
+/**
+ * Shared metadata filter type used by both keyword and vector queries.
+ * "any" = OR semantics; "all" = AND semantics.
+ */
+export interface KnowledgeMetadataFilter {
+  values: readonly string[];
+  mode: "any" | "all";
+}
+
 /** Source adapter contract — each adapter is typed and explicit. */
 export interface KnowledgeSourceAdapter<T> {
   canHandle(source: unknown, sourcePath: string): source is T;
