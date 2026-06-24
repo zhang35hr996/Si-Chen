@@ -1,5 +1,8 @@
+import { useState } from "react";
 import type { EligibilityTraceEvent, MemoryTraceEvent, QueueTraceEvent, RollbackTraceEvent } from "../../../engine/trace/domainEvents";
 import type { TraceTransaction } from "../../../engine/trace/types";
+import { buildTraceExport, downloadTraceExport, serializeTraceExport } from "../../../engine/trace/export";
+import { formatTraceDiagnostic } from "../../../engine/trace/diagnostic";
 import { EligibilityTraceSection } from "./EligibilityTraceSection";
 import { MemoryTraceSection } from "./MemoryTraceSection";
 import { QueueTraceSection } from "./QueueTraceSection";
@@ -7,10 +10,23 @@ import { RollbackTraceSection } from "./RollbackTraceSection";
 import { TraceMutationRow } from "./TraceMutationRow";
 
 function copyJson(tx: TraceTransaction) {
-  void navigator.clipboard.writeText(JSON.stringify(tx, null, 2));
+  void navigator.clipboard.writeText(serializeTraceExport(buildTraceExport([tx], "selected")));
 }
 
-export function TraceDetails({ tx, onBack }: { tx: TraceTransaction; onBack: () => void }) {
+function useCopyDiagnostic(tx: TraceTransaction) {
+  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const copy = () => {
+    const text = formatTraceDiagnostic(tx);
+    navigator.clipboard.writeText(text).then(
+      () => { setStatus("copied"); setTimeout(() => setStatus("idle"), 2000); },
+      () => { setStatus("failed"); setTimeout(() => setStatus("idle"), 2000); },
+    );
+  };
+  return { copy, status };
+}
+
+export function TraceDetails({ tx, onBack, onCompare }: { tx: TraceTransaction; onBack: () => void; onCompare?: () => void }) {
+  const { copy: copyDiagnostic, status: copyStatus } = useCopyDiagnostic(tx);
   const untracked = tx.mutations.filter((m) => m.classification === "untracked");
   const memoryEvents = tx.domainEvents.filter((e): e is MemoryTraceEvent => e.kind === "memory");
   const queueEvents = tx.domainEvents.filter((e): e is QueueTraceEvent => e.kind === "queue");
@@ -26,6 +42,11 @@ export function TraceDetails({ tx, onBack }: { tx: TraceTransaction; onBack: () 
           {tx.outcome === "committed" ? "已提交" : "已回滚"}
         </span>
         <button type="button" onClick={() => copyJson(tx)}>复制 JSON</button>
+        <button type="button" onClick={() => downloadTraceExport([tx], "selected")}>导出</button>
+        <button type="button" onClick={copyDiagnostic}>
+          {copyStatus === "copied" ? "已复制 ✓" : copyStatus === "failed" ? "复制失败" : "复制诊断"}
+        </button>
+        {onCompare && <button type="button" onClick={onCompare}>对比…</button>}
       </div>
       <p className="trace-details__meta">
         {new Date(tx.timestamp).toLocaleTimeString()} · {tx.source.label}
