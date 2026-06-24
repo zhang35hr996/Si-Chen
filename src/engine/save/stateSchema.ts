@@ -122,6 +122,36 @@ const officialHistorySchema = z.strictObject({
   vacatedPostId: idSchema.optional(),
 });
 
+const candidateAptitudeSchema = z.strictObject({
+  governance: percent,
+  scholarship: percent,
+  military: percent,
+  integrity: percent,
+});
+
+const officialCandidateSchema = z.strictObject({
+  id: idSchema,
+  surname: z.string().min(1),
+  givenName: z.string().min(1),
+  age: z.number().int().min(1),
+  familyId: idSchema.nullable(),
+  origin: z.enum(["examination", "recommendation"]),
+  examinationYear: z.number().int().min(1),
+  examinationRank: z.number().int().min(1),
+  aptitude: candidateAptitudeSchema,
+  status: z.enum(["eligible", "appointed", "expired", "withdrawn"]),
+  enteredPoolAt: gameTimeSchema,
+  expiresAtYear: z.number().int().min(1),
+  appointedOfficialId: idSchema.optional(),
+});
+
+const examinationResultSchema = z.strictObject({
+  year: z.number().int().min(1),
+  generatedAt: gameTimeSchema,
+  candidateIds: z.array(idSchema),
+  acknowledged: z.boolean(),
+});
+
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
 
 /** 角色持续状态（禁足等）。活跃判定见 characters/confinement.ts，不存「剩余月份」。 */
@@ -246,6 +276,8 @@ export const gameStateSchema = z.strictObject({
   kinship: z.array(kinshipSchema),
   pendingRetirements: z.array(pendingRetirementSchema),
   officialHistory: z.array(officialHistorySchema),
+  officialCandidates: z.record(idSchema, officialCandidateSchema),
+  examinationResults: z.array(examinationResultSchema),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),

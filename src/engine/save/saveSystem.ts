@@ -19,7 +19,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 11;
+export const SAVE_FORMAT_VERSION = 12;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -184,6 +184,20 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return {
       ...env,
       formatVersion: 11,
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
+    };
+  },
+  // v11 → v12: 科举与候补官员池（officialCandidates / examinationResults）。旧档补空即可
+  // （PR3A 不在迁移期补生成历史榜单——旧档此前无科举，留空，新存档自然累积）。
+  11: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (typeof state.officialCandidates !== "object" || state.officialCandidates === null) state.officialCandidates = {};
+    if (!Array.isArray(state.examinationResults)) state.examinationResults = [];
+    return {
+      ...env,
+      formatVersion: 12,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };
