@@ -68,7 +68,7 @@ test("vertical slice: new game → 登基 → event → choose → save → relo
 
   // ── state survived the roundtrip ────────────────────────────────────
   const afterReload = await readState(page);
-  expect(afterReload.calendar.ap).toBe(5);
+  expect(afterReload.calendar.ap).toBe(4); // save had ap=4 (apMax=5 - 1 spent); reload restores same
   expect(afterReload.flags.rite_scheduled).toBe(true);
   expect(afterReload.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
   expect((afterReload.memories.wei_sui?.entries ?? []).length).toBe(siliMemories.length);
