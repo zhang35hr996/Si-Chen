@@ -4317,3 +4317,65 @@ button:active:enabled {
   background: #c9433f;
   color: #fff;
 }
+
+/* ── 人事奏折与请托裁决（PR3C-3b） ───────────────────────────────────── */
+.personnel-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 28px;
+  overflow-y: auto;
+  max-height: 100%;
+  color: #f3ece0;
+}
+.personnel-screen__header { display: flex; align-items: center; gap: 12px; }
+.personnel-screen__back {
+  background: none; border: none; color: inherit; opacity: 0.85;
+  cursor: pointer; padding: 6px 0; font-size: 14px;
+}
+.personnel-screen__title { margin: 0; font-size: 17px; }
+.personnel-screen__empty { opacity: 0.7; font-size: 14px; padding: 12px 4px; }
+.personnel-screen__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.personnel-screen__notice {
+  margin-top: 4px; font-size: 13px; padding: 6px 10px;
+  border-radius: 6px; background: rgba(255, 255, 255, 0.06);
+}
+.personnel-card {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.personnel-card__kind { margin: 0; font-size: 13px; color: #d4af37; letter-spacing: 0.04em; }
+.personnel-card__source { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.personnel-card__facts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.personnel-card__facts > div { display: flex; gap: 6px; min-width: 0; }
+.personnel-card__facts dt { opacity: 0.6; font-size: 12px; white-space: nowrap; }
+.personnel-card__facts dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; min-width: 0; }
+.personnel-card__options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.personnel-option { display: flex; flex-direction: column; gap: 2px; }
+.personnel-option__btn {
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 14px;
+  width: 100%;
+  text-align: left;
+}
+.personnel-option__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.personnel-option--administrative .personnel-option__btn { border-color: rgba(120, 190, 140, 0.5); }
+.personnel-option--punishment .personnel-option__btn { border-color: rgba(201, 67, 63, 0.6); }
+.personnel-option__note { font-size: 12px; opacity: 0.75; overflow-wrap: anywhere; }
+.personnel-option--punishment .personnel-option__note { color: #e8a39f; }
+.personnel-option__reason { font-size: 12px; color: #e8c06f; overflow-wrap: anywhere; }
+
+@media (max-width: 430px) {
+  .personnel-card__facts { grid-template-columns: 1fr; }
+}

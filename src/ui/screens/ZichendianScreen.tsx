@@ -60,6 +60,10 @@ export interface ZichendianScreenProps {
   onAdmitPendingAudience: (eventId: string) => void;
 
   onReviewMemorials: () => void;
+  /** 人事奏折与请托裁决入口（PR3C-3b）；提供时渲染入口，badge 显待裁数。 */
+  onReviewPersonnel?: () => void;
+  /** 待裁人事决策数（badge）。 */
+  personnelDecisionCount?: number;
   onSummonConsort: () => void;
   onRest: () => void;
   onLeave: () => void;
@@ -96,6 +100,8 @@ export function ZichendianScreen({
   onDeferAudience,
   onAdmitPendingAudience,
   onReviewMemorials,
+  onReviewPersonnel,
+  personnelDecisionCount = 0,
   onSummonConsort,
   onRest,
   onLeave,
@@ -208,6 +214,11 @@ export function ZichendianScreen({
       <button type="button" className="action-btn action-btn--key" onClick={onReviewMemorials} disabled={sceneActionsLocked}>
         批阅奏折
       </button>
+      {onReviewPersonnel && (
+        <button type="button" className="action-btn" onClick={onReviewPersonnel} disabled={sceneActionsLocked}>
+          人事奏折{personnelDecisionCount > 0 ? ` · ${personnelDecisionCount}` : ""}
+        </button>
+      )}
       <button type="button" className="action-btn" onClick={onSummonConsort} disabled={sceneActionsLocked}>
         召见侍君
       </button>

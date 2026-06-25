@@ -13,7 +13,6 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const LU_CONSORT = "lu_huaijin";
-const LU_OFFICIAL = "official_fam_lu_main";
 const WEN_OFFICIAL = "official_fam_wen_main";
 const tune = (s: GameState, id: string, p: Partial<Official["reviewState"]>): GameState => {
   const o = s.officials[id]!;
