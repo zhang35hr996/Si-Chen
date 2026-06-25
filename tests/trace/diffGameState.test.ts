@@ -43,8 +43,8 @@ describe("diffGameState", () => {
     const diffs = diffGameState(before, after);
     const apDiff = diffs.find((d) => d.path === "calendar.ap");
     expect(apDiff).toBeDefined();
-    expect(apDiff?.before).toBe(6);
-    expect(apDiff?.after).toBe(5);
+    expect(apDiff?.before).toBe(5);
+    expect(apDiff?.after).toBe(4);
   });
 
   it("detects flag changes", () => {

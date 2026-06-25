@@ -5,6 +5,7 @@
  */
 import type { CalendarState } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
+import { isAssignableRank } from "../content/schemas";
 import type { GameState, Official, OfficialAptitude, OfficialReviewState } from "../state/types";
 import { gestationRoll } from "../characters/gestation";
 import { candidatePostFit } from "./fit";
@@ -49,7 +50,7 @@ export function seniorityScore(official: Official, calendar: Pick<CalendarState,
  * 其它系统需要位分标准化时统一复用本函数，勿再对 order 直接做比例。
  */
 export function haremRankScore(db: ContentDB, rankId: string): number {
-  const ranks = Object.values(db.ranks).filter((r) => r.domain === "harem").sort((a, b) => a.order - b.order);
+  const ranks = Object.values(db.ranks).filter((r) => r.domain === "harem" && isAssignableRank(r)).sort((a, b) => a.order - b.order);
   if (ranks.length <= 1) return ranks.length === 1 && ranks[0]!.id === rankId ? 100 : 0;
   const idx = ranks.findIndex((r) => r.id === rankId);
   return idx < 0 ? 0 : (idx / (ranks.length - 1)) * 100;

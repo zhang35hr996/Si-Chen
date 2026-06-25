@@ -17,9 +17,9 @@ import {
 } from "../../src/engine/calendar/time";
 
 describe("calendar core", () => {
-  it("createCalendar defaults to 元年一月上旬 with AP 6/6", () => {
+  it("createCalendar defaults to 元年一月上旬 with AP 5/5", () => {
     const cal = createCalendar();
-    expect(cal).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0, ap: 6, apMax: 6, eraName: "" });
+    expect(cal).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0, ap: 5, apMax: 5, eraName: "" });
   });
 
   it.each([
@@ -46,7 +46,7 @@ describe("action-day rollover", () => {
   const at = (year: number, month: number, period: MonthPeriod): CalendarState => ({
     ...makeGameTime(year, month, period),
     ap: 0,
-    apMax: 6,
+    apMax: 5,
     eraName: "",
   });
 
@@ -61,7 +61,7 @@ describe("action-day rollover", () => {
   ] as const)("advances %o", (from, expected) => {
     const next = advanceActionDay(from);
     expect(next).toMatchObject(expected);
-    expect(next.ap).toBe(6); // AP refills
+    expect(next.ap).toBe(5); // AP refills
     expect(next.dayIndex).toBe(from.dayIndex + 1); // dayIndex is strictly monotonic
   });
 });
@@ -119,8 +119,8 @@ describe("Chinese formatting", () => {
   });
 
   it("formatAp renders 行动点：n/max", () => {
-    expect(formatAp(createCalendar())).toBe("行动点：6/6");
-    expect(formatAp({ ...createCalendar(), ap: 2 })).toBe("行动点：2/6");
+    expect(formatAp(createCalendar())).toBe("行动点：5/5");
+    expect(formatAp({ ...createCalendar(), ap: 2 })).toBe("行动点：2/5");
   });
 });
 
@@ -129,12 +129,11 @@ describe("时辰 / time-of-day", () => {
 
   it.each([
     // [ap remaining, slot, 时辰, time-of-day]
-    [6, 0, "卯时（早上）", "day"],
-    [5, 1, "辰时（上午）", "day"],
-    [4, 2, "申时（下午）", "day"],
-    [3, 3, "酉时（黄昏）", "twilight"],
-    [2, 4, "戌时（晚上）", "night"],
-    [1, 5, "子时（深夜）", "night"],
+    [5, 0, "卯时（早上）", "day"],
+    [4, 1, "辰时（上午）", "day"],
+    [3, 2, "申时（下午）", "day"],
+    [2, 3, "酉时（黄昏）", "twilight"],
+    [1, 4, "戌时（晚上）", "night"],
   ] as const)("ap %i → slot %i, %s, %s", (apLeft, slot, label, tod) => {
     const cal = ap(apLeft);
     expect(shichenSlot(cal)).toBe(slot);

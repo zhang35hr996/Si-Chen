@@ -41,12 +41,12 @@ test("vertical slice: new game → 登基 → event → choose → save → relo
   await page.getByRole("button", { name: "（继续）" }).click();
 
   // committed audience returns to 紫宸殿 ({kind:"zichendian"}); one AP spent
-  // advances 卯时 → 辰时 (6 → 5) — shown in the top bar.
+  // advances 卯时 → 辰时 (5 → 4) — shown in the top bar.
   await expect(page.getByText("辰时（上午）")).toBeVisible();
 
   // ── verify the committed outcome ────────────────────────────────────
   const afterCommit = await readState(page);
-  expect(afterCommit.calendar.ap).toBe(5);
+  expect(afterCommit.calendar.ap).toBe(4); // apMax=5, apCost=1 → 4
   expect(afterCommit.flags.rite_scheduled).toBe(true);
   expect(afterCommit.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
   const siliMemories = afterCommit.memories.wei_sui?.entries ?? [];
@@ -68,7 +68,7 @@ test("vertical slice: new game → 登基 → event → choose → save → relo
 
   // ── state survived the roundtrip ────────────────────────────────────
   const afterReload = await readState(page);
-  expect(afterReload.calendar.ap).toBe(5);
+  expect(afterReload.calendar.ap).toBe(4); // save had ap=4 (apMax=5 - 1 spent); reload restores same
   expect(afterReload.flags.rite_scheduled).toBe(true);
   expect(afterReload.eventLog.some((e) => e.eventId === "ev_menses_rite")).toBe(true);
   expect((afterReload.memories.wei_sui?.entries ?? []).length).toBe(siliMemories.length);

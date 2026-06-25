@@ -3,8 +3,7 @@
  * 纯逻辑集中于此；殿选界面与 App 接线只调用本模块。确定性随机走 gestationRoll。
  */
 import type { ContentDB } from "../engine/content/loader";
-import type { CharacterRank, CharacterContent, EventEffect, CanonicalReactionTrait } from "../engine/content/schemas";
-import { characterSchema } from "../engine/content/schemas";
+import { isAssignableRank, characterSchema, type CharacterRank, type CharacterContent, type EventEffect, type CanonicalReactionTrait } from "../engine/content/schemas";
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
 import { chineseNumeral, dayIndexOf, MORNING_SLOT, shichenSlot, monthOrdinal, toGameTime } from "../engine/calendar/time";
 import { memoryEntryId } from "../engine/state/newGame";
@@ -50,10 +49,10 @@ export function initialFavorForRank(order: number): number {
   return Math.max(10, Math.min(20, raw));
 }
 
-/** 玩家可选位分：order 50（更衣）–180（皇贵君），排除凤后；降序。 */
+/** 玩家可选位分：order 50（更衣）–180（皇贵君），排除凤后和已废弃位分；降序。 */
 export function pickableRanks(db: ContentDB): CharacterRank[] {
   return Object.values(db.ranks)
-    .filter((r) => r.domain === "harem" && r.id !== "fenghou" && r.order >= 50 && r.order <= 180)
+    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "fenghou" && r.order >= 50 && r.order <= 180)
     .sort((a, b) => b.order - a.order);
 }
 

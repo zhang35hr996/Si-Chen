@@ -45,9 +45,9 @@ describe("store official punishment commands", () => {
   });
 });
 
-describe("v15 → v16 PunishmentRecord migration", () => {
-  it("SAVE_FORMAT_VERSION ≥ 16; backfills targetKind='consort' on legacy records", () => {
-    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(16);
+describe("v16 → v17 PunishmentRecord migration", () => {
+  it("SAVE_FORMAT_VERSION ≥ 17; backfills targetKind='consort' on legacy records", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(17);
     const full = createNewGameState(db, 1);
     const t = { year: full.calendar.year, month: full.calendar.month, period: full.calendar.period, dayIndex: full.calendar.dayIndex };
     const s = full as unknown as Record<string, unknown>;
@@ -59,7 +59,7 @@ describe("v15 → v16 PunishmentRecord migration", () => {
       details: { fromRankId: "guiren", toRankId: "changzai" },
     };
     s.justice = { cases: {}, punishments: { pun_000001: legacy }, nextSeq: { case: 1, punishment: 2, charge: 1, evidence: 1, confession: 1, verdict: 1 } };
-    const env = { ...createSaveData(db, s as unknown as GameState, "slot1"), formatVersion: 15, state: s, checksum: checksumOf(s as unknown as GameState) };
+    const env = { ...createSaveData(db, s as unknown as GameState, "slot1"), formatVersion: 16, state: s, checksum: checksumOf(s as unknown as GameState) };
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(env));
     const loaded = readSlot(storage, db, "slot1", { now: () => 2 });

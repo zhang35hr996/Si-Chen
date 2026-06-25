@@ -20,7 +20,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 16;
+export const SAVE_FORMAT_VERSION = 17;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -268,15 +268,30 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       checksum: checksumOf(state as GameState),
     };
   },
-  // v15 → v16: PunishmentRecord domain-neutral 化（PR3C-3a）。旧档记录全部为侍君目标，补 targetKind="consort"。
+  // v15 → v16: canonical apMax changed from 6 to 5 (PR7A).  Clamp any saved
+  // ap/apMax so existing saves run at the correct action-point budget.
   15: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    const cal = state.calendar;
+    if (cal.apMax === 6) {
+      (state as { calendar: typeof cal }).calendar = {
+        ...cal,
+        apMax: 5,
+        ap: Math.min(cal.ap, 5),
+      };
+    }
+    return { ...env, formatVersion: 16, state, checksum: checksumOf(state) };
+  },
+  // v16 → v17: PunishmentRecord domain-neutral 化（PR3C-3a）。旧档记录全部为侍君目标，补 targetKind="consort"。
+  16: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as GameState;
     const puns = (state as unknown as { justice?: { punishments?: Record<string, Record<string, unknown>> } }).justice?.punishments;
     if (puns) for (const rec of Object.values(puns)) if (rec.targetKind === undefined) rec.targetKind = "consort";
     return {
       ...env,
-      formatVersion: 16,
+      formatVersion: 17,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };

@@ -27,7 +27,7 @@ function dueBirth(rngSeed: number, health: number) {
   s.standing[cid]!.healthStatus = "healthy";
   s.standing[cid]!.lifecycle = "carrying";
   // conceivedAt year=1, month=1 → plannedBirthMonth ordinal ≥ 8 (early birth) or 10 (term).
-  // Calendar at year=1 month=10, ap=0: slot=apMax−ap=6 ≥ any birthSlot (0..5), always due.
+  // Calendar at year=1 month=10, ap=0: slot=apMax−ap=5 ≥ any birthSlot (0..4), always due.
   s.resources.bloodline.gestations = [{
     carrier: cid,
     conceivedAt: makeGameTime(1, 1, "early"),
@@ -35,7 +35,7 @@ function dueBirth(rngSeed: number, health: number) {
     transferredAtMonth: 1,
   }];
   const birthCalendar = makeGameTime(1, 10, "early");
-  s.calendar = { ...birthCalendar, ap: 0, apMax: 6, eraName: "" };
+  s.calendar = { ...birthCalendar, ap: 0, apMax: 5, eraName: "" };
   return { s, cid };
 }
 
