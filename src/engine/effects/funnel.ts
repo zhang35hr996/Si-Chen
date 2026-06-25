@@ -1105,7 +1105,7 @@ export function applyEffects(
         // so it doesn't exist yet when consort_decease fires — the guard is unnecessary.
         for (const punId of Object.keys(next.justice.punishments)) {
           const pun = next.justice.punishments[punId]!;
-          if (pun.targetId === effect.char && pun.lifecycle.status === "active") {
+          if (pun.targetId === effect.char && pun.lifecycle.status === "active" && pun.targetKind === "consort") {
             next.justice.punishments[punId] = {
               ...pun,
               lifecycle: { status: "completed" as const, resolvedAt: effect.at, resolution: "target_deceased" as const },

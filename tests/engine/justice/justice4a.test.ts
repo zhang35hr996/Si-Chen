@@ -25,6 +25,8 @@ import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../../../src/engine/characters
 import type { GameError } from "../../../src/engine/infra/errors";
 import { validateJusticeLinks } from "../../../src/engine/justice/crossLink";
 import { applyEffects as funnelApplyEffects } from "../../../src/engine/effects/funnel";
+import { gameStateSchema } from "../../../src/engine/save/stateSchema";
+import type { PunishmentRecord } from "../../../src/engine/justice/types";
 
 const db = loadRealContent();
 
@@ -86,6 +88,7 @@ describe("cold palace — PunishmentRecord", () => {
     const pun = store.getState().justice.punishments["pun_000001"]!;
     expect(pun).toBeDefined();
     expect(pun.kind).toBe("cold_palace");
+    expect(pun.targetKind).toBe("consort");
     expect(pun.lifecycle.status).toBe("active");
     expect(pun.targetId).toBe(TARGET);
     expect(pun.actorId).toBe("player");
@@ -558,6 +561,7 @@ describe("cold palace — legacy cold_palace statusEffect injection", () => {
         type: "create_punishment" as const,
         record: {
           id: punishmentId,
+          targetKind: "consort" as const,
           kind: "cold_palace" as const,
           targetId: TARGET,
           actorId: "player",
@@ -570,7 +574,7 @@ describe("cold palace — legacy cold_palace statusEffect injection", () => {
             previousResidenceId: "zhaoyang",
             coldPalaceResidenceId: "changmengong",
           },
-        },
+        } satisfies PunishmentRecord,
       }],
       nextSeq: alloc.nextSeq,
     };
@@ -586,7 +590,10 @@ describe("cold palace — legacy cold_palace statusEffect injection", () => {
         [TARGET]: { ...withBoth.value.standing[TARGET]!, residence: "changmengong" },
       },
     };
-    // loadState triggers schema validation; should not throw.
+    // Verify via schema that the assembled state is structurally valid.
+    const parsed = gameStateSchema.safeParse(withResidence);
+    expect(parsed.success).toBe(true);
+    // loadState: assigns without re-parsing.
     expect(() => store.loadState(withResidence)).not.toThrow();
     // Can restore.
     const restore = store.restoreFromColdPalace(db, TARGET, "pardoned");
@@ -942,6 +949,7 @@ describe("cold palace — confinement historical cross-link validation", () => {
           ...state.justice.punishments,
           "pun_corrupt_001": {
             id: "pun_corrupt_001",
+            targetKind: "consort" as const,
             kind: "indefinite_confinement" as const,
             targetId: TARGET,
             actorId: "player",
@@ -985,6 +993,7 @@ describe("cold palace — confinement historical cross-link validation", () => {
           ...state.justice.punishments,
           "pun_corrupt_002": {
             id: "pun_corrupt_002",
+            targetKind: "consort" as const,
             kind: "indefinite_confinement" as const,
             targetId: TARGET,
             actorId: "player",
@@ -1029,6 +1038,7 @@ describe("cold palace — confinement historical cross-link validation", () => {
           ...state.justice.punishments,
           "pun_corrupt_003": {
             id: "pun_corrupt_003",
+            targetKind: "consort" as const,
             kind: "indefinite_confinement" as const,
             targetId: TARGET,
             actorId: "player",
@@ -1077,6 +1087,7 @@ describe("cold palace — confinement historical cross-link validation", () => {
           ...state.justice.punishments,
           "pun_corrupt_004": {
             id: "pun_corrupt_004",
+            targetKind: "consort" as const,
             kind: "finite_confinement" as const,
             targetId: TARGET,
             actorId: "player",
@@ -1123,6 +1134,7 @@ describe("cold palace — confinement historical cross-link validation", () => {
           ...state.justice.punishments,
           "pun_corrupt_005": {
             id: "pun_corrupt_005",
+            targetKind: "consort" as const,
             kind: "indefinite_confinement" as const,
             targetId: TARGET,
             actorId: "player",

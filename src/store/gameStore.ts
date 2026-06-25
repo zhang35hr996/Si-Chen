@@ -1747,15 +1747,16 @@ export class GameStore {
         }]
       : [];
 
-    const punishmentRecord: PunishmentRecord = {
+    const punishmentRecord = {
       id: punishmentId,
-      kind: "cold_palace",
+      targetKind: "consort" as const,
+      kind: "cold_palace" as const,
       targetId,
       actorId: "player",
       severity: punishmentSeverity("cold_palace"),
       imposedAt: now,
       publicity: meta.publicity ?? "palace",
-      lifecycle: { status: "active" },
+      lifecycle: { status: "active" as const },
       ...(meta.caseId ? { caseId: meta.caseId } : {}),
       ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
       details: {
@@ -1764,7 +1765,7 @@ export class GameStore {
         ...(previousChamber !== undefined ? { previousChamber } : {}),
         coldPalaceResidenceId,
       },
-    } as PunishmentRecord;
+    } satisfies PunishmentRecord;
 
     const justicePlan: JusticePlan = {
       mutations: [
