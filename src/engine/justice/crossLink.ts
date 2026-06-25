@@ -6,6 +6,7 @@
  * - ColdPalaceEffect.sourcePunishmentId and PunishmentRecord.details.statusEffectId
  */
 import { gameError, type GameError } from "../infra/errors";
+import type { GameTime } from "../calendar/time";
 import type { GameState } from "../state/types";
 
 function crossLinkErr(msg: string): GameError {
@@ -24,6 +25,13 @@ export function validateJusticeLinks(state: GameState): GameError[] {
   for (const effect of statusEffects) {
     if (effect.kind !== "confinement") continue;
     if (effect.liftedTurn !== undefined) continue; // not active
+
+    // Active effects must not carry a liftReason.
+    if (effect.liftReason !== undefined) {
+      errors.push(crossLinkErr(
+        `ConfinementEffect ${effect.id} is active (no liftedTurn) but has liftReason=${effect.liftReason}`,
+      ));
+    }
 
     const { sourcePunishmentId } = effect;
     if (!sourcePunishmentId) continue; // no link to validate
@@ -115,6 +123,52 @@ export function validateJusticeLinks(state: GameState): GameError[] {
     if (pun.lifecycle.status === "active") {
       errors.push(crossLinkErr(
         `ConfinementEffect ${effect.id} is lifted (liftedTurn=${effect.liftedTurn}) but linked punishment ${pun.id} is still active`,
+      ));
+    } else {
+      // Lifecycle equivalence: liftReason must match punishment resolution.
+      const resolved = pun.lifecycle as { resolvedAt: GameTime; resolution?: string };
+      if (effect.liftReason === "lifted_by_emperor") {
+        if (pun.lifecycle.status !== "lifted" || resolved.resolution !== "lifted_by_decree") {
+          errors.push(crossLinkErr(
+            `ConfinementEffect ${effect.id} liftReason=lifted_by_emperor but punishment ${pun.id} lifecycle=${pun.lifecycle.status}/${resolved.resolution} (expected lifted/lifted_by_decree)`,
+          ));
+        }
+      } else if (effect.liftReason === "term_expired") {
+        if (pun.lifecycle.status !== "completed" || resolved.resolution !== "expired") {
+          errors.push(crossLinkErr(
+            `ConfinementEffect ${effect.id} liftReason=term_expired but punishment ${pun.id} lifecycle=${pun.lifecycle.status}/${resolved.resolution} (expected completed/expired)`,
+          ));
+        }
+      } else {
+        // undefined liftReason = death cleanup
+        if (pun.lifecycle.status !== "completed" || resolved.resolution !== "target_deceased") {
+          errors.push(crossLinkErr(
+            `ConfinementEffect ${effect.id} liftReason=undefined (death) but punishment ${pun.id} lifecycle=${pun.lifecycle.status}/${resolved.resolution} (expected completed/target_deceased)`,
+          ));
+        }
+      }
+
+      // Timestamps must match.
+      if (effect.liftedAt && resolved.resolvedAt) {
+        const ea = effect.liftedAt as GameTime;
+        const pa = resolved.resolvedAt as GameTime;
+        if (ea.year !== pa.year || ea.month !== pa.month || ea.dayIndex !== pa.dayIndex) {
+          errors.push(crossLinkErr(
+            `ConfinementEffect ${effect.id} liftedAt=${JSON.stringify(ea)} != punishment ${pun.id} resolvedAt=${JSON.stringify(pa)}`,
+          ));
+        }
+      }
+    }
+
+    // liftedAt ↔ liftedTurn pairing.
+    if (effect.liftedTurn !== undefined && !effect.liftedAt) {
+      errors.push(crossLinkErr(
+        `ConfinementEffect ${effect.id} has liftedTurn=${effect.liftedTurn} but liftedAt is missing`,
+      ));
+    }
+    if (effect.liftedAt !== undefined && effect.liftedTurn === undefined) {
+      errors.push(crossLinkErr(
+        `ConfinementEffect ${effect.id} has liftedAt but liftedTurn is missing`,
       ));
     }
   }

@@ -24,6 +24,7 @@ import type { ImperialCommand } from "../../../src/store/imperialCommands";
 import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../../../src/engine/characters/chambers";
 import type { GameError } from "../../../src/engine/infra/errors";
 import { validateJusticeLinks } from "../../../src/engine/justice/crossLink";
+import { applyEffects as funnelApplyEffects } from "../../../src/engine/effects/funnel";
 
 const db = loadRealContent();
 
@@ -852,27 +853,45 @@ describe("cold palace — same-batch set_harem_administration bypass", () => {
   it("CP-BATCH1. send_to_cold_palace(empress) + set_harem_administration(empress) in same batch is rejected", () => {
     const EMPRESS = "shen_zhibai";
     const store = makeStore();
-    const gameTime = toGameTime(store.getState().calendar);
+    const state = store.getState();
+    const gameTime = toGameTime(state.calendar);
+    // Derive previousResidenceId from runtime state, not hardcoded string.
+    const previousResidenceId =
+      state.standing[EMPRESS]?.residence ??
+      db.characters[EMPRESS]?.defaultLocation ??
+      "zhongcui_gong";
+    const stateBefore = JSON.parse(JSON.stringify(state));
 
-    // Attempt: send empress to cold palace AND restore her to empress in one batch.
-    const r = store.applyEffects(db, [
-      {
-        type: "send_to_cold_palace" as const,
-        char: EMPRESS,
-        statusEffectId: "se_shen_zhibai_000001",
-        punishmentId: "pun_000001",
-        coldPalaceResidenceId: "changmengong",
-        previousResidenceId: "zhongcui_gong",
-        startedAt: gameTime,
-        startTurn: store.getState().calendar.dayIndex,
-      },
-      {
-        type: "set_harem_administration",
-        state: { mode: "empress" },
-      },
-    ]);
-    // The batch must fail — set_harem_administration to empress is invalid when empress is being sent to cold palace.
+    // Call the funnel directly with allowInternalEffects: true to simulate the internal
+    // transaction path that the production JusticePlan commit uses.
+    const r = funnelApplyEffects(
+      db,
+      state,
+      [
+        {
+          type: "send_to_cold_palace" as const,
+          char: EMPRESS,
+          statusEffectId: "se_shen_zhibai_000001",
+          punishmentId: "pun_000001",
+          coldPalaceResidenceId: "changmengong",
+          previousResidenceId,
+          startedAt: gameTime,
+          startTurn: state.calendar.dayIndex,
+        },
+        {
+          type: "set_harem_administration" as const,
+          state: { mode: "empress" as const },
+        },
+      ],
+      { allowInternalEffects: true },
+    );
+    // The batch must fail: validation detects coldPalaceInBatch for the empress.
     expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.some((e: GameError) => e.message?.includes("empress is in cold palace"))).toBe(true);
+    }
+    // Funnel: state is never mutated on failure.
+    expect(store.getState()).toEqual(stateBefore);
   });
 });
 
@@ -973,6 +992,141 @@ describe("cold palace — confinement historical cross-link validation", () => {
             imposedAt: now,
             publicity: "palace" as const,
             lifecycle: { status: "completed" as const, resolvedAt: now, resolution: "target_deceased" as const },
+            details: { statusEffectId: effectId },
+          },
+        },
+      },
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+  });
+
+  it("CP-XLINK4. term_expired effect + lifted_by_decree punishment → lifecycle mismatch detected", () => {
+    const store = makeStore();
+    const state = store.getState();
+    const now = toGameTime(state.calendar);
+    const effectId = "se_corrupt_003";
+
+    const corruptedState = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: effectId,
+          kind: "confinement" as const,
+          characterId: TARGET,
+          startedAt: now,
+          startTurn: state.calendar.dayIndex,
+          sourcePunishmentId: "pun_corrupt_003",
+          liftedTurn: state.calendar.dayIndex + 5,
+          liftedAt: now,
+          liftReason: "term_expired" as const,
+        },
+      ],
+      justice: {
+        ...state.justice,
+        punishments: {
+          ...state.justice.punishments,
+          "pun_corrupt_003": {
+            id: "pun_corrupt_003",
+            kind: "indefinite_confinement" as const,
+            targetId: TARGET,
+            actorId: "player",
+            severity: "moderate" as const,
+            imposedAt: now,
+            publicity: "palace" as const,
+            // Mismatch: effect says term_expired but punishment says lifted_by_decree
+            lifecycle: { status: "lifted" as const, resolvedAt: now, resolution: "lifted_by_decree" as const },
+            details: { statusEffectId: effectId },
+          },
+        },
+      },
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+  });
+
+  it("CP-XLINK5. lifted_by_emperor effect + expired punishment → lifecycle mismatch detected", () => {
+    const store = makeStore();
+    const state = store.getState();
+    const now = toGameTime(state.calendar);
+    const effectId = "se_corrupt_004";
+
+    const corruptedState = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: effectId,
+          kind: "confinement" as const,
+          characterId: TARGET,
+          startedAt: now,
+          startTurn: state.calendar.dayIndex,
+          sourcePunishmentId: "pun_corrupt_004",
+          liftedTurn: state.calendar.dayIndex + 1,
+          liftedAt: now,
+          liftReason: "lifted_by_emperor" as const,
+        },
+      ],
+      justice: {
+        ...state.justice,
+        punishments: {
+          ...state.justice.punishments,
+          "pun_corrupt_004": {
+            id: "pun_corrupt_004",
+            kind: "finite_confinement" as const,
+            targetId: TARGET,
+            actorId: "player",
+            severity: "moderate" as const,
+            imposedAt: now,
+            publicity: "palace" as const,
+            // Mismatch: effect says lifted_by_emperor but punishment says expired
+            lifecycle: { status: "completed" as const, resolvedAt: now, resolution: "expired" as const },
+            details: { statusEffectId: effectId, endTurnExclusive: state.calendar.dayIndex + 10 },
+          },
+        },
+      },
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+  });
+
+  it("CP-XLINK6. liftedAt !== resolvedAt → timestamp mismatch detected", () => {
+    const store = makeStore();
+    const state = store.getState();
+    const now = toGameTime(state.calendar);
+    const later = { ...now, dayIndex: now.dayIndex + 1 };
+    const effectId = "se_corrupt_005";
+
+    const corruptedState = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: effectId,
+          kind: "confinement" as const,
+          characterId: TARGET,
+          startedAt: now,
+          startTurn: state.calendar.dayIndex,
+          sourcePunishmentId: "pun_corrupt_005",
+          liftedTurn: state.calendar.dayIndex + 1,
+          liftedAt: later, // different from punishment resolvedAt
+          liftReason: "lifted_by_emperor" as const,
+        },
+      ],
+      justice: {
+        ...state.justice,
+        punishments: {
+          ...state.justice.punishments,
+          "pun_corrupt_005": {
+            id: "pun_corrupt_005",
+            kind: "indefinite_confinement" as const,
+            targetId: TARGET,
+            actorId: "player",
+            severity: "moderate" as const,
+            imposedAt: now,
+            publicity: "palace" as const,
+            lifecycle: { status: "lifted" as const, resolvedAt: now, resolution: "lifted_by_decree" as const },
             details: { statusEffectId: effectId },
           },
         },
