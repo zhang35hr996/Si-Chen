@@ -11,7 +11,8 @@ import { stateError, type GameError } from "../engine/infra/errors";
 import type { RingBufferLogger } from "../engine/infra/logger";
 import { err, ok, type Result } from "../engine/infra/result";
 import { formatGameTime, fromTurnIndex, monthOrdinal, toGameTime } from "../engine/calendar/time";
-import { expiredUnrecordedConfinements, nextStatusEffectId } from "../engine/characters/confinement";
+import { activeConfinement, expiredUnrecordedConfinements, nextStatusEffectId } from "../engine/characters/confinement";
+import { activeColdPalaceEffectFor, isInColdPalace } from "../engine/characters/coldPalace";
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
 import { allocateJusticeIds } from "../engine/justice/ids";
@@ -1686,6 +1687,215 @@ export class GameStore {
     if (this.state !== expected) return false;
     this.tracedSet(next, { kind: "action", sourceId: "commitDialogueState", label: "commitDialogueState" });
     return true;
+  }
+
+  /**
+   * 将侍君打入冷宫（冷宫运行态 PUNISH-4A）。
+   *
+   * 创建 ColdPalaceEffect + PunishmentRecord（kind=cold_palace），
+   * 将居所迁至冷宫，写史，触发后果效果。
+   * punishmentId / statusEffectId 均由此处分配，调用方不得传入。
+   */
+  sendConsortToColdPalace(
+    db: ContentDB,
+    targetId: string,
+    meta: PunishmentMeta,
+  ): Result<{ baseLines: string[]; punishmentId: string }, GameError[]> {
+    const standing = this.state.standing[targetId];
+    const char = db.characters[targetId] ?? this.state.generatedConsorts[targetId];
+    if (!char || char.kind !== "consort" || !standing) {
+      const error = stateError("COLD_PALACE_INVALID", `no consort standing for target "${targetId}"`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    if (standing.lifecycle === "deceased") {
+      const error = stateError("COLD_PALACE_INVALID", `cannot send deceased consort to cold palace: "${targetId}"`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+    if (isInColdPalace(this.state, targetId)) {
+      const error = stateError("COLD_PALACE_INVALID", `consort "${targetId}" is already in cold palace`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+
+    const alloc = allocateJusticeIds(this.state.justice, { punishments: 1 });
+    const punishmentId = alloc.punishments[0]!;
+    const statusEffectId = nextStatusEffectId(this.state, targetId);
+    const now = toGameTime(this.state.calendar);
+    const currentTurn = this.state.calendar.dayIndex;
+
+    const previousResidenceId = standing.residence ?? (db.characters[targetId]?.kind === "consort" ? db.characters[targetId]!.defaultLocation : undefined) ?? "unknown";
+    const coldPalaceResidenceId = "changmengong";
+
+    // Check if there is an active confinement to resolve in the same transaction.
+    const activeConf = activeConfinement(this.state, targetId);
+    const resolveConfinementMutations: Array<{
+      type: "resolve_punishment";
+      punishmentId: string;
+      lifecycle: { status: "lifted"; resolvedAt: typeof now; resolution: "lifted_by_decree" };
+    }> = activeConf?.sourcePunishmentId
+      ? [{
+          type: "resolve_punishment" as const,
+          punishmentId: activeConf.sourcePunishmentId,
+          lifecycle: { status: "lifted" as const, resolvedAt: now, resolution: "lifted_by_decree" as const },
+        }]
+      : [];
+
+    const punishmentRecord: PunishmentRecord = {
+      id: punishmentId,
+      kind: "cold_palace",
+      targetId,
+      actorId: "player",
+      severity: punishmentSeverity("cold_palace"),
+      imposedAt: now,
+      publicity: meta.publicity ?? "palace",
+      lifecycle: { status: "active" },
+      ...(meta.caseId ? { caseId: meta.caseId } : {}),
+      ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
+      details: {
+        statusEffectId,
+        previousResidenceId,
+        coldPalaceResidenceId,
+      },
+    } as PunishmentRecord;
+
+    const justicePlan: JusticePlan = {
+      mutations: [
+        ...resolveConfinementMutations,
+        { type: "create_punishment", record: punishmentRecord },
+      ],
+      nextSeq: alloc.nextSeq,
+    };
+
+    const ctx: PunishmentOutcomeContext = {
+      punishmentId,
+      ...(meta.caseId ? { caseId: meta.caseId } : {}),
+      targetId,
+      actorId: "player",
+      kind: "cold_palace",
+      severity: punishmentSeverity("cold_palace"),
+      occurredAt: now,
+      ...(meta.sourceLocation ? { sourceLocation: meta.sourceLocation } : {}),
+      ...(meta.publicity ? { publicity: meta.publicity } : {}),
+    };
+
+    const conseq = planPunishmentConsequences(db, this.state, ctx);
+
+    // Inject send_to_cold_palace effect and thread sourcePunishmentId into memory effects.
+    const coldPalaceEffect = {
+      type: "send_to_cold_palace" as const,
+      char: targetId,
+      statusEffectId,
+      punishmentId,
+      coldPalaceResidenceId,
+      previousResidenceId,
+      startedAt: now,
+      startTurn: currentTurn,
+    };
+
+    // If there is an active confinement, inject a lift_confinement effect so both the
+    // ConfinementEffect and its PunishmentRecord are resolved in the same atomic transaction.
+    // The resolve_punishment mutation (already in resolveConfinementMutations) handles the
+    // PunishmentRecord side; this effect handles the ConfinementEffect side via the funnel.
+    const liftConfinementEffects: Array<{ type: "lift_confinement"; char: string; at: typeof now; reason: "lifted_by_emperor" }> =
+      activeConf ? [{ type: "lift_confinement" as const, char: targetId, at: now, reason: "lifted_by_emperor" as const }] : [];
+
+    const augmentedEffects = [
+      coldPalaceEffect,
+      ...liftConfinementEffects,
+      ...conseq.effects.map((e) => {
+        if (e.type === "memory") {
+          return { ...e, entry: { ...e.entry, sourcePunishmentId: punishmentId } };
+        }
+        return e;
+      }),
+    ];
+
+    // Chronicle: primary decree gets punishmentId; ancillary entries get sourcePunishmentId.
+    const PUNITIVE_DECREES = new Set(["cold_palace_imposed"]);
+    const punishmentChronicle = conseq.chronicle.map((draft) => {
+      const decree = (draft.payload as { decree?: string }).decree;
+      const isPrimary = PUNITIVE_DECREES.has(decree ?? "");
+      const payloadExtra = isPrimary
+        ? { punishmentId, ...(meta.caseId ? { caseId: meta.caseId } : {}) }
+        : { sourcePunishmentId: punishmentId };
+      const links = isPrimary
+        ? { punishmentId, ...(meta.caseId ? { caseId: meta.caseId } : {}) }
+        : { sourcePunishmentId: punishmentId };
+      return { ...draft, payload: { ...draft.payload, ...payloadExtra }, links };
+    });
+
+    const txResult = this.commitPlannedTransaction(
+      db,
+      augmentedEffects,
+      punishmentChronicle,
+      conseq.reactionBeats,
+      { kind: "imperial_command", sourceId: "send_to_cold_palace", label: `cold palace: ${targetId}` },
+      justicePlan,
+    );
+    if (!txResult.ok) return txResult;
+    return ok({ baseLines: [], punishmentId });
+  }
+
+  /**
+   * 从冷宫召回侍君（冷宫运行态 PUNISH-4A）。
+   *
+   * 解除 ColdPalaceEffect，恢复居所，结案 PunishmentRecord。
+   */
+  restoreFromColdPalace(
+    db: ContentDB,
+    targetId: string,
+    liftReason: "lifted_by_emperor" | "pardoned",
+    meta?: { caseId?: string },
+  ): Result<{ punishmentId: string }, GameError[]> {
+    const activeEffect = activeColdPalaceEffectFor(this.state, targetId);
+    if (!activeEffect) {
+      const error = stateError("COLD_PALACE_INVALID", `no active cold palace effect for "${targetId}"`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+
+    const now = toGameTime(this.state.calendar);
+    const currentTurn = this.state.calendar.dayIndex;
+
+    // Map lift reason to PunishmentLifecycle resolution.
+    const punishmentResolution = liftReason === "pardoned" ? "pardoned" as const : "lifted_by_decree" as const;
+
+    // Build justice plan to resolve the punishment.
+    const resolveMutations = activeEffect.sourcePunishmentId
+      ? [{
+          type: "resolve_punishment" as const,
+          punishmentId: activeEffect.sourcePunishmentId,
+          lifecycle: { status: "lifted" as const, resolvedAt: now, resolution: punishmentResolution },
+        }]
+      : [];
+
+    const alloc = allocateJusticeIds(this.state.justice, {});
+    const justicePlan: JusticePlan | undefined = resolveMutations.length > 0
+      ? { mutations: resolveMutations, nextSeq: alloc.nextSeq }
+      : undefined;
+
+    const restoreEffect = {
+      type: "restore_from_cold_palace" as const,
+      char: targetId,
+      liftReason,
+      restoreResidenceId: activeEffect.previousResidenceId,
+      liftedAt: now,
+      liftedTurn: currentTurn,
+    };
+
+    const txResult = this.commitPlannedTransaction(
+      db,
+      [restoreEffect],
+      [],
+      [],
+      { kind: "imperial_command", sourceId: "restore_from_cold_palace", label: `restore from cold palace: ${targetId}` },
+      justicePlan,
+    );
+    if (!txResult.ok) return txResult;
+    void meta;
+    return ok({ punishmentId: activeEffect.sourcePunishmentId ?? "" });
   }
 
   private lastEffectReport: EffectReport | null = null;

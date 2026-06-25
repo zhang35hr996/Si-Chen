@@ -1,8 +1,9 @@
 /**
- * PUNISH-3B2: Cross-link validator for GameState justice consistency.
+ * PUNISH-3B2 / PUNISH-4A: Cross-link validator for GameState justice consistency.
  *
- * Validates bidirectional links between ConfinementEffect.sourcePunishmentId
- * and PunishmentRecord.details.statusEffectId to catch state corruption early.
+ * Validates bidirectional links between:
+ * - ConfinementEffect.sourcePunishmentId and PunishmentRecord.details.statusEffectId
+ * - ColdPalaceEffect.sourcePunishmentId and PunishmentRecord.details.statusEffectId
  */
 import { gameError, type GameError } from "../infra/errors";
 import type { GameState } from "../state/types";
@@ -85,9 +86,103 @@ export function validateJusticeLinks(state: GameState): GameError[] {
       continue;
     }
 
+    if ((effect as { sourcePunishmentId?: string }).sourcePunishmentId !== pun.id) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but ConfinementEffect.sourcePunishmentId=${(effect as { sourcePunishmentId?: string }).sourcePunishmentId}`,
+      ));
+    }
+  }
+
+  // ── ColdPalaceEffect → PunishmentRecord checks ───────────────────────────
+  const activeColdPalaceByChar = new Map<string, string>(); // charId → effectId
+
+  for (const effect of statusEffects) {
+    if (effect.kind !== "cold_palace") continue;
+    if (effect.liftedTurn !== undefined) continue; // not active
+
+    const { sourcePunishmentId, characterId } = effect;
+
+    // Check for duplicate active cold palace effects for same character.
+    if (activeColdPalaceByChar.has(characterId)) {
+      errors.push(crossLinkErr(
+        `Character ${characterId} has multiple active ColdPalaceEffects: ${activeColdPalaceByChar.get(characterId)} and ${effect.id}`,
+      ));
+    } else {
+      activeColdPalaceByChar.set(characterId, effect.id);
+    }
+
+    const pun = justice.punishments[sourcePunishmentId];
+    if (!pun) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} has sourcePunishmentId=${sourcePunishmentId} but punishment not found`,
+      ));
+      continue;
+    }
+
+    if (pun.kind !== "cold_palace") {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} links to punishment ${pun.id} of kind ${pun.kind} (expected cold_palace)`,
+      ));
+    }
+
+    if (pun.targetId !== characterId) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} characterId=${characterId} but punishment ${pun.id} targetId=${pun.targetId}`,
+      ));
+    }
+
+    const details = pun.details as { statusEffectId?: string };
+    if (details.statusEffectId !== effect.id) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} links to punishment ${pun.id} but punishment.details.statusEffectId=${details.statusEffectId}`,
+      ));
+    }
+
+    if (pun.lifecycle.status !== "active") {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} is active but linked punishment ${pun.id} has lifecycle.status=${pun.lifecycle.status}`,
+      ));
+    }
+  }
+
+  // ── PunishmentRecord → ColdPalaceEffect checks ────────────────────────────
+  for (const pun of Object.values(justice.punishments)) {
+    if (pun.kind !== "cold_palace") continue;
+    if (pun.lifecycle.status !== "active") continue;
+
+    const details = pun.details as { statusEffectId: string };
+    const statusEffectId = details.statusEffectId;
+
+    const effect = statusEffects.find((e) => e.id === statusEffectId);
+    if (!effect) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} (active, cold_palace) references statusEffectId=${statusEffectId} but no matching ColdPalaceEffect found`,
+      ));
+      continue;
+    }
+
+    if (effect.kind !== "cold_palace") {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but effect.kind=${effect.kind} (expected cold_palace)`,
+      ));
+      continue;
+    }
+
     if (effect.sourcePunishmentId !== pun.id) {
       errors.push(crossLinkErr(
-        `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but ConfinementEffect.sourcePunishmentId=${effect.sourcePunishmentId}`,
+        `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but ColdPalaceEffect.sourcePunishmentId=${effect.sourcePunishmentId}`,
+      ));
+    }
+  }
+
+  // ── Conflict: no character should have BOTH active confinement AND active cold palace ──
+  for (const [charId, coldPalaceEffectId] of activeColdPalaceByChar) {
+    const hasActiveConfinement = statusEffects.some(
+      (e) => e.kind === "confinement" && e.characterId === charId && e.liftedTurn === undefined,
+    );
+    if (hasActiveConfinement) {
+      errors.push(crossLinkErr(
+        `Character ${charId} has both an active confinement and an active cold palace effect (${coldPalaceEffectId}) — conflict`,
       ));
     }
   }

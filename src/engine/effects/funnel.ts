@@ -19,6 +19,7 @@ import { diffGameState } from "../trace/diff";
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
+import { activeColdPalaceEffectFor, isInColdPalace } from "../characters/coldPalace";
 import { eligibleHaremAdministrators } from "../characters/haremAdministration";
 import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../characters/haremRankAuthority";
 import { nextHeirId } from "../characters/heirs";
@@ -28,7 +29,8 @@ import { isAssignableRank, eventEffectSchema, type EventEffect } from "../conten
 import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import { memoryEntryId } from "../state/newGame";
-import type { GameState } from "../state/types";
+import type { GameTime } from "../calendar/time";
+import type { ColdPalaceEffect, GameState } from "../state/types";
 import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 
 /** Max |cumulative delta| per axis (char×field / pillar×field) per batch. */
@@ -51,6 +53,8 @@ export function validateEffects(
   // 批内禁足去重：同一 batch 同一角色只允许一条 confine；confine+lift 矛盾批次一并拒绝。
   const confineInBatch = new Set<string>();
   const liftInBatch = new Set<string>();
+  // 批内冷宫去重：同一 batch 同一角色只允许一条 send_to_cold_palace。
+  const coldPalaceInBatch = new Set<string>();
 
   effects.forEach((effect, index) => {
     const parsed = eventEffectSchema.safeParse(effect);
@@ -401,6 +405,32 @@ export function validateEffects(
         }
         break;
       }
+      case "send_to_cold_palace": {
+        const ch = (e as { char: string }).char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        const st = state.standing[ch];
+        if (!c || c.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `send_to_cold_palace needs a consort with standing: "${ch}"`, { char: ch });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot send a deceased consort to cold palace: "${ch}"`, { char: ch });
+        } else if (isInColdPalace(state, ch)) {
+          bad(index, "BAD_EFFECT", `consort already in cold palace: "${ch}"`, { char: ch });
+        } else if (coldPalaceInBatch.has(ch)) {
+          bad(index, "BAD_EFFECT", `duplicate send_to_cold_palace in same batch: "${ch}"`, { char: ch });
+        } else {
+          coldPalaceInBatch.add(ch);
+        }
+        break;
+      }
+      case "restore_from_cold_palace": {
+        const ch = (e as { char: string }).char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        if (!c || c.kind !== "consort" || !state.standing[ch]) {
+          bad(index, "BAD_EFFECT_TARGET", `restore_from_cold_palace needs a consort with standing: "${ch}"`, { char: ch });
+        }
+        // 幂等：无活跃冷宫效果时 apply 是 no-op，不在此报错。
+        break;
+      }
       case "set_harem_administration": {
         // 判断凤后禁足现状（或本批中是否存在禁足/解禁凤后的效果）。
         const fenghousId = Object.keys(state.standing).find(
@@ -496,6 +526,8 @@ function describeEffect(effect: EventEffect): string {
     case "set_consort_posthumous": return `set_consort_posthumous ${effect.char}`;
     case "confine": return `confine ${effect.char}${effect.endTurnExclusive !== null ? ` until turn ${effect.endTurnExclusive}` : " (indefinite)"}`;
     case "lift_confinement": return `lift_confinement ${effect.char} reason=${effect.reason}`;
+    case "send_to_cold_palace": return `send_to_cold_palace ${(effect as { char: string }).char}`;
+    case "restore_from_cold_palace": return `restore_from_cold_palace ${(effect as { char: string }).char}`;
     case "set_harem_administration": return `set_harem_administration mode=${effect.state.mode}`;
     case "enqueue_aftermath": return `enqueue_aftermath kind=${effect.kind} subject=${effect.subjectId}`;
     case "record_physician_visit": return `record_physician_visit month=${effect.monthKey}`;
@@ -868,6 +900,44 @@ export function applyEffects(
         }
         break;
       }
+      case "send_to_cold_palace": {
+        const e = effect as {
+          char: string; statusEffectId: string; punishmentId: string;
+          coldPalaceResidenceId: string; previousResidenceId: string;
+          startedAt: GameTime; startTurn: number;
+        };
+        const ch = e.char;
+        const coldPalaceEntry: ColdPalaceEffect = {
+          id: e.statusEffectId,
+          kind: "cold_palace",
+          characterId: ch,
+          startedAt: e.startedAt,
+          startTurn: e.startTurn,
+          previousResidenceId: e.previousResidenceId,
+          coldPalaceResidenceId: e.coldPalaceResidenceId,
+          sourcePunishmentId: e.punishmentId,
+        };
+        next.statusEffects.push(coldPalaceEntry);
+        next.standing[ch]!.residence = e.coldPalaceResidenceId;
+        break;
+      }
+      case "restore_from_cold_palace": {
+        const e = effect as {
+          char: string; liftReason: "lifted_by_emperor" | "pardoned";
+          restoreResidenceId?: string; liftedAt: GameTime; liftedTurn: number;
+        };
+        const ch = e.char;
+        const active = activeColdPalaceEffectFor(next, ch, next.calendar.dayIndex);
+        if (active) {
+          active.liftedAt = e.liftedAt;
+          active.liftedTurn = e.liftedTurn;
+          active.liftReason = e.liftReason;
+        }
+        if (e.restoreResidenceId) {
+          next.standing[ch]!.residence = e.restoreResidenceId;
+        }
+        break;
+      }
       case "set_harem_administration": {
         next.haremAdministration = effect.state;
         break;
@@ -885,11 +955,13 @@ export function applyEffects(
           };
         }
         next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter((g) => g.carrier !== effect.char); // 断胎
-        // 统一死亡清理：作废活跃禁足等持续状态、清留宿与免请安计划。
+        // 统一死亡清理：作废活跃禁足/冷宫等持续状态、清留宿与免请安计划。
         for (const se of next.statusEffects) {
-          if (se.kind === "confinement" && se.characterId === effect.char && se.liftedTurn === undefined) {
-            se.liftedTurn = effect.at.dayIndex;
-            se.liftedAt = effect.at;
+          if (se.characterId === effect.char && se.liftedTurn === undefined) {
+            if (se.kind === "confinement" || se.kind === "cold_palace") {
+              se.liftedTurn = effect.at.dayIndex;
+              se.liftedAt = effect.at;
+            }
           }
         }
         if (next.overnightWith?.charId === effect.char) delete next.overnightWith;

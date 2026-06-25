@@ -136,7 +136,7 @@ export type PunishmentRecord =
   | (PunishmentBase & { targetKind: "consort"; kind: "strip_title"; details: { removedTitle: string } })
   | (PunishmentBase & { targetKind: "consort"; kind: "finite_confinement"; details: { statusEffectId: string; endTurnExclusive: number } })
   | (PunishmentBase & { targetKind: "consort"; kind: "indefinite_confinement"; details: { statusEffectId: string } })
-  | (PunishmentBase & { targetKind: "consort"; kind: "cold_palace"; details: { previousResidenceId: string; coldPalaceResidenceId: string } })
+  | (PunishmentBase & { targetKind: "consort"; kind: "cold_palace"; details: { statusEffectId: string; previousResidenceId: string; coldPalaceResidenceId: string } })
   | (PunishmentBase & { targetKind: "consort"; kind: "execution"; details: { deathCause: "imperial_execution" } })
   | (PunishmentBase & {
       targetKind: "consort";
