@@ -50,6 +50,7 @@ function makePunishment(state: GameState, caseId?: string): PunishmentRecord {
     id: nextPunishmentId(state.justice),
     caseId,
     targetId: "shen_zhibai",
+    targetKind: "consort",
     actorId: "player",
     kind: "rank_demotion",
     severity: "moderate",
@@ -691,5 +692,32 @@ describe("GameStore commitPlannedTransaction — justice atomicity", () => {
     expect(result.value.justice.cases["case_000001"]).toBeDefined();
     // Source state still has empty justice.
     expect(state.justice.cases).toEqual({});
+  });
+});
+
+describe("targetKind ↔ kind consistency at mutation time (PR3C-3a)", () => {
+  const badRecord = (state: GameState, over: Record<string, unknown>): PunishmentRecord => {
+    const alloc = allocateJusticeIds(state.justice, { punishments: 1 });
+    return { ...makePunishment(state), id: alloc.punishments[0]!, ...over } as PunishmentRecord;
+  };
+  const expectRejectedAtomic = (state: GameState, record: PunishmentRecord) => {
+    const snap = JSON.stringify(state.justice);
+    const alloc = allocateJusticeIds(state.justice, { punishments: 1 });
+    const r = applyJusticePlan(state, { mutations: [{ type: "create_punishment", record }], nextSeq: alloc.nextSeq });
+    expect(r.ok).toBe(false); // applyJusticePlan 运行时即拒绝（不留到存档才被 Zod 拒）
+    expect(JSON.stringify(state.justice)).toBe(snap); // 原 state / nextSeq 完全不变
+  };
+
+  it("official kind + targetKind:consort is rejected", () => {
+    const state = makeState();
+    expectRejectedAtomic(state, badRecord(state, { kind: "official_demotion", targetKind: "consort", details: { fromPostId: "taibao", toPostId: "zhubo" } }));
+  });
+  it("consort kind + targetKind:official is rejected", () => {
+    const state = makeState();
+    expectRejectedAtomic(state, badRecord(state, { targetKind: "official" }));
+  });
+  it("missing targetKind is rejected", () => {
+    const state = makeState();
+    expectRejectedAtomic(state, badRecord(state, { targetKind: undefined }));
   });
 });

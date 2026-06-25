@@ -11,6 +11,9 @@ function justiceErr(msg: string): GameError {
   return gameError("state", "BAD_JUSTICE_MUTATION", msg);
 }
 
+/** 官员目标的惩戒 kind（其余 kind 一律 targetKind=consort）。 */
+const OFFICIAL_PUNISHMENT_KINDS = new Set<string>(["official_demotion", "official_dismissal"]);
+
 /**
  * Full structural and referential invariant check on a JusticeState.
  * Does not depend on ContentDB — only checks state-internal consistency.
@@ -160,6 +163,14 @@ export function validateJusticeState(justice: JusticeState): GameError[] {
     // lifecycle consistency
     if (pun.lifecycle.status === "active") {
       // active has no extra fields — discriminated union already enforces this
+    }
+
+    // targetKind ↔ kind consistency (domain-neutral PunishmentRecord, PR3C-3a).
+    // Guards against cast/legacy records that the Zod schema would reject only at save/load time,
+    // so a `applyJusticePlan` runtime commit cannot accept a mismatched record.
+    const expectsOfficial = OFFICIAL_PUNISHMENT_KINDS.has(pun.kind);
+    if ((expectsOfficial && pun.targetKind !== "official") || (!expectsOfficial && pun.targetKind !== "consort")) {
+      errors.push(justiceErr(`punishment ${pun.id}: targetKind ${String(pun.targetKind)} does not match kind ${pun.kind}`));
     }
 
     // kind/details structural consistency
