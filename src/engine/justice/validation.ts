@@ -229,6 +229,16 @@ function validatePunishmentDetails(pun: PunishmentRecord): GameError[] {
         errors.push(justiceErr(`punishment ${pun.id}: strip_harem_authority acting_consort charId must be non-empty`));
       }
       break;
+    case "official_demotion":
+      if (!pun.details.fromPostId || !pun.details.toPostId || pun.details.fromPostId === pun.details.toPostId) {
+        errors.push(justiceErr(`punishment ${pun.id}: official_demotion fromPostId/toPostId must be non-empty and differ`));
+      }
+      break;
+    case "official_dismissal":
+      if (!pun.details.fromPostId) {
+        errors.push(justiceErr(`punishment ${pun.id}: official_dismissal fromPostId must be non-empty`));
+      }
+      break;
   }
   return errors;
 }

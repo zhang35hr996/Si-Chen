@@ -5,7 +5,7 @@
  * 永不复用，事务失败不推进 nextSeq。
  */
 import type { GameTime } from "../calendar/time";
-import type { PunishmentKind, PunishmentSeverity } from "../punishments/types";
+import type { OfficialPunishmentKind, PunishmentKind, PunishmentSeverity } from "../punishments/types";
 
 // ── ID type aliases (validated at runtime by regex) ───────────────────────────
 
@@ -109,12 +109,21 @@ export type PunishmentLifecycle =
   | { status: "completed"; resolvedAt: GameTime; resolution: "immediate" | "expired" | "target_deceased" }
   | { status: "lifted"; resolvedAt: GameTime; resolution: "lifted_by_decree" | "authority_restored" | "pardoned" };
 
+/** 官员惩戒一律即时完成（PR3C-3a）：类型上禁止 active/lifted/非 immediate。 */
+export interface ImmediatePunishmentLifecycle {
+  status: "completed";
+  resolvedAt: GameTime;
+  resolution: "immediate";
+}
+
 export interface PunishmentBase {
   id: PunishmentId;
   caseId?: CaseId;
   targetId: string;
+  /** 目标域判别（PR3C-3a 起 domain-neutral）：consort=后宫侍君；official=朝廷官员。 */
+  targetKind: "consort" | "official";
   actorId: string;
-  kind: PunishmentKind;
+  kind: PunishmentKind | OfficialPunishmentKind;
   severity: PunishmentSeverity;
   imposedAt: GameTime;
   sourceLocation?: string;
@@ -123,19 +132,23 @@ export interface PunishmentBase {
 }
 
 export type PunishmentRecord =
-  | (PunishmentBase & { kind: "rank_demotion"; details: { fromRankId: string; toRankId: string } })
-  | (PunishmentBase & { kind: "strip_title"; details: { removedTitle: string } })
-  | (PunishmentBase & { kind: "finite_confinement"; details: { statusEffectId: string; endTurnExclusive: number } })
-  | (PunishmentBase & { kind: "indefinite_confinement"; details: { statusEffectId: string } })
-  | (PunishmentBase & { kind: "cold_palace"; details: { previousResidenceId: string; coldPalaceResidenceId: string } })
-  | (PunishmentBase & { kind: "execution"; details: { deathCause: "imperial_execution" } })
+  | (PunishmentBase & { targetKind: "consort"; kind: "rank_demotion"; details: { fromRankId: string; toRankId: string } })
+  | (PunishmentBase & { targetKind: "consort"; kind: "strip_title"; details: { removedTitle: string } })
+  | (PunishmentBase & { targetKind: "consort"; kind: "finite_confinement"; details: { statusEffectId: string; endTurnExclusive: number } })
+  | (PunishmentBase & { targetKind: "consort"; kind: "indefinite_confinement"; details: { statusEffectId: string } })
+  | (PunishmentBase & { targetKind: "consort"; kind: "cold_palace"; details: { previousResidenceId: string; coldPalaceResidenceId: string } })
+  | (PunishmentBase & { targetKind: "consort"; kind: "execution"; details: { deathCause: "imperial_execution" } })
   | (PunishmentBase & {
+      targetKind: "consort";
       kind: "strip_harem_authority";
       details: {
         fromMode: "empress";
         initialTarget: { mode: "acting_consort"; charId: string } | { mode: "neiwu_proxy" };
       };
-    });
+    })
+  // ── 官员目标（PR3C-3a；皇帝亲发，即时完成；lifecycle 收紧为 immediate completed）──
+  | (PunishmentBase & { targetKind: "official"; kind: "official_demotion"; lifecycle: ImmediatePunishmentLifecycle; details: { fromPostId: string; toPostId: string } })
+  | (PunishmentBase & { targetKind: "official"; kind: "official_dismissal"; lifecycle: ImmediatePunishmentLifecycle; details: { fromPostId: string } });
 
 // ── JusticeState ──────────────────────────────────────────────────────────────
 

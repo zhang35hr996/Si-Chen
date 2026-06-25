@@ -21,7 +21,7 @@ import { candidatePostFit } from "./fit";
 import { promotionScore, seniorityYears } from "./careerMetrics";
 import { getEligibleOfficialCandidates } from "./examination";
 import { appointOfficialCandidate } from "./appointment";
-import { getLastHeldPostId, hasPendingRetirement, isPostVacant } from "./selectors";
+import { getLastHeldPostId, hasPendingRetirement, isPostVacant, wasLastVacatedByDismissal } from "./selectors";
 
 /** 吏部考课月（十一月；避开正月 lifecycle、二月科举、四月大选）。 */
 export const REVIEW_MONTH = 11;
@@ -150,10 +150,11 @@ function pickBest(cands: Filler[]): Filler | null {
 export function bestFiller(state: GameState, db: ContentDB, post: OfficialPost, moved: Set<string>): Filler | null {
   const vacGrade = post.gradeOrder;
 
-  // ① 无职在任官员（参照最近任职品级，跨度 ≤ +2）。
+  // ① 无职在任官员（参照最近任职品级，跨度 ≤ +2）。被免职/免官者除外——须经明确重新授任，年度补缺不自动起复。
   const noPost: Filler[] = [];
   for (const o of Object.values(state.officials)) {
     if (o.status !== "active" || o.postId !== null || moved.has(o.id) || hasPendingRetirement(state, o.id)) continue;
+    if (wasLastVacatedByDismissal(state, o.id)) continue;
     const refGrade = gradeOf(db, getLastHeldPostId(state, o.id) ?? null);
     if (vacGrade > refGrade + MAX_PROMOTION_JUMP) continue;
     noPost.push({ kind: "fill", officialId: o.id, score: promotionScore(state, db, o, post) });

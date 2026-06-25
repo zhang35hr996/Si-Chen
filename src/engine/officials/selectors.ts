@@ -138,6 +138,18 @@ export function getLastHeldPostId(state: GameState, officialId: string): string 
   return undefined;
 }
 
+/**
+ * 该官员最近一次离任是否为「免职/免官」（officialHistory 倒序首条该官员条目 reason==="dismissal"）。
+ * 被免者不应由年度补缺自动起复——须经明确重新授任事件（PR3C-3a）。
+ */
+export function wasLastVacatedByDismissal(state: GameState, officialId: string): boolean {
+  for (let i = state.officialHistory.length - 1; i >= 0; i--) {
+    const h = state.officialHistory[i]!;
+    if (h.officialId === officialId) return h.reason === "dismissal";
+  }
+  return false;
+}
+
 /** 某家族出身、当前在宫的侍君 charId（按 standing.birthFamilyId）。 */
 export function getConsortsByFamilyId(state: GameState, familyId: string): string[] {
   return Object.entries(state.standing)

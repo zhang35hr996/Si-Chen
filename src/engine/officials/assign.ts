@@ -11,7 +11,23 @@ import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
-import type { GameState } from "../state/types";
+import type { GameState, Official, OfficialHistoryEntry } from "../state/types";
+import { officialHistoryId } from "./lifecycle";
+
+/**
+ * 写一条 active officialHistory（plain 行政移动，reason 不设）。使任何实际任免/调任/卸任都进入可见历史
+ * ——「最近一次离任」语义因此始终准确（明确重新授任后即不再被视为「被免官」，PR3C-3a）。
+ */
+function withMoveHistory(state: GameState, officialId: string, next: Official, vacatedPostId: string | undefined, at: GameTime): GameState {
+  const entry: OfficialHistoryEntry = {
+    id: officialHistoryId(state.officialHistory.length + 1),
+    officialId,
+    status: "active",
+    at,
+    ...(vacatedPostId !== undefined ? { vacatedPostId } : {}),
+  };
+  return { ...state, officials: { ...state.officials, [officialId]: next }, officialHistory: [...state.officialHistory, entry] };
+}
 
 export function assignOfficialPost(
   state: GameState,
@@ -25,10 +41,10 @@ export function assignOfficialPost(
     return err(stateError("OFFICIAL_NOT_FOUND", `无此官员「${officialId}」`, { context: { officialId } }));
   }
 
-  // 去职（null）：任何状态均允许；已为 null 则幂等。appointedAt 保留（上次任职时刻）。
+  // 去职（null）：任何状态均允许；已为 null 则幂等。appointedAt 保留（上次任职时刻）。写 plain 卸任历史。
   if (newPostId === null) {
     if (cur.postId === null) return ok(state);
-    return ok({ ...state, officials: { ...state.officials, [officialId]: { ...cur, postId: null } } });
+    return ok(withMoveHistory(state, officialId, { ...cur, postId: null }, cur.postId, at));
   }
 
   // 授官（非 null）：必须先确认 active，再做「同职幂等」与席位判定——
@@ -51,9 +67,6 @@ export function assignOfficialPost(
     );
   }
 
-  // 实际授官/调任：写 appointedAt。
-  return ok({
-    ...state,
-    officials: { ...state.officials, [officialId]: { ...cur, postId: newPostId, appointedAt: at } },
-  });
+  // 实际授官/调任：写 appointedAt + plain active 历史（vacatedPostId 记旧职）。
+  return ok(withMoveHistory(state, officialId, { ...cur, postId: newPostId, appointedAt: at }, cur.postId ?? undefined, at));
 }
