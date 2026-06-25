@@ -59,6 +59,7 @@ import type { QueueTraceEvent } from "../engine/trace/domainEvents";
 import { applyJusticePlan, type JusticePlan } from "../engine/justice/mutations";
 import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../engine/characters/chambers";
 import type { ChamberId } from "../engine/state/types";
+import { planColdPalaceIncidents } from "../engine/characters/coldPalaceIncidents";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -1568,7 +1569,29 @@ export class GameStore {
       collector?.capturePhaseScheduled("annual_review", diffGameState(beforeReview, candidate));
     }
 
-    // 5) Daxuan calendar event detection.
+    // 5) Cold-palace incident generation (月度，replay-stable；每居民每月至多一条).
+    if (monthChanged) {
+      const beforeIncidents = candidate;
+      const newIncidents = planColdPalaceIncidents(candidate);
+      if (newIncidents.length > 0) {
+        const healthEffects = newIncidents
+          .filter((i) => i.kind === "health_deterioration" && i.healthDelta !== undefined)
+          .map((i) => ({ type: "set_consort_health" as const, char: i.residentId, healthDelta: i.healthDelta! }));
+        if (healthEffects.length > 0) {
+          const h = collector
+            ? collector.withPhase("cold_palace_incidents_health", () =>
+                applyEffects(db, candidate, healthEffects),
+              )
+            : applyEffects(db, candidate, healthEffects);
+          if (!h.ok) return err(h.error);
+          candidate = h.value;
+        }
+        candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, ...newIncidents] };
+        collector?.capturePhaseScheduled("cold_palace_incidents", diffGameState(beforeIncidents, candidate));
+      }
+    }
+
+    // 7) Daxuan calendar event detection.
     const beforeDaxuan = candidate;
     if (candidate.pendingDaxuan && isPendingDaxuanResolved(candidate, candidate.pendingDaxuan)) {
       candidate = { ...candidate, pendingDaxuan: undefined };
@@ -1579,7 +1602,7 @@ export class GameStore {
     }
     collector?.capturePhaseScheduled("daxuan_detection", diffGameState(beforeDaxuan, candidate));
 
-    // 6) Expire confinements.
+    // 8) Expire confinements.
     const beforeSweep = candidate;
     const swept = collector
       ? collector.withPhase("sweep_expired_confinements", () =>
@@ -2086,6 +2109,16 @@ export class GameStore {
       this.logger?.logGameError(result.error);
     }
     return result;
+  }
+
+  /** 标记冷宫事件通报为已确认（PUNISH-4C）。幂等：未找到则静默。 */
+  acknowledgeIncident(incidentId: string): void {
+    const idx = this.state.coldPalaceIncidents.findIndex((i) => i.id === incidentId);
+    if (idx === -1) return;
+    const updated = [...this.state.coldPalaceIncidents];
+    updated[idx] = { ...updated[idx]!, acknowledged: true };
+    this.state = { ...this.state, coldPalaceIncidents: updated };
+    this.emit();
   }
 
   private emit(): void {

@@ -13,6 +13,7 @@ export type GlobalInterruptKind =
   | "pregnancy_disclosure" // 敬事房孕事上书（Jingshifang）
   | "successor" // 宗正寺承嗣上书（自孕三月自动）
   | "centennial_heir" // 皇嗣百日赐名
+  | "cold_palace_report" // 冷宫事件通报（PUNISH-4C）
   | "grand_selection"; // 大选·殿选日历提示
 
 /** 各全局中断当前是否到期（由 App 从最新 Store + 瞬时驳回态派生；保持纯粹便于测试）。 */
@@ -21,18 +22,20 @@ export interface GlobalInterruptInputs {
   pregnancyDisclosureDue: boolean;
   successorDue: boolean;
   centennialDue: boolean;
+  coldPalaceReportDue: boolean;
   grandSelectionDue: boolean;
 }
 
 /**
  * 确定性优先级（皇帝驾崩/终局在结算之前已 short-circuit，不在此列）：
- * 生产 > 孕事上书 > 承嗣 > 百日赐名 > 大选。一次只返回一个；解决后状态变化、重选得到下一个。
+ * 生产 > 孕事上书 > 承嗣 > 百日赐名 > 冷宫通报 > 大选。一次只返回一个；解决后状态变化、重选得到下一个。
  */
 export function pickNextGlobalInterrupt(inputs: GlobalInterruptInputs): GlobalInterruptKind | null {
   if (inputs.birthDue) return "birth";
   if (inputs.pregnancyDisclosureDue) return "pregnancy_disclosure";
   if (inputs.successorDue) return "successor";
   if (inputs.centennialDue) return "centennial_heir";
+  if (inputs.coldPalaceReportDue) return "cold_palace_report";
   if (inputs.grandSelectionDue) return "grand_selection";
   return null;
 }
