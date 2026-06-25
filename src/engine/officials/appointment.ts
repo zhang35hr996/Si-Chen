@@ -13,6 +13,7 @@ import { err, ok, type Result } from "../infra/result";
 import type { GameState, Official, OfficialFamily, OfficialHistoryEntry } from "../state/types";
 import { officialHistoryId } from "./lifecycle";
 import { isPostVacant } from "./selectors";
+import { initialReviewState } from "./careerMetrics";
 
 /** 转正官员 id：稳定、可追溯候补、与既有 official_<famId> 命名空间隔离。 */
 export function appointedOfficialId(candidateId: string): string {
@@ -105,6 +106,8 @@ export function appointOfficialCandidate(
     age: cand.age,
     familyId,
     status: "active",
+    aptitude: cand.aptitude, // 原样继承候补能力
+    reviewState: initialReviewState(),
     appointedAt: at,
   };
 

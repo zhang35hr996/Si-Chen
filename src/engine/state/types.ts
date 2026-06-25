@@ -234,6 +234,10 @@ export interface Official {
   age: number; // 入仕年龄约束见 officials/constraints
   familyId: string; // 所属官员家族（母系实体）
   status: OfficialStatus;
+  /** 静态四维能力（与候补同构）。授官原样继承；开局/现有官员确定性回填，读档不重生成。 */
+  aptitude: OfficialAptitude;
+  /** 动态履历（年度考课累积；PR3C-1 只建模与回填，不发生职位变化）。 */
+  reviewState: OfficialReviewState;
   /** 任职时刻（可空；开局官员置开局时刻）。 */
   appointedAt?: GameTime;
   /** 最近一次状态变化时刻（非 active 时应有）。 */
@@ -242,6 +246,19 @@ export interface Official {
   statusReason?: OfficialStatusReason;
   /** 死亡时刻（status=dead 时应有）。 */
   deathAt?: GameTime;
+}
+
+/** 官员四维能力（与候补 CandidateAptitude 同构；授官原样继承）。 */
+export type OfficialAptitude = CandidateAptitude;
+
+/** 官员动态履历（铨选用；PR3C-1 只建模/回填，年度考课于 PR3C-2 推进）。 */
+export interface OfficialReviewState {
+  /** 政绩 0–100，初始 50。 */
+  merit: number;
+  /** 最近一次考课年份；未考过则不设。 */
+  lastReviewedYear?: number;
+  /** 连续考课不合格年数。 */
+  underperformanceYears: number;
 }
 
 /** 待玩家裁决的告老请求（PR2A 只生成；批准/挽留由 store 命令处理，UI 留 PR2B）。 */

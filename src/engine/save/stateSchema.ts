@@ -73,6 +73,19 @@ const officialStatusReasonSchema = z.enum([
   "retirement", "dismissal", "imprisonment", "exile", "natural_death", "execution",
 ]);
 
+const officialAptitudeSchema = z.strictObject({
+  governance: percent,
+  scholarship: percent,
+  military: percent,
+  integrity: percent,
+});
+
+const officialReviewStateSchema = z.strictObject({
+  merit: percent,
+  lastReviewedYear: z.number().int().min(1).optional(),
+  underperformanceYears: z.number().int().min(0),
+});
+
 const officialSchema = z.strictObject({
   id: idSchema,
   surname: z.string().min(1),
@@ -82,6 +95,8 @@ const officialSchema = z.strictObject({
   age: z.number().int().min(1),
   familyId: idSchema,
   status: z.enum(["active", "retired", "imprisoned", "exiled", "dead"]),
+  aptitude: officialAptitudeSchema,
+  reviewState: officialReviewStateSchema,
   appointedAt: gameTimeSchema.optional(),
   statusChangedAt: gameTimeSchema.optional(),
   statusReason: officialStatusReasonSchema.optional(),

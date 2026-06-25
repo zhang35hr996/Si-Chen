@@ -14,12 +14,13 @@ import { validateOfficialWorld } from "../officials/validation";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
-import type { GameState } from "../state/types";
+import type { GameState, Official, OfficialAptitude } from "../state/types";
+import { deriveOfficialAptitude, initialReviewState } from "../officials/careerMetrics";
 import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 13;
+export const SAVE_FORMAT_VERSION = 14;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -224,6 +225,35 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       formatVersion: 13,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
+    };
+  },
+  // v13 → v14: 官员增静态能力 aptitude + 动态履历 reviewState（PR3C-1）。回填优先级：已有值 →
+  // 候补出身者继承其候补能力（v13 已有 PR3B 授官记录，须保持同一人能力一致）→ 否则稳定 seed 确定性
+  // 派生。reviewState 取初值。物化入档，读档不重算。
+  13: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    const rngSeed = state.rngSeed;
+    // appointedOfficialId → 候补能力（仅取已转正、回指一致的候补）。
+    const inheritedAptitude = new Map<string, OfficialAptitude>();
+    for (const c of Object.values(state.officialCandidates ?? {})) {
+      if (c.status === "appointed" && c.appointedOfficialId) inheritedAptitude.set(c.appointedOfficialId, c.aptitude);
+    }
+    const officials: Record<string, Official> = {};
+    for (const [id, o] of Object.entries(state.officials)) {
+      const off = o as Official & Partial<Pick<Official, "aptitude" | "reviewState">>;
+      officials[id] = {
+        ...off,
+        aptitude: off.aptitude ?? inheritedAptitude.get(id) ?? deriveOfficialAptitude(id, rngSeed),
+        reviewState: off.reviewState ?? initialReviewState(),
+      };
+    }
+    const next = { ...state, officials };
+    return {
+      ...env,
+      formatVersion: 14,
+      state: next,
+      checksum: checksumOf(next),
     };
   },
 };
