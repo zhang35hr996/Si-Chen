@@ -21,6 +21,8 @@ import { allocateJusticeIds } from "../../../src/engine/justice/ids";
 import { applyJusticePlan } from "../../../src/engine/justice/mutations";
 import { toGameTime } from "../../../src/engine/calendar/time";
 import type { ImperialCommand } from "../../../src/store/imperialCommands";
+import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../../../src/engine/characters/chambers";
+import type { GameError } from "../../../src/engine/infra/errors";
 
 const db = loadRealContent();
 
@@ -714,17 +716,37 @@ describe("cold palace — chamber-level restore (Fix 3)", () => {
   });
 
   it("CP-CHAMBER3. restoreFromColdPalace fails when no chamber is available", () => {
-    // With only ~3 living consorts in the fixture, we cannot fill all 50 slots (10 palaces × 5 chambers).
-    // This test documents the scenario and verifies the error path exists in code,
-    // but cannot be meaningfully exercised with the current fixture size.
-    // The implementation in restoreFromColdPalace returns err() when restoreSlot is null (all slots occupied).
     const store = makeStore();
+
+    // Send TARGET to cold palace first.
     const r0 = store.sendConsortToColdPalace(db, TARGET, {});
     expect(r0.ok).toBe(true);
-    // Cannot fill all 50 chamber slots with available fixture characters — skip full scenario.
-    // Verify that a normal restore still succeeds (guards the happy path).
+
+    // Fill every chambered-palace slot with synthetic standing entries so that
+    // isSlotOccupied returns true for every possible restore destination.
+    // Use loadState to inject the modified state so the store sees the new entries.
+    const stateAfterSend = store.getState();
+    const synStanding: Record<string, unknown> = { ...stateAfterSend.standing };
+    let synIdx = 0;
+    for (const palace of CHAMBERED_PALACE_ORDER) {
+      for (const { id: chamberId } of CHAMBERS) {
+        const synId = `__syn_${synIdx++}`;
+        synStanding[synId] = {
+          lifecycle: "alive",
+          residence: palace,
+          chamber: chamberId,
+          rank: "guiren",
+          title: undefined,
+        };
+      }
+    }
+    store.loadState({ ...stateAfterSend, standing: synStanding as typeof stateAfterSend.standing });
+
+    // Now restore should fail — no available slot.
     const r = store.restoreFromColdPalace(db, TARGET, "pardoned");
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.some((e: GameError) => e.code === "COLD_PALACE_INVALID")).toBe(true);
   });
 });
 

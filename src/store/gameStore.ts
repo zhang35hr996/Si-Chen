@@ -13,6 +13,7 @@ import { err, ok, type Result } from "../engine/infra/result";
 import { formatGameTime, fromTurnIndex, monthOrdinal, toGameTime } from "../engine/calendar/time";
 import { activeConfinement, expiredUnrecordedConfinements, nextStatusEffectId } from "../engine/characters/confinement";
 import { activeColdPalaceEffectFor, isInColdPalace } from "../engine/characters/coldPalace";
+import { getCharacterLocation } from "../engine/characters/presence";
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
 import { allocateJusticeIds } from "../engine/justice/ids";
@@ -1723,7 +1724,12 @@ export class GameStore {
     const now = toGameTime(this.state.calendar);
     const currentTurn = this.state.calendar.dayIndex;
 
-    const previousResidenceId = standing.residence ?? (db.characters[targetId]?.kind === "consort" ? db.characters[targetId]!.defaultLocation : undefined) ?? "unknown";
+    const previousResidenceId = getCharacterLocation(db, this.state, targetId);
+    if (!previousResidenceId || previousResidenceId === "unknown") {
+      const error = stateError("COLD_PALACE_INVALID", `cannot send "${targetId}" to cold palace: no known residence`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
     const previousChamber = standing.chamber;  // undefined means "main"
     const coldPalaceResidenceId = "changmengong";
 
@@ -1892,6 +1898,10 @@ export class GameStore {
             imposedOnId: targetId,
             punishmentId,
           },
+          links: {
+            sourcePunishmentId: punishmentId,
+            ...(meta.caseId ? { caseId: meta.caseId } : {}),
+          },
           publicity: { scope: "palace", persistence: "institutional" } as const,
           publicSalience: 70,
           retention: "permanent" as const,
@@ -1951,7 +1961,7 @@ export class GameStore {
         ([id, s]) =>
           id !== targetId &&
           s.lifecycle !== "deceased" &&
-          s.residence === loc &&
+          (s.residence ?? db.characters[id]?.defaultLocation) === loc &&
           ((s.chamber ?? "main") as ChamberId) === ch,
       );
 

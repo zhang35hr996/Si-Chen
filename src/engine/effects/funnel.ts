@@ -953,13 +953,23 @@ export function applyEffects(
             charIds: next.excusedFromGreeting.charIds.filter((id) => id !== ch),
           };
         }
-        // Cold palace empress cannot administer harem — transfer to neiwu_proxy fallback.
+        // Cold palace empress cannot administer harem — transfer to acting_consort if eligible, else neiwu_proxy.
         if (next.standing[ch]?.rank === "fenghou" && next.haremAdministration.mode === "empress") {
-          next.haremAdministration = {
-            mode: "neiwu_proxy",
-            appointedAt: toGameTime(next.calendar),
-            reason: "imperial_deprivation",
-          };
+          const eligible = eligibleHaremAdministrators(db, next);
+          if (eligible.length > 0) {
+            next.haremAdministration = {
+              mode: "acting_consort",
+              charId: eligible[0]!.id,
+              appointedAt: toGameTime(next.calendar),
+              reason: "imperial_reassignment",
+            };
+          } else {
+            next.haremAdministration = {
+              mode: "neiwu_proxy",
+              appointedAt: toGameTime(next.calendar),
+              reason: "imperial_deprivation",
+            };
+          }
         }
         // If the target is the current acting consort admin, find a real replacement.
         if (
@@ -1008,7 +1018,32 @@ export function applyEffects(
         break;
       }
       case "set_harem_administration": {
-        next.haremAdministration = effect.state;
+        const ns = effect.state as typeof next.haremAdministration;
+        if (ns.mode === "acting_consort") {
+          // Re-check eligibility against accumulated batch state — a prior effect
+          // may have confined or cold-palace'd the proposed consort in this same batch.
+          const eligible = eligibleHaremAdministrators(db, next);
+          const charId = (ns as { charId: string }).charId;
+          if (!eligible.some((c) => c.id === charId)) {
+            const replacement = eligible[0];
+            if (replacement) {
+              next.haremAdministration = {
+                mode: "acting_consort",
+                charId: replacement.id,
+                appointedAt: toGameTime(next.calendar),
+                reason: "imperial_reassignment",
+              };
+            } else {
+              next.haremAdministration = {
+                mode: "neiwu_proxy",
+                appointedAt: toGameTime(next.calendar),
+                reason: "no_eligible_consort",
+              };
+            }
+            break;
+          }
+        }
+        next.haremAdministration = ns;
         break;
       }
       case "consort_decease": {
