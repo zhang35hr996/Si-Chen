@@ -86,6 +86,12 @@ export function validateJusticeLinks(state: GameState): GameError[] {
       continue;
     }
 
+    if ((effect as { liftedTurn?: number }).liftedTurn !== undefined) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} is active but linked ConfinementEffect ${statusEffectId} is lifted (liftedTurn=${(effect as { liftedTurn?: number }).liftedTurn})`,
+      ));
+    }
+
     if ((effect as { sourcePunishmentId?: string }).sourcePunishmentId !== pun.id) {
       errors.push(crossLinkErr(
         `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but ConfinementEffect.sourcePunishmentId=${(effect as { sourcePunishmentId?: string }).sourcePunishmentId}`,
@@ -166,6 +172,13 @@ export function validateJusticeLinks(state: GameState): GameError[] {
         `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but effect.kind=${effect.kind} (expected cold_palace)`,
       ));
       continue;
+    }
+
+    // Active punishment must have a not-yet-lifted ColdPalaceEffect.
+    if (effect.liftedTurn !== undefined) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} is active but linked ColdPalaceEffect ${statusEffectId} is lifted (liftedTurn=${effect.liftedTurn})`,
+      ));
     }
 
     if (effect.sourcePunishmentId !== pun.id) {

@@ -919,6 +919,27 @@ export function applyEffects(
         };
         next.statusEffects.push(coldPalaceEntry);
         next.standing[ch]!.residence = e.coldPalaceResidenceId;
+        // Clear overnight schedule if it involves this character.
+        if (next.overnightWith?.charId === ch) delete next.overnightWith;
+        // Cold palace empress cannot administer harem — transfer to neiwu_proxy fallback.
+        if (next.standing[ch]?.rank === "fenghou" && next.haremAdministration.mode === "empress") {
+          next.haremAdministration = {
+            mode: "neiwu_proxy",
+            appointedAt: toGameTime(next.calendar),
+            reason: "empress_confined",
+          };
+        }
+        // If the target is the current acting consort admin, fall back to neiwu_proxy.
+        if (
+          next.haremAdministration.mode === "acting_consort" &&
+          (next.haremAdministration as { charId: string }).charId === ch
+        ) {
+          next.haremAdministration = {
+            mode: "neiwu_proxy",
+            appointedAt: toGameTime(next.calendar),
+            reason: "no_eligible_consort",
+          };
+        }
         break;
       }
       case "restore_from_cold_palace": {

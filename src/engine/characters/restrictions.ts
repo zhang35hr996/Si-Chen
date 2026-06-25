@@ -1,13 +1,14 @@
 /**
  * 统一行动许可层（任务 §5）。所有「某角色此刻能否参加某玩法」的判断都从这里取，
- * 避免各模块各自散落 isConfined 特判。目前唯一的限制来源是禁足；后续冷宫/下狱/
- * 守丧/卧病可在此追加 reason，而调用方无需改动。
+ * 避免各模块各自散落 isConfined 特判。限制来源：禁足、冷宫；后续下狱/守丧/卧病
+ * 可在此追加 reason，而调用方无需改动。
  *
  * 注意：本层只负责「持续状态导致的资格限制」。已故（lifecycle==="deceased"）由各候选
  * 池既有的存活过滤负责，不在此重复。
  */
 import type { GameState } from "../state/types";
 import { activeConfinement } from "./confinement";
+import { activeColdPalaceEffectFor } from "./coldPalace";
 
 /**
  * 受限玩法标识。凡是要求角色离宫、抛头露面、或与皇帝/他人正常往来的行为都在此列；
@@ -50,6 +51,14 @@ export function getActionAvailability(
   const confinement = activeConfinement(state, charId, turn);
   if (confinement) {
     return { allowed: false, reasonCode: "confined", message: CONFINED_MESSAGE };
+  }
+  const coldPalaceEffect = activeColdPalaceEffectFor(state, charId, turn);
+  if (coldPalaceEffect) {
+    return {
+      allowed: false,
+      reasonCode: "cold_palace",
+      message: "此宫已打入冷宫，不得参与宫廷日常事务。",
+    };
   }
   return ALLOWED;
 }

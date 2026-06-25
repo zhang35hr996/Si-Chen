@@ -596,6 +596,15 @@ export class GameStore {
    * untouched, notifies no one, and logs every collected error once.
    */
   applyEffects(db: ContentDB, effects: readonly EventEffect[]): Result<GameState, GameError[]> {
+    // Internal-only effect types must not be submitted via the public API.
+    const INTERNAL_ONLY: ReadonlySet<string> = new Set(["send_to_cold_palace", "restore_from_cold_palace"]);
+    for (const e of effects) {
+      if (INTERNAL_ONLY.has((e as { type: string }).type)) {
+        const error = stateError("BAD_EFFECT", `effect type "${(e as { type: string }).type}" is internal-only and cannot be applied via applyEffects`);
+        this.logger?.logGameError(error);
+        return err([error]);
+      }
+    }
     const collector = this.makeCollector();
     const beforeState = this.state;
     const source: TraceSource = { kind: "action", label: "applyEffects" };
@@ -1794,6 +1803,24 @@ export class GameStore {
       startTurn: currentTurn,
     };
 
+    // Primary memory for the target: trauma entry with sourcePunishmentId.
+    const targetMemoryEffect: EventEffect = {
+      type: "memory",
+      char: targetId,
+      entry: {
+        kind: "trauma",
+        summary: "臣被皇帝打入冷宫，此后幽居长门，不得见君颜。",
+        strength: 90,
+        retention: "permanent",
+        subjectIds: ["player", targetId],
+        perspective: "target",
+        triggerTags: ["player", "cold_palace"],
+        unresolved: true,
+        emotions: { fear: 55, shame: 45 },
+        sourcePunishmentId: punishmentId,
+      },
+    };
+
     // If there is an active confinement, inject a lift_confinement effect so both the
     // ConfinementEffect and its PunishmentRecord are resolved in the same atomic transaction.
     // The resolve_punishment mutation (already in resolveConfinementMutations) handles the
@@ -1803,6 +1830,7 @@ export class GameStore {
 
     const augmentedEffects = [
       coldPalaceEffect,
+      targetMemoryEffect,
       ...liftConfinementEffects,
       ...conseq.effects.map((e) => {
         if (e.type === "memory") {
@@ -1812,24 +1840,42 @@ export class GameStore {
       }),
     ];
 
-    // Chronicle: primary decree gets punishmentId; ancillary entries get sourcePunishmentId.
-    const PUNITIVE_DECREES = new Set(["cold_palace_imposed"]);
-    const punishmentChronicle = conseq.chronicle.map((draft) => {
-      const decree = (draft.payload as { decree?: string }).decree;
-      const isPrimary = PUNITIVE_DECREES.has(decree ?? "");
-      const payloadExtra = isPrimary
-        ? { punishmentId, ...(meta.caseId ? { caseId: meta.caseId } : {}) }
-        : { sourcePunishmentId: punishmentId };
-      const links = isPrimary
-        ? { punishmentId, ...(meta.caseId ? { caseId: meta.caseId } : {}) }
-        : { sourcePunishmentId: punishmentId };
-      return { ...draft, payload: { ...draft.payload, ...payloadExtra }, links };
-    });
+    // Build primary chronicle entry directly (planPunishmentConsequences returns chronicle: []).
+    const primaryChronicle: Omit<CourtEvent, "id">[] = [
+      {
+        type: "punished",
+        occurredAt: now,
+        participants: [{ charId: targetId, role: "punished" }],
+        payload: {
+          decree: "cold_palace_imposed",
+          targetId,
+          punishmentId,
+          ...(meta.caseId ? { caseId: meta.caseId } : {}),
+        },
+        links: {
+          punishmentId,
+          ...(meta.caseId ? { caseId: meta.caseId } : {}),
+        },
+        publicity: { scope: "palace", persistence: "institutional" },
+        publicSalience: 90,
+        retention: "permanent",
+        tags: ["imperial_decree", "cold_palace"],
+      },
+    ];
+
+    // Thread sourcePunishmentId into any ancillary chronicle entries from consequence planner.
+    const conseqChronicle = conseq.chronicle.map((draft) => ({
+      ...draft,
+      payload: { ...draft.payload, sourcePunishmentId: punishmentId },
+      links: { sourcePunishmentId: punishmentId },
+    }));
+
+    const allChronicle = [...primaryChronicle, ...conseqChronicle];
 
     const txResult = this.commitPlannedTransaction(
       db,
       augmentedEffects,
-      punishmentChronicle,
+      allChronicle,
       conseq.reactionBeats,
       { kind: "imperial_command", sourceId: "send_to_cold_palace", label: `cold palace: ${targetId}` },
       justicePlan,
@@ -1876,11 +1922,19 @@ export class GameStore {
       ? { mutations: resolveMutations, nextSeq: alloc.nextSeq }
       : undefined;
 
+    // Check if original residence is still available (not occupied by another consort).
+    const prevRes = activeEffect.previousResidenceId;
+    const isOccupied = prevRes !== undefined &&
+      Object.entries(this.state.standing).some(
+        ([id, s]) => id !== targetId && s.lifecycle !== "deceased" && s.residence === prevRes,
+      );
+    const restoreResidenceId = isOccupied ? undefined : prevRes;
+
     const restoreEffect = {
       type: "restore_from_cold_palace" as const,
       char: targetId,
       liftReason,
-      restoreResidenceId: activeEffect.previousResidenceId,
+      restoreResidenceId,
       liftedAt: now,
       liftedTurn: currentTurn,
     };
