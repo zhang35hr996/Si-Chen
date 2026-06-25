@@ -12,6 +12,7 @@ import type { ContentDB } from "../content/loader";
 import type { CharacterContent } from "../content/schemas";
 import type { GameState, HaremAdministrationState } from "../state/types";
 import { isConfined } from "./confinement";
+import { isInColdPalace } from "./coldPalace";
 import { resolveDisplayName } from "./standing";
 
 /** 凤后驸级门槛：rank.order 须 >= fu 的 order。 */
@@ -49,6 +50,7 @@ export function eligibleHaremAdministrators(db: ContentDB, state: GameState): Ch
       const rankMeta = db.ranks[st.rank];
       if (!rankMeta || rankMeta.order < minOrder) return false;
       if (isConfined(state, c.id)) return false;
+      if (isInColdPalace(state, c.id)) return false;
       const home = st.residence ?? c.defaultLocation;
       if (home === "changmengong") return false;
       return true;

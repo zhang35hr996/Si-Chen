@@ -107,6 +107,13 @@ export function extractProvenance(
         },
         unknownRefs,
       };
+    case "skipped_runtime_state":
+      // Retriever was configured but bypassed intentionally — not a failure.
+      return {
+        sourceRefs,
+        knowledge: { chunkIds: [], degraded: false },
+        unknownRefs,
+      };
   }
 }
 

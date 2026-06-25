@@ -13,3 +13,6 @@ playwright/.cache/
 
 # knowledge index database
 *.db
+
+# knowledge eval artifacts (reports are regenerated; only cases.jsonl is committed)
+artifacts/knowledge-eval/

@@ -20,9 +20,11 @@ import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gate
 import {
   buildDialogueKnowledgeQuery,
   extractProvenance,
+  getLatestTargetUtterance,
   packPromptKnowledge,
   resolveVisibilityCeiling,
 } from "./knowledge/index";
+import { classifyQueryIntent } from "../knowledge/intent";
 import { buildMemoryContext, selectPromptEventsByActivation } from "./memoryContext";
 import { recordMentionedContext } from "./mentionWriteback";
 import type { DialogueProviderResult } from "./providerContract";
@@ -601,34 +603,48 @@ export async function produceDialogueTurn(
   if (options?.retriever && provider.kind === "generative") {
     const ceiling = resolveVisibilityCeiling(request.speakerId, db, state);
     const query = buildDialogueKnowledgeQuery(request, ceiling);
-    try {
-      const result = await options.retriever.retrieve(query);
-      retrievalStatus = result.vectorDegradation !== undefined
-        ? { kind: "vector_degraded", reason: result.vectorDegradation.reason }
-        : { kind: "ok" };
-      const chunks = packPromptKnowledge(result.hits, ceiling);
-      finalRequest = {
-        ...request,
-        promptContext: { ...request.promptContext, knowledgeContext: chunks },
-      };
-    } catch (e: unknown) {
-      const errMsg = String(e);
-      logger?.logGameError(
-        aiError("KNOWLEDGE_RETRIEVAL_FAILED", errMsg, {
-          severity: "warn",
-          context: { speakerId: request.speakerId },
-        }),
-      );
-      const failureMode = options.knowledgeFailureMode ?? "continue_without_knowledge";
-      if (failureMode === "fail_turn") {
-        return err(aiError("KNOWLEDGE_RETRIEVAL_FAILED", errMsg, { context: { speakerId: request.speakerId } }));
-      }
-      // continue_without_knowledge: inject empty array so provenance sees retrieval ran
+
+    // Intent gate: classify only the user's latest utterance, not the full
+    // composite query (which includes sceneDirective and topicTags that may
+    // contain static-rule vocabulary and would corrupt the signal).
+    const utterance = getLatestTargetUtterance(request);
+    const intent = utterance ? classifyQueryIntent(utterance) : "static_lore";
+    if (intent === "runtime_state") {
       finalRequest = {
         ...request,
         promptContext: { ...request.promptContext, knowledgeContext: [] },
       };
-      retrievalStatus = { kind: "fatal_degraded" };
+      retrievalStatus = { kind: "skipped_runtime_state" };
+    } else {
+      try {
+        const result = await options.retriever.retrieve(query);
+        retrievalStatus = result.vectorDegradation !== undefined
+          ? { kind: "vector_degraded", reason: result.vectorDegradation.reason }
+          : { kind: "ok" };
+        const chunks = packPromptKnowledge(result.hits, ceiling);
+        finalRequest = {
+          ...request,
+          promptContext: { ...request.promptContext, knowledgeContext: chunks },
+        };
+      } catch (e: unknown) {
+        const errMsg = String(e);
+        logger?.logGameError(
+          aiError("KNOWLEDGE_RETRIEVAL_FAILED", errMsg, {
+            severity: "warn",
+            context: { speakerId: request.speakerId },
+          }),
+        );
+        const failureMode = options.knowledgeFailureMode ?? "continue_without_knowledge";
+        if (failureMode === "fail_turn") {
+          return err(aiError("KNOWLEDGE_RETRIEVAL_FAILED", errMsg, { context: { speakerId: request.speakerId } }));
+        }
+        // continue_without_knowledge: inject empty array so provenance sees retrieval ran
+        finalRequest = {
+          ...request,
+          promptContext: { ...request.promptContext, knowledgeContext: [] },
+        };
+        retrievalStatus = { kind: "fatal_degraded" };
+      }
     }
   }
 
