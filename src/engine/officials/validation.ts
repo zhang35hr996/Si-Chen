@@ -306,12 +306,12 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     arr.push(h);
     histByPun.set(h.punishmentId, arr);
   }
-  // punished CourtEvent 按 punishmentId 归集。
-  const evtByPun = new Map<string, number>();
+  // punished CourtEvent 按 punishmentId 归集（保留事件以校验内容）。
+  const evtByPun = new Map<string, typeof state.chronicle>();
   for (const evt of state.chronicle) {
     if (evt.type !== "punished") continue;
     const pid = evt.payload?.punishmentId;
-    if (typeof pid === "string") evtByPun.set(pid, (evtByPun.get(pid) ?? 0) + 1);
+    if (typeof pid === "string") { const arr = evtByPun.get(pid) ?? []; arr.push(evt); evtByPun.set(pid, arr); }
   }
   for (const pun of Object.values(punishments)) {
     if (pun.targetKind !== "official") continue;
@@ -323,29 +323,44 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     }
     // details 官职有效/方向。
     const fromPostId = pun.details.fromPostId;
+    const expectedToPostId: string | null = pun.kind === "official_demotion" ? pun.details.toPostId : null;
     if (!gradedPost(fromPostId)) e("PUNISHMENT_OFFICIAL_BAD_POST", `官员惩戒「${pun.id}」fromPostId 非有效官职`, { id: pun.id });
     if (pun.kind === "official_demotion") {
-      const toPostId = pun.details.toPostId;
-      if (!gradedPost(toPostId) || gradeOrderOf(toPostId) >= gradeOrderOf(fromPostId)) {
+      if (!gradedPost(expectedToPostId) || gradeOrderOf(expectedToPostId) >= gradeOrderOf(fromPostId)) {
         e("PUNISHMENT_OFFICIAL_BAD_POST", `官员惩戒「${pun.id}」降职 toPostId 须为更低品级有效官职`, { id: pun.id });
       }
     }
-    // 恰一条 history，且各项一致。
+    // 恰一条 history，且各项一致（含 reason 方向：免官须 dismissal，降职须非 dismissal）。
     const hs = histByPun.get(pun.id) ?? [];
     if (hs.length !== 1) {
       e("PUNISHMENT_OFFICIAL_HISTORY_COUNT", `官员惩戒「${pun.id}」应恰有一条 history（实有 ${hs.length}）`, { id: pun.id });
     } else {
       const h = hs[0]!;
-      const okHist =
-        h.officialId === pun.targetId &&
-        h.vacatedPostId === fromPostId &&
-        JSON.stringify(h.at) === JSON.stringify(pun.imposedAt) &&
-        (pun.kind === "official_dismissal" ? h.reason === "dismissal" : true);
+      const reasonOk = pun.kind === "official_dismissal" ? h.reason === "dismissal" : h.reason !== "dismissal";
+      const okHist = h.officialId === pun.targetId && h.vacatedPostId === fromPostId && JSON.stringify(h.at) === JSON.stringify(pun.imposedAt) && reasonOk;
       if (!okHist) e("PUNISHMENT_OFFICIAL_HISTORY_INCONSISTENT", `官员惩戒「${pun.id}」history 与记录不一致`, { id: pun.id });
     }
-    // 恰一条 punished CourtEvent。
-    if ((evtByPun.get(pun.id) ?? 0) !== 1) {
+    // 恰一条 punished CourtEvent，且内容（target/role/time/kind/from-to/publicity）与记录一致。
+    const evs = evtByPun.get(pun.id) ?? [];
+    if (evs.length !== 1) {
       e("PUNISHMENT_OFFICIAL_EVENT_COUNT", `官员惩戒「${pun.id}」应恰有一条 punished CourtEvent`, { id: pun.id });
+    } else {
+      const ev = evs[0]!;
+      const role = pun.kind === "official_demotion" ? "demoted" : "dismissed";
+      const part = ev.participants.find((p) => p.charId === pun.targetId);
+      const pub = ev.publicity;
+      const pubOk =
+        pun.publicity === "secret" ? pub.scope === "circle" && pub.circleIds.includes(pun.targetId)
+        : pun.publicity === "public" ? pub.scope === "realm"
+        : pub.scope === "palace";
+      const okEvent =
+        JSON.stringify(ev.occurredAt) === JSON.stringify(pun.imposedAt) &&
+        !!part && part.role === role &&
+        ev.payload.kind === pun.kind &&
+        ev.payload.fromPostId === fromPostId &&
+        ((ev.payload.toPostId ?? null) === expectedToPostId) &&
+        pubOk;
+      if (!okEvent) e("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT", `官员惩戒「${pun.id}」CourtEvent 内容与记录不一致`, { id: pun.id });
     }
   }
   for (const [postId, used] of Object.entries(seatUse)) {

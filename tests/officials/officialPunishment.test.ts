@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { punishOfficial, promoteOfficialAdministratively } from "../../src/engine/officials/officialPunishment";
 import { resolveOfficialVacancies } from "../../src/engine/officials/annualReview";
 import { assignOfficialPost } from "../../src/engine/officials/assign";
+import { wasLastVacatedByDismissal } from "../../src/engine/officials/selectors";
 import { validateOfficialWorld } from "../../src/engine/officials/validation";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { ContentDB } from "../../src/engine/content/loader";
@@ -93,10 +94,17 @@ describe("PR3C-3a review fixes", () => {
     const filled = resolveOfficialVacancies({ ...st, calendar: { ...st.calendar, year: st.calendar.year + 1 } }, db, at(3));
     expect(filled.state.officials[o.id]!.postId).toBeNull();
     expect(filled.changes.some((c) => c.officialId === o.id)).toBe(false);
-    // 但明确重新授任可恢复任职。
+    // 明确重新授任写普通 active 历史，解除「免官」限制。
     const re = assignOfficialPost(st, db, o.id, "zhubo", at(4));
     expect(re.ok).toBe(true);
-    if (re.ok) { st = re.value; expect(st.officials[o.id]!.postId).toBe("zhubo"); }
+    if (!re.ok) return;
+    st = re.value;
+    expect(st.officials[o.id]!.postId).toBe("zhubo");
+    // 重新授任 → 普通卸任 → 不再被视为被免官，可由年度补缺起复。
+    const vac = assignOfficialPost(st, db, o.id, null, at(5));
+    expect(vac.ok).toBe(true);
+    if (!vac.ok) return;
+    expect(wasLastVacatedByDismissal(vac.value, o.id)).toBe(false);
   });
 
   it("P2: a pending retirement is cleared when the official is punished or promoted", () => {
@@ -164,6 +172,29 @@ describe("PR3C-3a official-punishment validation closure", () => {
     const puns = { ...st.justice.punishments };
     puns[pid] = { ...puns[pid]!, lifecycle: { status: "active" } } as typeof puns[string];
     expect(codes({ ...st, justice: { ...st.justice, punishments: puns } })).toContain("PUNISHMENT_OFFICIAL_BAD_LIFECYCLE");
+  });
+
+  it("demotion history carrying reason='dismissal' → PUNISHMENT_OFFICIAL_HISTORY_INCONSISTENT", () => {
+    const { st, pid } = punished();
+    const officialHistory = st.officialHistory.map((h) => (h.punishmentId === pid ? { ...h, reason: "dismissal" as const } : h));
+    expect(codes({ ...st, officialHistory })).toContain("PUNISHMENT_OFFICIAL_HISTORY_INCONSISTENT");
+  });
+
+  // 篡改唯一 punished CourtEvent 的各字段 → EVENT_INCONSISTENT。
+  const tamperEvent = (st: GameState, pid: string, mut: (e: GameState["chronicle"][number]) => GameState["chronicle"][number]) =>
+    ({ ...st, chronicle: st.chronicle.map((e) => (e.type === "punished" && e.payload.punishmentId === pid ? mut(e) : e)) }) as GameState;
+
+  it("tampered CourtEvent content (participant/role/time/kind/from-to/publicity) → PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT", () => {
+    const { st, pid, offId } = punished();
+    const otherId = Object.values(st.officials).find((o) => o.id !== offId)!.id;
+    const t = (mut: Parameters<typeof tamperEvent>[2]) => codes(tamperEvent(st, pid, mut));
+    expect(t((e) => ({ ...e, participants: [{ charId: otherId, role: "demoted" }] }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
+    expect(t((e) => ({ ...e, participants: [{ ...e.participants[0]!, role: "dismissed" }] }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
+    expect(t((e) => ({ ...e, occurredAt: { ...e.occurredAt, year: e.occurredAt.year + 9 } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
+    expect(t((e) => ({ ...e, payload: { ...e.payload, kind: "official_dismissal" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
+    expect(t((e) => ({ ...e, payload: { ...e.payload, fromPostId: "taibao" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
+    expect(t((e) => ({ ...e, payload: { ...e.payload, toPostId: "dadudu" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
+    expect(t((e) => ({ ...e, publicity: { scope: "realm", persistence: "institutional" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
   });
 });
 
