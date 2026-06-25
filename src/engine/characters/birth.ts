@@ -1,13 +1,41 @@
 /**
- * 生产裁决（纯函数，确定性）：性别、难产结局、子嗣宠爱初值。
+ * 生产裁决（纯函数，确定性）：性别、难产结局、子嗣宠爱初值、双胎、生辰天象。
  * 帝王自孕（carrier="sovereign"）永不难产。宠爱按生产当月承载侍君的受宠程度派生。
+ * 双胎各自独立判定生辰天象（吉兆/凶兆）；宠爱已包含天象加成。
+ *
+ * 皇嗣宠爱与侍君恩宠统一使用 0–100 区间。凤后加成仅为出生初始值 bonus，
+ * 不存在凤后皇嗣 80 的终身上限；最终统一 clamp 至 0–100。
  */
 import { monthOrdinal, type GameTime } from "../calendar/time";
 import { computeFavorStats, type BedchamberThresholds, type FavorTier } from "./favorTier";
-import { dystociaChance, gestationRoll, type GestationConfig } from "./gestation";
+import {
+  dystociaChance,
+  gestationRoll,
+  type BirthOmenConfig,
+  type GestationConfig,
+  type TwinsConfig,
+  DEFAULT_BIRTH_OMEN,
+  DEFAULT_TWINS,
+} from "./gestation";
 import type { BedchamberRecord, HeirSex } from "../state/types";
 
 export type BearerOutcome = "safe" | "child_dies" | "bearer_dies" | "both";
+export type BirthOmen = "auspicious" | "inauspicious";
+
+const AUSPICIOUS_OMENS = [
+  "祥云缭绕，紫气东来",
+  "久旱逢甘霖，万物得润",
+  "阴雨连绵，骤然天晴，霞光万道",
+  "百花不应时节，竟于此刻齐放，宫苑芬芳四溢",
+];
+
+const INAUSPICIOUS_OMENS = [
+  "天忽电闪雷鸣，大雨倾盆",
+  "大地微微震动，宫殿轻颤",
+  "京郊洪水泛滥，汹涌漫道",
+  "忽降冰雹，砸得宫中花木俱损",
+  "宫苑百花无故凋零，衰败于一夕之间",
+];
 
 export interface BirthInput {
   rngSeed: number;
@@ -24,14 +52,27 @@ export interface BirthInput {
 
 export interface BirthVerdict {
   sex: HeirSex;
+  /** Present when twins are born; sex of the second child. */
+  twinSex?: HeirSex;
   fatherId: string | null;
   bearer: "sovereign" | string;
   legitimate: boolean;
+  /** First child's favor (omen delta already applied, clamped 0–100). */
   favor: number;
+  /** Second child's favor; present only when twinSex is set. */
+  twinFavor?: number;
   bearerOutcome: BearerOutcome;
+  /** Birth omen for the first child (null = none). */
+  omen: BirthOmen | null;
+  /** Descriptive phrase for the omen phenomenon (absent when omen is null). */
+  omenText?: string;
+  /** Birth omen for the second child; present only when twinSex is set. */
+  twinOmen?: BirthOmen | null;
+  twinOmenText?: string;
 }
 
-const FENGHOU_CAP = 80;
+/** 皇嗣/侍君宠爱统一 clamp 至 0–100。 */
+const clampFavor = (n: number): number => Math.min(100, Math.max(0, n));
 
 function tierValue(tier: FavorTier, cfg: GestationConfig): number {
   return cfg.childFavor.tierValues[tier];
@@ -44,24 +85,81 @@ function pickOutcome(roll: number, cfg: GestationConfig): Exclude<BearerOutcome,
   return "both";
 }
 
+type TwinType = "dragonPhoenix" | "twoDaughters" | "twoSons";
+
+function rollTwinType(rngSeed: number, bm: number, carrier: string, cfg: TwinsConfig): TwinType | null {
+  const roll = gestationRoll(`twins:${rngSeed}:${bm}:${carrier}`);
+  const dp = cfg.dragonPhoenixChance;
+  const td = cfg.twoDaughtersChance;
+  const ts = cfg.twoSonsChance;
+  if (roll < dp) return "dragonPhoenix";
+  if (roll < dp + td) return "twoDaughters";
+  if (roll < dp + td + ts) return "twoSons";
+  return null;
+}
+
+function rollOmen(
+  rngSeed: number,
+  bm: number,
+  carrier: string,
+  childIndex: number,
+  cfg: BirthOmenConfig,
+): { omen: BirthOmen | null; text?: string } {
+  const roll = gestationRoll(`omen:${rngSeed}:${bm}:${carrier}:${childIndex}`);
+  if (roll < cfg.auspiciousChance) {
+    return { omen: "auspicious", text: AUSPICIOUS_OMENS[roll % AUSPICIOUS_OMENS.length] };
+  }
+  if (roll < cfg.auspiciousChance + cfg.inauspiciousChance) {
+    const idx = roll - cfg.auspiciousChance;
+    return { omen: "inauspicious", text: INAUSPICIOUS_OMENS[idx % INAUSPICIOUS_OMENS.length] };
+  }
+  return { omen: null };
+}
+
+function applyOmenToFavor(base: number, omen: BirthOmen | null, cfg: BirthOmenConfig): number {
+  if (omen === "auspicious") return clampFavor(base + cfg.auspiciousFavorDelta);
+  if (omen === "inauspicious") return clampFavor(base + cfg.inauspiciousFavorDelta);
+  return clampFavor(base);
+}
+
 export function resolveBirth(input: BirthInput): BirthVerdict {
   const { rngSeed, now, carrier, fatherId, transferredAtMonth, bearerIsFenghou } = input;
   const bm = monthOrdinal(now);
+  const twinsConfig = input.cfg.twins ?? DEFAULT_TWINS;
+  const omenConfig = input.cfg.birthOmen ?? DEFAULT_BIRTH_OMEN;
 
-  const sex: HeirSex = gestationRoll(`sex:${rngSeed}:${bm}:${carrier}`) % 2 === 0 ? "daughter" : "son";
-  const legitimate = bearerIsFenghou || carrier === "sovereign";
+  // Twin type determination (before individual sex rolls)
+  const twinType = rollTwinType(rngSeed, bm, carrier, twinsConfig);
 
-  // 宠爱初值
-  let favor: number;
-  if (carrier === "sovereign") {
-    favor = input.cfg.childFavor.selfPregnancy;
+  // Sex assignment
+  let sex: HeirSex;
+  let twinSex: HeirSex | undefined;
+  if (twinType === "dragonPhoenix") {
+    sex = "son";
+    twinSex = "daughter";
+  } else if (twinType === "twoDaughters") {
+    sex = "daughter";
+    twinSex = "daughter";
+  } else if (twinType === "twoSons") {
+    sex = "son";
+    twinSex = "son";
   } else {
-    const stats = computeFavorStats(input.carrierRecord, now, input.thresholds);
-    favor = tierValue(stats.tier, input.cfg);
-    if (bearerIsFenghou) favor = Math.min(FENGHOU_CAP, favor + input.cfg.childFavor.fenghouBonus);
+    sex = gestationRoll(`sex:${rngSeed}:${bm}:${carrier}`) % 2 === 0 ? "daughter" : "son";
   }
 
-  // 难产裁决（自孕不判定）
+  const legitimate = bearerIsFenghou || carrier === "sovereign";
+
+  // Base favor
+  let baseFavor: number;
+  if (carrier === "sovereign") {
+    baseFavor = input.cfg.childFavor.selfPregnancy;
+  } else {
+    const stats = computeFavorStats(input.carrierRecord, now, input.thresholds);
+    baseFavor = tierValue(stats.tier, input.cfg);
+    if (bearerIsFenghou) baseFavor += input.cfg.childFavor.fenghouBonus;
+  }
+
+  // Dystocia (self-pregnancy never dystocia)
   let bearerOutcome: BearerOutcome = "safe";
   if (carrier !== "sovereign") {
     const chance = dystociaChance(transferredAtMonth ?? input.cfg.transferEarliestMonth, input.cfg);
@@ -69,5 +167,26 @@ export function resolveBirth(input: BirthInput): BirthVerdict {
     if (hit) bearerOutcome = pickOutcome(gestationRoll(`outcome:${rngSeed}:${bm}:${carrier}`), input.cfg);
   }
 
-  return { sex, fatherId, bearer: carrier, legitimate, favor, bearerOutcome };
+  // Omen rolls (one per child)
+  const { omen, text: omenText } = rollOmen(rngSeed, bm, carrier, 0, omenConfig);
+  const favor = applyOmenToFavor(baseFavor, omen, omenConfig);
+
+  if (twinSex !== undefined) {
+    const { omen: twinOmen, text: twinOmenText } = rollOmen(rngSeed, bm, carrier, 1, omenConfig);
+    const twinFavor = applyOmenToFavor(baseFavor, twinOmen, omenConfig);
+    return {
+      sex, twinSex, fatherId, bearer: carrier, legitimate,
+      favor, twinFavor,
+      bearerOutcome,
+      omen, ...(omenText ? { omenText } : {}),
+      twinOmen, ...(twinOmenText ? { twinOmenText } : {}),
+    };
+  }
+
+  return {
+    sex, fatherId, bearer: carrier, legitimate,
+    favor,
+    bearerOutcome,
+    omen, ...(omenText ? { omenText } : {}),
+  };
 }

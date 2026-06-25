@@ -102,7 +102,7 @@ import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
 import { buildAdoptionReaction } from "../store/adoption";
 import { CharacterReactionScreen } from "./screens/CharacterReactionScreen";
-import { buildBirth, dueGestation } from "../store/gestation";
+import { buildBirth, collectNewbornIds, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
 import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
@@ -231,7 +231,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [physicianConsortPickerOpen, setPhysicianConsortPickerOpen] = useState(false);
   const [physicianHeirPickerOpen, setPhysicianHeirPickerOpen] = useState(false);
   const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
-  const [namePetHeirId, setNamePetHeirId] = useState<string | null>(null);
+  const [namePetHeirIds, setNamePetHeirIds] = useState<string[]>([]);
+  const namePetHeirId = namePetHeirIds[0] ?? null;
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   // 国库与国情一致：浮层，任意画面可开，关闭后回到原处（不切 view）。
@@ -988,13 +989,14 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const commitBirth = () => {
     const plan = activeBirthPlan;
     if (!plan) return;
+    const beforeCount = store.getState().resources.bloodline.heirs.length;
     const applied = store.applyEffects(db, plan.effects);
     if (!applied.ok) return;
     doAutosave();
-    const heirsNow = store.getState().resources.bloodline.heirs;
-    const newborn = heirsNow[heirsNow.length - 1];
-    if (newborn && plan.bearerOutcome !== "child_dies" && plan.bearerOutcome !== "both") {
-      setNamePetHeirId(newborn.id);
+    const childSurvives = plan.bearerOutcome !== "child_dies" && plan.bearerOutcome !== "both";
+    if (childSurvives) {
+      const heirsNow = store.getState().resources.bloodline.heirs;
+      setNamePetHeirIds(collectNewbornIds(beforeCount, heirsNow));
     }
     if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && plan.bearer !== "shen_zhibai") {
       setReaction({
@@ -2432,15 +2434,18 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       )}
       {namePetHeirId && (
         <HeirNameModal
+          key={namePetHeirId}
           title="为新生皇嗣起个小名"
           hint="乳名一双字，亲昵相唤。"
           confirmLabel="起名"
           onRandom={() => randomPetName(store.getState().rngSeed, namePetHeirId)}
           onConfirm={(name) => {
             const id = namePetHeirId;
-            setNamePetHeirId(null);
+            if (!id) return;
             const r = store.applyEffects(db, [{ type: "heir_name", heirId: id, field: "pet", name }]);
-            if (r.ok) doAutosave();
+            if (!r.ok) return;
+            doAutosave();
+            setNamePetHeirIds((queue) => queue.slice(1));
           }}
         />
       )}
