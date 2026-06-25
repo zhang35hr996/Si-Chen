@@ -351,8 +351,8 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       const pub = ev.publicity;
       const pubOk =
         pun.publicity === "secret" ? pub.scope === "circle" && pub.circleIds.includes(pun.targetId)
-        : pun.publicity === "public" ? pub.scope === "realm"
-        : pub.scope === "palace";
+        : pun.publicity === "public" ? pub.scope === "realm" && pub.persistence === "institutional"
+        : pub.scope === "palace" && pub.persistence === "institutional";
       const okEvent =
         JSON.stringify(ev.occurredAt) === JSON.stringify(pun.imposedAt) &&
         !!part && part.role === role &&
