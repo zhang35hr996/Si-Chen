@@ -1,4 +1,5 @@
 import type {
+  EligibilityFailure,
   EligibilityTraceEvent,
   MemoryTraceEvent,
   QueueTraceEvent,
@@ -145,7 +146,7 @@ export class TraceCollector {
   }
 
   recordDomainEvent(event: TraceDomainEvent): void {
-    this._domainEvents.push(cloneDomainEvent(event));
+    this._domainEvents.push(cloneTraceDomainEvent(event));
   }
 
   recordMemoryEvent(event: Omit<MemoryTraceEvent, "kind">): void {
@@ -157,12 +158,7 @@ export class TraceCollector {
   }
 
   recordEligibilityEvent(event: Omit<EligibilityTraceEvent, "kind">): void {
-    this._domainEvents.push({
-      kind: "eligibility",
-      ...event,
-      failedBefore: [...event.failedBefore],
-      failedAfter: [...event.failedAfter],
-    });
+    this._domainEvents.push(cloneTraceDomainEvent({ kind: "eligibility", ...event }));
   }
 
   /** Record a rollback with phase attribution and counts of attempted work. */
@@ -203,9 +199,24 @@ export class TraceCollector {
   }
 }
 
-function cloneDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
+function cloneEligibilityFailure(failure: EligibilityFailure): EligibilityFailure {
+  return {
+    ...failure,
+    ...(failure.expected !== undefined ? { expected: structuredClone(failure.expected) } : {}),
+    ...(failure.actual !== undefined ? { actual: structuredClone(failure.actual) } : {}),
+  };
+}
+
+/** Deep-copies a TraceDomainEvent so mutations on the returned object or its nested structures
+ *  never affect the stored history entry. For eligibility events, `expected`/`actual` on each
+ *  EligibilityFailure are structuredClone'd because their type is `unknown`. */
+export function cloneTraceDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
   if (event.kind === "eligibility") {
-    return { ...event, failedBefore: [...event.failedBefore], failedAfter: [...event.failedAfter] };
+    return {
+      ...event,
+      failedBefore: event.failedBefore.map(cloneEligibilityFailure),
+      failedAfter: event.failedAfter.map(cloneEligibilityFailure),
+    };
   }
   return { ...event };
 }

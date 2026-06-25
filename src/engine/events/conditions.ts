@@ -97,27 +97,5 @@ export function explainCondition(condition: TriggerCondition, ctx: ConditionCont
 }
 
 export function evaluateCondition(condition: TriggerCondition, ctx: ConditionContext): boolean {
-  const { db, state } = ctx;
-  if ("all" in condition) return condition.all.every((c) => evaluateCondition(c, ctx));
-  if ("any" in condition) return condition.any.some((c) => evaluateCondition(c, ctx));
-  if ("not" in condition) return !evaluateCondition(condition.not, ctx);
-  if ("flagSet" in condition) return isFlagSet(state, condition.flagSet);
-  if ("monthAtLeast" in condition) return state.calendar.month >= condition.monthAtLeast;
-  if ("periodIs" in condition) return state.calendar.period === condition.periodIs;
-  if ("atLocation" in condition) return state.playerLocation === condition.atLocation;
-  if ("favorAtLeast" in condition) {
-    const { char, value } = condition.favorAtLeast;
-    return (state.standing[char]?.favor ?? 0) >= value;
-  }
-  if ("rankAtLeast" in condition) {
-    const { char, rank } = condition.rankAtLeast;
-    const held = state.standing[char] ? db.ranks[state.standing[char].rank] : undefined;
-    const target = db.ranks[rank];
-    return held !== undefined && target !== undefined && held.order >= target.order;
-  }
-  if ("hasMemoryTag" in condition) {
-    const { char, tag } = condition.hasMemoryTag;
-    return hasMemoryTag(state, char, tag);
-  }
-  return hasEventFired(state, condition.eventFired);
+  return explainCondition(condition, ctx).eligible;
 }
