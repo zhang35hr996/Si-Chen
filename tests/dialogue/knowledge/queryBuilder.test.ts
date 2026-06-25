@@ -3,7 +3,10 @@
  * whitespace normalization, length bounding, transcript selection.
  */
 import { describe, it, expect } from "vitest";
-import { buildDialogueKnowledgeQuery } from "../../../src/engine/dialogue/knowledge/queryBuilder";
+import {
+  buildDialogueKnowledgeQuery,
+  getLatestTargetUtterance,
+} from "../../../src/engine/dialogue/knowledge/queryBuilder";
 import type { DialogueRequest } from "../../../src/engine/dialogue/types";
 import type { GameTime } from "../../../src/engine/calendar/time";
 
@@ -161,5 +164,83 @@ describe("buildDialogueKnowledgeQuery", () => {
     expect(req.transcript.length).toBe(transcriptBefore);
     expect(req.sceneDirective).toBe("test");
     expect(req.topicTags).toEqual(["t1"]);
+  });
+});
+
+/**
+ * Suite B: getLatestTargetUtterance — direct unit tests for the helper used by
+ * the intent classifier to isolate the user's utterance from retrieval context.
+ */
+describe("getLatestTargetUtterance", () => {
+  it("returns undefined when transcript is empty", () => {
+    const req = fakeRequest({ transcript: [] });
+    expect(getLatestTargetUtterance(req)).toBeUndefined();
+  });
+
+  it("returns the text when there is exactly one target line", () => {
+    const req = fakeRequest({
+      transcript: [{ speaker: "player", text: "宫中礼仪如何" }],
+    });
+    expect(getLatestTargetUtterance(req)).toBe("宫中礼仪如何");
+  });
+
+  it("returns the latest target line when multiple exist", () => {
+    const req = fakeRequest({
+      transcript: [
+        { speaker: "player", text: "第一句" },
+        { speaker: "player", text: "第二句" },
+        { speaker: "player", text: "最后一句" },
+      ],
+    });
+    expect(getLatestTargetUtterance(req)).toBe("最后一句");
+  });
+
+  it("ignores speaker lines interleaved between target lines", () => {
+    const req = fakeRequest({
+      transcript: [
+        { speaker: "player", text: "早先那件事" },
+        { speaker: "shen_zhibai", text: "臣妾遵命" },
+        { speaker: "player", text: "谁现在怀孕了" },
+        { speaker: "shen_zhibai", text: "容臣妾想想" },
+      ],
+    });
+    // Latest TARGET line is the third entry, not the last overall
+    expect(getLatestTargetUtterance(req)).toBe("谁现在怀孕了");
+  });
+
+  it("uses targetId — works correctly when targetId is a non-player NPC", () => {
+    // Override the default fakeRequest targetId by constructing a modified request
+    const base = fakeRequest({
+      transcript: [
+        { speaker: "player", text: "player says something" },
+        { speaker: "npc_a", text: "npc 第一句" },
+        { speaker: "player", text: "player says more" },
+        { speaker: "npc_a", text: "npc 最后一句" },
+      ],
+    });
+    const req = { ...base, targetId: "npc_a" } as typeof base;
+    // With targetId="npc_a", should return npc's latest line, NOT player's
+    expect(getLatestTargetUtterance(req)).toBe("npc 最后一句");
+  });
+
+  it("speaker's later line does not shadow an earlier target line", () => {
+    const req = fakeRequest({
+      transcript: [
+        { speaker: "player", text: "谁最受宠" },
+        // Speaker responds after player — this must not be returned
+        { speaker: "shen_zhibai", text: "这是说话人的台词" },
+      ],
+    });
+    expect(getLatestTargetUtterance(req)).toBe("谁最受宠");
+  });
+
+  it("returns undefined when transcript has only non-target lines", () => {
+    const req = fakeRequest({
+      transcript: [
+        { speaker: "shen_zhibai", text: "臣妾问安" },
+        { speaker: "shen_zhibai", text: "请陛下明鉴" },
+      ],
+    });
+    expect(getLatestTargetUtterance(req)).toBeUndefined();
   });
 });
