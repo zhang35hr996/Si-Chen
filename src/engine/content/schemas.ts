@@ -239,10 +239,15 @@ export const eventEffectSchema = z.union([
   z.strictObject({
     type: z.literal("birth"),
     sex: z.enum(["daughter", "son"]),
+    /** Present when twins are born; sex of the second child. */
+    twinSex: z.enum(["daughter", "son"]).optional(),
     fatherId: z.union([idSchema, z.null()]),
     bearer: z.union([z.literal("sovereign"), idSchema]),
     legitimate: z.boolean(),
+    /** First child's favor (omen already applied). */
     favor: percent,
+    /** Second child's favor; present only when twinSex is set. */
+    twinFavor: percent.optional(),
     bearerOutcome: z.enum(["safe", "child_dies", "bearer_dies", "both"]),
     recoverUntilMonth: z.number().int().min(1).optional(),
   }),
@@ -848,6 +853,19 @@ export const worldSchema = z.strictObject({
           none: percent,
         }),
       }),
+      /** 双胎几率（缺省各 5%）。 */
+      twins: z.strictObject({
+        dragonPhoenixChance: percent,
+        twoDaughtersChance: percent,
+        twoSonsChance: percent,
+      }).optional(),
+      /** 生辰天象（吉兆/凶兆）几率与宠爱加成（缺省 10%/5%，±10）。 */
+      birthOmen: z.strictObject({
+        auspiciousChance: percent,
+        inauspiciousChance: percent,
+        auspiciousFavorDelta: z.number().int().min(0).max(100),
+        inauspiciousFavorDelta: z.number().int().min(-100).max(0),
+      }).optional(),
     })
     .optional(),
 });

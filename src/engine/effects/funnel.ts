@@ -679,27 +679,30 @@ export function applyEffects(
         const bl = next.resources.bloodline;
         const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";
         if (childSurvives) {
-          bl.heirs.push({
+          const makeHeir = (sex: typeof effect.sex, favor: number) => ({
             id: nextHeirId(bl.heirs.length),
-            sex: effect.sex,
+            sex,
             fatherId: effect.fatherId,
             bearer: effect.bearer,
             birthAt: now,
-            favor: effect.favor,
+            favor,
             legitimate: effect.legitimate,
             petName: "",
             education: { scholarship: 5, martial: 5, virtue: 5 },
-            // 出生默认值（scaffold：初始化并持久化，逻辑暂不读取）。
             health: 60,
             talent: 50,
             diligence: 50,
             ambition: 20,
             closeness: 50,
             support: 20,
-            faction: "none",
-            lifecycle: "alive",
-            healthStatus: "healthy",
+            faction: "none" as const,
+            lifecycle: "alive" as const,
+            healthStatus: "healthy" as const,
           });
+          bl.heirs.push(makeHeir(effect.sex, effect.favor));
+          if (effect.twinSex !== undefined && effect.twinFavor !== undefined) {
+            bl.heirs.push(makeHeir(effect.twinSex, effect.twinFavor));
+          }
         }
         if (effect.bearer !== "sovereign") {
           const st = next.standing[effect.bearer];

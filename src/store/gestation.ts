@@ -3,7 +3,7 @@
  * effects 走正常漏斗；lines 经 ReactionScreen 对话缝隙重放。
  */
 import { monthOrdinal, toGameTime } from "../engine/calendar/time";
-import { resolveBirth } from "../engine/characters/birth";
+import { resolveBirth, type BirthVerdict } from "../engine/characters/birth";
 import {
   DEFAULT_GESTATION,
   birthSlot,
@@ -107,16 +107,17 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
       ? recoverUntilMonth(monthOrdinal(now), safe, cfg)
       : undefined;
 
-  const childNoun = verdict.sex === "daughter" ? "皇子" : "皇郎";
-  const lines = buildBirthLines(db, state, gest.carrier, verdict.bearerOutcome, childNoun);
+  const lines = buildBirthLines(db, state, gest.carrier, verdict.bearerOutcome, verdict);
 
   const birthEffect: EventEffect = {
     type: "birth",
     sex: verdict.sex,
+    ...(verdict.twinSex !== undefined ? { twinSex: verdict.twinSex } : {}),
     fatherId: verdict.fatherId,
     bearer: verdict.bearer,
     legitimate: verdict.legitimate,
     favor: verdict.favor,
+    ...(verdict.twinFavor !== undefined ? { twinFavor: verdict.twinFavor } : {}),
     bearerOutcome: verdict.bearerOutcome,
     ...(recover !== undefined ? { recoverUntilMonth: recover } : {}),
   };
@@ -140,25 +141,66 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
   };
 }
 
+function twinNoun(sex: BirthVerdict["sex"], twinSex: BirthVerdict["twinSex"]): string {
+  if (twinSex === undefined) return sex === "daughter" ? "皇子" : "皇郎";
+  if (sex === "son" && twinSex === "daughter") return "龙凤双胎";
+  if (sex === "daughter") return "双生皇子";
+  return "双生皇郎";
+}
+
+function omenLine(omen: BirthVerdict["omen"] | undefined, text: string | undefined, childLabel: string): string | null {
+  if (!omen || !text) return null;
+  if (omen === "auspicious") return `${childLabel}降生之时，${text}，宫人皆以为天降吉兆，陛下对此子倍加垂怜。`;
+  return `${childLabel}降生之时，${text}，太史令进言此为凶兆，宫中上下不免暗自惶恐。`;
+}
+
 function buildBirthLines(
   db: ContentDB,
   state: GameState,
   carrier: string,
   outcome: BirthOutcome,
-  childNoun: string,
+  verdict: BirthVerdict,
 ): string[] {
+  const isTwin = verdict.twinSex !== undefined;
+  const noun = twinNoun(verdict.sex, verdict.twinSex);
+  const count = isTwin ? "两位" : "一位";
+
+  let main: string;
   if (carrier === "sovereign") {
-    return [`陛下临盆，诞下一位${childNoun}，母子均安，举国称庆。`];
+    main = `陛下临盆，诞下${count}${noun}，母子均安，举国称庆。`;
+  } else {
+    const name = displayName(db, state, carrier);
+    switch (outcome) {
+      case "safe":
+        main = `${name}临盆，顺利诞下${count}${noun}，父子均安。`;
+        break;
+      case "child_dies":
+        main = `${name}难产，胎死腹中，太医勉力保住了${name}性命。噩耗传来，宫中一片缄默。`;
+        break;
+      case "bearer_dies":
+        main = `${name}难产，拼死诞下${count}${noun}，自己却血崩而亡。宫人垂泪相送。`;
+        break;
+      case "both":
+        main = `${name}难产，一尸两命。太医跪地请罪，宫中举哀。`;
+        break;
+    }
   }
-  const name = displayName(db, state, carrier);
-  switch (outcome) {
-    case "safe":
-      return [`${name}临盆，顺利诞下一位${childNoun}，父子均安。`];
-    case "child_dies":
-      return [`${name}难产，胎死腹中，太医勉力保住了${name}性命。噩耗传来，宫中一片缄默。`];
-    case "bearer_dies":
-      return [`${name}难产，拼死诞下一位${childNoun}，自己却血崩而亡。宫人垂泪相送。`];
-    case "both":
-      return [`${name}难产，一尸两命。太医跪地请罪，宫中举哀。`];
+
+  const lines: string[] = [main];
+
+  // Omen lines (only when child survives)
+  const childSurvives = outcome === "safe" || outcome === "bearer_dies";
+  if (childSurvives) {
+    const firstLabel = isTwin ? (verdict.sex === "son" ? "长子" : "长女") : "此子";
+    const l1 = omenLine(verdict.omen, verdict.omenText, firstLabel);
+    if (l1) lines.push(l1);
+
+    if (isTwin) {
+      const secondLabel = verdict.twinSex === "son" ? "次子" : "次女";
+      const l2 = omenLine(verdict.twinOmen, verdict.twinOmenText, secondLabel);
+      if (l2) lines.push(l2);
+    }
   }
+
+  return lines;
 }

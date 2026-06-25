@@ -5,6 +5,26 @@
 import { fnv1a64Hex } from "../save/canonical";
 import { monthOrdinal, type GameTime } from "../calendar/time";
 
+export interface TwinsConfig {
+  /** % chance of one son + one daughter (龙凤胎). */
+  dragonPhoenixChance: number;
+  /** % chance of twin daughters (双生皇子). */
+  twoDaughtersChance: number;
+  /** % chance of twin sons (双生皇郎). */
+  twoSonsChance: number;
+}
+
+export interface BirthOmenConfig {
+  /** % chance each newborn has an auspicious omen (吉兆, +favorDelta). */
+  auspiciousChance: number;
+  /** % chance each newborn has an inauspicious omen (凶兆, +favorDelta). */
+  inauspiciousChance: number;
+  /** Favor delta for auspicious omen (positive). */
+  auspiciousFavorDelta: number;
+  /** Favor delta for inauspicious omen (negative). */
+  inauspiciousFavorDelta: number;
+}
+
 export interface GestationConfig {
   termMonths: number;
   transferEarliestMonth: number;
@@ -20,7 +40,22 @@ export interface GestationConfig {
     fenghouBonus: number;
     tierValues: { abundant: number; favored: number; small: number; fallen: number; none: number };
   };
+  twins?: TwinsConfig;
+  birthOmen?: BirthOmenConfig;
 }
+
+export const DEFAULT_TWINS: TwinsConfig = {
+  dragonPhoenixChance: 5,
+  twoDaughtersChance: 5,
+  twoSonsChance: 5,
+};
+
+export const DEFAULT_BIRTH_OMEN: BirthOmenConfig = {
+  auspiciousChance: 10,
+  inauspiciousChance: 5,
+  auspiciousFavorDelta: 10,
+  inauspiciousFavorDelta: -10,
+};
 
 export const DEFAULT_GESTATION: GestationConfig = {
   termMonths: 10,
@@ -33,6 +68,8 @@ export const DEFAULT_GESTATION: GestationConfig = {
     fenghouBonus: 30,
     tierValues: { abundant: 50, favored: 38, small: 25, fallen: 12, none: 0 },
   },
+  twins: DEFAULT_TWINS,
+  birthOmen: DEFAULT_BIRTH_OMEN,
 };
 
 const clampPct = (n: number): number => Math.min(100, Math.max(0, n));
