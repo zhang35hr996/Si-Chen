@@ -52,6 +52,7 @@ export interface KnowledgeHandlerResult {
 export async function handleKnowledgeRetrieve(
   rawInput: unknown,
   deps: KnowledgeHandlerDeps,
+  signal?: AbortSignal,
 ): Promise<KnowledgeHandlerResult> {
   const parsed = remoteKnowledgeRetrieveRequestSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -78,6 +79,7 @@ export async function handleKnowledgeRetrieve(
       rrfK: q.rrfK,
       keywordWeight: q.keywordWeight,
       vectorWeight: q.vectorWeight,
+      signal,
     });
   } catch (err) {
     // Log a safe classification — NEVER log err.message (may contain API keys, paths, stacks).

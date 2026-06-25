@@ -1,14 +1,11 @@
 /**
  * HTTP adapter for the knowledge retrieval handler.
  *
- * Mirrors the pattern used by server/llm/anthropicRelay.ts:
  *   - Reads body bytes, parses JSON, delegates to the handler
+ *   - Forwards a disconnect AbortSignal so embedding calls are cancelled on
+ *     client disconnect (PR6: T2 server-side cancellation)
  *   - Writes status + JSON body
  *   - Never exposes internal errors as plain text
- *
- * Note: This relay is a skeleton for PR5. It is not yet wired into
- * any running server. Connection to SQLite-backed KnowledgeHybridRetriever
- * is the composition root (host.ts), deferred to a follow-up PR.
  */
 import http from "node:http";
 import { handleKnowledgeRetrieve, type KnowledgeHandlerDeps } from "./handler";
@@ -24,25 +21,42 @@ export function createKnowledgeRequestHandler(
       return;
     }
 
-    let rawBody: Buffer;
-    try {
-      rawBody = await readBody(req, MAX_BODY_BYTES);
-    } catch (err) {
-      const code = err instanceof Error && err.message === "too_large" ? 413 : 400;
-      writeJson(res, code, { error: "bad_request" });
-      return;
-    }
+    // Register disconnect listeners BEFORE reading the body — Node.js does not
+    // replay EventEmitter events, so a disconnect during upload would be missed
+    // if we waited until after readBody().
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    const onClose = () => { if (!res.writableEnded) controller.abort(); };
+    req.on("aborted", onAbort);
+    res.on("close", onClose);
 
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(rawBody.toString("utf-8"));
-    } catch {
-      writeJson(res, 400, { error: "invalid_json" });
-      return;
-    }
+      let rawBody: Buffer;
+      try {
+        rawBody = await readBody(req, MAX_BODY_BYTES);
+      } catch (err) {
+        const code = err instanceof Error && err.message === "too_large" ? 413 : 400;
+        writeJson(res, code, { error: "bad_request" });
+        return;
+      }
 
-    const result = await handleKnowledgeRetrieve(parsed, deps);
-    writeJson(res, result.status, result.body);
+      // Short-circuit if the client already disconnected during body read
+      if (controller.signal.aborted) return;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawBody.toString("utf-8"));
+      } catch {
+        writeJson(res, 400, { error: "invalid_json" });
+        return;
+      }
+
+      const result = await handleKnowledgeRetrieve(parsed, deps, controller.signal);
+      writeJson(res, result.status, result.body);
+    } finally {
+      req.off("aborted", onAbort);
+      res.off("close", onClose);
+    }
   };
 }
 
