@@ -13,13 +13,13 @@ import {
   getHighVacancyPosts,
   getOfficialsByStatus,
   getPostOccupancy,
-  getVacantPosts,
   getVacantSeatCount,
   hasPendingRetirement,
 } from "../../engine/officials/selectors";
+import { getLatestAnnualReview } from "../../engine/officials/annualReview";
 import { OfficialDetail } from "./OfficialDetail";
 import { officialPostView } from "./postDisplay";
-import { DEPARTMENT_LABEL, OFFICIAL_STATUS_LABEL } from "./labels";
+import { DEPARTMENT_LABEL, OFFICIAL_STATUS_LABEL, PERSONNEL_CHANGE_LABEL } from "./labels";
 
 export interface OfficialsScreenProps {
   db: ContentDB;
@@ -39,7 +39,7 @@ const DEPARTMENT_ORDER: OfficialDepartment[] = [
 
 export function OfficialsScreen({ db, store, onBack, onCommitted }: OfficialsScreenProps) {
   const state = useGameState(store);
-  const [tab, setTab] = useState<"roster" | "posts">("roster");
+  const [tab, setTab] = useState<"roster" | "posts" | "review">("roster");
   const [statusFilter, setStatusFilter] = useState<OfficialStatus>("active");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,14 +68,11 @@ export function OfficialsScreen({ db, store, onBack, onCommitted }: OfficialsScr
       <div className="officials-screen">
         <OfficialDetail db={db} state={state} officialId={selected.id} onBack={() => { setSelectedId(null); setNotice(null); }} />
         <OfficialActions
-          db={db}
           state={state}
           official={selected}
-          onDismiss={() => run("罢免", () => store.dismissOfficial(selected.id))}
           onRestore={() => run("起复", () => store.restoreOfficial(selected.id))}
           onApprove={() => run("准告老", () => store.approveRetirement(selected.id))}
           onRetain={() => run("挽留", () => store.retainRetirement(selected.id))}
-          onAssign={(postId) => run(postId ? "调任" : "卸任", () => store.assignOfficialPost(db, selected.id, postId))}
         />
         {notice && <p className="officials-screen__notice" role="status">{notice}</p>}
       </div>
@@ -99,15 +96,18 @@ export function OfficialsScreen({ db, store, onBack, onCommitted }: OfficialsScr
         </div>
       )}
 
-      <nav className="officials-screen__tabs" aria-label="名册/官位表">
+      <nav className="officials-screen__tabs" aria-label="名册/官位表/人事简报">
         <button type="button" className={tab === "roster" ? "is-active" : ""} onClick={() => setTab("roster")}>名册</button>
         <button type="button" className={tab === "posts" ? "is-active" : ""} onClick={() => setTab("posts")}>官位表</button>
+        <button type="button" className={tab === "review" ? "is-active" : ""} onClick={() => setTab("review")}>人事简报</button>
       </nav>
 
       {tab === "roster" ? (
         <RosterTab db={db} state={state} statusFilter={statusFilter} onFilter={setStatusFilter} onSelect={setSelectedId} nameOf={nameOf} />
-      ) : (
+      ) : tab === "posts" ? (
         <PostTable db={db} state={state} />
+      ) : (
+        <ReviewTab db={db} state={state} />
       )}
       {notice && <p className="officials-screen__notice" role="status">{notice}</p>}
     </div>
@@ -213,29 +213,32 @@ function PostTable({ db, state }: { db: ContentDB; state: ReturnType<typeof useG
 }
 
 // ── 详情操作（按状态/未决告老条件渲染按钮 + 调任空缺选择） ────────────────
+/**
+ * 详情操作（PR3C-2 起，名册不再开放玩家自由调任/免职——常规人事由吏部考课自动进行；皇帝亲发的惩戒性
+ * 处置走事件/PUNISH，见 PR3C-3）。此处仅保留对官员自发请求的裁决：准告老/挽留，以及起复。
+ */
 function OfficialActions({
-  db, state, official, onDismiss, onRestore, onApprove, onRetain, onAssign,
+  state, official, onRestore, onApprove, onRetain,
 }: {
-  db: ContentDB;
   state: ReturnType<typeof useGameState>;
   official: Official;
-  onDismiss: () => void;
   onRestore: () => void;
   onApprove: () => void;
   onRetain: () => void;
-  onAssign: (postId: string | null) => boolean;
 }) {
-  const [transferOpen, setTransferOpen] = useState(false);
   const pendingRetire = hasPendingRetirement(state, official.id);
-  // 排除官员当前官职：多席官职对其本人是「同职」，授任会幂等假成功。
-  const vacant = getVacantPosts(state, db).filter((v) => v.postId !== official.postId);
 
   if (official.status === "dead") {
-    return <section className="officials-screen__actions"><p className="officials-screen__empty">已故，无可任免。</p></section>;
+    return <section className="officials-screen__actions"><p className="officials-screen__empty">已故，无可裁决。</p></section>;
+  }
+
+  const canRestore = official.status === "retired" || official.status === "imprisoned" || official.status === "exiled";
+  if (!pendingRetire && !canRestore) {
+    return <section className="officials-screen__actions"><p className="officials-screen__empty">常规迁转由吏部考课自动进行，无需在此处置。</p></section>;
   }
 
   return (
-    <section className="officials-screen__actions" aria-label="任免操作">
+    <section className="officials-screen__actions" aria-label="裁决">
       {pendingRetire && (
         <div className="officials-screen__action-row">
           <span className="officials-screen__action-hint">告老请辞</span>
@@ -243,39 +246,37 @@ function OfficialActions({
           <button type="button" onClick={onRetain}>挽留一年</button>
         </div>
       )}
-      {official.status === "active" && (
-        <div className="officials-screen__action-row">
-          {official.postId !== null && <button type="button" onClick={onDismiss}>免职</button>}
-          <button type="button" onClick={() => setTransferOpen((v) => !v)}>{official.postId ? "调任" : "任命"}</button>
-        </div>
-      )}
-      {(official.status === "retired" || official.status === "imprisoned" || official.status === "exiled") && (
+      {canRestore && (
         <div className="officials-screen__action-row">
           <button type="button" onClick={onRestore}>起复（恢复可任用）</button>
         </div>
       )}
-      {transferOpen && official.status === "active" && (
-        <div className="officials-screen__transfer">
-          <p className="officials-screen__action-hint">选空缺官职授任：</p>
-          {vacant.length === 0 ? (
-            <p className="officials-screen__empty">当前无空缺官职。</p>
-          ) : (
-            <ul className="officials-screen__list">
-              {vacant.map((v) => {
-                const p = db.officialPosts[v.postId]!;
-                return (
-                  <li key={v.postId}>
-                    <button type="button" className="officials-screen__row" onClick={() => { if (onAssign(v.postId)) setTransferOpen(false); }}>
-                      <span className="officials-screen__row-name">{p.grade}·{p.name}</span>
-                      <span className="officials-screen__row-meta">空 {v.vacantSeatCount}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      )}
     </section>
+  );
+}
+
+// ── 人事简报（吏部考课只读结果） ─────────────────────────────────────────────
+function ReviewTab({ db, state }: { db: ContentDB; state: ReturnType<typeof useGameState> }) {
+  const review = getLatestAnnualReview(state);
+  if (!review) return <p className="officials-screen__empty">尚无吏部考课简报。</p>;
+  const postLabel = (postId: string | null) => (postId ? `${db.officialPosts[postId]?.grade ?? ""}·${db.officialPosts[postId]?.name ?? postId}` : "无职");
+  const nameForChange = (id: string) => { const o = state.officials[id]; return o ? `${o.surname}${o.givenName}` : id; };
+  return (
+    <div className="officials-screen__review">
+      <h4 className="officials-screen__group-title">{review.year} 年吏部考课</h4>
+      {review.changes.length === 0 ? (
+        <p className="officials-screen__empty">本年无人事变动。</p>
+      ) : (
+        <ul className="officials-screen__list">
+          {review.changes.map((c, i) => (
+            <li key={i} className="officials-screen__review-row">
+              <span className="officials-screen__row-name">{nameForChange(c.officialId)}</span>
+              <span className="officials-screen__row-post">{PERSONNEL_CHANGE_LABEL[c.kind]}</span>
+              <span className="officials-screen__row-meta">{postLabel(c.fromPostId)} → {postLabel(c.toPostId)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

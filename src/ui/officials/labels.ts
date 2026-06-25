@@ -17,6 +17,14 @@ export const APTITUDE_LABEL: Record<"governance" | "scholarship" | "military" | 
   integrity: "清正",
 };
 
+/** 吏部考课人事变动文案（PR3C-2）。 */
+export const PERSONNEL_CHANGE_LABEL: Record<"promotion" | "demotion" | "fill" | "appointment", string> = {
+  promotion: "升迁",
+  demotion: "降级",
+  fill: "补缺",
+  appointment: "授官",
+};
+
 export const DEPARTMENT_LABEL: Record<OfficialDepartment, string> = {
   chancellery: "政事堂",
   personnel: "吏部",
