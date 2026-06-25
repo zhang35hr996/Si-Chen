@@ -152,14 +152,16 @@ export function resolvePersonnelDecision(
       break;
     }
     case "family_implication": {
+      // 注意：**不**把来源侍君案件 caseId 传给官员 punishment——侍君案件 subjectIds 不含其族官员，
+      // justice 会拒绝（subject 不匹配）。官员惩戒为独立记录，叙事溯源由 decision.sourcePunishmentId 保留。
       if (resolution === "demote") {
         if (!d.recommendedPostId) return err(stateError("DECISION_BAD_TARGET", "牵连降职裁断缺目标官职", { context: { decisionId } }));
-        const r = punishOfficial(cur, db, { officialId: d.officialId, kind: "official_demotion", toPostId: d.recommendedPostId, publicity: "palace", ...(d.caseId ? { caseId: d.caseId } : {}) }, at);
+        const r = punishOfficial(cur, db, { officialId: d.officialId, kind: "official_demotion", toPostId: d.recommendedPostId, publicity: "palace" }, at);
         if (!r.ok) return err(r.error);
         cur = r.value.state;
         punishmentId = r.value.punishmentId;
       } else if (resolution === "dismiss") {
-        const r = punishOfficial(cur, db, { officialId: d.officialId, kind: "official_dismissal", publicity: "palace", ...(d.caseId ? { caseId: d.caseId } : {}) }, at);
+        const r = punishOfficial(cur, db, { officialId: d.officialId, kind: "official_dismissal", publicity: "palace" }, at);
         if (!r.ok) return err(r.error);
         cur = r.value.state;
         punishmentId = r.value.punishmentId;

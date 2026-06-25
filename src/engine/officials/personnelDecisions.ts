@@ -35,13 +35,19 @@ const MEMORIAL_DISMISSAL_UNDERPERFORM_YEARS = 2;
 const gradeOf = (db: ContentDB, postId: string | null): number =>
   postId ? (db.officialPosts[postId]?.gradeOrder ?? 0) : 0;
 
-/** "pdec_000001" 单调。决策永不删除（resolved 留存），故 count+1 无冲突。 */
+/** "pdec_000001" 单调。 */
 export function personnelDecisionId(seq: number): string {
   return `pdec_${String(seq).padStart(6, "0")}`;
 }
 
+/** 扫描现有合法 id 的最大序号 +1（忽略异常 key，杜绝稀疏键导致覆盖；与 CourtEvent id 同策略）。 */
 function nextDecisionId(state: GameState): string {
-  return personnelDecisionId(Object.keys(state.personnelDecisions).length + 1);
+  let maxSeq = 0;
+  for (const id of Object.keys(state.personnelDecisions)) {
+    const m = /^pdec_(\d{6})$/.exec(id);
+    if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
+  }
+  return personnelDecisionId(maxSeq + 1);
 }
 
 /** 同一 sourceId 全局至多一条（无论 pending/resolved）。 */
@@ -266,6 +272,40 @@ export function generateMemorial(
     },
     at,
   );
+}
+
+/** 年度生成上限（确定性、有界；避免每年刷一堆奏折/请托）。 */
+const ANNUAL_MEMORIAL_CAP = 3;
+const ANNUAL_PETITION_CAP = 2;
+const MEMORIAL_KINDS: readonly MemorialKind[] = ["memorial_promotion", "memorial_demotion", "memorial_dismissal"];
+
+/**
+ * 年度结算的确定性人事生成（紫宸殿人事奏折 + 侍君请托）：在吏部考课之后一次性生成有界条目。无概率，
+ * 按 officialId / consortId 稳定遍历；同一官员每年至多一条奏折、同源去重；待决请托不重复。家族牵连不在此处
+ * （由侍君获罪即时触发）。该函数应在每年只调一次（与 hasReviewedYear 同一守卫块内）。
+ */
+export function generateAnnualPersonnelEvents(state: GameState, db: ContentDB, at: GameTime): GameState {
+  let cur = state;
+
+  // 人事奏折：按 id 遍历在任官员，每人至多一条（荐升 > 请降 > 请免 优先），总数有界。
+  let memCount = 0;
+  for (const o of getActiveSeatedOfficials(state, db).slice().sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (memCount >= ANNUAL_MEMORIAL_CAP) break;
+    for (const kind of MEMORIAL_KINDS) {
+      const r = generateMemorial(cur, db, o.id, kind, at);
+      if (r) { cur = r.state; memCount += 1; break; }
+    }
+  }
+
+  // 侍君请托：按 id 遍历在宫侍君，确定性生成有界条目（资格/去重在生成器内）。
+  let petCount = 0;
+  for (const consortId of Object.keys(state.standing).filter((id) => !state.officials[id]).sort()) {
+    if (petCount >= ANNUAL_PETITION_CAP) break;
+    const r = generateConsortPetition(cur, db, consortId, at);
+    if (r) { cur = r.state; petCount += 1; }
+  }
+
+  return cur;
 }
 
 /** 待裁人事决策（按 id 稳定排序，UI 展示用）。 */

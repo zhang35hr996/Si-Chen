@@ -126,6 +126,29 @@ describe("family implication resolution — PUNISH branch", () => {
     expect(validateOfficialWorld(st, db)).toEqual([]);
   });
 
+  it("regression: a source punishment carrying a caseId still lets demote AND dismiss succeed", () => {
+    // 来源侍君案件 subjectIds 只含侍君，不含其族官员。decision 继承 caseId 作叙事溯源，但 resolver
+    // 绝不把它传给 punishOfficial（否则 justice 因 subject 不匹配拒绝）。
+    const caseRec = {
+      id: "case_000001", status: "open" as const, subjectIds: [LU_CONSORT], openedAt: NOW, openedBy: "player",
+      source: { kind: "imperial" as const }, publicity: "palace" as const, charges: [], evidence: [], confessions: [], punishmentIds: ["pun_000001"],
+    };
+    const seed = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "severe");
+    const punWithCase: PunishmentRecord = { ...seed.justice.punishments.pun_000001!, caseId: "case_000001" };
+    const withCase = { ...seed, justice: { ...seed.justice, cases: { case_000001: caseRec }, punishments: { pun_000001: punWithCase }, nextSeq: { ...seed.justice.nextSeq, case: 2 } } };
+    const g = generateFamilyImplication(withCase, db, "pun_000001", NOW)!;
+    expect(g.decision.caseId).toBe("case_000001"); // 决策保留溯源
+
+    for (const resolution of ["demote", "dismiss"] as const) {
+      const r = resolvePersonnelDecision(g.state, db, g.decision.id, resolution, NOW);
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      const newPun = r.value.state.justice.punishments[r.value.punishmentId!]!;
+      expect(newPun.caseId).toBeUndefined(); // 官员惩戒不绑定侍君案件
+      expect(validateOfficialWorld(r.value.state, db)).toEqual([]);
+    }
+  });
+
   it("punished consort forms a private trauma memory linked to the new punishment", () => {
     const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "severe");
     const g = generateFamilyImplication(s, db, "pun_000001", at(3))!;

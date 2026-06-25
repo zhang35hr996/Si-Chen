@@ -524,6 +524,34 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     }
     if (d.caseId !== undefined && !state.justice.cases[d.caseId]) e("PDEC_BAD_CASE", `人事决策「${d.id}」caseId「${d.caseId}」不存在`, { id: d.id });
 
+    // ── kind-specific 关联不变量（杜绝「各 ID 单独存在但语义错配」的损坏决策） ──
+    const consortFamily = d.consortId !== undefined ? state.standing[d.consortId]?.birthFamilyId : undefined;
+    if (d.kind === "consort_petition_promotion") {
+      if (d.consortId === undefined) e("PDEC_MISSING_FIELD", `请托决策「${d.id}」缺 consortId`, { id: d.id });
+      if (d.familyId === undefined) e("PDEC_MISSING_FIELD", `请托决策「${d.id}」缺 familyId`, { id: d.id });
+      if (d.recommendedPostId === undefined) e("PDEC_MISSING_FIELD", `请托决策「${d.id}」缺 recommendedPostId`, { id: d.id });
+      if (d.consortId !== undefined && consortFamily !== d.familyId) {
+        e("PDEC_CONSORT_FAMILY_MISMATCH", `请托决策「${d.id}」侍君母族「${consortFamily ?? "无"}」≠ familyId「${d.familyId ?? "无"}」`, { id: d.id });
+      }
+    }
+    if (d.kind === "family_implication") {
+      if (d.consortId === undefined) e("PDEC_MISSING_FIELD", `牵连决策「${d.id}」缺 consortId`, { id: d.id });
+      if (d.consortId !== undefined && consortFamily !== d.familyId) {
+        e("PDEC_CONSORT_FAMILY_MISMATCH", `牵连决策「${d.id}」侍君母族「${consortFamily ?? "无"}」≠ familyId「${d.familyId ?? "无"}」`, { id: d.id });
+      }
+      const sp = d.sourcePunishmentId !== undefined ? punishments[d.sourcePunishmentId] : undefined;
+      if (sp) {
+        if (sp.targetId !== d.consortId) e("PDEC_SOURCE_TARGET_MISMATCH", `牵连决策「${d.id}」来源 punishment 目标「${sp.targetId}」≠ consortId「${d.consortId ?? "无"}」`, { id: d.id });
+        if (sp.severity !== "severe" && sp.severity !== "terminal") e("PDEC_SOURCE_NOT_SEVERE", `牵连决策「${d.id}」来源 punishment 严重度「${sp.severity}」不足（须 severe/terminal）`, { id: d.id });
+      }
+    }
+    if ((d.kind === "memorial_promotion" || d.kind === "memorial_demotion") && d.recommendedPostId === undefined) {
+      e("PDEC_MISSING_FIELD", `奏折「${d.id}」(${d.kind}) 缺 recommendedPostId`, { id: d.id });
+    }
+    if (d.kind === "memorial_dismissal" && d.recommendedPostId !== undefined) {
+      e("PDEC_DISMISSAL_WITH_TARGET", `请免奏折「${d.id}」不应带 recommendedPostId`, { id: d.id });
+    }
+
     // pending/resolved 字段一致性 + 裁断合法 + resolvedAt ≥ createdAt。
     if (d.status === "pending") {
       if (d.resolvedAt !== undefined || d.resolution !== undefined) e("PDEC_PENDING_WITH_RESOLUTION", `待裁人事决策「${d.id}」不应带 resolvedAt/resolution`, { id: d.id });

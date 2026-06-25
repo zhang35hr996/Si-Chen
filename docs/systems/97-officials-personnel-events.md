@@ -50,6 +50,15 @@ PR3C-3 的第二刀：把官员升降落到**皇帝亲裁的人事事件**上。
 
 亲缘一律凭 `kinship` 边，绝不靠姓名推断。
 
+### 生产触发 seam（玩法可达）
+- **侍君请托 + 人事奏折**：在统一日历结算（`settleCalendarAdvance`）的吏部考课之后，由
+  `generateAnnualPersonnelEvents` 一次性确定性生成有界条目（同 `hasReviewedYear` 守卫，每年仅一次；
+  每名在任官员每年至多一条奏折，按 id 稳定遍历，上限 `ANNUAL_MEMORIAL_CAP` / `ANNUAL_PETITION_CAP`）。
+- **获罪牵连家族**：侍君获 severe/terminal 惩罚（幽禁/赐死/冷宫）时，由对应 store 命令经
+  `commitPlannedTransaction` 的 `postCommit` 变换**即时**生成牵连待裁决策——折进同一次提交与 emit
+  （不额外 emit）；生成器对不合格惩罚为纯 no-op。
+- 三类决策均不在 React render 期生成；紫宸殿 badge 随订阅态自然出现。
+
 ## 四、原子裁断（`engine/officials/personnelDecisionResolve.ts`）
 
 `resolvePersonnelDecision(state, db, decisionId, resolution, at)` 一次原子完成：

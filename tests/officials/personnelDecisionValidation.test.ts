@@ -137,3 +137,70 @@ describe("personnel decision validator — corruption", () => {
     expect(codes(withDecisions(s, d))).toContain("PDEC_RESOLVED_BEFORE_CREATED");
   });
 });
+
+describe("personnel decision validator — kind-specific invariants", () => {
+  it("petition missing recommendedPostId", () => {
+    const s = createNewGameState(db, 1);
+    const d = { ...basePetition(s) };
+    delete (d as { recommendedPostId?: string }).recommendedPostId;
+    expect(codes(withDecisions(s, d))).toContain("PDEC_MISSING_FIELD");
+  });
+
+  it("petition consort birthFamily ≠ decision.familyId", () => {
+    const s = createNewGameState(db, 1);
+    // consort shen_zhibai 母族 fam_shen_main，但 decision 用 fam_lu_main 官员/家族 → 侍君母族不匹配。
+    const d: PersonnelDecision = { ...basePetition(s), consortId: "shen_zhibai" };
+    expect(codes(withDecisions(s, d))).toContain("PDEC_CONSORT_FAMILY_MISMATCH");
+  });
+
+  it("memorial_promotion missing recommendedPostId", () => {
+    const s = createNewGameState(db, 1);
+    const off = s.officials[LU_OFFICIAL]!;
+    const d: PersonnelDecision = {
+      id: "pdec_000001", kind: "memorial_promotion", status: "pending", createdAt: at(3),
+      sourceId: "memorial:memorial_promotion:official_fam_lu_main:3", officialId: LU_OFFICIAL,
+      familyId: off.familyId, fromPostId: off.postId!,
+    };
+    expect(codes(withDecisions(s, d))).toContain("PDEC_MISSING_FIELD");
+  });
+
+  it("memorial_dismissal must not carry recommendedPostId", () => {
+    const s = createNewGameState(db, 1);
+    const off = s.officials[LU_OFFICIAL]!;
+    const d: PersonnelDecision = {
+      id: "pdec_000001", kind: "memorial_dismissal", status: "pending", createdAt: at(3),
+      sourceId: "memorial:memorial_dismissal:official_fam_lu_main:3", officialId: LU_OFFICIAL,
+      familyId: off.familyId, fromPostId: off.postId!, recommendedPostId: "zhixian",
+    };
+    expect(codes(withDecisions(s, d))).toContain("PDEC_DISMISSAL_WITH_TARGET");
+  });
+
+  it("family implication source punishment targets a different consort", () => {
+    const s = withConsortPun(createNewGameState(db, 1)); // pun_000001 targets LU_CONSORT
+    const off = s.officials[LU_OFFICIAL]!;
+    const d: PersonnelDecision = {
+      id: "pdec_000001", kind: "family_implication", status: "pending", createdAt: at(3),
+      sourceId: "implication:pun_000001", officialId: LU_OFFICIAL, consortId: "shen_zhibai",
+      familyId: off.familyId, fromPostId: off.postId!, sourcePunishmentId: "pun_000001",
+    };
+    expect(codes(withDecisions(s, d))).toContain("PDEC_SOURCE_TARGET_MISMATCH");
+  });
+
+  it("family implication source punishment not severe enough", () => {
+    const s = createNewGameState(db, 1);
+    // 注入 moderate 来源 punishment。
+    const moderate: PunishmentRecord = {
+      id: "pun_000001", targetId: LU_CONSORT, targetKind: "consort", actorId: "player", kind: "rank_demotion",
+      severity: "moderate", imposedAt: at(2), publicity: "palace", lifecycle: { status: "active" },
+      details: { fromRankId: "rank_a", toRankId: "rank_b" },
+    };
+    const s2 = { ...s, justice: { ...s.justice, punishments: { pun_000001: moderate } } };
+    const off = s2.officials[LU_OFFICIAL]!;
+    const d: PersonnelDecision = {
+      id: "pdec_000001", kind: "family_implication", status: "pending", createdAt: at(3),
+      sourceId: "implication:pun_000001", officialId: LU_OFFICIAL, consortId: LU_CONSORT,
+      familyId: off.familyId, fromPostId: off.postId!, sourcePunishmentId: "pun_000001",
+    };
+    expect(codes(withDecisions(s2, d))).toContain("PDEC_SOURCE_NOT_SEVERE");
+  });
+});
