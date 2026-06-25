@@ -180,7 +180,7 @@ describe("planHaremAdministrationTransfer – punitive (healthy empress→other)
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.punishmentId).toMatch(/^pun:\d+:\d+$/);
+    expect(result.value.punishmentId).toMatch(/^pun_\d{6}$/);
     // Chronicle should contain the punishmentId
     const chronicle = store.getState().chronicle;
     const entry = chronicle.find((e) => (e.payload as { punishmentId?: string }).punishmentId === result.value.punishmentId);

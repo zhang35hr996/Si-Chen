@@ -13,6 +13,7 @@ import {
 
 import type { GameState } from "../state/types";
 import { validateJusticeState } from "../justice/validation";
+import { validateJusticeLinks } from "../justice/crossLink";
 
 const nonEmpty = z.string().min(1);
 
@@ -179,6 +180,7 @@ const statusEffectSchema = z.strictObject({
   liftedAt: gameTimeSchema.optional(),
   liftedTurn: z.number().int().min(0).optional(),
   liftReason: z.enum(["lifted_by_emperor", "term_expired"]).optional(),
+  sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
 });
 
 // ── Justice state schemas ─────────────────────────────────────────────────────
@@ -532,6 +534,11 @@ export const gameStateSchema = z.strictObject({
   ]).default({ mode: "empress" }),
   justice: justiceStateSchema,
   rngSeed: z.number(),
+}).superRefine((data, ctx) => {
+  const errs = validateJusticeLinks(data as Parameters<typeof validateJusticeLinks>[0]);
+  for (const e of errs) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });
+  }
 }) satisfies z.ZodType<GameState>;
 
 /** Envelope checked BEFORE the state payload (checksum gates the inside). */

@@ -113,6 +113,8 @@ const memoryDraftBase = z.strictObject({
   unresolved: z.boolean().default(false),
   emotions: memoryEmotionsSchema.default({}),
   sourceEventId: z.string().regex(/^evt_\d{6}$/).optional(), // 格式 evt_NNNNNN（content 层不能 import 上层 courtEventIdSchema，内联同正则）
+  sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
+  sourceCaseId: z.string().regex(/^case_\d{6}$/).optional(),
 });
 
 export const initialMemoryDraftSchema = memoryDraftBase.extend({
@@ -303,6 +305,7 @@ export const eventEffectSchema = z.union([
     endTurnExclusive: z.union([z.number().int().min(0), z.null()]),
     imposedAt: gameTimeShape,
     sourceLocation: idSchema.optional(),
+    sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
   }),
   z.strictObject({
     type: z.literal("lift_confinement"),
