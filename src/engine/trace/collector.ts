@@ -1,4 +1,5 @@
 import type {
+  EligibilityFailure,
   EligibilityTraceEvent,
   MemoryTraceEvent,
   QueueTraceEvent,
@@ -157,12 +158,7 @@ export class TraceCollector {
   }
 
   recordEligibilityEvent(event: Omit<EligibilityTraceEvent, "kind">): void {
-    this._domainEvents.push({
-      kind: "eligibility",
-      ...event,
-      failedBefore: event.failedBefore.map((f) => ({ ...f })),
-      failedAfter: event.failedAfter.map((f) => ({ ...f })),
-    });
+    this._domainEvents.push(cloneTraceDomainEvent({ kind: "eligibility", ...event }));
   }
 
   /** Record a rollback with phase attribution and counts of attempted work. */
@@ -203,14 +199,23 @@ export class TraceCollector {
   }
 }
 
-/** Deep-copies a TraceDomainEvent so mutations on the returned object or its nested arrays
- *  never affect the stored history entry. */
+function cloneEligibilityFailure(failure: EligibilityFailure): EligibilityFailure {
+  return {
+    ...failure,
+    ...(failure.expected !== undefined ? { expected: structuredClone(failure.expected) } : {}),
+    ...(failure.actual !== undefined ? { actual: structuredClone(failure.actual) } : {}),
+  };
+}
+
+/** Deep-copies a TraceDomainEvent so mutations on the returned object or its nested structures
+ *  never affect the stored history entry. For eligibility events, `expected`/`actual` on each
+ *  EligibilityFailure are structuredClone'd because their type is `unknown`. */
 export function cloneTraceDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
   if (event.kind === "eligibility") {
     return {
       ...event,
-      failedBefore: event.failedBefore.map((f) => ({ ...f })),
-      failedAfter: event.failedAfter.map((f) => ({ ...f })),
+      failedBefore: event.failedBefore.map(cloneEligibilityFailure),
+      failedAfter: event.failedAfter.map(cloneEligibilityFailure),
     };
   }
   return { ...event };

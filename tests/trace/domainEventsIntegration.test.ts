@@ -445,22 +445,24 @@ describe("domain event immutability", () => {
     expect(snapshot.failedBefore[0]?.conditionType).toBe("flagSet");
   });
 
-  it("mutating a recorded eligibility failure object does not affect the stored snapshot", () => {
+  it("mutating a nested object inside a failure's expected field does not affect the stored snapshot", () => {
     const collector = new TraceCollector();
-    const failure = { conditionType: "flagSet", expected: { key: "before" } as unknown };
+    // expected holds a nested object — the real risk case for unknown fields
+    const expected = { nested: { key: "before" } };
     collector.recordEligibilityEvent({
       eventId: "test_event",
       transition: "became_ineligible",
-      failedBefore: [failure],
+      failedBefore: [{ conditionType: "custom", expected }],
       failedAfter: [],
       phase: "boundary_diff",
     });
-    // Mutate the original failure object's reference field
-    (failure as Record<string, unknown>)["expected"] = { key: "mutated" };
+    // Mutate the nested object in-place (not replace the reference)
+    expected.nested.key = "mutated";
     const stored = collector.getDomainEvents().find((e): e is EligibilityTraceEvent => e.kind === "eligibility")!;
-    // The stored failure was shallow-copied, so primitive fields are safe.
-    // This verifies the spread copy defence at least guards scalar mutations.
-    expect(stored.failedBefore[0]?.conditionType).toBe("flagSet");
+    expect(stored.kind).toBe("eligibility");
+    if (stored.kind === "eligibility") {
+      expect(stored.failedBefore[0]?.expected).toEqual({ nested: { key: "before" } });
+    }
   });
 
   it("cloneTraceDomainEvent produces an independent eligibility snapshot", () => {
