@@ -46,6 +46,25 @@ describe("annual settlement seam — 人事奏折 + 侍君请托", () => {
     expect(store.getState().personnelDecisions[d.id]!.status).toBe("resolved");
   });
 
+  it("a sustained underperformer yields a memorial_dismissal in production (not zeroed away)", () => {
+    // 关键回归：考课自动降级会清零 underperformanceYears；请免须据简报 dismissalCandidateIds 生成，
+    // 而非读清零后的计数。tune WEN 连年不合格 + 低政绩（保持不合格，避免被 updateMerit 复位）。
+    const s = settleAnnualExamination(createNewGameState(db, 7), db, 1, { year: 1, month: 2, period: "early", dayIndex: 0 });
+    const WEN = "official_fam_wen_main";
+    const tuned = { ...s, officials: { ...s.officials, [WEN]: { ...s.officials[WEN]!, reviewState: { merit: 15, underperformanceYears: 2 } } } };
+    const store = new GameStore();
+    store.loadState({ ...tuned, calendar: { ...tuned.calendar, year: 1, month: 10, period: "late", dayIndex: dayIndexOf(1, 10, "late"), ap: 1 } });
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+
+    const review = store.getState().annualReviews.find((r) => r.year === 1)!;
+    expect(review.dismissalCandidateIds ?? []).toContain(WEN); // 简报记录了严重失职信号
+    const decisions = Object.values(store.getState().personnelDecisions);
+    const dismissal = decisions.find((d) => d.kind === "memorial_dismissal" && d.officialId === WEN);
+    expect(dismissal).toBeDefined(); // 请免奏折在真实生产路径可达
+    expect(dismissal!.recommendedPostId).toBeUndefined();
+    expect(validateOfficialWorld(store.getState(), db)).toEqual([]);
+  });
+
   it("is idempotent within the year (no duplicate generation on a second advance)", () => {
     const s = settleAnnualExamination(createNewGameState(db, 7), db, 1, { year: 1, month: 2, period: "early", dayIndex: 0 });
     const store = new GameStore();
@@ -83,6 +102,27 @@ describe("family-implication seam — 侍君获罪即时生成", () => {
     const r = store.applyImperialPunishmentWithConsequences(db, { type: "impose_confinement", targetId: LU_CONSORT, durationTurns: 6 }, {});
     expect(r.ok).toBe(true);
     expect(Object.values(store.getState().personnelDecisions).some((d) => d.kind === "family_implication")).toBe(false);
+  });
+
+  it("execution spawns implication; resolving it does NOT add memory/relationship to the dead consort", () => {
+    const store = new GameStore();
+    store.loadState(createNewGameState(db));
+    const r = store.applyImperialCommand(db, { type: "execute", targetId: LU_CONSORT });
+    expect(r.ok).toBe(true);
+    expect(store.getState().standing[LU_CONSORT]!.lifecycle).toBe("deceased");
+    const impl = Object.values(store.getState().personnelDecisions).find((d) => d.kind === "family_implication" && d.consortId === LU_CONSORT);
+    expect(impl).toBeDefined();
+
+    const memBefore = store.getState().memories[LU_CONSORT]!.entries.length;
+    const standingBefore = JSON.stringify(store.getState().standing[LU_CONSORT]);
+    const res = store.resolvePersonnelDecision(db, impl!.id, "dismiss");
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // 官员仍被免（PUNISH 生效），但死者关系/记忆冻结。
+    expect(store.getState().justice.punishments[res.value.punishmentId!]!.kind).toBe("official_dismissal");
+    expect(store.getState().memories[LU_CONSORT]!.entries.length).toBe(memBefore); // 无新增记忆
+    expect(JSON.stringify(store.getState().standing[LU_CONSORT])).toBe(standingBefore); // favor/affection/loyalty 不变
+    expect(validateOfficialWorld(store.getState(), db)).toEqual([]);
   });
 });
 

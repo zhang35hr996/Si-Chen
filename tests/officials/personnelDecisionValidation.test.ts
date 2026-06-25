@@ -186,6 +186,30 @@ describe("personnel decision validator — kind-specific invariants", () => {
     expect(codes(withDecisions(s, d))).toContain("PDEC_SOURCE_TARGET_MISMATCH");
   });
 
+  it("family implication missing familyId", () => {
+    const s = withConsortPun(createNewGameState(db, 1));
+    const off = s.officials[LU_OFFICIAL]!;
+    const d: PersonnelDecision = {
+      id: "pdec_000001", kind: "family_implication", status: "pending", createdAt: at(3),
+      sourceId: "implication:pun_000001", officialId: LU_OFFICIAL, consortId: LU_CONSORT,
+      fromPostId: off.postId!, sourcePunishmentId: "pun_000001",
+      // familyId 缺失 → 关联校验失效缺口（本应被 kind-specific 校验拦下）。
+    };
+    expect(codes(withDecisions(s, d))).toContain("PDEC_MISSING_FIELD");
+  });
+
+  it("family implication official belongs to a different family", () => {
+    const s = withConsortPun(createNewGameState(db, 1)); // 受罚侍君 LU_CONSORT，母族 fam_lu_main
+    const WEN_OFFICIAL = "official_fam_wen_main"; // 别族官员
+    const d: PersonnelDecision = {
+      id: "pdec_000001", kind: "family_implication", status: "pending", createdAt: at(3),
+      sourceId: "implication:pun_000001", officialId: WEN_OFFICIAL, consortId: LU_CONSORT,
+      familyId: "fam_lu_main", fromPostId: s.officials[WEN_OFFICIAL]!.postId!, sourcePunishmentId: "pun_000001",
+    };
+    // 官员家族(fam_wen_main) ≠ decision.familyId(fam_lu_main) → 官族不匹配。
+    expect(codes(withDecisions(s, d))).toContain("PDEC_FAMILY_MISMATCH");
+  });
+
   it("family implication source punishment not severe enough", () => {
     const s = createNewGameState(db, 1);
     // 注入 moderate 来源 punishment。

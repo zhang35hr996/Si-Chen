@@ -109,7 +109,9 @@ export function resolvePersonnelDecision(
   }
 
   const consortId = d.consortId;
-  const hasMemory = consortId !== undefined && state.memories[consortId] !== undefined;
+  // 已故侍君（如赐死来源的牵连）仍可裁断，但**绝不**再改其 favor/affection/loyalty/记忆——死者关系冻结。
+  const consortAlive = consortId !== undefined && state.standing[consortId]?.lifecycle !== "deceased";
+  const hasMemory = consortAlive && state.memories[consortId!] !== undefined;
 
   let cur = state;
   let punishmentId: string | undefined;
@@ -125,7 +127,7 @@ export function resolvePersonnelDecision(
         if (!r.ok) return err(r.error);
         cur = r.value;
       }
-      if (d.kind === "consort_petition_promotion" && consortId) {
+      if (d.kind === "consort_petition_promotion" && consortId && consortAlive) {
         effects = resolution === "approve"
           ? petitionApprovedEffects(consortId, hasMemory)
           : petitionRejectedEffects(consortId, hasMemory);
@@ -166,7 +168,7 @@ export function resolvePersonnelDecision(
         cur = r.value.state;
         punishmentId = r.value.punishmentId;
       }
-      if (consortId) {
+      if (consortId && consortAlive) {
         effects = resolution === "spare"
           ? implicationSparedEffects(consortId, hasMemory)
           : implicationPunishedEffects(consortId, resolution === "dismiss", punishmentId!, hasMemory);

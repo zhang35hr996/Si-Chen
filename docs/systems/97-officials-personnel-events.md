@@ -54,6 +54,9 @@ PR3C-3 的第二刀：把官员升降落到**皇帝亲裁的人事事件**上。
 - **侍君请托 + 人事奏折**：在统一日历结算（`settleCalendarAdvance`）的吏部考课之后，由
   `generateAnnualPersonnelEvents` 一次性确定性生成有界条目（同 `hasReviewedYear` 守卫，每年仅一次；
   每名在任官员每年至多一条奏折，按 id 稳定遍历，上限 `ANNUAL_MEMORIAL_CAP` / `ANNUAL_PETITION_CAP`）。
+  奏折优先级**互斥**：请免（严重失职）> 请降 > 荐升。其中**请免**凭据取本年简报的
+  `AnnualReviewRecord.dismissalCandidateIds`（自动降级前的连年不合格者）——因为自动降级会清零
+  `underperformanceYears`，生产路径不能再读清零后的计数。
 - **获罪牵连家族**：侍君获 severe/terminal 惩罚（幽禁/赐死/冷宫）时，由对应 store 命令经
   `commitPlannedTransaction` 的 `postCommit` 变换**即时**生成牵连待裁决策——折进同一次提交与 emit
   （不额外 emit）；生成器对不合格惩罚为纯 no-op。
@@ -77,6 +80,8 @@ PR3C-3 的第二刀：把官员升降落到**皇帝亲裁的人事事件**上。
 - 请托准许：侍君 favor/affection/loyalty 适度↑ + 私下感念记忆；拒绝：适度↓ + 私下被拒记忆（不广播全宫）。
 - 牵连降/免：被牵连侍君形成**创伤**记忆，并以新官员 `punishmentId` 溯源；罪止其身：感念记忆。
 - 所有记忆经 `applyEffects` 的 `memory` effect 写入（无侍君记忆库则跳过，不抛）。
+- **已故侍君关系冻结**：赐死来源的牵连（或请求者裁断前死亡）仍可裁断，但 resolver 据
+  `standing.lifecycle !== "deceased"` 跳过对死者 favor/affection/loyalty/记忆的一切改动；职位变更（升迁/降免）照常生效。
 - 知情范围：私下请托 circle/private；牵连降/免 palace；公布朝野的免官 realm（由 `punishOfficial` 的 publicity 决定）。
 
 ## 六、UI（`ui/officials/PersonnelDecisionsScreen.tsx` + `personnelDecisionView.ts`）

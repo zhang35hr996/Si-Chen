@@ -73,6 +73,20 @@ describe("petition resolution — administrative promotion (no PUNISH)", () => {
     expect(validateOfficialWorld(st, db)).toEqual([]);
   });
 
+  it("a petitioner who died before resolution gets no relationship/memory change (decision still resolves)", () => {
+    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const dead = { ...g.state, standing: { ...g.state.standing, [LU_CONSORT]: { ...g.state.standing[LU_CONSORT]!, lifecycle: "deceased" as const } } };
+    const memBefore = dead.memories[LU_CONSORT]!.entries.length;
+    const standingBefore = JSON.stringify(dead.standing[LU_CONSORT]);
+    const r = resolvePersonnelDecision(dead, db, g.decision.id, "approve", at(3));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.state.officials[LU_OFFICIAL]!.postId).toBe(g.decision.recommendedPostId); // 升迁仍生效
+    expect(r.value.state.memories[LU_CONSORT]!.entries.length).toBe(memBefore); // 死者无新增记忆
+    expect(JSON.stringify(r.value.state.standing[LU_CONSORT])).toBe(standingBefore); // 死者关系冻结
+    expect(r.value.state.personnelDecisions[g.decision.id]!.status).toBe("resolved");
+  });
+
   it("writes a private memory to the petitioning consort (not broadcast)", () => {
     const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
     const memBefore = g.state.memories[LU_CONSORT]!.entries.length;

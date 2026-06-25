@@ -328,6 +328,11 @@ export interface AnnualReviewRecord {
   year: number;
   at: GameTime;
   changes: PersonnelChange[];
+  /**
+   * 本年触发「连年不合格」阈值（被自动降级前 underperformanceYears≥阈值）的官员 id。自动降级会随即清零
+   * underperformanceYears，故 PR3C-3b 的请免奏折生成需据此持久信号判定「严重失职」，而非读清零后的计数。
+   */
+  dismissalCandidateIds?: string[];
 }
 
 // ── 人事决策（皇帝亲裁；Phase 3 PR3C-3b） ─────────────────────────────────

@@ -194,6 +194,7 @@ const annualReviewRecordSchema = z.strictObject({
   year: z.number().int().min(1),
   at: gameTimeSchema,
   changes: z.array(personnelChangeSchema),
+  dismissalCandidateIds: z.array(idSchema).optional(),
 });
 
 const personnelDecisionSchema = z.strictObject({

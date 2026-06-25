@@ -13,6 +13,7 @@ import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import type { GameState, Official, PersonnelDecision, PersonnelDecisionKind } from "../state/types";
 import { getPunishment } from "../justice/selectors";
+import { getLatestAnnualReview } from "./annualReview";
 import { promotionScore } from "./careerMetrics";
 import {
   getActiveSeatedOfficials,
@@ -277,24 +278,44 @@ export function generateMemorial(
 /** 年度生成上限（确定性、有界；避免每年刷一堆奏折/请托）。 */
 const ANNUAL_MEMORIAL_CAP = 3;
 const ANNUAL_PETITION_CAP = 2;
-const MEMORIAL_KINDS: readonly MemorialKind[] = ["memorial_promotion", "memorial_demotion", "memorial_dismissal"];
+
+/**
+ * 请免奏折（基于本年考课「连年不合格」信号）。自动降级会清零 underperformanceYears，故年度生产路径不能再读
+ * 该计数——改由本年简报的 dismissalCandidateIds 作严重失职凭据，绕过已清零的计数。仅在任占职 + 同源去重。
+ */
+function generateMemorialDismissalBySignal(state: GameState, officialId: string, at: GameTime): { state: GameState; decision: PersonnelDecision } | null {
+  const o = state.officials[officialId];
+  if (!o || o.status !== "active" || o.postId === null) return null;
+  const sourceId = `memorial:memorial_dismissal:${officialId}:${at.year}`;
+  if (hasDecisionForSource(state, sourceId)) return null;
+  return appendDecision(state, { kind: "memorial_dismissal", sourceId, officialId, familyId: o.familyId, fromPostId: o.postId }, at);
+}
 
 /**
  * 年度结算的确定性人事生成（紫宸殿人事奏折 + 侍君请托）：在吏部考课之后一次性生成有界条目。无概率，
  * 按 officialId / consortId 稳定遍历；同一官员每年至多一条奏折、同源去重；待决请托不重复。家族牵连不在此处
  * （由侍君获罪即时触发）。该函数应在每年只调一次（与 hasReviewedYear 同一守卫块内）。
+ *
+ * 奏折优先级（互斥，每官至多一条）：**请免（严重失职信号）> 请降 > 荐升**——确保连年严重不合格者真正走到请免，
+ * 而非先被请降覆盖。请免凭据取本年简报 dismissalCandidateIds（自动降级前的连年不合格者）。
  */
 export function generateAnnualPersonnelEvents(state: GameState, db: ContentDB, at: GameTime): GameState {
   let cur = state;
 
-  // 人事奏折：按 id 遍历在任官员，每人至多一条（荐升 > 请降 > 请免 优先），总数有界。
+  const review = getLatestAnnualReview(state);
+  const severe = new Set<string>(review?.year === at.year ? review.dismissalCandidateIds ?? [] : []);
+
   let memCount = 0;
   for (const o of getActiveSeatedOfficials(state, db).slice().sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (memCount >= ANNUAL_MEMORIAL_CAP) break;
-    for (const kind of MEMORIAL_KINDS) {
-      const r = generateMemorial(cur, db, o.id, kind, at);
-      if (r) { cur = r.state; memCount += 1; break; }
+    if (severe.has(o.id)) {
+      const r = generateMemorialDismissalBySignal(cur, o.id, at);
+      if (r) { cur = r.state; memCount += 1; continue; }
     }
+    const dem = generateMemorial(cur, db, o.id, "memorial_demotion", at);
+    if (dem) { cur = dem.state; memCount += 1; continue; }
+    const promo = generateMemorial(cur, db, o.id, "memorial_promotion", at);
+    if (promo) { cur = promo.state; memCount += 1; continue; }
   }
 
   // 侍君请托：按 id 遍历在宫侍君，确定性生成有界条目（资格/去重在生成器内）。

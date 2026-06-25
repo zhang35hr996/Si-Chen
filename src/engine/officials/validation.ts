@@ -536,6 +536,8 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     }
     if (d.kind === "family_implication") {
       if (d.consortId === undefined) e("PDEC_MISSING_FIELD", `牵连决策「${d.id}」缺 consortId`, { id: d.id });
+      if (d.familyId === undefined) e("PDEC_MISSING_FIELD", `牵连决策「${d.id}」缺 familyId`, { id: d.id });
+      if (d.fromPostId === undefined) e("PDEC_MISSING_FIELD", `牵连决策「${d.id}」缺 fromPostId`, { id: d.id });
       if (d.consortId !== undefined && consortFamily !== d.familyId) {
         e("PDEC_CONSORT_FAMILY_MISMATCH", `牵连决策「${d.id}」侍君母族「${consortFamily ?? "无"}」≠ familyId「${d.familyId ?? "无"}」`, { id: d.id });
       }
