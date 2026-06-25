@@ -599,7 +599,7 @@ export interface PendingAftermath {
 // ── 角色持续状态（可复用：禁足 / 后续冷宫·下狱·守丧·卧病）─────────────────
 // 单一权威的「持续效果」时间线：append-mostly，解除时就地标记 lifted 而非物理删除，
 // 以保留历史。活跃判定只依据 startTurn/endTurnExclusive/liftedTurn，不存「剩余月份」。
-export type StatusEffectKind = "confinement";
+export type StatusEffectKind = "confinement" | "cold_palace";
 
 /** 禁足解除原因：皇帝下旨 / 期满自动到期。 */
 export type ConfinementLiftReason = "lifted_by_emperor" | "term_expired";
@@ -626,8 +626,26 @@ export interface ConfinementEffect {
   sourcePunishmentId?: string;
 }
 
-/** 角色持续状态的判别联合（目前仅禁足；冷宫/下狱/守丧待扩展）。 */
-export type CharacterStatusEffect = ConfinementEffect;
+export type ColdPalaceLiftReason = "lifted_by_emperor" | "pardoned";
+
+export interface ColdPalaceEffect {
+  /** "status_<charId>_NNNNNN" 单调。 */
+  id: string;
+  kind: "cold_palace";
+  characterId: string;
+  startedAt: GameTime;
+  startTurn: number;
+  previousResidenceId: string;
+  previousChamber?: ChamberId;  // undefined means "main" (default)
+  coldPalaceResidenceId: string;
+  sourcePunishmentId: string;
+  liftedAt?: GameTime;
+  liftedTurn?: number;
+  liftReason?: ColdPalaceLiftReason;
+}
+
+/** 角色持续状态的判别联合（禁足 / 冷宫；下狱/守丧待扩展）。 */
+export type CharacterStatusEffect = ConfinementEffect | ColdPalaceEffect;
 
 // ── 太后（尊长）状态 ──────────────────────────────────────────────────
 export interface TaihouState {

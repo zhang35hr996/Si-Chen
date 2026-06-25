@@ -19,6 +19,7 @@ import { diffGameState } from "../trace/diff";
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
+import { activeColdPalaceEffectFor, isInColdPalace } from "../characters/coldPalace";
 import { eligibleHaremAdministrators } from "../characters/haremAdministration";
 import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../characters/haremRankAuthority";
 import { nextHeirId } from "../characters/heirs";
@@ -28,7 +29,8 @@ import { isAssignableRank, eventEffectSchema, type EventEffect } from "../conten
 import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import { memoryEntryId } from "../state/newGame";
-import type { GameState } from "../state/types";
+import type { GameTime } from "../calendar/time";
+import type { ChamberId, ColdPalaceEffect, GameState } from "../state/types";
 import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 
 /** Max |cumulative delta| per axis (char×field / pillar×field) per batch. */
@@ -51,6 +53,8 @@ export function validateEffects(
   // 批内禁足去重：同一 batch 同一角色只允许一条 confine；confine+lift 矛盾批次一并拒绝。
   const confineInBatch = new Set<string>();
   const liftInBatch = new Set<string>();
+  // 批内冷宫去重：同一 batch 同一角色只允许一条 send_to_cold_palace。
+  const coldPalaceInBatch = new Set<string>();
 
   effects.forEach((effect, index) => {
     const parsed = eventEffectSchema.safeParse(effect);
@@ -380,6 +384,8 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `relocate needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "fenghou") {
           bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not relocatable: "${e.char}"`, { char: e.char });
+        } else if (isInColdPalace(state, e.char)) {
+          bad(index, "BAD_EFFECT", `cannot relocate "${e.char}" while in cold palace`, { char: e.char });
         } else if (!hasChambers(e.location)) {
           bad(index, "BAD_EFFECT", `relocate target "${e.location}" is not a 设宫室 palace`, { location: e.location });
         } else {
@@ -401,6 +407,32 @@ export function validateEffects(
         }
         break;
       }
+      case "send_to_cold_palace": {
+        const ch = (e as { char: string }).char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        const st = state.standing[ch];
+        if (!c || c.kind !== "consort" || !st) {
+          bad(index, "BAD_EFFECT_TARGET", `send_to_cold_palace needs a consort with standing: "${ch}"`, { char: ch });
+        } else if (st.lifecycle === "deceased") {
+          bad(index, "BAD_EFFECT_TARGET", `cannot send a deceased consort to cold palace: "${ch}"`, { char: ch });
+        } else if (isInColdPalace(state, ch)) {
+          bad(index, "BAD_EFFECT", `consort already in cold palace: "${ch}"`, { char: ch });
+        } else if (coldPalaceInBatch.has(ch)) {
+          bad(index, "BAD_EFFECT", `duplicate send_to_cold_palace in same batch: "${ch}"`, { char: ch });
+        } else {
+          coldPalaceInBatch.add(ch);
+        }
+        break;
+      }
+      case "restore_from_cold_palace": {
+        const ch = (e as { char: string }).char;
+        const c = db.characters[ch] ?? state.generatedConsorts[ch];
+        if (!c || c.kind !== "consort" || !state.standing[ch]) {
+          bad(index, "BAD_EFFECT_TARGET", `restore_from_cold_palace needs a consort with standing: "${ch}"`, { char: ch });
+        }
+        // 幂等：无活跃冷宫效果时 apply 是 no-op，不在此报错。
+        break;
+      }
       case "set_harem_administration": {
         // 判断凤后禁足现状（或本批中是否存在禁足/解禁凤后的效果）。
         const fenghousId = Object.keys(state.standing).find(
@@ -418,8 +450,14 @@ export function validateEffects(
         const CONFINEMENT_REASONS = new Set(["empress_confined", "no_eligible_consort"]);
         const requiresConfinement = "reason" in ns && CONFINEMENT_REASONS.has(ns.reason);
         if (ns.mode === "empress") {
+          const fenghouInColdPalace = fenghousId ? isInColdPalace(state, fenghousId) : false;
+          const coldPalaceInBatch = effects.some(
+            (be) => be.type === "send_to_cold_palace" && (be as { char?: string }).char === fenghousId,
+          );
           if (effectivelyConfined) {
             bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is confined", {});
+          } else if (fenghouInColdPalace || coldPalaceInBatch) {
+            bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is in cold palace", {});
           }
         } else if (ns.mode === "acting_consort") {
           if (requiresConfinement && !effectivelyConfined) {
@@ -433,6 +471,11 @@ export function validateEffects(
               bad(index, "BAD_EFFECT", `acting consort cannot be fenghou: "${ns.charId}"`, { char: ns.charId });
             } else if (st.lifecycle === "deceased" || st.lifecycle === "candidate") {
               bad(index, "BAD_EFFECT_TARGET", `acting consort is deceased or candidate: "${ns.charId}"`, { char: ns.charId });
+            } else {
+              const eligible = eligibleHaremAdministrators(db, state);
+              if (!eligible.some((c) => c.id === ns.charId)) {
+                bad(index, "BAD_EFFECT", `character "${ns.charId}" is not eligible to administer the harem`, {});
+              }
             }
           }
         } else {
@@ -458,6 +501,9 @@ export interface EffectContext {
   sceneId?: string;
   /** Dev-only trace collector; undefined = tracing off (production). Never changes game behaviour. */
   collector?: TraceCollector;
+  /** Allow internal-only effect types (send_to_cold_palace, restore_from_cold_palace).
+   *  Only commitPlannedTransaction sets this to true. */
+  allowInternalEffects?: boolean;
 }
 
 /** Human-readable one-line summary of an effect's intent (for trace panel). */
@@ -496,6 +542,8 @@ function describeEffect(effect: EventEffect): string {
     case "set_consort_posthumous": return `set_consort_posthumous ${effect.char}`;
     case "confine": return `confine ${effect.char}${effect.endTurnExclusive !== null ? ` until turn ${effect.endTurnExclusive}` : " (indefinite)"}`;
     case "lift_confinement": return `lift_confinement ${effect.char} reason=${effect.reason}`;
+    case "send_to_cold_palace": return `send_to_cold_palace ${(effect as { char: string }).char}`;
+    case "restore_from_cold_palace": return `restore_from_cold_palace ${(effect as { char: string }).char}`;
     case "set_harem_administration": return `set_harem_administration mode=${effect.state.mode}`;
     case "enqueue_aftermath": return `enqueue_aftermath kind=${effect.kind} subject=${effect.subjectId}`;
     case "record_physician_visit": return `record_physician_visit month=${effect.monthKey}`;
@@ -510,6 +558,14 @@ export function applyEffects(
   effects: readonly EventEffect[],
   context: EffectContext = {},
 ): Result<GameState, GameError[]> {
+  if (!context.allowInternalEffects) {
+    const INTERNAL_ONLY = new Set(["send_to_cold_palace", "restore_from_cold_palace"]);
+    for (const [i, e] of effects.entries()) {
+      if (INTERNAL_ONLY.has((e as { type: string }).type)) {
+        return err([stateError("BAD_EFFECT", `effect #${i}: "${(e as { type: string }).type}" is internal-only and requires a JusticePlan`)]);
+      }
+    }
+  }
   const errors = validateEffects(db, state, effects);
   if (errors.length > 0) return err(errors);
 
@@ -863,13 +919,163 @@ export function applyEffects(
           }
         }
         // 凤后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
-        if (next.standing[effect.char]?.rank === "fenghou" && next.haremAdministration.mode !== "empress") {
+        // Guard: do NOT restore if the empress is currently in the cold palace.
+        if (next.standing[effect.char]?.rank === "fenghou"
+            && next.haremAdministration.mode !== "empress"
+            && !isInColdPalace(next, effect.char, next.calendar.dayIndex)) {
           next.haremAdministration = { mode: "empress" };
         }
         break;
       }
+      case "send_to_cold_palace": {
+        const e = effect as {
+          char: string; statusEffectId: string; punishmentId: string;
+          coldPalaceResidenceId: string; previousResidenceId: string;
+          previousChamber?: string; startedAt: GameTime; startTurn: number;
+        };
+        const ch = e.char;
+        const coldPalaceEntry: ColdPalaceEffect = {
+          id: e.statusEffectId,
+          kind: "cold_palace",
+          characterId: ch,
+          startedAt: e.startedAt,
+          startTurn: e.startTurn,
+          previousResidenceId: e.previousResidenceId,
+          ...(e.previousChamber !== undefined ? { previousChamber: e.previousChamber as ChamberId } : {}),
+          coldPalaceResidenceId: e.coldPalaceResidenceId,
+          sourcePunishmentId: e.punishmentId,
+        };
+        next.statusEffects.push(coldPalaceEntry);
+        next.standing[ch]!.residence = e.coldPalaceResidenceId;
+        // Clear overnight schedule if it involves this character.
+        if (next.overnightWith?.charId === ch) delete next.overnightWith;
+        // Clear excusedFromGreeting for cold-palace-bound consort.
+        if (next.excusedFromGreeting?.charIds.includes(ch)) {
+          next.excusedFromGreeting = {
+            ...next.excusedFromGreeting,
+            charIds: next.excusedFromGreeting.charIds.filter((id) => id !== ch),
+          };
+        }
+        // Cold palace empress cannot administer harem — transfer to acting_consort if eligible, else neiwu_proxy.
+        // reason is always "imperial_deprivation": punitive removal of empress authority.
+        if (next.standing[ch]?.rank === "fenghou" && next.haremAdministration.mode === "empress") {
+          const eligible = eligibleHaremAdministrators(db, next);
+          if (eligible.length > 0) {
+            next.haremAdministration = {
+              mode: "acting_consort",
+              charId: eligible[0]!.id,
+              appointedAt: toGameTime(next.calendar),
+              reason: "imperial_deprivation",
+            };
+          } else {
+            next.haremAdministration = {
+              mode: "neiwu_proxy",
+              appointedAt: toGameTime(next.calendar),
+              reason: "imperial_deprivation",
+            };
+          }
+        }
+        // If the target is the current acting consort admin, find a real replacement.
+        if (
+          next.haremAdministration.mode === "acting_consort" &&
+          (next.haremAdministration as { charId: string }).charId === ch
+        ) {
+          // At this point ch's residence is already changed to changmengong,
+          // so eligibleHaremAdministrators(db, next) will correctly exclude them.
+          const eligible = eligibleHaremAdministrators(db, next);
+          if (eligible.length > 0) {
+            next.haremAdministration = {
+              mode: "acting_consort",
+              charId: eligible[0]!.id,
+              appointedAt: toGameTime(next.calendar),
+              reason: "imperial_reassignment",
+            };
+          } else {
+            next.haremAdministration = {
+              mode: "neiwu_proxy",
+              appointedAt: toGameTime(next.calendar),
+              reason: "no_eligible_consort",
+            };
+          }
+        }
+        break;
+      }
+      case "restore_from_cold_palace": {
+        const e = effect as {
+          char: string; liftReason: "lifted_by_emperor" | "pardoned";
+          restoreResidenceId?: string; restoreChamber?: string;
+          liftedAt: GameTime; liftedTurn: number;
+        };
+        const ch = e.char;
+        const active = activeColdPalaceEffectFor(next, ch, next.calendar.dayIndex);
+        if (!active) break; // no-op: no active cold palace effect
+        active.liftedAt = e.liftedAt;
+        active.liftedTurn = e.liftedTurn;
+        active.liftReason = e.liftReason;
+        if (e.restoreResidenceId) {
+          next.standing[ch]!.residence = e.restoreResidenceId;
+        }
+        if (e.restoreChamber) {
+          next.standing[ch]!.chamber = e.restoreChamber as ChamberId;
+        }
+        break;
+      }
       case "set_harem_administration": {
-        next.haremAdministration = effect.state;
+        const ns = effect.state as typeof next.haremAdministration;
+        if (ns.mode === "empress") {
+          // Defensive recheck: a prior effect in this batch may have sent the empress to
+          // cold palace or confined her. If so, redirect to a legal proxy state.
+          const fenghouIdNow = Object.keys(next.standing).find(
+            (id) => next.standing[id]?.rank === "fenghou" && next.standing[id]?.lifecycle !== "deceased",
+          );
+          const fenghouBlockedNow = fenghouIdNow &&
+            (isInColdPalace(next, fenghouIdNow) ||
+              next.statusEffects.some(
+                (se) => se.kind === "confinement" && se.characterId === fenghouIdNow && se.liftedTurn === undefined,
+              ));
+          if (fenghouBlockedNow) {
+            const eligible = eligibleHaremAdministrators(db, next);
+            if (eligible.length > 0) {
+              next.haremAdministration = {
+                mode: "acting_consort",
+                charId: eligible[0]!.id,
+                appointedAt: toGameTime(next.calendar),
+                reason: "imperial_deprivation",
+              };
+            } else {
+              next.haremAdministration = {
+                mode: "neiwu_proxy",
+                appointedAt: toGameTime(next.calendar),
+                reason: "imperial_deprivation",
+              };
+            }
+            break;
+          }
+        } else if (ns.mode === "acting_consort") {
+          // Re-check eligibility against accumulated batch state — a prior effect
+          // may have confined or cold-palace'd the proposed consort in this same batch.
+          const eligible = eligibleHaremAdministrators(db, next);
+          const charId = (ns as { charId: string }).charId;
+          if (!eligible.some((c) => c.id === charId)) {
+            const replacement = eligible[0];
+            if (replacement) {
+              next.haremAdministration = {
+                mode: "acting_consort",
+                charId: replacement.id,
+                appointedAt: toGameTime(next.calendar),
+                reason: "imperial_reassignment",
+              };
+            } else {
+              next.haremAdministration = {
+                mode: "neiwu_proxy",
+                appointedAt: toGameTime(next.calendar),
+                reason: "no_eligible_consort",
+              };
+            }
+            break;
+          }
+        }
+        next.haremAdministration = ns;
         break;
       }
       case "consort_decease": {
@@ -885,11 +1091,25 @@ export function applyEffects(
           };
         }
         next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter((g) => g.carrier !== effect.char); // 断胎
-        // 统一死亡清理：作废活跃禁足等持续状态、清留宿与免请安计划。
+        // 统一死亡清理：作废活跃禁足/冷宫等持续状态、清留宿与免请安计划。
         for (const se of next.statusEffects) {
-          if (se.kind === "confinement" && se.characterId === effect.char && se.liftedTurn === undefined) {
-            se.liftedTurn = effect.at.dayIndex;
-            se.liftedAt = effect.at;
+          if (se.characterId === effect.char && se.liftedTurn === undefined) {
+            if (se.kind === "confinement" || se.kind === "cold_palace") {
+              se.liftedTurn = effect.at.dayIndex;
+              se.liftedAt = effect.at;
+            }
+          }
+        }
+        // Resolve all active PunishmentRecords for the deceased character.
+        // The execution PunishmentRecord (if any) is created AFTER effects run in commitPlannedTransaction,
+        // so it doesn't exist yet when consort_decease fires — the guard is unnecessary.
+        for (const punId of Object.keys(next.justice.punishments)) {
+          const pun = next.justice.punishments[punId]!;
+          if (pun.targetId === effect.char && pun.lifecycle.status === "active" && pun.targetKind === "consort") {
+            next.justice.punishments[punId] = {
+              ...pun,
+              lifecycle: { status: "completed" as const, resolvedAt: effect.at, resolution: "target_deceased" as const },
+            };
           }
         }
         if (next.overnightWith?.charId === effect.char) delete next.overnightWith;
