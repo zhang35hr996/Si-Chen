@@ -4,8 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { OfficialsScreen } from "../../src/ui/officials/OfficialsScreen";
 import { GameStore } from "../../src/store/gameStore";
 import { getHighVacancyPosts } from "../../src/engine/officials/selectors";
-import { err } from "../../src/engine/infra/result";
-import { stateError } from "../../src/engine/infra/errors";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
@@ -56,17 +54,17 @@ describe("OfficialsScreen — vacancy reminder + 官位表", () => {
   });
 });
 
-describe("OfficialsScreen — actions persist via onCommitted", () => {
-  it("免职 vacates the post and fires onCommitted once", async () => {
-    const { store, onCommitted } = mount();
+describe("OfficialsScreen — free transfer/dismiss closed (PR3C-2)", () => {
+  it("a seated active official shows NO free 免职/调任 buttons (auto-review note instead)", async () => {
+    const { store } = mount();
     await userEvent.click(screen.getByText(nameOf(store, SHEN)));
-    await userEvent.click(screen.getByRole("button", { name: "免职" }));
-    expect(store.getState().officials[SHEN]!.postId).toBeNull();
-    expect(onCommitted).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/罢免已办妥/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "免职" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "调任" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "任命" })).toBeNull();
+    expect(screen.getByText(/常规迁转由吏部考课自动进行/)).toBeInTheDocument();
   });
 
-  it("准其告老 retires and fires onCommitted once", async () => {
+  it("准其告老 (responding to a system-generated request) is retained and fires onCommitted", async () => {
     const { store, onCommitted } = mount((s) => ({ ...s, pendingRetirements: [{ officialId: SHEN, requestedAt: s.calendar }] }));
     await userEvent.click(screen.getByText(nameOf(store, SHEN)));
     await userEvent.click(screen.getByRole("button", { name: "准其告老" }));
@@ -74,7 +72,7 @@ describe("OfficialsScreen — actions persist via onCommitted", () => {
     expect(onCommitted).toHaveBeenCalledTimes(1);
   });
 
-  it("起复 a retired official fires onCommitted once", async () => {
+  it("起复 a retired official is retained and fires onCommitted", async () => {
     const { store, onCommitted } = mount((s) => ({
       ...s,
       officials: { ...s.officials, [SHEN]: { ...s.officials[SHEN]!, status: "retired", postId: null, statusReason: "retirement", statusChangedAt: s.calendar } },
@@ -86,53 +84,35 @@ describe("OfficialsScreen — actions persist via onCommitted", () => {
     expect(onCommitted).toHaveBeenCalledTimes(1);
   });
 
-  it("调任 to a vacant post fires onCommitted once and seats the official", async () => {
-    const { store, onCommitted } = mount();
-    await userEvent.click(screen.getByText(nameOf(store, SHEN)));
-    await userEvent.click(screen.getByRole("button", { name: "调任" }));
-    await userEvent.click(screen.getByRole("button", { name: /从一品·太保/ }));
-    expect(store.getState().officials[SHEN]!.postId).toBe("taibao");
-    expect(onCommitted).toHaveBeenCalledTimes(1);
-  });
-
-  it("a dead official shows no appointment actions", async () => {
+  it("a dead official shows no decision actions", async () => {
     const { store } = mount((s) => ({
       ...s,
       officials: { ...s.officials, [SHEN]: { ...s.officials[SHEN]!, status: "dead", postId: null, statusReason: "natural_death", statusChangedAt: s.calendar, deathAt: s.calendar } },
     }));
     await userEvent.click(screen.getByRole("button", { name: /已故（1）/ }));
     await userEvent.click(screen.getByText(nameOf(store, SHEN)));
-    expect(screen.getByText(/已故，无可任免/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "免职" })).toBeNull();
+    expect(screen.getByText(/已故，无可裁决/)).toBeInTheDocument();
   });
 });
 
-describe("OfficialsScreen — transfer correctness (P2)", () => {
-  it("the transfer list excludes the official's current (multi-seat) post", async () => {
-    // 温经邦 任 知府(zhifu, seatCount 3, 仍有空席)；调任列表不应再列 知府。
-    const store = new GameStore();
-    store.loadState(createNewGameState(db, 1));
-    const zhifu = Object.values(store.getState().officials).find((o) => o.postId === "zhifu")!;
-    render(<OfficialsScreen db={db} store={store} onBack={() => {}} onCommitted={vi.fn()} />);
-    await userEvent.click(screen.getByText(`${zhifu.surname}${zhifu.givenName}`));
-    await userEvent.click(screen.getByRole("button", { name: "调任" }));
-    expect(screen.getByText(/选空缺官职授任/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /从四品·知府/ })).toBeNull();
+describe("OfficialsScreen — 人事简报 tab (PR3C-2)", () => {
+  it("shows the latest annual review changes", async () => {
+    const { store } = mount((s) => ({
+      ...s,
+      annualReviews: [{ year: 3, at: s.calendar, changes: [
+        { officialId: SHEN, kind: "promotion" as const, fromPostId: "zhifu", toPostId: "chengxiang", authority: "system_review" as const },
+      ] }],
+    }));
+    await userEvent.click(screen.getByRole("button", { name: "人事简报" }));
+    expect(screen.getByRole("heading", { name: /3 年吏部考课/ })).toBeInTheDocument();
+    expect(screen.getByText("升迁")).toBeInTheDocument();
+    expect(screen.getByText(nameOf(store, SHEN))).toBeInTheDocument();
   });
 
-  it("a failed appointment keeps the transfer list open and does not commit", async () => {
-    const store = new GameStore();
-    store.loadState(createNewGameState(db, 1));
-    // 强制任命失败。
-    store.assignOfficialPost = vi.fn(() => err(stateError("OFFICIAL_SEAT_FULL", "满席"))) as never;
-    const onCommitted = vi.fn();
-    render(<OfficialsScreen db={db} store={store} onBack={() => {}} onCommitted={onCommitted} />);
-    await userEvent.click(screen.getByText(nameOf(store, SHEN)));
-    await userEvent.click(screen.getByRole("button", { name: "调任" }));
-    await userEvent.click(screen.getByRole("button", { name: /从一品·太保/ }));
-    expect(onCommitted).not.toHaveBeenCalled();
-    expect(screen.getByText(/选空缺官职授任/)).toBeInTheDocument(); // 列表未关闭
-    expect(screen.getByText(/调任未成/)).toBeInTheDocument();
+  it("empty state when no review yet", async () => {
+    mount();
+    await userEvent.click(screen.getByRole("button", { name: "人事简报" }));
+    expect(screen.getByText(/尚无吏部考课简报/)).toBeInTheDocument();
   });
 });
 

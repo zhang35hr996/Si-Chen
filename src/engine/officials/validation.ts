@@ -264,6 +264,34 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       e("HISTORY_APPOINTMENT_INCONSISTENT", `授官史条目「${h.id}」与候补状态/appointedOfficialId 不符`, { id: h.id });
     }
   }
+  // 年度吏部考课简报（PR3C-2）：每年至多一条；at.year 一致；变动方向/字段语义自洽。
+  const seenReviewYears = new Set<number>();
+  const gradedPost = (pid: string | null) => pid !== null && (db.officialPosts[pid]?.gradeOrder ?? 0) > 0;
+  const gradeOrderOf = (pid: string | null) => (pid ? (db.officialPosts[pid]?.gradeOrder ?? 0) : 0);
+  for (const rec of state.annualReviews) {
+    if (seenReviewYears.has(rec.year)) e("REVIEW_DUP_YEAR", `${rec.year} 年存在多份考课简报`, { year: rec.year });
+    seenReviewYears.add(rec.year);
+    if (rec.at.year !== rec.year) e("REVIEW_AT_YEAR_MISMATCH", `考课简报 ${rec.year} 的 at.year(${rec.at.year}) 不符`, { year: rec.year });
+    for (const c of rec.changes) {
+      if (c.fromPostId !== null && !gradedPost(c.fromPostId)) e("REVIEW_BAD_POST", `${rec.year} 考课 fromPostId「${c.fromPostId}」非有效官职`, { year: rec.year });
+      if (c.toPostId !== null && !gradedPost(c.toPostId)) e("REVIEW_BAD_POST", `${rec.year} 考课 toPostId「${c.toPostId}」非有效官职`, { year: rec.year });
+      if (c.kind === "appointment") {
+        if (!c.candidateId) e("REVIEW_BAD_CHANGE", `${rec.year} 授官变动缺 candidateId`, { year: rec.year, id: c.officialId });
+        if (c.fromPostId !== null || c.toPostId === null) e("REVIEW_BAD_CHANGE", `${rec.year} 授官变动 from/to 非法`, { year: rec.year, id: c.officialId });
+      } else {
+        if (c.candidateId !== undefined) e("REVIEW_BAD_CHANGE", `${rec.year} 非授官变动不应带 candidateId`, { year: rec.year, id: c.officialId });
+      }
+      if (c.kind === "promotion" && !(c.fromPostId !== null && c.toPostId !== null && gradeOrderOf(c.toPostId) > gradeOrderOf(c.fromPostId))) {
+        e("REVIEW_BAD_DIRECTION", `${rec.year} 升迁方向非法`, { year: rec.year, id: c.officialId });
+      }
+      if (c.kind === "demotion" && !(c.fromPostId !== null && (c.toPostId === null || gradeOrderOf(c.toPostId) < gradeOrderOf(c.fromPostId)))) {
+        e("REVIEW_BAD_DIRECTION", `${rec.year} 降级方向非法`, { year: rec.year, id: c.officialId });
+      }
+      if (c.kind === "fill" && !(c.fromPostId === null && c.toPostId !== null)) {
+        e("REVIEW_BAD_DIRECTION", `${rec.year} 补缺 from/to 非法`, { year: rec.year, id: c.officialId });
+      }
+    }
+  }
   for (const [postId, used] of Object.entries(seatUse)) {
     const cap = db.officialPosts[postId]?.seatCount ?? 1;
     if (used > cap) e("OFFICIAL_SEAT_OVERFLOW", `官职「${postId}」在任 ${used} 人，超出席位 ${cap}`, { postId, used, cap });

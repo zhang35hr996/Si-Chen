@@ -20,7 +20,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 14;
+export const SAVE_FORMAT_VERSION = 15;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -254,6 +254,18 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       formatVersion: 14,
       state: next,
       checksum: checksumOf(next),
+    };
+  },
+  // v14 → v15: 年度吏部考课人事简报（annualReviews）。旧档补空数组即可。
+  14: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!Array.isArray(state.annualReviews)) state.annualReviews = [];
+    return {
+      ...env,
+      formatVersion: 15,
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
     };
   },
 };

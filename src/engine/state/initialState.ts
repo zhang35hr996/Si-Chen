@@ -61,6 +61,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     officialHistory: [],
     officialCandidates: {},
     examinationResults: [],
+    annualReviews: [],
     memories: {},
     bedchamber: {},
     eventLog: [],

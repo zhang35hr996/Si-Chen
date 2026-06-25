@@ -32,6 +32,7 @@ import { assignOfficialPost } from "../engine/officials/assign";
 import { dismissOfficial, restoreOfficialToActive, retireOfficial } from "../engine/officials/lifecycle";
 import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { EXAM_MONTH, acknowledgeExaminationResult, hasGeneratedExaminationForYear, settleAnnualExamination } from "../engine/officials/examination";
+import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/officials/annualReview";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
@@ -1503,6 +1504,14 @@ export class GameStore {
       const beforeExam = candidate;
       candidate = settleAnnualExamination(candidate, db, candidate.calendar.year, toGameTime(candidate.calendar));
       collector?.capturePhaseScheduled("annual_examination", diffGameState(beforeExam, candidate));
+    }
+
+    // 十一月（或其后首次推进，catch-up）→ 吏部考课：政绩更新/自动升降/连锁补缺/人事简报。
+    // 同样不依赖 monthChanged；hasReviewedYear 保证本年幂等（在科举之后，候补已就绪）。
+    if (candidate.calendar.month >= REVIEW_MONTH && !hasReviewedYear(candidate, candidate.calendar.year)) {
+      const beforeReview = candidate;
+      candidate = buildAnnualReview(candidate, db, candidate.calendar.year, toGameTime(candidate.calendar));
+      collector?.capturePhaseScheduled("annual_review", diffGameState(beforeReview, candidate));
     }
 
     // 5) Daxuan calendar event detection.

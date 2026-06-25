@@ -302,6 +302,32 @@ export type CandidateOrigin = "examination" | "recommendation";
  *  withdrawn=死亡/身体或其它合法退出。非 eligible 者绝不被可任命 selector 选中。 */
 export type CandidateStatus = "eligible" | "appointed" | "expired" | "withdrawn";
 
+// ── 年度吏部考课人事变动（Phase 3 PR3C-2） ───────────────────────────────
+/**
+ * 一次自动人事变动的种类。promotion=升迁(高品)；demotion=连年不合格降级(低品)；fill=无职在任官员补缺；
+ * appointment=候补授官转正补缺。全部为**行政制度结果**，不进入 PUNISH。
+ */
+export type PersonnelChangeKind = "promotion" | "demotion" | "fill" | "appointment";
+
+/** 一条自动人事变动（写入年度简报；玩家亲自惩戒不走此处，见 PR3C-3 + PUNISH）。 */
+export interface PersonnelChange {
+  officialId: string;
+  kind: PersonnelChangeKind;
+  fromPostId: string | null;
+  toPostId: string | null;
+  /** 由候补转正者携带其候补 id（kind=appointment 时）。 */
+  candidateId?: string;
+  /** 一律「制度考课」权威；绝非皇帝亲发惩罚。 */
+  authority: "system_review";
+}
+
+/** 一年一度的吏部考课人事简报（只读；玩家不必逐项确认）。 */
+export interface AnnualReviewRecord {
+  year: number;
+  at: GameTime;
+  changes: PersonnelChange[];
+}
+
 /** 候补能力（0–100）。任命时按官职类型匹配（匹配评分留 PR3B），PR3A 只生成保存。 */
 export interface CandidateAptitude {
   governance: number; // 政略/治理
@@ -739,6 +765,8 @@ export interface GameState {
   officialCandidates: Record<string, OfficialCandidate>;
   /** 历年科举结果（append-only 榜单）。 */
   examinationResults: ExaminationResult[];
+  /** 历年吏部考课人事简报（append-only，只读）。 */
+  annualReviews: AnnualReviewRecord[];
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

@@ -124,6 +124,8 @@ describe("yearly tick fires through the time transaction", () => {
     }
     expect(store.getState().calendar.year).toBeGreaterThanOrEqual(2);
     for (const o of Object.values(store.getState().officials)) {
+      // 年中可能由吏部考课新授官（候补转正）——这些官员开局不存在，跳过。
+      if (!(o.id in before)) continue;
       expect(o.age).toBe(o.status === "dead" ? before[o.id]! : before[o.id]! + 1);
     }
     expect(validateOfficialWorld(store.getState(), db)).toEqual([]);

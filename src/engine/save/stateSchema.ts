@@ -180,6 +180,21 @@ const examinationResultSchema = z.strictObject({
   acknowledged: z.boolean(),
 });
 
+const personnelChangeSchema = z.strictObject({
+  officialId: idSchema,
+  kind: z.enum(["promotion", "demotion", "fill", "appointment"]),
+  fromPostId: idSchema.nullable(),
+  toPostId: idSchema.nullable(),
+  candidateId: idSchema.optional(),
+  authority: z.literal("system_review"),
+});
+
+const annualReviewRecordSchema = z.strictObject({
+  year: z.number().int().min(1),
+  at: gameTimeSchema,
+  changes: z.array(personnelChangeSchema),
+});
+
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
 
 /** 角色持续状态（禁足等）。活跃判定见 characters/confinement.ts，不存「剩余月份」。 */
@@ -439,6 +454,7 @@ export const gameStateSchema = z.strictObject({
   officialHistory: z.array(officialHistorySchema),
   officialCandidates: z.record(idSchema, officialCandidateSchema),
   examinationResults: z.array(examinationResultSchema),
+  annualReviews: z.array(annualReviewRecordSchema),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),
