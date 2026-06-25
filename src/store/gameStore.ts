@@ -34,6 +34,8 @@ import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { EXAM_MONTH, acknowledgeExaminationResult, hasGeneratedExaminationForYear, settleAnnualExamination } from "../engine/officials/examination";
 import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/officials/annualReview";
 import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmentCommand } from "../engine/officials/officialPunishment";
+import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionResolve";
+import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
@@ -374,6 +376,18 @@ export class GameStore {
     this.state = r.value;
     this.emit();
     return ok(undefined);
+  }
+
+  /**
+   * 原子裁断一条人事决策（侍君请提拔亲族 / 获罪牵连 / 紫宸殿人事奏折；PR3C-3b）。升迁经行政 API，
+   * 降职/免官经 PUNISH。失败 state 不变、不 emit；成功一次 emit，返回可选 punishmentId（降/免才有）。
+   */
+  resolvePersonnelDecision(db: ContentDB, decisionId: string, resolution: PersonnelDecisionResolution): Result<{ punishmentId?: string }, GameError> {
+    const r = resolvePersonnelDecision(this.state, db, decisionId, resolution, toGameTime(this.state.calendar));
+    if (!r.ok) return r;
+    this.state = r.value.state;
+    this.emit();
+    return ok(r.value.punishmentId ? { punishmentId: r.value.punishmentId } : {});
   }
 
   /** 标记某年度科举榜单为已查看（PR3B）。幂等。 */

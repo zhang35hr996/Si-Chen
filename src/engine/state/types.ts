@@ -330,6 +330,62 @@ export interface AnnualReviewRecord {
   changes: PersonnelChange[];
 }
 
+// ── 人事决策（皇帝亲裁；Phase 3 PR3C-3b） ─────────────────────────────────
+/**
+ * 待皇帝亲裁的人事事件种类：
+ * - `consort_petition_promotion`：侍君私下请求提拔其族中官员（行政升迁，**不入 PUNISH**）。
+ * - `family_implication`：侍君获罪后皇帝决定是否牵连其族中官员（牵连=亲发惩戒，**入 PUNISH**）。
+ * - `memorial_promotion` / `memorial_demotion` / `memorial_dismissal`：紫宸殿人事奏折（荐升/请降/请免）。
+ *
+ * 升迁批准 → `promoteOfficialAdministratively`（行政，不创建 PunishmentRecord）；
+ * 降职/免官批准 → `punishOfficial`（皇帝亲发惩戒，进 PUNISH）。所有职位变更**只**经这两个正式 API。
+ */
+export type PersonnelDecisionKind =
+  | "consort_petition_promotion"
+  | "family_implication"
+  | "memorial_promotion"
+  | "memorial_demotion"
+  | "memorial_dismissal";
+
+/**
+ * 一次人事决策的裁断。`approve`/`reject` 用于升迁请求与荐升/请降/请免奏折（approve=准奏）；
+ * `spare`/`demote`/`dismiss` 用于侍君获罪牵连（spare=罪止其身，demote=降职，dismiss=免官）。
+ */
+export type PersonnelDecisionResolution = "approve" | "reject" | "spare" | "demote" | "dismiss";
+
+/**
+ * 待裁/已裁的人事决策（pending 可存档；resolved 不可再次执行）。`sourceId` 为去重键（同源不重复创建）；
+ * `id`（"pdec_000001"）为存储键，与 record key 一致。事件与 UI 绝不直接改 postId / officialHistory /
+ * justice.punishments——一律经 resolvePersonnelDecision 调用正式职位 API。
+ */
+export interface PersonnelDecision {
+  /** "pdec_000001" 单调；与 record key 一致。 */
+  id: string;
+  kind: PersonnelDecisionKind;
+  status: "pending" | "resolved";
+  createdAt: GameTime;
+  /** 去重键：同一 sourceId 全局至多一条（无论 pending/resolved）。 */
+  sourceId: string;
+  /** 职位可能变更的官员。 */
+  officialId: string;
+  /** 相关侍君：请求者（petition）或获罪牵连者（family_implication）。 */
+  consortId?: string;
+  /** 相关家族（官员母族）。 */
+  familyId?: string;
+  /** 创建时官员当前官职快照（叙述/展示用；执行以实时 state 为准）。 */
+  fromPostId?: string;
+  /** 建议目标官职（升迁/降职）。免官无此字段。 */
+  recommendedPostId?: string;
+  /** family_implication 的来源侍君 punishment（必须指向真实 consort 目标记录）。 */
+  sourcePunishmentId?: string;
+  /** 关联案件（可选，溯源用）。 */
+  caseId?: string;
+  /** 裁断时刻（resolved 必填，不早于 createdAt）。 */
+  resolvedAt?: GameTime;
+  /** 裁断结果（resolved 必填，且须与 kind 合法）。 */
+  resolution?: PersonnelDecisionResolution;
+}
+
 /** 候补能力（0–100）。任命时按官职类型匹配（匹配评分留 PR3B），PR3A 只生成保存。 */
 export interface CandidateAptitude {
   governance: number; // 政略/治理
@@ -769,6 +825,8 @@ export interface GameState {
   examinationResults: ExaminationResult[];
   /** 历年吏部考课人事简报（append-only，只读）。 */
   annualReviews: AnnualReviewRecord[];
+  /** 待皇帝亲裁/已裁的人事决策（侍君请提拔亲族 / 获罪牵连 / 紫宸殿人事奏折；PR3C-3b）。 */
+  personnelDecisions: Record<string, PersonnelDecision>;
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

@@ -196,6 +196,29 @@ const annualReviewRecordSchema = z.strictObject({
   changes: z.array(personnelChangeSchema),
 });
 
+const personnelDecisionSchema = z.strictObject({
+  id: z.string().regex(/^pdec_\d{6}$/),
+  kind: z.enum([
+    "consort_petition_promotion",
+    "family_implication",
+    "memorial_promotion",
+    "memorial_demotion",
+    "memorial_dismissal",
+  ]),
+  status: z.enum(["pending", "resolved"]),
+  createdAt: gameTimeSchema,
+  sourceId: z.string().min(1),
+  officialId: idSchema,
+  consortId: idSchema.optional(),
+  familyId: idSchema.optional(),
+  fromPostId: idSchema.optional(),
+  recommendedPostId: idSchema.optional(),
+  sourcePunishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
+  caseId: z.string().regex(/^case_\d{6}$/).optional(),
+  resolvedAt: gameTimeSchema.optional(),
+  resolution: z.enum(["approve", "reject", "spare", "demote", "dismiss"]).optional(),
+});
+
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
 
 /** 角色持续状态（禁足等）。活跃判定见 characters/confinement.ts，不存「剩余月份」。 */
@@ -467,6 +490,7 @@ export const gameStateSchema = z.strictObject({
   officialCandidates: z.record(idSchema, officialCandidateSchema),
   examinationResults: z.array(examinationResultSchema),
   annualReviews: z.array(annualReviewRecordSchema),
+  personnelDecisions: z.record(z.string(), personnelDecisionSchema),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),

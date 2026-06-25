@@ -6,8 +6,10 @@
 import type { ContentDB } from "../content/loader";
 import { stateError, type GameError } from "../infra/errors";
 import type { FamilyMemberRole, GameState, PersonSex } from "../state/types";
+import { compareGameTime } from "../calendar/time";
 import { isValidParentChildAge, isValidSpouseAge } from "./constraints";
 import { hanmenFamilyId } from "./appointment";
+import { legalResolutionsFor } from "./personnelDecisions";
 
 /** 角色（FamilyMember.role）应有的性别。 */
 const ROLE_SEX: Record<FamilyMemberRole, PersonSex> = {
@@ -482,6 +484,55 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     if (k.type === "sibling" || k.type === "spouse") {
       if (!has(k.toPersonId, k.fromPersonId, k.type)) {
         e("KIN_NOT_SYMMETRIC", `${k.type} 边不对称（缺 ${k.toPersonId} → ${k.fromPersonId}）`, { edge: k });
+      }
+    }
+  }
+
+  // ── 人事决策（PR3C-3b）：record key=id、sourceId 去重、引用存在性、官族匹配、状态/裁断一致性 ──
+  const seenDecisionSource = new Set<string>();
+  for (const [key, d] of Object.entries(state.personnelDecisions)) {
+    if (d.id !== key) e("PDEC_KEY_MISMATCH", `personnelDecisions["${key}"].id = "${d.id}"（键不一致）`, { key, id: d.id });
+    if (seenDecisionSource.has(d.sourceId)) e("PDEC_DUP_SOURCE", `人事决策来源「${d.sourceId}」重复`, { id: d.id, sourceId: d.sourceId });
+    seenDecisionSource.add(d.sourceId);
+
+    const off = state.officials[d.officialId];
+    if (!off) e("PDEC_BAD_OFFICIAL", `人事决策「${d.id}」指向无效官员「${d.officialId}」`, { id: d.id, officialId: d.officialId });
+
+    // consortId（若有）须为在宫侍君（在 standing 且非 official）。
+    if (d.consortId !== undefined && (!state.standing[d.consortId] || state.officials[d.consortId])) {
+      e("PDEC_BAD_CONSORT", `人事决策「${d.id}」consortId「${d.consortId}」不是有效侍君`, { id: d.id, consortId: d.consortId });
+    }
+    if (d.familyId !== undefined && !state.officialFamilies[d.familyId]) {
+      e("PDEC_BAD_FAMILY", `人事决策「${d.id}」familyId「${d.familyId}」无对应家族`, { id: d.id, familyId: d.familyId });
+    }
+    if (off && d.familyId !== undefined && off.familyId !== d.familyId) {
+      e("PDEC_FAMILY_MISMATCH", `人事决策「${d.id}」官员家族「${off.familyId}」≠ decision.familyId「${d.familyId}」`, { id: d.id });
+    }
+    if (d.fromPostId !== undefined && !gradedPost(d.fromPostId)) e("PDEC_BAD_POST", `人事决策「${d.id}」fromPostId「${d.fromPostId}」非有效官职`, { id: d.id });
+    if (d.recommendedPostId !== undefined && !gradedPost(d.recommendedPostId)) e("PDEC_BAD_POST", `人事决策「${d.id}」recommendedPostId「${d.recommendedPostId}」非有效官职`, { id: d.id });
+
+    // sourcePunishmentId：family_implication 必须有，且须指向真实**侍君**目标记录。
+    if (d.sourcePunishmentId !== undefined) {
+      const sp = punishments[d.sourcePunishmentId];
+      if (!sp) e("PDEC_BAD_SOURCE_PUNISHMENT", `人事决策「${d.id}」sourcePunishmentId「${d.sourcePunishmentId}」不存在`, { id: d.id });
+      else if (d.kind === "family_implication" && sp.targetKind !== "consort") {
+        e("PDEC_SOURCE_NOT_CONSORT", `牵连决策「${d.id}」来源 punishment 非侍君目标`, { id: d.id });
+      }
+    }
+    if (d.kind === "family_implication" && d.sourcePunishmentId === undefined) {
+      e("PDEC_IMPLICATION_NO_SOURCE", `牵连决策「${d.id}」缺 sourcePunishmentId`, { id: d.id });
+    }
+    if (d.caseId !== undefined && !state.justice.cases[d.caseId]) e("PDEC_BAD_CASE", `人事决策「${d.id}」caseId「${d.caseId}」不存在`, { id: d.id });
+
+    // pending/resolved 字段一致性 + 裁断合法 + resolvedAt ≥ createdAt。
+    if (d.status === "pending") {
+      if (d.resolvedAt !== undefined || d.resolution !== undefined) e("PDEC_PENDING_WITH_RESOLUTION", `待裁人事决策「${d.id}」不应带 resolvedAt/resolution`, { id: d.id });
+    } else {
+      if (d.resolvedAt === undefined || d.resolution === undefined) {
+        e("PDEC_RESOLVED_MISSING_FIELDS", `已裁人事决策「${d.id}」缺 resolvedAt/resolution`, { id: d.id });
+      } else {
+        if (!legalResolutionsFor(d.kind).includes(d.resolution)) e("PDEC_BAD_RESOLUTION", `人事决策「${d.id}」裁断「${d.resolution}」对「${d.kind}」非法`, { id: d.id });
+        if (compareGameTime(d.resolvedAt, d.createdAt) < 0) e("PDEC_RESOLVED_BEFORE_CREATED", `人事决策「${d.id}」resolvedAt 早于 createdAt`, { id: d.id });
       }
     }
   }

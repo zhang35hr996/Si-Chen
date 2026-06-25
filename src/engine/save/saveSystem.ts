@@ -20,7 +20,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 17;
+export const SAVE_FORMAT_VERSION = 18;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -295,6 +295,15 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };
+  },
+  // v17 → v18: 人事决策集合（PR3C-3b）。旧档无任何待裁决策，补空记录。
+  17: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    if ((state as unknown as { personnelDecisions?: unknown }).personnelDecisions === undefined) {
+      (state as unknown as { personnelDecisions: Record<string, never> }).personnelDecisions = {};
+    }
+    return { ...env, formatVersion: 18, state, checksum: checksumOf(state) };
   },
 };
 
