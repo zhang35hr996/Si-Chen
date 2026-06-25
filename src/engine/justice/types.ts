@@ -109,6 +109,13 @@ export type PunishmentLifecycle =
   | { status: "completed"; resolvedAt: GameTime; resolution: "immediate" | "expired" | "target_deceased" }
   | { status: "lifted"; resolvedAt: GameTime; resolution: "lifted_by_decree" | "authority_restored" | "pardoned" };
 
+/** 官员惩戒一律即时完成（PR3C-3a）：类型上禁止 active/lifted/非 immediate。 */
+export interface ImmediatePunishmentLifecycle {
+  status: "completed";
+  resolvedAt: GameTime;
+  resolution: "immediate";
+}
+
 export interface PunishmentBase {
   id: PunishmentId;
   caseId?: CaseId;
@@ -139,9 +146,9 @@ export type PunishmentRecord =
         initialTarget: { mode: "acting_consort"; charId: string } | { mode: "neiwu_proxy" };
       };
     })
-  // ── 官员目标（PR3C-3a；皇帝亲发，即时完成）──
-  | (PunishmentBase & { targetKind: "official"; kind: "official_demotion"; details: { fromPostId: string; toPostId: string | null } })
-  | (PunishmentBase & { targetKind: "official"; kind: "official_dismissal"; details: { fromPostId: string } });
+  // ── 官员目标（PR3C-3a；皇帝亲发，即时完成；lifecycle 收紧为 immediate completed）──
+  | (PunishmentBase & { targetKind: "official"; kind: "official_demotion"; lifecycle: ImmediatePunishmentLifecycle; details: { fromPostId: string; toPostId: string } })
+  | (PunishmentBase & { targetKind: "official"; kind: "official_dismissal"; lifecycle: ImmediatePunishmentLifecycle; details: { fromPostId: string } });
 
 // ── JusticeState ──────────────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@ import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
-import type { GameState, Official, OfficialFamily, OfficialHistoryEntry } from "../state/types";
+import type { CourtEventPublicity, GameState, Official, OfficialFamily, OfficialHistoryEntry } from "../state/types";
 import { officialPunishmentSeverity, type OfficialPunishmentKind } from "../punishments/types";
 import type { PunishmentRecord } from "../justice/types";
 import { allocateJusticeIds } from "../justice/ids";
@@ -51,7 +51,16 @@ function adjustFamilyFavor(state: GameState, familyId: string, delta: number): G
   return { ...state, officialFamilies: { ...state.officialFamilies, [familyId]: next } };
 }
 
-/** 受控移动 + 忠心增量 + officialHistory（可带 punishmentId / reason）。 */
+/** 公开范围 → CourtEvent 公开范围（保持记录与事件单一事实源一致）。 */
+function courtEventPublicityFor(publicity: "secret" | "palace" | "public", targetId: string): CourtEventPublicity {
+  switch (publicity) {
+    case "secret": return { scope: "circle", circleIds: [targetId] };
+    case "public": return { scope: "realm", persistence: "institutional" };
+    default: return { scope: "palace", persistence: "institutional" };
+  }
+}
+
+/** 受控移动 + 忠心增量 + officialHistory（可带 punishmentId / reason）；同时撤回该官员未决告老。 */
 function moveWithHistory(
   state: GameState,
   officialId: string,
@@ -76,7 +85,13 @@ function moveWithHistory(
     ...(extra.reason ? { reason: extra.reason } : {}),
     ...(extra.punishmentId ? { punishmentId: extra.punishmentId } : {}),
   };
-  return { ...state, officials: { ...state.officials, [officialId]: next }, officialHistory: [...state.officialHistory, entry] };
+  return {
+    ...state,
+    officials: { ...state.officials, [officialId]: next },
+    officialHistory: [...state.officialHistory, entry],
+    // 任何正式职位变更都撤回该官员未决告老（与生命周期一致，避免悬挂请求）。
+    pendingRetirements: state.pendingRetirements.filter((p) => p.officialId !== officialId),
+  };
 }
 
 /**
@@ -117,7 +132,7 @@ export function punishOfficial(state: GameState, db: ContentDB, command: Officia
           severity: officialPunishmentSeverity("official_demotion"), imposedAt: at, publicity: command.publicity ?? "palace",
           lifecycle: { status: "completed", resolvedAt: at, resolution: "immediate" },
           ...(command.caseId ? { caseId: command.caseId } : {}), ...(command.sourceLocation ? { sourceLocation: command.sourceLocation } : {}),
-          details: { fromPostId, toPostId },
+          details: { fromPostId, toPostId: toPostId! },
         }
       : {
           id: punishmentId, targetId: command.officialId, targetKind: "official", actorId: "player", kind: "official_dismissal",
@@ -144,7 +159,7 @@ export function punishOfficial(state: GameState, db: ContentDB, command: Officia
     participants: [{ charId: command.officialId, role: command.kind === "official_demotion" ? "demoted" : "dismissed" }],
     ...(command.sourceLocation ? { locationId: command.sourceLocation } : {}),
     payload: { punishmentId, kind: command.kind, fromPostId, toPostId },
-    publicity: { scope: "palace", persistence: "institutional" },
+    publicity: courtEventPublicityFor(command.publicity ?? "palace", command.officialId),
     publicSalience: command.kind === "official_dismissal" ? 55 : 40,
     retention: "slow",
     tags: ["official_punishment"],

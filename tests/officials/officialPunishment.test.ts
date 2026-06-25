@@ -1,6 +1,8 @@
 /** 官员惩戒与行政升迁（Phase 3 PR3C-3a）。 */
 import { describe, expect, it } from "vitest";
 import { punishOfficial, promoteOfficialAdministratively } from "../../src/engine/officials/officialPunishment";
+import { resolveOfficialVacancies } from "../../src/engine/officials/annualReview";
+import { assignOfficialPost } from "../../src/engine/officials/assign";
 import { validateOfficialWorld } from "../../src/engine/officials/validation";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { ContentDB } from "../../src/engine/content/loader";
@@ -75,6 +77,93 @@ describe("punishOfficial — demotion (PUNISH branch)", () => {
     if (!r.ok) return;
     // 被免者本轮不会被补缺重新坐回原职。
     expect(r.value.state.officials[o.id]!.postId).not.toBe(fromPostId);
+  });
+});
+
+describe("PR3C-3a review fixes", () => {
+  it("P1: a dismissed official is NOT auto-reinstated by later vacancy fills (until explicit re-appointment)", () => {
+    const s = createNewGameState(db, 1);
+    const o = seatedHigh(s);
+    const r = punishOfficial(s, db, { officialId: o.id, kind: "official_dismissal" }, at(2));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    let st = r.value.state;
+    expect(st.officials[o.id]!.postId).toBeNull();
+    // 制造一个其原品级附近的新空缺，再跑补缺 → 被免者仍无职。
+    const filled = resolveOfficialVacancies({ ...st, calendar: { ...st.calendar, year: st.calendar.year + 1 } }, db, at(3));
+    expect(filled.state.officials[o.id]!.postId).toBeNull();
+    expect(filled.changes.some((c) => c.officialId === o.id)).toBe(false);
+    // 但明确重新授任可恢复任职。
+    const re = assignOfficialPost(st, db, o.id, "zhubo", at(4));
+    expect(re.ok).toBe(true);
+    if (re.ok) { st = re.value; expect(st.officials[o.id]!.postId).toBe("zhubo"); }
+  });
+
+  it("P2: a pending retirement is cleared when the official is punished or promoted", () => {
+    const base = createNewGameState(db, 1);
+    const o = seatedHigh(base);
+    const s: GameState = { ...base, pendingRetirements: [{ officialId: o.id, requestedAt: base.calendar }] };
+    const r = punishOfficial(s, db, { officialId: o.id, kind: "official_dismissal" }, at(2));
+    expect(r.ok && r.value.state.pendingRetirements.some((p) => p.officialId === o.id)).toBe(false);
+  });
+
+  it("P2: CourtEvent publicity scope mirrors the record publicity", () => {
+    const s = createNewGameState(db, 1);
+    const o = seatedHigh(s);
+    const scopeFor = (publicity: "secret" | "palace" | "public") => {
+      const r = punishOfficial(s, db, { officialId: o.id, kind: "official_dismissal", publicity }, at(2));
+      if (!r.ok) throw new Error("punish failed");
+      return r.value.state.chronicle.find((e) => e.type === "punished")!.publicity.scope;
+    };
+    expect(scopeFor("secret")).toBe("circle");
+    expect(scopeFor("palace")).toBe("palace");
+    expect(scopeFor("public")).toBe("realm");
+  });
+});
+
+describe("PR3C-3a official-punishment validation closure", () => {
+  const codes = (st: GameState) => validateOfficialWorld(st, db).map((e) => e.code);
+  function punished(): { st: GameState; pid: string; offId: string } {
+    const s = createNewGameState(db, 1);
+    const o = seatedHigh(s);
+    const r = punishOfficial(s, db, { officialId: o.id, kind: "official_demotion", toPostId: lowerVacant(s, gradeOf(db, o.postId)) }, at(2));
+    if (!r.ok) throw new Error("setup");
+    return { st: r.value.state, pid: r.value.punishmentId, offId: o.id };
+  }
+
+  it("clean punished world validates", () => {
+    expect(validateOfficialWorld(punished().st, db)).toEqual([]);
+  });
+
+  it("deleting the punishment's history → PUNISHMENT_OFFICIAL_HISTORY_COUNT", () => {
+    const { st, pid } = punished();
+    expect(codes({ ...st, officialHistory: st.officialHistory.filter((h) => h.punishmentId !== pid) })).toContain("PUNISHMENT_OFFICIAL_HISTORY_COUNT");
+  });
+
+  it("duplicating the history → PUNISHMENT_OFFICIAL_HISTORY_COUNT", () => {
+    const { st, pid } = punished();
+    const dup = st.officialHistory.find((h) => h.punishmentId === pid)!;
+    expect(codes({ ...st, officialHistory: [...st.officialHistory, { ...dup, id: "ohist_dup" }] })).toContain("PUNISHMENT_OFFICIAL_HISTORY_COUNT");
+  });
+
+  it("deleting the punished CourtEvent → PUNISHMENT_OFFICIAL_EVENT_COUNT", () => {
+    const { st, pid } = punished();
+    expect(codes({ ...st, chronicle: st.chronicle.filter((e) => !(e.type === "punished" && e.payload.punishmentId === pid)) })).toContain("PUNISHMENT_OFFICIAL_EVENT_COUNT");
+  });
+
+  it("demotion record with non-lower toPostId → PUNISHMENT_OFFICIAL_BAD_POST", () => {
+    const { st, pid } = punished();
+    const puns = { ...st.justice.punishments };
+    const p = puns[pid] as { details: { fromPostId: string; toPostId: string } };
+    puns[pid] = { ...p, details: { ...p.details, toPostId: p.details.fromPostId === "taibao" ? "dadudu" : "taibao" } } as typeof puns[string]; // 高品
+    expect(codes({ ...st, justice: { ...st.justice, punishments: puns } })).toContain("PUNISHMENT_OFFICIAL_BAD_POST");
+  });
+
+  it("non-immediate lifecycle → PUNISHMENT_OFFICIAL_BAD_LIFECYCLE", () => {
+    const { st, pid } = punished();
+    const puns = { ...st.justice.punishments };
+    puns[pid] = { ...puns[pid]!, lifecycle: { status: "active" } } as typeof puns[string];
+    expect(codes({ ...st, justice: { ...st.justice, punishments: puns } })).toContain("PUNISHMENT_OFFICIAL_BAD_LIFECYCLE");
   });
 });
 

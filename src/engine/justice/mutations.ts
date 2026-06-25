@@ -209,7 +209,9 @@ function applyOneMutation(
       if (p.lifecycle.status !== "active") {
         return err(justiceErr(`punishment ${mut.punishmentId} is not active (status=${p.lifecycle.status})`));
       }
-      return ok({ ...justice, punishments: { ...justice.punishments, [mut.punishmentId]: { ...p, lifecycle: mut.lifecycle } } });
+      // 仅 active 惩罚（侍君禁足等）可改 lifecycle；官员惩戒恒为 immediate completed，永不到此。
+      // 故 cast 安全——官员变体的 ImmediatePunishmentLifecycle 与通用 lifecycle 在此互斥。
+      return ok({ ...justice, punishments: { ...justice.punishments, [mut.punishmentId]: { ...p, lifecycle: mut.lifecycle } as PunishmentRecord } });
     }
   }
 }

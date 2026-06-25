@@ -230,8 +230,8 @@ function validatePunishmentDetails(pun: PunishmentRecord): GameError[] {
       }
       break;
     case "official_demotion":
-      if (!pun.details.fromPostId || pun.details.fromPostId === pun.details.toPostId) {
-        errors.push(justiceErr(`punishment ${pun.id}: official_demotion fromPostId must be non-empty and differ from toPostId`));
+      if (!pun.details.fromPostId || !pun.details.toPostId || pun.details.fromPostId === pun.details.toPostId) {
+        errors.push(justiceErr(`punishment ${pun.id}: official_demotion fromPostId/toPostId must be non-empty and differ`));
       }
       break;
     case "official_dismissal":

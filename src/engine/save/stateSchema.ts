@@ -295,6 +295,13 @@ const punishmentLifecycleSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
+/** 官员惩戒：仅允许即时完成。 */
+const immediatePunishmentLifecycleSchema = z.strictObject({
+  status: z.literal("completed"),
+  resolvedAt: gameTimeSchema,
+  resolution: z.literal("immediate"),
+});
+
 const punishmentBaseSchema = z.object({
   id: punishmentIdSchema,
   caseId: caseIdSchema.optional(),
@@ -326,8 +333,8 @@ const punishmentRecordSchema = z.discriminatedUnion("kind", [
       ]),
     }),
   }),
-  punishmentBaseSchema.extend({ targetKind: z.literal("official"), kind: z.literal("official_demotion"), details: z.strictObject({ fromPostId: z.string(), toPostId: z.string().nullable() }) }),
-  punishmentBaseSchema.extend({ targetKind: z.literal("official"), kind: z.literal("official_dismissal"), details: z.strictObject({ fromPostId: z.string() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("official"), kind: z.literal("official_demotion"), lifecycle: immediatePunishmentLifecycleSchema, details: z.strictObject({ fromPostId: z.string(), toPostId: z.string() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("official"), kind: z.literal("official_dismissal"), lifecycle: immediatePunishmentLifecycleSchema, details: z.strictObject({ fromPostId: z.string() }) }),
 ]);
 
 const justiceNextSeqSchema = z.strictObject({
