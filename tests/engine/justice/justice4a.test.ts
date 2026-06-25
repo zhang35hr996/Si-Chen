@@ -1043,7 +1043,7 @@ describe("cold palace — confinement historical cross-link validation", () => {
       },
     };
     const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
-    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+    expect(errors.some(e => e.message?.includes("expected completed/expired"))).toBe(true);
   });
 
   it("CP-XLINK5. lifted_by_emperor effect + expired punishment → lifecycle mismatch detected", () => {
@@ -1051,6 +1051,8 @@ describe("cold palace — confinement historical cross-link validation", () => {
     const state = store.getState();
     const now = toGameTime(state.calendar);
     const effectId = "se_corrupt_004";
+    // endTurnExclusive matches punishment so only the lifecycle mismatch fires.
+    const endTurn = state.calendar.dayIndex + 10;
 
     const corruptedState = {
       ...state,
@@ -1066,6 +1068,7 @@ describe("cold palace — confinement historical cross-link validation", () => {
           liftedTurn: state.calendar.dayIndex + 1,
           liftedAt: now,
           liftReason: "lifted_by_emperor" as const,
+          endTurnExclusive: endTurn,
         },
       ],
       justice: {
@@ -1082,13 +1085,13 @@ describe("cold palace — confinement historical cross-link validation", () => {
             publicity: "palace" as const,
             // Mismatch: effect says lifted_by_emperor but punishment says expired
             lifecycle: { status: "completed" as const, resolvedAt: now, resolution: "expired" as const },
-            details: { statusEffectId: effectId, endTurnExclusive: state.calendar.dayIndex + 10 },
+            details: { statusEffectId: effectId, endTurnExclusive: endTurn },
           },
         },
       },
     };
     const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
-    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+    expect(errors.some(e => e.message?.includes("expected lifted/lifted_by_decree"))).toBe(true);
   });
 
   it("CP-XLINK6. liftedAt !== resolvedAt → timestamp mismatch detected", () => {
@@ -1133,6 +1136,57 @@ describe("cold palace — confinement historical cross-link validation", () => {
       },
     };
     const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
-    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+    expect(errors.some(e => e.message?.includes("!= punishment"))).toBe(true);
+  });
+
+  it("CP-XLINK7. active ConfinementEffect with liftedAt but no liftedTurn is rejected", () => {
+    const store = makeStore();
+    const state = store.getState();
+    const now = toGameTime(state.calendar);
+    const effectId = "se_corrupt_006";
+
+    const corruptedState = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: effectId,
+          kind: "confinement" as const,
+          characterId: TARGET,
+          startedAt: now,
+          startTurn: state.calendar.dayIndex,
+          // liftedTurn absent (active), but liftedAt is set — structural corruption
+          liftedAt: now,
+        },
+      ],
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.message?.includes("liftedTurn and liftedAt together"))).toBe(true);
+  });
+
+  it("CP-XLINK8. ConfinementEffect with liftedTurn but no liftedAt is rejected even without sourcePunishmentId", () => {
+    const store = makeStore();
+    const state = store.getState();
+    const now = toGameTime(state.calendar);
+    const effectId = "se_corrupt_007";
+
+    const corruptedState = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: effectId,
+          kind: "confinement" as const,
+          characterId: TARGET,
+          startedAt: now,
+          startTurn: state.calendar.dayIndex,
+          // no sourcePunishmentId — structural pre-scan must still catch this
+          liftedTurn: state.calendar.dayIndex + 3,
+          // liftedAt absent — structural corruption
+        },
+      ],
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.message?.includes("liftedTurn and liftedAt together"))).toBe(true);
   });
 });

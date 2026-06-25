@@ -21,17 +21,30 @@ export function validateJusticeLinks(state: GameState): GameError[] {
   const errors: GameError[] = [];
   const { justice, statusEffects } = state;
 
-  // ── ConfinementEffect → PunishmentRecord checks ───────────────────────────
+  // ── Structural integrity pre-scan (runs before any sourcePunishmentId guard) ──
   for (const effect of statusEffects) {
     if (effect.kind !== "confinement") continue;
-    if (effect.liftedTurn !== undefined) continue; // not active
 
-    // Active effects must not carry a liftReason.
-    if (effect.liftReason !== undefined) {
+    const hasLiftedTurn = effect.liftedTurn !== undefined;
+    const hasLiftedAt = effect.liftedAt !== undefined;
+
+    if (hasLiftedTurn !== hasLiftedAt) {
+      errors.push(crossLinkErr(
+        `ConfinementEffect ${effect.id} must have liftedTurn and liftedAt together (liftedTurn=${effect.liftedTurn}, liftedAt=${JSON.stringify(effect.liftedAt)})`,
+      ));
+    }
+
+    if (!hasLiftedTurn && effect.liftReason !== undefined) {
       errors.push(crossLinkErr(
         `ConfinementEffect ${effect.id} is active (no liftedTurn) but has liftReason=${effect.liftReason}`,
       ));
     }
+  }
+
+  // ── ConfinementEffect → PunishmentRecord checks ───────────────────────────
+  for (const effect of statusEffects) {
+    if (effect.kind !== "confinement") continue;
+    if (effect.liftedTurn !== undefined) continue; // not active
 
     const { sourcePunishmentId } = effect;
     if (!sourcePunishmentId) continue; // no link to validate
@@ -158,18 +171,6 @@ export function validateJusticeLinks(state: GameState): GameError[] {
           ));
         }
       }
-    }
-
-    // liftedAt ↔ liftedTurn pairing.
-    if (effect.liftedTurn !== undefined && !effect.liftedAt) {
-      errors.push(crossLinkErr(
-        `ConfinementEffect ${effect.id} has liftedTurn=${effect.liftedTurn} but liftedAt is missing`,
-      ));
-    }
-    if (effect.liftedAt !== undefined && effect.liftedTurn === undefined) {
-      errors.push(crossLinkErr(
-        `ConfinementEffect ${effect.id} has liftedAt but liftedTurn is missing`,
-      ));
     }
   }
 
