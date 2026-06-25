@@ -195,6 +195,8 @@ describe("PR3C-3a official-punishment validation closure", () => {
     expect(t((e) => ({ ...e, payload: { ...e.payload, fromPostId: "taibao" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
     expect(t((e) => ({ ...e, payload: { ...e.payload, toPostId: "dadudu" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
     expect(t((e) => ({ ...e, publicity: { scope: "realm", persistence: "institutional" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
+    // palace 事件 persistence 改 contemporaneous（默认 publicity=palace） → 不一致。
+    expect(t((e) => ({ ...e, publicity: { scope: "palace", persistence: "contemporaneous" } }))).toContain("PUNISHMENT_OFFICIAL_EVENT_INCONSISTENT");
   });
 });
 

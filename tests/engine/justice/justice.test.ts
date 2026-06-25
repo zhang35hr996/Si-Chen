@@ -57,6 +57,7 @@ function makePunishment(state: GameState, caseId?: string): PunishmentRecord {
     id: nextPunishmentId(state.justice),
     caseId: caseId as (typeof state.justice)["punishments"][string]["caseId"],
     targetId: "shen_zhibai",
+    targetKind: "consort",
     actorId: "player",
     kind: "rank_demotion",
     severity: "moderate",
