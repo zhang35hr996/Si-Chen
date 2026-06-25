@@ -292,6 +292,20 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
       }
     }
   }
+  // 官员惩戒溯源一致性（PR3C-3a）：officialHistory.punishmentId ↔ official 目标 PunishmentRecord。
+  const punishments = state.justice.punishments;
+  for (const h of state.officialHistory) {
+    if (h.punishmentId === undefined) continue;
+    const pun = punishments[h.punishmentId];
+    if (!pun || pun.targetKind !== "official" || pun.targetId !== h.officialId) {
+      e("OFFICIAL_HISTORY_BAD_PUNISHMENT", `历史条目「${h.id}」punishmentId 与官员 PunishmentRecord 不一致`, { id: h.id });
+    }
+  }
+  for (const pun of Object.values(punishments)) {
+    if (pun.targetKind === "official" && !state.officials[pun.targetId]) {
+      e("PUNISHMENT_BAD_OFFICIAL_TARGET", `官员惩戒「${pun.id}」目标「${pun.targetId}」不存在`, { id: pun.id });
+    }
+  }
   for (const [postId, used] of Object.entries(seatUse)) {
     const cap = db.officialPosts[postId]?.seatCount ?? 1;
     if (used > cap) e("OFFICIAL_SEAT_OVERFLOW", `官职「${postId}」在任 ${used} 人，超出席位 ${cap}`, { postId, used, cap });
