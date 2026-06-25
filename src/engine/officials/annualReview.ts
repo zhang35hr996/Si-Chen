@@ -61,7 +61,8 @@ export function annualMeritDelta(o: Official, fit: number, year: number): number
 export function updateMerit(state: GameState, db: ContentDB, year: number): GameState {
   const officials: Record<string, Official> = { ...state.officials };
   for (const o of Object.values(state.officials)) {
-    if (o.status !== "active") continue;
+    // 仅考核「在任且确占官职」者——无职无岗位政绩可考，merit/不合格计数/lastReviewedYear 一律不动。
+    if (o.status !== "active" || o.postId === null) continue;
     const fit = currentPostFit(db, o);
     const merit = clamp100(o.reviewState.merit + annualMeritDelta(o, fit, year));
     const unqualified = merit < MERIT_QUALIFY_MIN || fit < FIT_QUALIFY_MIN;
@@ -96,9 +97,10 @@ function moveOfficial(state: GameState, officialId: string, toPostId: string | n
 }
 
 // ── 2) 连年不合格自动降级（system_review，不进 PUNISH） ──────────────────────
-export function applyDemotions(state: GameState, db: ContentDB, at: GameTime): { state: GameState; changes: PersonnelChange[] } {
+export function applyDemotions(state: GameState, db: ContentDB, at: GameTime): { state: GameState; changes: PersonnelChange[]; movedOfficialIds: string[] } {
   let cur = state;
   const changes: PersonnelChange[] = [];
+  const movedOfficialIds: string[] = [];
   // 确定性顺序：按 officialId。
   const targets = Object.values(state.officials)
     .filter((o) => o.status === "active" && o.postId !== null && o.reviewState.underperformanceYears >= DEMOTION_TRIGGER_YEARS)
@@ -108,17 +110,19 @@ export function applyDemotions(state: GameState, db: ContentDB, at: GameTime): {
     const drop = 1 + (gestationRoll(`official:demote:${at.year}:${o.id}`) % 2); // 1 或 2
     const targetGrade = fromGrade - drop;
     const fromPostId = o.postId;
-    // 取空缺、品级 ≤ fromGrade-1 且最接近 targetGrade 的官职；无则释放为无职。
+    // 仅在「降 1–2 品」窗口内择空缺（fromGrade-2 ≤ g ≤ fromGrade-1），最接近 targetGrade；窗口内
+    // 无空缺则释放为无职——绝不一次跌落多品。
     const lower = Object.values(db.officialPosts)
-      .filter((p) => p.gradeOrder > 0 && p.gradeOrder < fromGrade && isPostVacant(cur, db, p.id))
+      .filter((p) => p.gradeOrder > 0 && p.gradeOrder >= fromGrade - MAX_PROMOTION_JUMP && p.gradeOrder < fromGrade && isPostVacant(cur, db, p.id))
       .sort((a, b) => Math.abs(a.gradeOrder - targetGrade) - Math.abs(b.gradeOrder - targetGrade) || (a.id < b.id ? -1 : 1));
     const toPostId = lower[0]?.id ?? null;
     cur = moveOfficial(cur, o.id, toPostId, at);
     // 降级后清零连续不合格，给一次重新积累的机会。
     cur = { ...cur, officials: { ...cur.officials, [o.id]: { ...cur.officials[o.id]!, reviewState: { ...cur.officials[o.id]!.reviewState, underperformanceYears: 0 } } } };
+    movedOfficialIds.push(o.id);
     changes.push({ officialId: o.id, kind: "demotion", fromPostId, toPostId, authority: "system_review" });
   }
-  return { state: cur, changes };
+  return { state: cur, changes, movedOfficialIds };
 }
 
 // ── 3) 自动升迁 + 连锁补缺（高品空缺优先；升迁链 → 候补；席位安全、确定性、有界） ──
@@ -129,44 +133,70 @@ interface Filler {
   score: number;
 }
 
-/** 为某空缺官职挑选最佳补缺者（不在 moved 内的在任官员或 eligible 候补）。 */
-function bestFiller(state: GameState, db: ContentDB, post: OfficialPost, moved: Set<string>): Filler | null {
-  const vacGrade = post.gradeOrder;
+/** 在一类候选内取最高分（稳定 id tie-break）。 */
+function pickBest(cands: Filler[]): Filler | null {
   let best: Filler | null = null;
-  const better = (f: Filler) => { if (!best || f.score > best.score || (f.score === best.score && (f.officialId ?? f.candidateId ?? "") < (best.officialId ?? best.candidateId ?? ""))) best = f; };
-
-  for (const o of Object.values(state.officials)) {
-    if (o.status !== "active" || moved.has(o.id) || hasPendingRetirement(state, o.id)) continue;
-    if (o.postId === post.id) continue;
-    const refGrade = o.postId !== null ? gradeOf(db, o.postId) : gradeOf(db, getLastHeldPostId(state, o.id) ?? null);
-    if (o.postId !== null) {
-      // 升迁：目标须更高、且不超 +2；满足政绩/评分门槛、年资≥1。
-      if (vacGrade <= refGrade || vacGrade > refGrade + MAX_PROMOTION_JUMP) continue;
-      if (o.reviewState.merit < PROMOTION_MERIT_MIN) continue;
-      if (seniorityYears(o, state.calendar) < 1) continue;
-      const score = promotionScore(state, db, o, post);
-      if (score < PROMOTION_SCORE_MIN) continue;
-      better({ kind: "promotion", officialId: o.id, score });
-    } else {
-      // 无职在任补缺：不得跨越大量品级（≤ 最近任职品级 +2）。
-      if (vacGrade > refGrade + MAX_PROMOTION_JUMP) continue;
-      better({ kind: "fill", officialId: o.id, score: promotionScore(state, db, o, post) });
-    }
-  }
-  // 候补授官（仅低品入仕）。
-  if (vacGrade <= CANDIDATE_ENTRY_GRADE_MAX) {
-    for (const c of getEligibleOfficialCandidates(state)) {
-      if (moved.has(c.id)) continue;
-      better({ kind: "appointment", candidateId: c.id, score: candidatePostFit(c, post) });
-    }
+  for (const f of cands) {
+    const fid = f.officialId ?? f.candidateId ?? "";
+    if (!best || f.score > best.score || (f.score === best.score && fid < (best.officialId ?? best.candidateId ?? ""))) best = f;
   }
   return best;
 }
 
-export function resolveOfficialVacancies(state: GameState, db: ContentDB, at: GameTime): { state: GameState; changes: PersonnelChange[] } {
+/**
+ * 严格三级补缺优先级（绝不跨类别比分数）：① 无职 active 官员 → ② 合格可升迁的低品官员 → ③ eligible 候补。
+ * 上一级有合格人选即用，不下探。
+ */
+export function bestFiller(state: GameState, db: ContentDB, post: OfficialPost, moved: Set<string>): Filler | null {
+  const vacGrade = post.gradeOrder;
+
+  // ① 无职在任官员（参照最近任职品级，跨度 ≤ +2）。
+  const noPost: Filler[] = [];
+  for (const o of Object.values(state.officials)) {
+    if (o.status !== "active" || o.postId !== null || moved.has(o.id) || hasPendingRetirement(state, o.id)) continue;
+    const refGrade = gradeOf(db, getLastHeldPostId(state, o.id) ?? null);
+    if (vacGrade > refGrade + MAX_PROMOTION_JUMP) continue;
+    noPost.push({ kind: "fill", officialId: o.id, score: promotionScore(state, db, o, post) });
+  }
+  const tier1 = pickBest(noPost);
+  if (tier1) return tier1;
+
+  // ② 合格的低品在任官员升迁（目标更高且 ≤ +2，merit/评分/年资门槛）。
+  const promo: Filler[] = [];
+  for (const o of Object.values(state.officials)) {
+    if (o.status !== "active" || o.postId === null || moved.has(o.id) || hasPendingRetirement(state, o.id)) continue;
+    if (o.postId === post.id) continue;
+    const refGrade = gradeOf(db, o.postId);
+    if (vacGrade <= refGrade || vacGrade > refGrade + MAX_PROMOTION_JUMP) continue;
+    if (o.reviewState.merit < PROMOTION_MERIT_MIN || seniorityYears(o, state.calendar) < 1) continue;
+    const score = promotionScore(state, db, o, post);
+    if (score < PROMOTION_SCORE_MIN) continue;
+    promo.push({ kind: "promotion", officialId: o.id, score });
+  }
+  const tier2 = pickBest(promo);
+  if (tier2) return tier2;
+
+  // ③ eligible 候补授官（仅低品入仕）。
+  if (vacGrade <= CANDIDATE_ENTRY_GRADE_MAX) {
+    const cands: Filler[] = [];
+    for (const c of getEligibleOfficialCandidates(state)) {
+      if (moved.has(c.id)) continue;
+      cands.push({ kind: "appointment", candidateId: c.id, score: candidatePostFit(c, post) });
+    }
+    return pickBest(cands);
+  }
+  return null;
+}
+
+export function resolveOfficialVacancies(
+  state: GameState,
+  db: ContentDB,
+  at: GameTime,
+  excluded: ReadonlySet<string> = new Set(),
+): { state: GameState; changes: PersonnelChange[] } {
   let cur = state;
   const changes: PersonnelChange[] = [];
-  const moved = new Set<string>(); // 每人/每候补本轮至多动一次
+  const moved = new Set<string>(excluded); // 每人/每候补本轮至多动一次；含本轮已降级者
   const unfillable = new Set<string>(); // 本轮已确认无人可补的官职
   for (let iter = 0; iter < MAX_VACANCY_ITERATIONS; iter++) {
     const vac = Object.values(db.officialPosts)
@@ -197,7 +227,8 @@ export function buildAnnualReview(state: GameState, db: ContentDB, year: number,
   if (hasReviewedYear(state, year)) return state;
   const merited = updateMerit(state, db, year);
   const demoted = applyDemotions(merited, db, at);
-  const filled = resolveOfficialVacancies(demoted.state, db, at);
+  // 本轮已降级者不得在同一事务被补缺重新挪动（含被升回原职）。
+  const filled = resolveOfficialVacancies(demoted.state, db, at, new Set(demoted.movedOfficialIds));
   const record: AnnualReviewRecord = { year, at, changes: [...demoted.changes, ...filled.changes] };
   return { ...filled.state, annualReviews: [...filled.state.annualReviews, record] };
 }

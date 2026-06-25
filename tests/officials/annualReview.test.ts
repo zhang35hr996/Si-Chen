@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   annualMeritDelta,
   applyDemotions,
+  bestFiller,
   buildAnnualReview,
   getLatestAnnualReview,
   hasReviewedYear,
@@ -118,6 +119,98 @@ describe("resolveOfficialVacancies — chain fill", () => {
     expect(newGrade).toBeGreaterThan(fromGrade);
     expect(newGrade).toBeLessThanOrEqual(fromGrade + 2); // 不超 +2
     expect(noOverSeat(state)).toBe(true);
+  });
+});
+
+/** 用占位在任官员占满给定官职（使其非空缺）。 */
+function seatDummies(base: GameState, postIds: string[]): GameState {
+  const famId = Object.keys(base.officialFamilies)[0]!;
+  const officials = { ...base.officials };
+  postIds.forEach((pid, i) => {
+    const id = `official_dummy_${i}`;
+    officials[id] = {
+      id, surname: "占", givenName: `位${i}`, postId: pid, loyalty: 50, age: 40, familyId: famId, status: "active",
+      aptitude: { governance: 50, scholarship: 50, military: 50, integrity: 50 }, reviewState: { merit: 50, underperformanceYears: 0 },
+      appointedAt: base.calendar,
+    };
+  });
+  return { ...base, officials };
+}
+
+describe("PR3C-2 review fixes", () => {
+  it("P1: a demoted-to-no-post official is NOT refilled in the same review transaction", () => {
+    let base = withExam(1);
+    const T = Object.values(base.officials).find((o) => o.status === "active" && o.postId)!;
+    // 把 T 坐到 zhubo(g2)、连年不合格；占满 g1(dianshi) 使降级窗口无空缺 → 应降为无职。
+    base = seatDummies(base, ["dianshi"]);
+    base = { ...base, officials: { ...base.officials, [T.id]: { ...T, postId: "zhubo", reviewState: { merit: 10, underperformanceYears: 2 } } } };
+    const r = buildAnnualReview(base, db, 1, at(1));
+    expect(r.officials[T.id]!.postId).toBeNull(); // 本轮仍无职，未被补回
+    expect(getLatestAnnualReview(r)!.changes.some((c) => c.officialId === T.id && c.kind === "demotion")).toBe(true);
+  });
+
+  it("P1: fill priority is strictly no-post → promotable → candidate (no cross-class score)", () => {
+    const examined = withExam(1);
+    const fam = Object.values(examined.officials)[0]!.familyId;
+    const strongPromo = (id: string, postId: string): Official => ({
+      id, surname: "升", givenName: id, postId, loyalty: 100, age: 40, familyId: fam, status: "active",
+      aptitude: { governance: 100, scholarship: 100, military: 100, integrity: 100 }, reviewState: { merit: 100, underperformanceYears: 0 },
+      appointedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+    });
+    const noPostOfficial: Official = { ...strongPromo("official_nopost", "dianshi"), postId: null };
+    const zhubo = db.officialPosts.zhubo!;
+    const calY = { ...examined, calendar: { ...examined.calendar, year: 30 } };
+
+    // ② 仅可升迁官员 + 候补 → 选官员（promotion）。
+    const s2 = { ...calY, officials: { ...calY.officials, official_promo: strongPromo("official_promo", "dianshi") } };
+    expect(bestFiller(s2, db, zhubo, new Set())!.kind).toBe("promotion");
+
+    // ① 同时有无职官员 + 可升迁官员 → 选无职（fill），不比分数。
+    const s1 = { ...s2, officials: { ...s2.officials, official_nopost: noPostOfficial } };
+    expect(bestFiller(s1, db, zhubo, new Set())!.kind).toBe("fill");
+
+    // ③ 既无无职亦无可升迁（authored 官员都高品、不能下迁）→ 候补。
+    expect(bestFiller(calY, db, zhubo, new Set())!.kind).toBe("appointment");
+  });
+
+  it("P2: demotion never drops more than 2 grades — far-only vacancy → no-post", () => {
+    let base = createNewGameState(db, 1);
+    // 占满全部 g13/g14（g15 的降级窗口）空缺。
+    const windowPosts = Object.values(db.officialPosts).filter((p) => p.gradeOrder === 13 || p.gradeOrder === 14).map((p) => p.id);
+    base = seatDummies(base, windowPosts);
+    // 用一名全新合成官员坐 g15（libu_shangshu，开局空缺），避免占用 T 移动腾出窗口内空位。
+    const famId = Object.keys(base.officialFamilies)[0]!;
+    const T: Official = {
+      id: "official_target_g15", surname: "考", givenName: "课", postId: "libu_shangshu", loyalty: 50, age: 50, familyId: famId, status: "active",
+      aptitude: { governance: 50, scholarship: 50, military: 50, integrity: 50 }, reviewState: { merit: 10, underperformanceYears: 2 }, appointedAt: base.calendar,
+    };
+    base = { ...base, officials: { ...base.officials, [T.id]: T } };
+    const { state } = applyDemotions(base, db, at(3));
+    expect(state.officials[T.id]!.postId).toBeNull(); // 无职，绝不一次跌到远低品
+  });
+
+  it("P2: a no-post active official is NOT scored as underperforming", () => {
+    const base = createNewGameState(db, 1);
+    const T = Object.values(base.officials).find((o) => o.status === "active" && o.postId)!;
+    const noPost = { ...base, officials: { ...base.officials, [T.id]: { ...T, postId: null, reviewState: { merit: 50, underperformanceYears: 0 } } } };
+    const r = updateMerit(noPost, db, 9);
+    expect(r.officials[T.id]!.reviewState).toEqual({ merit: 50, underperformanceYears: 0 }); // 完全不变
+  });
+});
+
+describe("annualReviews validation (PR3C-2)", () => {
+  const codes = (s: GameState) => validateOfficialWorld(s, db).map((e) => e.code);
+  const rec = (changes: GameState["annualReviews"][number]["changes"], year = 3) =>
+    ({ ...createNewGameState(db, 1), annualReviews: [{ year, at: { year, month: 11, period: "early" as const, dayIndex: 0 }, changes }] }) as GameState;
+
+  it("dup year / at-year mismatch / bad post / bad change / bad direction are caught", () => {
+    const ok = rec([{ officialId: "x", kind: "promotion", fromPostId: "zhubo", toPostId: "boshi", authority: "system_review" }]);
+    expect(codes(ok)).not.toContain("REVIEW_BAD_DIRECTION");
+    expect(codes({ ...ok, annualReviews: [ok.annualReviews[0]!, ok.annualReviews[0]!] })).toContain("REVIEW_DUP_YEAR");
+    expect(codes({ ...ok, annualReviews: [{ ...ok.annualReviews[0]!, at: { year: 99, month: 11, period: "early", dayIndex: 0 } }] })).toContain("REVIEW_AT_YEAR_MISMATCH");
+    expect(codes(rec([{ officialId: "x", kind: "fill", fromPostId: null, toPostId: "ghost", authority: "system_review" }]))).toContain("REVIEW_BAD_POST");
+    expect(codes(rec([{ officialId: "x", kind: "appointment", fromPostId: null, toPostId: "zhubo", authority: "system_review" }]))).toContain("REVIEW_BAD_CHANGE"); // 缺 candidateId
+    expect(codes(rec([{ officialId: "x", kind: "promotion", fromPostId: "boshi", toPostId: "zhubo", authority: "system_review" }]))).toContain("REVIEW_BAD_DIRECTION"); // 升迁却降品
   });
 });
 

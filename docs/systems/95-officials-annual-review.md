@@ -15,19 +15,23 @@
 
 ## 二、政绩更新
 
-每名 active 官员：`merit' = clamp(merit + annualMeritDelta, 0, 100)`，`annualMeritDelta` 确定性 −3..+3
-（适配高者上行、低者下行 + 确定性 jitter）。**不合格** = `merit' < 35 || currentPostFit < 30`；不合格
-`underperformanceYears+1`，合格清零；`lastReviewedYear = year`。事件型政绩（±5..±20）留 PR3C-3。
+**仅考核 active 且确占官职者**（`postId !== null`）：`merit' = clamp(merit + annualMeritDelta, 0, 100)`，
+`annualMeritDelta` 确定性 −3..+3（适配高者上行、低者下行 + 确定性 jitter）。**不合格** = `merit' < 35 ||
+currentPostFit < 30`；不合格 `underperformanceYears+1`，合格清零；`lastReviewedYear = year`。**无职期间不
+考核**（merit/计数/lastReviewedYear 一律不动——无岗位政绩可考，避免免职/起复等待补缺者被误计不合格、
+重新授任后立即触发降级）。事件型政绩（±5..±20）留 PR3C-3。
 
 ## 三、自动降级（system_review）
 
-`underperformanceYears >= 2` 的在任占职官员降 1–2 个 gradeOrder：移到品级 < 当前、最接近目标的**空缺**官职；
-无合适空缺则释放为无职（postId=null，仍 active）。降级后 `underperformanceYears` 清零。每次移动写
-`officialHistory`（status active + vacatedPostId），并记入简报 `kind: "demotion"`。**不产生惩罚记录。**
+`underperformanceYears >= 2` 的在任占职官员降 1–2 个 gradeOrder：**仅在 `[fromGrade−2, fromGrade−1]` 窗口内**
+择最接近目标的**有品级空缺**（绝不一次跌落多品）；窗口内无空缺则释放为无职（postId=null，仍 active）。
+降级后 `underperformanceYears` 清零，且**本轮被降级者一律排除出随后的补缺**（不得在同一事务被升回原职）。
+每次移动写 `officialHistory`（status active + vacatedPostId），记入简报 `kind: "demotion"`。**不产生惩罚记录。**
 
 ## 四、自动升迁 + 连锁补缺 `resolveOfficialVacancies`
 
-按官职品级**从高到低**逐个空缺补缺，每空缺挑最佳补缺者：
+按官职品级**从高到低**逐个空缺补缺，每空缺按**严格三级优先级**挑补缺者（**绝不跨类别比分数**，上一级有
+合格人选即用、不下探，级内再按分数 + 稳定 id tie-break）：
 1. **无职 active 官员**（参照其最近任职品级，跨度 ≤ +2）。
 2. **更低品在任官员**满足升迁门槛：`merit ≥ 50`、`promotionScore(目标) ≥ 65`、年资 ≥ 1、目标更高且 ≤ 当前 +2。
 3. **eligible 候补**（仅 `gradeOrder ≤ CANDIDATE_ENTRY_GRADE_MAX(8)` 的低品入仕）。
