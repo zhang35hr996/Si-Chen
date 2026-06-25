@@ -2434,6 +2434,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       )}
       {namePetHeirId && (
         <HeirNameModal
+          key={namePetHeirId}
           title="为新生皇嗣起个小名"
           hint="乳名一双字，亲昵相唤。"
           confirmLabel="起名"
