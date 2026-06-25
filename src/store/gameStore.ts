@@ -554,7 +554,7 @@ export class GameStore {
     this.tracedSet(
       { ...batch.value, flags: { ...batch.value.flags, [daxuanDianxuanFlagKey(year)]: true }, pendingDaxuan: undefined },
       { kind: "system", sourceId: "resolveDaxuanByDelegate", label: `resolveDaxuanByDelegate: year ${year}` },
-      [{ kind: "queue", queue: "pendingDaxuan", operation: "resolved", itemId: pdId, itemType: pd.kind, reason: "delegate_selected", phase: "direct_mutation" }],
+      [{ kind: "queue", queue: "pendingDaxuan", operation: "resolved", itemId: pdId, itemType: pd.kind, reason: "delegated_selection_completed", phase: "direct_mutation" }],
     );
     return ok(undefined);
   }

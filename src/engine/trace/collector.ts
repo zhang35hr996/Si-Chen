@@ -145,7 +145,7 @@ export class TraceCollector {
   }
 
   recordDomainEvent(event: TraceDomainEvent): void {
-    this._domainEvents.push(cloneDomainEvent(event));
+    this._domainEvents.push(cloneTraceDomainEvent(event));
   }
 
   recordMemoryEvent(event: Omit<MemoryTraceEvent, "kind">): void {
@@ -203,7 +203,9 @@ export class TraceCollector {
   }
 }
 
-function cloneDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
+/** Deep-copies a TraceDomainEvent so mutations on the returned object or its nested arrays
+ *  never affect the stored history entry. */
+export function cloneTraceDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
   if (event.kind === "eligibility") {
     return {
       ...event,

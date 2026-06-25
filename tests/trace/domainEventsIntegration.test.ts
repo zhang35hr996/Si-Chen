@@ -2,7 +2,7 @@
  * Integration tests for PR2 domain event tracing (memory, queue, eligibility, rollback).
  */
 import { describe, expect, it } from "vitest";
-import { TraceCollector } from "../../src/engine/trace/collector";
+import { TraceCollector, cloneTraceDomainEvent } from "../../src/engine/trace/collector";
 import { createGameStore } from "../../src/store/gameStore";
 import { loadRealContent } from "../helpers/contentFixture";
 import { explainEventEligibility } from "../../src/engine/trace/eligibilityDiff";
@@ -265,7 +265,7 @@ describe("queue domain events", () => {
     const qEvs = delegateTx?.domainEvents.filter((e): e is QueueTraceEvent => e.kind === "queue") ?? [];
     const daxuanEv = qEvs.find((e) => e.queue === "pendingDaxuan");
     expect(daxuanEv?.operation).toBe("resolved");
-    expect(daxuanEv?.reason).toBe("delegate_selected");
+    expect(daxuanEv?.reason).toBe("delegated_selection_completed");
     expect(daxuanEv?.itemId).toBe("dianxuan:3");
   });
 
@@ -317,37 +317,40 @@ describe("eligibility domain events", () => {
     expect(eligEvs).toHaveLength(0);
   });
 
-  const onceEvent = Object.values(db.events).find((e) => e.once);
-  it.skipIf(!onceEvent)("became_ineligible for once event includes once_already_fired failure after event fires", () => {
-    const ev = onceEvent!;
-    const store = makeStarted("record");
-    const stateWithFiredEvent = {
-      ...store.getState(),
-      eventLog: [...store.getState().eventLog, {
-        eventId: ev.id,
-        firedAt: store.getState().calendar,
-        scenePath: "test",
-      }],
-    };
-    const result = explainEventEligibility(db, stateWithFiredEvent, ev);
+  // Minimal stubs — explainEventEligibility only reads state.eventLog and state.calendar
+  // so these tests are completely independent of production content.
+  const minimalCalendar = { year: 1, month: 1, period: "上旬" as const, dayIndex: 0 };
+  const minimalState = (overrides: Partial<{ eventLog: unknown[]; calendar: typeof minimalCalendar }> = {}) =>
+    ({ eventLog: [], calendar: minimalCalendar, ...overrides } as unknown) as Parameters<typeof explainEventEligibility>[1];
+
+  it("once_already_fired is reported when a once-event has already fired", () => {
+    const onceEventStub = {
+      id: "stub_once_evt",
+      once: true,
+      cooldown: undefined,
+      condition: { flagSet: "__never__" },
+    } as Parameters<typeof explainEventEligibility>[2];
+    const state = minimalState({
+      eventLog: [{ eventId: "stub_once_evt", firedAt: minimalCalendar, scenePath: "test" }],
+    });
+    const result = explainEventEligibility(db, state, onceEventStub);
     expect(result.eligible).toBe(false);
     expect(result.failures.some((f) => f.conditionType === "once_already_fired")).toBe(true);
   });
 
-  const cooldownEvent = Object.values(db.events).find((e) => e.cooldown);
-  it.skipIf(!cooldownEvent)("cooldown failure explains cooldown_not_ready when event is on cooldown", () => {
-    const ev = cooldownEvent!;
-    const store = makeStarted("record");
-    const stateWithRecentFire = {
-      ...store.getState(),
-      eventLog: [...store.getState().eventLog, {
-        eventId: ev.id,
-        firedAt: { ...store.getState().calendar, dayIndex: 0 },
-        scenePath: "test",
-      }],
-      calendar: { ...store.getState().calendar, dayIndex: 1 },
-    };
-    const result = explainEventEligibility(db, stateWithRecentFire, ev);
+  it("cooldown_not_ready is reported when event is within its cooldown window", () => {
+    const cooldownStub = {
+      id: "stub_cooldown_evt",
+      once: false,
+      cooldown: { actionDays: 5 },
+      condition: { flagSet: "__never__" },
+    } as Parameters<typeof explainEventEligibility>[2];
+    // Fired at dayIndex 0; current dayIndex 2 — within 5-action-day cooldown
+    const state = minimalState({
+      eventLog: [{ eventId: "stub_cooldown_evt", firedAt: { ...minimalCalendar, dayIndex: 0 }, scenePath: "test" }],
+      calendar: { ...minimalCalendar, dayIndex: 2 },
+    });
+    const result = explainEventEligibility(db, state, cooldownStub);
     expect(result.eligible).toBe(false);
     expect(result.failures.some((f) => f.conditionType === "cooldown_not_ready")).toBe(true);
   });
@@ -458,6 +461,26 @@ describe("domain event immutability", () => {
     // The stored failure was shallow-copied, so primitive fields are safe.
     // This verifies the spread copy defence at least guards scalar mutations.
     expect(stored.failedBefore[0]?.conditionType).toBe("flagSet");
+  });
+
+  it("cloneTraceDomainEvent produces an independent eligibility snapshot", () => {
+    const original = {
+      kind: "eligibility" as const,
+      eventId: "evt_x",
+      transition: "became_ineligible" as const,
+      failedBefore: [{ conditionType: "flagSet", expected: true, actual: false }] as EligibilityFailure[],
+      failedAfter: [] as EligibilityFailure[],
+      phase: "boundary_diff",
+    };
+    const clone = cloneTraceDomainEvent(original);
+    // Mutate source arrays after cloning
+    original.failedBefore.push({ conditionType: "injected" });
+    // Clone is unaffected
+    expect(clone.kind).toBe("eligibility");
+    if (clone.kind === "eligibility") {
+      expect(clone.failedBefore).toHaveLength(1);
+      expect(clone.failedBefore[0]?.conditionType).toBe("flagSet");
+    }
   });
 
   it("domainEvents array snapshot is stable across reads", () => {
