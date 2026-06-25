@@ -114,15 +114,59 @@ The default when omitted is `public` (safe, conservative).
 1. Content **before the first `##` heading** → `_intro` chunk (if ≥ 10 chars).
 2. Each **`##` or `###` heading** + its body → one chunk.
 3. Chunk ID format:
-   - `##` heading → `${docId}#${h2Text}` (e.g. `etiquette.confinement#禁足期间的请安`)
-   - `###` heading under a `##` → `${docId}#${h2Text}/${h3Text}` (e.g. `official.system#中书省/职责`)
+   - `##` heading → `${docId}#${anchorOrH2Text}`
+   - `###` heading under a `##` → `${docId}#${anchorOrH2}/${anchorOrH3}`
    - Two `### 职责` sections under different `##` parents get **distinct** IDs via the H2 prefix.
 4. Intro chunk ID: `${docId}#_intro`.
 5. If a section body exceeds ~800 characters, it is **split at paragraph boundaries** (blank lines).  Never splits mid-sentence or mid-paragraph.
 6. Sub-chunk IDs: `${docId}#${headingPath}:0`, `${docId}#${headingPath}:1`, … (where `headingPath` follows the H2/H3 rule above).
 7. Empty sections (< 10 chars after trimming) are **discarded** — no garbage chunks.
 8. All chunks inherit the document-level `tags`, `entityIds`, `locationIds`, `visibility`, `validFrom`, `validUntil`.
-9. Chunk title for a `###` section includes the parent `##` for display context: `"H2 — H3"` (e.g. `"中书省 — 职责"`).
+9. Chunk title for a `###` section includes the parent `##` for display context: `"H2 — H3"` (e.g. `"高位自称 — 对皇帝的正式自称"`).
+
+---
+
+## Stable Heading Anchors
+
+Production knowledge files (`content/knowledge/*.md`) MUST use **stable heading anchors** to decouple chunk IDs from Chinese display text.
+
+### Syntax
+
+```markdown
+## 后宫位分顺序 {#rank-order}
+
+### 对皇帝的正式自称 {#to-emperor}
+```
+
+### Rules
+
+- Anchor format: `{#kebab-case-id}` at the end of the heading line.
+- Anchor characters: lowercase ASCII letters, digits, and hyphens. Must start with a letter.
+- When an anchor is present it becomes the **ID component**; the Chinese heading text is display-only.
+- When no anchor is present the heading text is used (backwards-compatible for test fixtures and legacy files).
+- **Every `##` and `###` heading in `content/knowledge/*.md` MUST carry an anchor** — `knowledge:validate` rejects files that omit them.
+- Anchors must be unique within a document.
+- Renaming an anchor is a **breaking change** (chunk ID changes, golden eval expected IDs break, any stored references need migration).
+
+### Generated IDs
+
+```
+## 后宫位分顺序 {#rank-order}          → titles.harem-ranks#rank-order
+### 对皇帝的正式自称 {#to-emperor}     → titles.harem-ranks#rank-order/to-emperor
+```
+
+Without anchor (legacy / test fixtures):
+
+```
+## 禁足期间的请安                       → etiquette.confinement#禁足期间的请安
+### 请安规则                           → etiquette.confinement#禁足期间的请安/请安规则
+```
+
+### Compatibility Policy
+
+- Test fixtures in `tests/knowledge/fixtures/` may use headings without anchors.
+- The `knowledge:validate` production validator enforces anchors only for `content/knowledge/*.md`.
+- Legacy documents in other directories are not subject to the anchor requirement.
 
 ---
 
@@ -130,9 +174,9 @@ The default when omitted is `public` (safe, conservative).
 
 - IDs are derived from document content only — no filesystem order dependency.
 - Identical document + path → identical IDs across all runs.
-- IDs may contain Chinese characters and `/` separators (knowledge IDs are not `idSchema`).
+- IDs may contain Chinese characters, hyphens, and `/` separators (knowledge IDs are not `idSchema`).
 - Do not rely on database row IDs as business IDs.
-- H3 IDs embed the parent H2 text: `doc#H2/H3` — never write `doc#H3` alone.
+- H3 IDs embed the parent H2 anchor/text: `doc#H2key/H3key` — never write `doc#H3key` alone.
 
 ---
 

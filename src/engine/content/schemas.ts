@@ -512,11 +512,19 @@ export type OfficialPost = z.infer<typeof officialPostSchema>;
 export const characterRankSchema = z.strictObject({
   id: idSchema,
   name: nonEmpty,
+  /** Acceptable alternate names (e.g. common short forms). Empty by default. */
+  aliases: z.array(nonEmpty).default([]),
+  /** Former names now replaced. Recognised by old-content readers but MUST NOT
+   *  appear in new production lore or new content files. */
+  deprecatedAliases: z.array(nonEmpty).default([]),
   grade: nonEmpty,
   selfRefs: selfRefsSchema,
   order: z.number().int().min(0),
   domain: z.enum(["harem", "official"]),
   favorTerm: nonEmpty, // 恩宠 (consort) / 圣眷 (official) — display label
+  /** True when the rank is no longer part of the canonical set.
+   *  Kept in world.json for save-file compatibility; new content must not use it. */
+  deprecated: z.boolean().default(false),
 });
 
 export type CharacterRank = z.infer<typeof characterRankSchema>;

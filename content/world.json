@@ -1,6 +1,6 @@
 {
   "contentVersion": "0.1.0",
-  "calendar": { "apMax": 6, "start": { "year": 1, "month": 1, "period": "early" } },
+  "calendar": { "apMax": 5, "start": { "year": 1, "month": 1, "period": "early" } },
   "startingLocation": "zichendian",
   "sovereign": { "startingAge": 18 },
   "startingResources": {
@@ -28,7 +28,16 @@
     { "id": "changzai", "name": "常在", "grade": "六品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 70, "domain": "harem", "favorTerm": "恩宠" },
     { "id": "daying", "name": "答应", "grade": "七品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 60, "domain": "harem", "favorTerm": "恩宠" },
     { "id": "gengyi", "name": "更衣", "grade": "八品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 50, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "guannanzi", "name": "官男子", "grade": "九品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 40, "domain": "harem", "favorTerm": "恩宠" },
+    {
+      "id": "guannanzi",
+      "name": "官男子",
+      "grade": "九品",
+      "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] },
+      "order": 40,
+      "domain": "harem",
+      "favorTerm": "恩宠",
+      "deprecated": true
+    },
     { "id": "sili_zhang", "name": "司礼", "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" },
     { "id": "shiwei_zhang", "name": "侍卫总管", "grade": "正三品", "selfRefs": { "toPlayer": ["臣"], "formal": ["属下"] }, "order": 130, "domain": "official", "favorTerm": "圣眷" }
   ],
