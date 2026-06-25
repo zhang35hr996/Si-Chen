@@ -35,7 +35,7 @@ const now = makeGameTime(1, 10, "early");
 const emptyRecord: BedchamberRecord = { encounters: [] };
 
 describe("resolveBirth — self pregnancy", () => {
-  it("safe, fatherId null, legitimate, favor=100", () => {
+  it("safe, fatherId null, legitimate, favor=65 (selfPregnancy default)", () => {
     const v = resolveBirth({
       rngSeed: 1,
       now,
@@ -50,13 +50,13 @@ describe("resolveBirth — self pregnancy", () => {
     expect(v.bearerOutcome).toBe("safe");
     expect(v.fatherId).toBeNull();
     expect(v.legitimate).toBe(true);
-    expect(v.favor).toBe(100);
+    expect(v.favor).toBe(65); // selfPregnancy=65, no omen (seed=1 roll=78)
     expect(v.sex === "daughter" || v.sex === "son").toBe(true);
   });
 });
 
 describe("resolveBirth — consort carrier", () => {
-  it("transfer at month 3 (5% dystocia) is usually safe; favor from tier none=0", () => {
+  it("transfer at month 3 (5% dystocia) is safe; favor from tier none=15", () => {
     const v = resolveBirth({
       rngSeed: 1,
       now,
@@ -64,16 +64,17 @@ describe("resolveBirth — consort carrier", () => {
       fatherId: "lu_huaijin",
       transferredAtMonth: 3,
       bearerIsFenghou: false,
-      carrierRecord: emptyRecord, // no encounters → tier none → 0
+      carrierRecord: emptyRecord, // no encounters → tier none → 15
       thresholds: DEFAULT_TIERS,
       cfg: DEFAULT_GESTATION,
     });
     expect(v.fatherId).toBe("lu_huaijin");
     expect(v.legitimate).toBe(false);
-    if (v.bearerOutcome === "safe") expect(v.favor).toBe(0);
+    expect(v.bearerOutcome).toBe("safe"); // seed=1 dystocia roll > 5%
+    expect(v.favor).toBe(15);
   });
 
-  it("fenghou bearer adds +30 (capped 80) and is legitimate", () => {
+  it("fenghou bearer adds +15 (no cap) and is legitimate; tier none → 15+15=30", () => {
     const v = resolveBirth({
       rngSeed: 1,
       now,
@@ -81,12 +82,13 @@ describe("resolveBirth — consort carrier", () => {
       fatherId: "shen_zhibai",
       transferredAtMonth: 3,
       bearerIsFenghou: true,
-      carrierRecord: emptyRecord, // tier none=0 → +30 = 30
+      carrierRecord: emptyRecord, // tier none=15 → +fenghouBonus(15) = 30
       thresholds: DEFAULT_TIERS,
       cfg: DEFAULT_GESTATION,
     });
     expect(v.legitimate).toBe(true);
-    if (v.bearerOutcome === "safe") expect(v.favor).toBe(30);
+    expect(v.bearerOutcome).toBe("safe");
+    expect(v.favor).toBe(30);
   });
 
   it("100% dystocia yields a non-safe outcome from the split", () => {
@@ -118,6 +120,42 @@ describe("resolveBirth — consort carrier", () => {
       cfg: DEFAULT_GESTATION,
     } as const;
     expect(resolveBirth(input)).toEqual(resolveBirth(input));
+  });
+});
+
+describe("resolveBirth — favor defaults", () => {
+  const base = {
+    rngSeed: 1, now,
+    fatherId: "lu_huaijin", transferredAtMonth: 3, bearerIsFenghou: false,
+    carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
+  };
+
+  it("selfPregnancy=65 with no omen", () => {
+    const v = resolveBirth({ ...base, carrier: "sovereign", fatherId: null,
+      transferredAtMonth: undefined, cfg: NO_TWINS_NO_OMEN });
+    expect(v.favor).toBe(65);
+  });
+
+  it("tier none=15 with no omen", () => {
+    const v = resolveBirth({ ...base, carrier: "lu_huaijin", cfg: NO_TWINS_NO_OMEN });
+    expect(v.favor).toBe(15);
+  });
+
+  it("fenghouBonus=15 stacks on tier none: 15+15=30", () => {
+    const v = resolveBirth({ ...base, carrier: "shen_zhibai", bearerIsFenghou: true, cfg: NO_TWINS_NO_OMEN });
+    expect(v.favor).toBe(30);
+  });
+
+  it("selfPregnancy auspicious: 65+10=75 (not clamped)", () => {
+    const v = resolveBirth({ ...base, carrier: "sovereign", fatherId: null,
+      transferredAtMonth: undefined, cfg: ALL_AUSPICIOUS });
+    expect(v.favor).toBe(75);
+  });
+
+  it("selfPregnancy inauspicious: 65-10=55", () => {
+    const v = resolveBirth({ ...base, carrier: "sovereign", fatherId: null,
+      transferredAtMonth: undefined, cfg: ALL_INAUSPICIOUS });
+    expect(v.favor).toBe(55);
   });
 });
 
@@ -153,9 +191,17 @@ describe("resolveBirth — twins", () => {
     expect(v.twinFavor).toBeUndefined();
   });
 
+  it("twinSex and twinFavor always paired (both present or both absent)", () => {
+    for (const cfg of [NO_TWINS_NO_OMEN, ALL_DRAGON_PHOENIX, ALL_TWIN_DAUGHTERS, ALL_TWIN_SONS]) {
+      for (let seed = 1; seed <= 5; seed++) {
+        const v = resolveBirth({ ...base, rngSeed: seed, cfg });
+        expect((v.twinSex !== undefined) === (v.twinFavor !== undefined)).toBe(true);
+      }
+    }
+  });
+
   it("twinFavor is independently set from favor", () => {
     const v = resolveBirth({ ...base, cfg: ALL_DRAGON_PHOENIX });
-    // Both favor values are numbers in [0,100]
     expect(v.favor).toBeGreaterThanOrEqual(0);
     expect(v.favor).toBeLessThanOrEqual(100);
     expect(v.twinFavor).toBeGreaterThanOrEqual(0);
@@ -170,20 +216,20 @@ describe("resolveBirth — birth omens", () => {
     carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
   } as const;
 
-  it("100% auspicious → omen=auspicious, favor += delta (clamped)", () => {
+  it("100% auspicious → omen=auspicious, favor=65+10=75", () => {
     const v = resolveBirth({ ...base, cfg: ALL_AUSPICIOUS });
     expect(v.omen).toBe("auspicious");
     expect(v.omenText).toBeDefined();
-    // self-preg base=100; auspicious +10 → clamped to 100
-    expect(v.favor).toBe(100);
+    // self-preg base=65; auspicious +10 → 75 (not clamped)
+    expect(v.favor).toBe(75);
   });
 
-  it("100% inauspicious → omen=inauspicious, favor -= delta", () => {
+  it("100% inauspicious → omen=inauspicious, favor=65-10=55", () => {
     const v = resolveBirth({ ...base, cfg: ALL_INAUSPICIOUS });
     expect(v.omen).toBe("inauspicious");
     expect(v.omenText).toBeDefined();
-    // self-preg base=100; inauspicious −10 → 90
-    expect(v.favor).toBe(90);
+    // self-preg base=65; inauspicious −10 → 55
+    expect(v.favor).toBe(55);
   });
 
   it("0% omen → omen=null, no omenText", () => {
@@ -192,34 +238,50 @@ describe("resolveBirth — birth omens", () => {
     expect(v.omenText).toBeUndefined();
   });
 
-  it("auspicious omen on tier-none consort → favor 0+10=10", () => {
+  it("auspicious omen on tier-none consort → favor 15+10=25", () => {
     const v = resolveBirth({
       rngSeed: 1, now, carrier: "lu_huaijin", fatherId: "lu_huaijin",
       transferredAtMonth: 3, bearerIsFenghou: false,
       carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
       cfg: ALL_AUSPICIOUS,
     });
-    if (v.bearerOutcome === "safe") expect(v.favor).toBe(10);
+    expect(v.bearerOutcome).toBe("safe");
+    // tier none=15; auspicious +10 → 25
+    expect(v.favor).toBe(25);
   });
 
-  it("inauspicious omen on tier-none consort → favor clamped to 0", () => {
+  it("inauspicious omen on tier-none consort → favor 15-10=5", () => {
     const v = resolveBirth({
       rngSeed: 1, now, carrier: "lu_huaijin", fatherId: "lu_huaijin",
       transferredAtMonth: 3, bearerIsFenghou: false,
       carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
       cfg: ALL_INAUSPICIOUS,
     });
-    if (v.bearerOutcome === "safe") expect(v.favor).toBe(0); // max(0-10, 0) = 0
+    expect(v.bearerOutcome).toBe("safe");
+    // tier none=15; inauspicious −10 → 5
+    expect(v.favor).toBe(5);
   });
 
-  it("twins each get independent omen rolls", () => {
+  it("twins each get independent omen rolls — different omens possible across seeds", () => {
     const cfg: GestationConfig = {
       ...ALL_DRAGON_PHOENIX,
       birthOmen: { auspiciousChance: 50, inauspiciousChance: 50, auspiciousFavorDelta: 10, inauspiciousFavorDelta: -10 },
     };
-    const v = resolveBirth({ ...base, cfg });
-    // Both omens are set (may be the same or different — both defined)
-    expect(["auspicious", "inauspicious"]).toContain(v.omen);
-    expect(v.twinOmen !== undefined).toBe(true);
+    const luBase = {
+      now, carrier: "lu_huaijin" as const, fatherId: "lu_huaijin",
+      transferredAtMonth: 3, bearerIsFenghou: false,
+      carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
+    };
+    let found = false;
+    for (let seed = 1; seed <= 200; seed++) {
+      const v = resolveBirth({ ...luBase, rngSeed: seed, cfg });
+      if (v.twinOmen !== v.omen) {
+        // Two children got different omens — proves rolls are independent
+        expect(v.favor).not.toBe(v.twinFavor);
+        found = true;
+        break;
+      }
+    }
+    expect(found).toBe(true);
   });
 });

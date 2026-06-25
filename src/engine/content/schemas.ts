@@ -239,17 +239,21 @@ export const eventEffectSchema = z.union([
   z.strictObject({
     type: z.literal("birth"),
     sex: z.enum(["daughter", "son"]),
-    /** Present when twins are born; sex of the second child. */
+    /** Present when twins are born; sex of the second child. Must be paired with twinFavor. */
     twinSex: z.enum(["daughter", "son"]).optional(),
     fatherId: z.union([idSchema, z.null()]),
     bearer: z.union([z.literal("sovereign"), idSchema]),
     legitimate: z.boolean(),
     /** First child's favor (omen already applied). */
     favor: percent,
-    /** Second child's favor; present only when twinSex is set. */
+    /** Second child's favor; present only when twinSex is set. Must be paired with twinSex. */
     twinFavor: percent.optional(),
     bearerOutcome: z.enum(["safe", "child_dies", "bearer_dies", "both"]),
     recoverUntilMonth: z.number().int().min(1).optional(),
+  }).superRefine((e, ctx) => {
+    if ((e.twinSex !== undefined) !== (e.twinFavor !== undefined)) {
+      ctx.addIssue({ code: "custom", message: "birth twinSex and twinFavor must both be present or both absent" });
+    }
   }),
   z.strictObject({ type: z.literal("memory"), char: idSchema, entry: effectMemoryDraftSchema }),
   z.strictObject({
@@ -752,6 +756,28 @@ export const administratorRankChangeReactionsSchema = z.strictObject({
   }),
 });
 
+// ── birth-rule config schemas (named for testability) ─────────────────
+/** 双胎概率块；三种双胎类型概率之和不得超过 100。 */
+export const twinsConfigSchema = z.strictObject({
+  dragonPhoenixChance: percent,
+  twoDaughtersChance: percent,
+  twoSonsChance: percent,
+}).refine(
+  (t) => t.dragonPhoenixChance + t.twoDaughtersChance + t.twoSonsChance <= 100,
+  { message: "twins chance total must be <= 100" },
+);
+
+/** 生辰天象概率块；吉兆 + 凶兆概率之和不得超过 100。 */
+export const birthOmenConfigSchema = z.strictObject({
+  auspiciousChance: percent,
+  inauspiciousChance: percent,
+  auspiciousFavorDelta: z.number().int().min(0).max(100),
+  inauspiciousFavorDelta: z.number().int().min(-100).max(0),
+}).refine(
+  (b) => b.auspiciousChance + b.inauspiciousChance <= 100,
+  { message: "birth omen chance total must be <= 100" },
+);
+
 // ── world.json ────────────────────────────────────────────────────────
 export const worldSchema = z.strictObject({
   contentVersion: nonEmpty,
@@ -853,19 +879,10 @@ export const worldSchema = z.strictObject({
           none: percent,
         }),
       }),
-      /** 双胎几率（缺省各 5%）。 */
-      twins: z.strictObject({
-        dragonPhoenixChance: percent,
-        twoDaughtersChance: percent,
-        twoSonsChance: percent,
-      }).optional(),
-      /** 生辰天象（吉兆/凶兆）几率与宠爱加成（缺省 10%/5%，±10）。 */
-      birthOmen: z.strictObject({
-        auspiciousChance: percent,
-        inauspiciousChance: percent,
-        auspiciousFavorDelta: z.number().int().min(0).max(100),
-        inauspiciousFavorDelta: z.number().int().min(-100).max(0),
-      }).optional(),
+      /** 双胎几率（缺省各 5%；三者总和 <= 100）。 */
+      twins: twinsConfigSchema.optional(),
+      /** 生辰天象（吉兆/凶兆）几率与宠爱加成（缺省 10%/5%，±10；两者总和 <= 100）。 */
+      birthOmen: birthOmenConfigSchema.optional(),
     })
     .optional(),
 });

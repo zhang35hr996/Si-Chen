@@ -161,9 +161,9 @@
       "outcomeSplit": { "childDies": 50, "bearerDies": 30, "both": 20 }
     },
     "childFavor": {
-      "selfPregnancy": 100,
-      "fenghouBonus": 30,
-      "tierValues": { "abundant": 50, "favored": 38, "small": 25, "fallen": 12, "none": 0 }
+      "selfPregnancy": 65,
+      "fenghouBonus": 15,
+      "tierValues": { "abundant": 46, "favored": 38, "small": 30, "fallen": 22, "none": 15 }
     }
   }
 }

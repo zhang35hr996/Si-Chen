@@ -52,6 +52,7 @@ describe("funnel: birth", () => {
 
   it("child_dies → no heir, carrier normal + recoverUntilMonth", () => {
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "child_dies" }]);
+    expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(0);
     expect(r.value.standing.lu_huaijin!.lifecycle).toBe("normal");
@@ -64,6 +65,7 @@ describe("funnel: birth", () => {
     // consort_decease effect emitted by planHealthChange(forceDeath:true). The birth effect
     // itself leaves the carrier lifecycle as-is (still "carrying" until consort_decease fires).
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "bearer_dies" }]);
+    expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(1);
     expect(r.value.resources.bloodline.heirs[0]!.bearer).toBe("lu_huaijin");
@@ -77,6 +79,7 @@ describe("funnel: birth", () => {
     // Same as bearer_dies: birth effect clears the gestation and records the heir (none here),
     // but leaves lifecycle/deathRecord to the subsequent consort_decease effect.
     const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "both" }]);
+    expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(0);
     expect(r.value.resources.bloodline.gestations).toEqual([]);
@@ -136,6 +139,7 @@ describe("funnel: birth", () => {
       twinSex: "son",
       twinFavor: 20,
     }]);
+    expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(0);
   });
@@ -147,8 +151,21 @@ describe("funnel: birth", () => {
       twinSex: "son",
       twinFavor: 30,
     }]);
+    expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.resources.bloodline.heirs).toHaveLength(2);
+  });
+
+  it("rejects twinSex without twinFavor (unpaired)", () => {
+    const errs = validateEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "safe", twinSex: "son" }]);
+    expect(errs.length).toBeGreaterThanOrEqual(1);
+    expect(errs.some((e) => e.message.includes("twinSex") && e.message.includes("twinFavor"))).toBe(true);
+  });
+
+  it("rejects twinFavor without twinSex (unpaired)", () => {
+    const errs = validateEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "safe", twinFavor: 20 }]);
+    expect(errs.length).toBeGreaterThanOrEqual(1);
+    expect(errs.some((e) => e.message.includes("twinSex") && e.message.includes("twinFavor"))).toBe(true);
   });
 
   it("assigns monotonic heir ids across sequential safe births", () => {

@@ -2,6 +2,9 @@
  * 生产裁决（纯函数，确定性）：性别、难产结局、子嗣宠爱初值、双胎、生辰天象。
  * 帝王自孕（carrier="sovereign"）永不难产。宠爱按生产当月承载侍君的受宠程度派生。
  * 双胎各自独立判定生辰天象（吉兆/凶兆）；宠爱已包含天象加成。
+ *
+ * 皇嗣宠爱与侍君恩宠统一使用 0–100 区间。凤后加成仅为出生初始值 bonus，
+ * 不存在凤后皇嗣 80 的终身上限；最终统一 clamp 至 0–100。
  */
 import { monthOrdinal, type GameTime } from "../calendar/time";
 import { computeFavorStats, type BedchamberThresholds, type FavorTier } from "./favorTier";
@@ -68,7 +71,8 @@ export interface BirthVerdict {
   twinOmenText?: string;
 }
 
-const FENGHOU_CAP = 80;
+/** 皇嗣/侍君宠爱统一 clamp 至 0–100。 */
+const clampFavor = (n: number): number => Math.min(100, Math.max(0, n));
 
 function tierValue(tier: FavorTier, cfg: GestationConfig): number {
   return cfg.childFavor.tierValues[tier];
@@ -113,9 +117,9 @@ function rollOmen(
 }
 
 function applyOmenToFavor(base: number, omen: BirthOmen | null, cfg: BirthOmenConfig): number {
-  if (omen === "auspicious") return Math.min(100, Math.max(0, base + cfg.auspiciousFavorDelta));
-  if (omen === "inauspicious") return Math.min(100, Math.max(0, base + cfg.inauspiciousFavorDelta));
-  return Math.min(100, Math.max(0, base));
+  if (omen === "auspicious") return clampFavor(base + cfg.auspiciousFavorDelta);
+  if (omen === "inauspicious") return clampFavor(base + cfg.inauspiciousFavorDelta);
+  return clampFavor(base);
 }
 
 export function resolveBirth(input: BirthInput): BirthVerdict {
@@ -152,7 +156,7 @@ export function resolveBirth(input: BirthInput): BirthVerdict {
   } else {
     const stats = computeFavorStats(input.carrierRecord, now, input.thresholds);
     baseFavor = tierValue(stats.tier, input.cfg);
-    if (bearerIsFenghou) baseFavor = Math.min(FENGHOU_CAP, baseFavor + input.cfg.childFavor.fenghouBonus);
+    if (bearerIsFenghou) baseFavor += input.cfg.childFavor.fenghouBonus;
   }
 
   // Dystocia (self-pregnancy never dystocia)

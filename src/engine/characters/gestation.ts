@@ -64,9 +64,11 @@ export const DEFAULT_GESTATION: GestationConfig = {
   recovery: { safeMonths: 1, dystociaMonths: 3 },
   dystocia: { baseAtMonth3: 5, perMonthAfter: 8, outcomeSplit: { childDies: 50, bearerDies: 30, both: 20 } },
   childFavor: {
-    selfPregnancy: 100,
-    fenghouBonus: 30,
-    tierValues: { abundant: 50, favored: 38, small: 25, fallen: 12, none: 0 },
+    // 出生宠爱保留后续召见/培养成长空间；100 为长期培养顶点，非出生默认值。
+    // 凤后只提供初始加成，无终身上限；clamp 统一在 0–100。
+    selfPregnancy: 65,
+    fenghouBonus: 15,
+    tierValues: { abundant: 46, favored: 38, small: 30, fallen: 22, none: 15 },
   },
   twins: DEFAULT_TWINS,
   birthOmen: DEFAULT_BIRTH_OMEN,

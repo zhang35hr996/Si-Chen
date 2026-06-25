@@ -283,6 +283,9 @@ export function validateEffects(
         if (e.fatherId !== null && (!db.characters[e.fatherId] || db.characters[e.fatherId]!.kind !== "consort")) {
           bad(index, "BAD_EFFECT_TARGET", `birth fatherId is not a consort: "${e.fatherId}"`, { char: e.fatherId });
         }
+        if ((e.twinSex !== undefined) !== (e.twinFavor !== undefined)) {
+          bad(index, "BAD_EFFECT", `birth twinSex and twinFavor must both be present or both absent`, {});
+        }
         break;
       }
       case "heir_name": {

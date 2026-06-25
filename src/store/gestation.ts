@@ -141,11 +141,17 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
   };
 }
 
-function twinNoun(sex: BirthVerdict["sex"], twinSex: BirthVerdict["twinSex"]): string {
-  if (twinSex === undefined) return sex === "daughter" ? "皇子" : "皇郎";
-  if (sex === "son" && twinSex === "daughter") return "龙凤双胎";
-  if (sex === "daughter") return "双生皇子";
-  return "双生皇郎";
+/**
+ * 生产名词短语（含数量/种类）：作为一个整体嵌入叙事句，避免"两位龙凤双胎"式拼接。
+ * 导出供叙事测试直接验证短语形式。
+ */
+export function birthPhrase(sex: BirthVerdict["sex"], twinSex?: BirthVerdict["twinSex"]): string {
+  if (twinSex === undefined) return sex === "daughter" ? "一位皇子" : "一位皇郎";
+  if ((sex === "son" && twinSex === "daughter") || (sex === "daughter" && twinSex === "son")) {
+    return "一对龙凤胎";
+  }
+  if (sex === "daughter") return "两位双生皇子";
+  return "两位双生皇郎";
 }
 
 function omenLine(omen: BirthVerdict["omen"] | undefined, text: string | undefined, childLabel: string): string | null {
@@ -162,33 +168,36 @@ function buildBirthLines(
   verdict: BirthVerdict,
 ): string[] {
   const isTwin = verdict.twinSex !== undefined;
-  const noun = twinNoun(verdict.sex, verdict.twinSex);
-  const count = isTwin ? "两位" : "一位";
+  const phrase = birthPhrase(verdict.sex, verdict.twinSex);
 
   let main: string;
   if (carrier === "sovereign") {
-    main = `陛下临盆，诞下${count}${noun}，母子均安，举国称庆。`;
+    main = `陛下临盆，诞下${phrase}，母子均安，举国称庆。`;
   } else {
     const name = displayName(db, state, carrier);
     switch (outcome) {
       case "safe":
-        main = `${name}临盆，顺利诞下${count}${noun}，父子均安。`;
+        main = `${name}临盆，顺利诞下${phrase}，父子均安。`;
         break;
       case "child_dies":
-        main = `${name}难产，胎死腹中，太医勉力保住了${name}性命。噩耗传来，宫中一片缄默。`;
+        main = isTwin
+          ? `${name}难产，两名皇嗣皆未能保住，太医勉力保住了${name}性命。噩耗传来，宫中一片缄默。`
+          : `${name}难产，胎死腹中，太医勉力保住了${name}性命。噩耗传来，宫中一片缄默。`;
         break;
       case "bearer_dies":
-        main = `${name}难产，拼死诞下${count}${noun}，自己却血崩而亡。宫人垂泪相送。`;
+        main = `${name}难产，拼死诞下${phrase}，自己却血崩而亡。宫人垂泪相送。`;
         break;
       case "both":
-        main = `${name}难产，一尸两命。太医跪地请罪，宫中举哀。`;
+        main = isTwin
+          ? `${name}难产，一尸三命。太医跪地请罪，宫中举哀。`
+          : `${name}难产，一尸两命。太医跪地请罪，宫中举哀。`;
         break;
     }
   }
 
   const lines: string[] = [main];
 
-  // Omen lines (only when child survives)
+  // Omen lines only for actually surviving children (safe or bearer_dies)
   const childSurvives = outcome === "safe" || outcome === "bearer_dies";
   if (childSurvives) {
     const firstLabel = isTwin ? (verdict.sex === "son" ? "长子" : "长女") : "此子";
