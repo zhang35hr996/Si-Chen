@@ -902,4 +902,57 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
     expect(dupFindings).toEqual([{ code: "unknown_context_ref", ref: hallucRef }]);
     expect(logger2.entries().filter((e) => e.message.includes("UNKNOWN_CONTEXT_REF"))).toHaveLength(1);
   });
+
+  describe("intent gate — runtime_state bypasses retriever", () => {
+    function makeRequestWithTarget(targetText: string) {
+      // Inject a player transcript line so buildDialogueKnowledgeQuery uses it as query text.
+      const r = assembleDialogueRequest(db, state, TURN_SPEAKER, "zichendian", {
+        transcript: [{ speaker: "player", text: targetText }],
+      });
+      if (!r.ok) throw new Error(r.error.message);
+      return r.value;
+    }
+
+    it("runtime_state query: retriever NOT called, meta.knowledge present, degraded=false", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // 谁 + 现在 → runtime_state → retriever must be bypassed
+      const request = makeRequestWithTarget("谁现在怀孕了");
+      const result = await produceDialogueTurn(db, provider, request, state, { retriever });
+
+      expect(retrieverCalls.count).toBe(0);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Provenance should show a wired-but-skipped retrieval (not undefined, not degraded)
+      expect(result.value.line.meta.knowledge).toBeDefined();
+      expect(result.value.line.meta.knowledge?.degraded).toBe(false);
+      expect(result.value.line.meta.knowledge?.chunkIds).toEqual([]);
+    });
+
+    it("static query containing '怀孕': retriever IS called (no false positive)", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // 怀孕 alone without a PERSON_OR_RECORD_SELECTOR → static_lore
+      const request = makeRequestWithTarget("怀孕期间是否照常视事");
+      await produceDialogueTurn(db, provider, request, state, { retriever });
+
+      expect(retrieverCalls.count).toBe(1);
+    });
+
+    it("static query containing '目前': retriever IS called (no false positive)", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // 目前 without a person selector → static_lore (asks about rank system, not specific person)
+      const request = makeRequestWithTarget("目前正式使用的后宫位分有哪些");
+      await produceDialogueTurn(db, provider, request, state, { retriever });
+
+      expect(retrieverCalls.count).toBe(1);
+    });
+  });
 });

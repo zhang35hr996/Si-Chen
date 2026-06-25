@@ -59,25 +59,18 @@ export function runKeywordEval(
   const results: CaseResult[] = [];
 
   for (const c of cases) {
-    // Pre-retrieval intent gate: if the case declares expectedRetrievalSkipped,
-    // check whether the classifier agrees before running the index search.
-    const requiresSkip = c.expectedRetrievalSkipped === true;
-    let retrievalSkipped = false;
+    // Always classify intent: static_lore cases must not be skipped (false positives
+    // would silently suppress retrieval for legitimate lore questions).
+    const intent = classifyQueryIntent(c.query);
+    const retrievalSkipped = intent === "runtime_state";
     let actualIds: string[];
     let details: ResultDetail[];
 
-    if (requiresSkip) {
-      const intent = classifyQueryIntent(c.query);
-      if (intent === "runtime_state") {
-        // Classifier correctly identified this as a runtime state query.
-        retrievalSkipped = true;
-        actualIds = [];
-        details = [];
-        results.push(computeCaseResult(c, actualIds, details, retrievalSkipped));
-        continue;
-      }
-      // Classifier failed to classify as runtime_state — fall through to
-      // retrieval so the failure report shows what would have been returned.
+    if (retrievalSkipped) {
+      actualIds = [];
+      details = [];
+      results.push(computeCaseResult(c, actualIds, details, retrievalSkipped));
+      continue;
     }
 
     const query: KnowledgeKeywordQuery = {

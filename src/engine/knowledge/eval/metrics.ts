@@ -111,7 +111,7 @@ export function computeCaseResult(
   const zeroHitsMet = expectedZeroHits ? actualIds.length === 0 : true;
 
   const expectedSkip = evalCase.expectedRetrievalSkipped === true;
-  const intentMet = !expectedSkip || retrievalSkipped;
+  const intentMet = retrievalSkipped === expectedSkip;
 
   return {
     caseId: evalCase.id,

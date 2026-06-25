@@ -38,3 +38,8 @@
 {"id":"fetal-breath-explanation","query":"胎息是什么制度","limit":5,"expectedAnyOf":["institution.reproduction#fetal-breath","institution.reproduction#reproduction-paths"],"category":"direct","note":"胎息=承养制的转交程序"}
 {"id":"matrilineal-principle","query":"皇位由谁传给谁","limit":5,"expectedAnyOf":["world.social-order#matrilineal-sovereignty"],"category":"direct","note":"母系传承，皇位必传女"}
 {"id":"shangguizhu-verb","query":"女子与贵主成婚用什么动词","limit":5,"expectedAnyOf":["titles.marriage-verbs#marrying-noble-lady"],"category":"direct","note":"尚贵主"}
+{"id":"rank-system-static","query":"目前正式使用的后宫位分有哪些","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["titles.harem-ranks#rank-order"],"category":"confusable","note":"含'目前'但问的是固定制度位分，intent gate 不应拦截，应检索 static lore"}
+{"id":"nursing-system-static","query":"现在的承养制度是怎样的","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["institution.reproduction#fetal-breath","institution.reproduction#nursing-parent-restrictions"],"category":"confusable","note":"含'现在'但问的是制度规则，intent gate 不应拦截"}
+{"id":"confinement-rule-static","query":"禁足在礼制中属于什么处罚","limit":5,"expectedRetrievalSkipped":false,"category":"confusable","note":"含'禁足'但问的是制度分类，不是实时事件，intent gate 不应拦截"}
+{"id":"pregnancy-duty-static","query":"怀孕期间是否照常视事","limit":5,"expectedRetrievalSkipped":false,"category":"confusable","note":"含'怀孕'但问的是规则，不是询问具体人物状态，intent gate 不应拦截"}
+{"id":"summon-etiquette-static","query":"宣召臣下应遵循什么礼仪","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["etiquette.address-and-audience#audience-protocol"],"category":"confusable","note":"含'宣召'但问的是固定礼仪，intent gate 不应拦截"}

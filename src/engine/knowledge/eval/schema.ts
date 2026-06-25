@@ -85,12 +85,13 @@ export const evalCaseSchema = z
         (c.expectedAnyOf?.length ?? 0) > 0 || (c.expectedAll?.length ?? 0) > 0;
       const hasForbidden = (c.forbiddenIds?.length ?? 0) > 0;
       const hasZero = c.expectedZeroHits === true;
-      const hasSkipIntent = c.expectedRetrievalSkipped === true;
+      // explicit true OR false: both are meaningful assertions about intent gate behaviour.
+      const hasSkipIntent = c.expectedRetrievalSkipped !== undefined;
       return hasPositive || hasForbidden || hasZero || hasSkipIntent;
     },
     {
       message:
-        "Case must have at least one assertion: expectedAnyOf/expectedAll with items, forbiddenIds with items, expectedZeroHits: true, or expectedRetrievalSkipped: true",
+        "Case must have at least one assertion: expectedAnyOf/expectedAll with items, forbiddenIds with items, expectedZeroHits: true, or expectedRetrievalSkipped: true/false",
     },
   )
   .refine(
