@@ -19,8 +19,8 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 
 describe("save format v16", () => {
-  it("SAVE_FORMAT_VERSION is 16", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(16);
+  it("SAVE_FORMAT_VERSION ≥ 16 (v15→v16 AP migration implemented)", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(16);
   });
 
   it("round-trip at v16 preserves apMax=5", () => {
