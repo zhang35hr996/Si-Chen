@@ -7,8 +7,10 @@
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
 import { getPresentAt } from "../../engine/characters/presence";
+import { isColdPalaceEffectActiveAt } from "../../engine/characters/coldPalace";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
+import type { ColdPalaceEffect } from "../../engine/state/types";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { canHoldCourt } from "../../store/gating";
@@ -23,6 +25,7 @@ export function FreeViewScreen({
   onOfferIncense,
   onDrawFortune,
   onViewProfile,
+  onRestoreFromColdPalace,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -33,6 +36,7 @@ export function FreeViewScreen({
   onOfferIncense?: () => void;
   onDrawFortune?: () => void;
   onViewProfile?: (charId: string) => void;
+  onRestoreFromColdPalace?: (charId: string) => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[locationId];
@@ -40,8 +44,25 @@ export function FreeViewScreen({
     return <p className="screen-error">未知地点：{locationId}</p>;
   }
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
-  // 冷宫等居所 free-view：列出住客侍君（按位分降序），可点开详情。
-  const residents = getPresentAt(db, state, location.id).filter((c) => c.kind === "consort");
+
+  // 长门宫：居民以活跃冷宫效果为权威，同时支持生成式侍君。
+  const isColdPalaceLocation = locationId === "changmengong";
+  const coldPalaceResidents = isColdPalaceLocation
+    ? state.statusEffects
+        .filter((e): e is ColdPalaceEffect =>
+          e.kind === "cold_palace" && isColdPalaceEffectActiveAt(e as ColdPalaceEffect, state.calendar.dayIndex),
+        )
+        .map((effect) => {
+          const char = db.characters[effect.characterId] ?? state.generatedConsorts[effect.characterId];
+          if (!char) return null;
+          const st = state.standing[effect.characterId];
+          return { char, effect, st, rk: st ? db.ranks[st.rank] : undefined };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+    : [];
+
+  // 其他居所 free-view：列出住客侍君（按位分降序），可点开详情。
+  const residents = isColdPalaceLocation ? [] : getPresentAt(db, state, location.id).filter((c) => c.kind === "consort");
   const action = location.actionEventId ? db.events[location.actionEventId] : undefined;
   const affordable = action ? state.calendar.ap >= action.apCost : false;
   // actionFirstSlotOnly：仅每日首个行动点（卯时早朝，ap===apMax）可行动。
@@ -70,31 +91,72 @@ export function FreeViewScreen({
         <p className="location-screen__ambience">{location.ambience.join(" · ")}</p>
       </section>
 
-      {residents.length > 0 && (
+      {isColdPalaceLocation ? (
         <section className="location-screen__present">
-          {residents.map((c) => {
-            const st = state.standing[c.id];
-            const portrait = registry.portrait(c.portraitSet, "neutral");
-            return (
-              <button
-                key={c.id}
-                type="button"
-                className="coldpalace-resident"
-                onClick={onViewProfile ? () => onViewProfile(c.id) : undefined}
-              >
-                <img
-                  className="coldpalace-resident__portrait"
-                  src={portrait.url}
-                  alt={c.profile.name}
-                  data-fallback={portrait.isFallback || undefined}
-                />
+          {coldPalaceResidents.length === 0 ? (
+            <p className="location-screen__empty">长门宫中目前无人幽居。</p>
+          ) : (
+            coldPalaceResidents.map(({ char, effect, st, rk }) => (
+              <div key={char.id} className="coldpalace-resident coldpalace-resident--managed">
                 <span className="coldpalace-resident__name">
-                  {resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined)}
+                  {resolveIdentityLabel(char, st, rk)}
                 </span>
-              </button>
-            );
-          })}
+                {effect.startedAt && (
+                  <span className="coldpalace-resident__since">
+                    自{formatGameTime({ ...effect.startedAt, eraName: state.calendar.eraName })}起幽居
+                  </span>
+                )}
+                <div className="coldpalace-resident__actions">
+                  {onViewProfile && (
+                    <button
+                      type="button"
+                      className="punish-btn"
+                      onClick={() => onViewProfile(char.id)}
+                    >
+                      查看详情
+                    </button>
+                  )}
+                  {onRestoreFromColdPalace && (
+                    <button
+                      type="button"
+                      className="punish-btn punish-btn--lift"
+                      onClick={() => onRestoreFromColdPalace(char.id)}
+                    >
+                      召回
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </section>
+      ) : (
+        residents.length > 0 && (
+          <section className="location-screen__present">
+            {residents.map((c) => {
+              const st = state.standing[c.id];
+              const portrait = registry.portrait(c.portraitSet, "neutral");
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="coldpalace-resident"
+                  onClick={onViewProfile ? () => onViewProfile(c.id) : undefined}
+                >
+                  <img
+                    className="coldpalace-resident__portrait"
+                    src={portrait.url}
+                    alt={c.profile.name}
+                    data-fallback={portrait.isFallback || undefined}
+                  />
+                  <span className="coldpalace-resident__name">
+                    {resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined)}
+                  </span>
+                </button>
+              );
+            })}
+          </section>
+        )
       )}
 
       <section className="location-screen__events">

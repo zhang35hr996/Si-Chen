@@ -7,7 +7,7 @@
  * 已禁足者打开菜单时直接显示禁足详情与「解除禁足」，而非重复下旨。
  * 凤后禁足流程增加「六宫主理者选择」步骤。
  */
-import { useState, type ReactNode } from "react";
+import { useState, useRef, type ReactNode } from "react";
 import {
   CONFINEMENT_DURATIONS,
   CONFINEMENT_DURATION_LABELS,
@@ -47,11 +47,14 @@ export function PunishmentModal({
   state: GameState;
   character: CharacterContent;
   onCommand: (command: ImperialCommand) => void;
-  onSendToColdPalace?: (charId: string) => void;
+  /** Returns null on success (parent closes modal), or an error string to display in-place. */
+  onSendToColdPalace?: (charId: string) => string | null;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<Step>({ kind: "menu" });
   const [typedName, setTypedName] = useState("");
+  const [coldPalaceError, setColdPalaceError] = useState<string | null>(null);
+  const coldPalaceSubmitting = useRef(false);
 
   const standing = state.standing[character.id];
   const rank = standing ? db.ranks[standing.rank] : undefined;
@@ -443,15 +446,32 @@ export function PunishmentModal({
   if (step.kind === "cold_palace_confirm") {
     const now = toGameTime(state.calendar);
     const nowLabel = formatGameTime({ ...now, eraName });
-    const isActingAdmin = state.haremAdministration.mode === "acting_consort" && state.haremAdministration.charId === character.id;
+    const haremAdmin2 = state.haremAdministration;
+    const haremWillTransfer =
+      (haremAdmin2.mode === "acting_consort" && haremAdmin2.charId === character.id) ||
+      (haremAdmin2.mode === "empress" && standing?.rank === "fenghou");
+    const handleConfirm = () => {
+      if (coldPalaceSubmitting.current) return;
+      coldPalaceSubmitting.current = true;
+      setColdPalaceError(null);
+      const err = onSendToColdPalace?.(character.id) ?? null;
+      if (err !== null) {
+        setColdPalaceError(err);
+        coldPalaceSubmitting.current = false;
+      }
+      // null = success → parent closes modal, component unmounts
+    };
     return (
       <Backdrop onClose={onClose}>
         <h2>{name}　打入冷宫</h2>
+        {coldPalaceError && (
+          <p className="punish-modal__error" role="alert">{coldPalaceError}</p>
+        )}
         <p className="punish-modal__confirm">
           【{name}】将自{nowLabel}起迁居长门宫，幽禁于此。
           <br />
           幽居期间不得召见、侍寝、搬迁或出宫。
-          {isActingAdmin && (
+          {haremWillTransfer && (
             <>
               <br />
               六宫主理权将自动移交（内务府代理或其他合资格侍君）。
@@ -464,16 +484,14 @@ export function PunishmentModal({
           <button
             type="button"
             className="punish-btn punish-btn--confine"
-            onClick={() => {
-              onSendToColdPalace?.(character.id);
-            }}
+            onClick={handleConfirm}
           >
             确认下旨
           </button>
           <button
             type="button"
             className="punish-btn punish-btn--minor"
-            onClick={() => setStep({ kind: "menu" })}
+            onClick={() => { setColdPalaceError(null); setStep({ kind: "menu" }); }}
           >
             返回
           </button>

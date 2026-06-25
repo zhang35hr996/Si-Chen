@@ -586,12 +586,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     }
   };
 
-  const applySendToColdPalace = (charId: string) => {
-    setPunishCharId(null);
+  const applySendToColdPalace = (charId: string): string | null => {
     const result = store.sendConsortToColdPalace(db, charId, {
       sourceLocation: store.getState().playerLocation ?? undefined,
     });
     if (result.ok) {
+      setPunishCharId(null); // close only on success
       doAutosave();
       const char = db.characters[charId] ?? store.getState().generatedConsorts[charId];
       const st = store.getState().standing[charId];
@@ -600,22 +600,22 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         ? (st?.title ? `${st.title}${char.profile.name}` : (rk ? `${rk.name}${char.profile.name}` : char.profile.name))
         : charId;
       setReaction({ speakerId: charId, lines: [`${name}奉旨迁居长门宫。`] });
+      return null;
     } else {
-      const reason = result.error[0]?.message ?? "操作失败，请重试。";
-      setReaction({ speakerId: "wei_sui", lines: [reason] });
+      return result.error[0]?.message ?? "操作失败，请重试。";
     }
   };
 
-  const applyRestoreFromColdPalace = (charId: string, reason: ColdPalaceLiftReason) => {
-    setRestoreCharId(null);
+  const applyRestoreFromColdPalace = (charId: string, reason: ColdPalaceLiftReason): string | null => {
     const result = store.restoreFromColdPalace(db, charId, reason);
     if (result.ok) {
+      setRestoreCharId(null); // close only on success
       doAutosave();
       const label = reason === "pardoned" ? "特旨赦免" : "奉旨召回";
       setReaction({ speakerId: charId, lines: [`叩首谢恩，${label}。`] });
+      return null;
     } else {
-      const msg = result.error[0]?.message ?? "操作失败，请重试。";
-      setReaction({ speakerId: "wei_sui", lines: [msg] });
+      return result.error[0]?.message ?? "操作失败，请重试。";
     }
   };
 
@@ -2107,6 +2107,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onOfferIncense={() => templeAction("incense")}
           onDrawFortune={() => templeAction("fortune")}
           onViewProfile={(id) => setProfileCharId(id)}
+          onRestoreFromColdPalace={(id) => setRestoreCharId(id)}
         />
       )}
       {view === "event" && activeEventId && (

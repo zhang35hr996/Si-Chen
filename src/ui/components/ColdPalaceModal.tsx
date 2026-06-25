@@ -3,7 +3,7 @@
  * 供玩家在长门宫场景点击「召回」后二次确认，选择召回原因并提交。
  * 不负责计算恢复居所；居所由 store.restoreFromColdPalace 决定。
  */
-import { useState, type ReactNode } from "react";
+import { useState, useRef, type ReactNode } from "react";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
 import { resolveDisplayName } from "../../engine/characters/standing";
@@ -23,10 +23,13 @@ export function ColdPalaceRestoreModal({
   db: ContentDB;
   state: GameState;
   charId: string;
-  onConfirm: (reason: ColdPalaceLiftReason) => void;
+  /** Returns null on success (parent closes modal), or an error string to display in-place. */
+  onConfirm: (reason: ColdPalaceLiftReason) => string | null;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<Step>("choose");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   const char = db.characters[charId] ?? state.generatedConsorts[charId];
   const standing = state.standing[charId];
@@ -84,9 +87,24 @@ export function ColdPalaceRestoreModal({
       : "皇帝念及旧情，特旨赦免，幽居即时解除。";
   const nowLabel = formatGameTime({ ...toGameTime(state.calendar), eraName: state.calendar.eraName });
 
+  const handleConfirm = () => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setSubmitError(null);
+    const err = onConfirm(reason);
+    if (err !== null) {
+      setSubmitError(err);
+      submitting.current = false;
+    }
+    // null = success → parent closes modal, component unmounts
+  };
+
   return (
     <Backdrop onClose={onClose}>
       <h2>{name}　{reasonLabel}</h2>
+      {submitError && (
+        <p className="punish-modal__error" role="alert">{submitError}</p>
+      )}
       <p className="punish-modal__confirm">
         {reasonDesc}
         <br />
@@ -98,14 +116,14 @@ export function ColdPalaceRestoreModal({
         <button
           type="button"
           className="punish-btn punish-btn--lift"
-          onClick={() => onConfirm(reason)}
+          onClick={handleConfirm}
         >
           确认{reasonLabel}
         </button>
         <button
           type="button"
           className="punish-btn punish-btn--minor"
-          onClick={() => setStep("choose")}
+          onClick={() => { setSubmitError(null); setStep("choose"); }}
         >
           返回
         </button>
