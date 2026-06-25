@@ -32,9 +32,9 @@ const WEN_OFFICIAL = "official_fam_wen_main";
 /** 注入一条侍君 PunishmentRecord（牵连来源），并推进 nextSeq。 */
 function withConsortPunishment(s: GameState, consortId: string, severity: PunishmentSeverity, id = "pun_000001"): GameState {
   const rec: PunishmentRecord = {
-    id, targetId: consortId, targetKind: "consort", actorId: "player", kind: "cold_palace",
+    id, targetId: consortId, targetKind: "consort", actorId: "player", kind: "rank_demotion",
     severity, imposedAt: at(2), publicity: "palace", lifecycle: { status: "active" },
-    details: { previousResidenceId: "res_a", coldPalaceResidenceId: "res_cold" },
+    details: { fromRankId: "rank_a", toRankId: "rank_b" },
   };
   const seqNum = Number(id.slice(4)) + 1;
   return {

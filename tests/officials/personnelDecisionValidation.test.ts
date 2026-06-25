@@ -16,9 +16,9 @@ const codes = (s: GameState) => validateOfficialWorld(s, db).map((e) => e.code);
 /** 注入一条侍君 PunishmentRecord（牵连来源）。 */
 function withConsortPun(s: GameState, id = "pun_000001"): GameState {
   const rec: PunishmentRecord = {
-    id, targetId: LU_CONSORT, targetKind: "consort", actorId: "player", kind: "cold_palace",
+    id, targetId: LU_CONSORT, targetKind: "consort", actorId: "player", kind: "rank_demotion",
     severity: "severe", imposedAt: at(2), publicity: "palace", lifecycle: { status: "active" },
-    details: { previousResidenceId: "res_a", coldPalaceResidenceId: "res_cold" },
+    details: { fromRankId: "rank_a", toRankId: "rank_b" },
   };
   return { ...s, justice: { ...s.justice, punishments: { ...s.justice.punishments, [id]: rec } } };
 }

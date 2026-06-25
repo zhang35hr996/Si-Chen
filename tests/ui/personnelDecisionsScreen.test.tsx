@@ -17,15 +17,14 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const LU_CONSORT = "lu_huaijin";
-const LU_OFFICIAL = "official_fam_lu_main";
 const WEN_OFFICIAL = "official_fam_wen_main";
 const NOW = toGameTime(createNewGameState(db, 1).calendar);
 
 function withConsortPun(s: GameState): GameState {
   const rec: PunishmentRecord = {
-    id: "pun_000001", targetId: LU_CONSORT, targetKind: "consort", actorId: "player", kind: "cold_palace",
+    id: "pun_000001", targetId: LU_CONSORT, targetKind: "consort", actorId: "player", kind: "rank_demotion",
     severity: "severe", imposedAt: NOW, publicity: "palace", lifecycle: { status: "active" },
-    details: { previousResidenceId: "res_a", coldPalaceResidenceId: "res_cold" },
+    details: { fromRankId: "rank_a", toRankId: "rank_b" },
   };
   return { ...s, justice: { ...s.justice, punishments: { pun_000001: rec }, nextSeq: { ...s.justice.nextSeq, punishment: 2 } } };
 }

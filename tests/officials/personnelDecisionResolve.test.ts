@@ -27,9 +27,9 @@ const WEN_OFFICIAL = "official_fam_wen_main";
 
 function withConsortPunishment(s: GameState, consortId: string, severity: PunishmentSeverity, id = "pun_000001"): GameState {
   const rec: PunishmentRecord = {
-    id, targetId: consortId, targetKind: "consort", actorId: "player", kind: "cold_palace",
+    id, targetId: consortId, targetKind: "consort", actorId: "player", kind: "rank_demotion",
     severity, imposedAt: at(2), publicity: "palace", lifecycle: { status: "active" },
-    details: { previousResidenceId: "res_a", coldPalaceResidenceId: "res_cold" },
+    details: { fromRankId: "rank_a", toRankId: "rank_b" },
   };
   return { ...s, justice: { ...s.justice, punishments: { ...s.justice.punishments, [id]: rec }, nextSeq: { ...s.justice.nextSeq, punishment: Number(id.slice(4)) + 1 } } };
 }
