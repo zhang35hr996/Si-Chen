@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checksumOf } from "../../src/engine/save/canonical";
 import {
-  CORRUPT_KEY_PREFIX,
   createSaveData,
   readSlot,
   SAVE_FORMAT_VERSION,
@@ -18,12 +17,11 @@ describe("save format v4", () => {
     expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(6);
   });
 
-  it("v5 save quarantines (no MIGRATIONS[5] — no-save-backcompat policy)", () => {
+  it("v5 save is rejected as OBSOLETE_VERSION (not quarantined)", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
     const v6 = createSaveData(db, state, "slot1");
 
-    // Simulate a v5 save: strip v6-only health fields so it truly looks like v5
     const v5State = structuredClone(v6.state) as unknown as Record<string, unknown>;
     const taihou = (v5State.taihou ?? {}) as Record<string, unknown>;
     delete taihou.health;
@@ -37,18 +35,15 @@ describe("save format v4", () => {
     const loaded = readSlot(storage, db, "slot1", { now: () => 5005 });
     expect(loaded.ok).toBe(false);
     if (loaded.ok) return;
-    expect(loaded.error.code).toBe("CORRUPT");
-    // Explicitly confirm quarantine: original removed, corrupt blob preserved
-    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
-    expect(storage.get(`${CORRUPT_KEY_PREFIX}5005`)).not.toBeNull();
+    expect(loaded.error.code).toBe("OBSOLETE_VERSION");
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).not.toBeNull();
   });
 
-  it("v3 save quarantines at v5→v6 boundary (no-save-backcompat: no MIGRATIONS[5])", () => {
+  it("v3 save is rejected as OBSOLETE_VERSION (not quarantined)", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
     const v6 = createSaveData(db, state, "slot1");
 
-    // Simulate a v3 save that lacks v5→v6 health fields
     const v3State = structuredClone(v6.state) as unknown as Record<string, unknown>;
     delete v3State.taihou;
     delete v3State.pendingAftermath;
@@ -58,9 +53,7 @@ describe("save format v4", () => {
     const loaded = readSlot(storage, db, "slot1", { now: () => 9999 });
     expect(loaded.ok).toBe(false);
     if (loaded.ok) return;
-    expect(loaded.error.code).toBe("CORRUPT");
-    // Quarantined — original key removed, corrupt key created
-    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
-    expect(storage.get(`${CORRUPT_KEY_PREFIX}9999`)).not.toBeNull();
+    expect(loaded.error.code).toBe("OBSOLETE_VERSION");
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).not.toBeNull();
   });
 });

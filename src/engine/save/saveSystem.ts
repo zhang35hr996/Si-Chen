@@ -188,13 +188,19 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       checksum: checksumOf(state as GameState),
     };
   },
-  // v11 → v12: 科举与候补官员池（officialCandidates / examinationResults）。旧档补空即可
-  // （PR3A 不在迁移期补生成历史榜单——旧档此前无科举，留空，新存档自然累积）。
+  // v11 → v12: 科举候补官员池 + justice 持久记录层。旧档补空即可。
   11: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as GameState & Record<string, unknown>;
     if (typeof state.officialCandidates !== "object" || state.officialCandidates === null) state.officialCandidates = {};
     if (!Array.isArray(state.examinationResults)) state.examinationResults = [];
+    if (!state.justice) {
+      state.justice = {
+        cases: {},
+        punishments: {},
+        nextSeq: { case: 1, punishment: 1, charge: 1, evidence: 1, confession: 1, verdict: 1 },
+      };
+    }
     return {
       ...env,
       formatVersion: 12,
@@ -202,16 +208,22 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       checksum: checksumOf(state as GameState),
     };
   },
-  // v12 → v13: officialHistory 增可选 appointment 溯源（候补授官转正）。纯附加可选字段，旧条目
-  // 天然无此字段，无需补值；仅重新打版本/校验和。
+  // v12 → v13: officialHistory 增可选 appointment 溯源；如旧档无 justice 层则补空。
   12: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
-    const state = structuredClone(env.state) as GameState;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    if (!state.justice) {
+      state.justice = {
+        cases: {},
+        punishments: {},
+        nextSeq: { case: 1, punishment: 1, charge: 1, evidence: 1, confession: 1, verdict: 1 },
+      };
+    }
     return {
       ...env,
       formatVersion: 13,
-      state,
-      checksum: checksumOf(state),
+      state: state as GameState,
+      checksum: checksumOf(state as GameState),
     };
   },
 };
@@ -331,6 +343,16 @@ function validateSave(
     // A future version is not corruption — refuse, never destroy.
     return err({
       error: saveError("FUTURE_VERSION", `save format v${save.formatVersion} is newer than v${SAVE_FORMAT_VERSION}`),
+      quarantineWorthy: false,
+    });
+  }
+  // All pre-v12 saves are rejected (not quarantined as corrupt).
+  // v9+ has active statusEffects/haremAdministration state without corresponding JusticeRecords;
+  // migrating them to empty justice leaves half-migrated state worse than rejection.
+  // v7/v8 saves also lack v9+ fields, so we reject all pre-v12 uniformly.
+  if (save.formatVersion < 12) {
+    return err({
+      error: saveError("OBSOLETE_VERSION", `save format v${save.formatVersion} is no longer supported (current: v${SAVE_FORMAT_VERSION}). Start a new game.`),
       quarantineWorthy: false,
     });
   }

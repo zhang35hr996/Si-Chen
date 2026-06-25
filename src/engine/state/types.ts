@@ -6,6 +6,7 @@
  */
 import type { CalendarState, GameTime } from "../calendar/time";
 import type { CharacterContent } from "../content/schemas";
+import type { JusticeState, JusticeLinks } from "../justice/types";
 
 // ── Global resource pillars (scaffold values 0–100) ──────────────────
 // 皇帝(玩家本人)属性。明面: health/diligence/prestige/martial/statecraft；
@@ -459,6 +460,9 @@ export interface MemoryEntry {
   kind: MemoryKind;
   /** 关联 chronicle CourtEvent（可空）。 */
   sourceEventId?: string;
+  /** 司法溯源（可选；不自动授权角色知识/claim）。 */
+  sourcePunishmentId?: string;
+  sourceCaseId?: string;
   /** 涉及的当事人（取代 participants）。 */
   subjectIds: string[];
   perspective: MemoryPerspective;
@@ -653,6 +657,8 @@ export interface CourtEvent {
   /** 公共事件也参与有效强度衰减（与私人记忆同一检索公式）。 */
   retention: MemoryRetention;
   tags: string[];
+  /** 司法溯源链接（可选；不自动授权角色知识）。 */
+  links?: JusticeLinks;
 }
 
 /**
@@ -744,6 +750,8 @@ export interface GameState {
   gameOver?: { cause: "sovereign_death"; at: GameTime };
   /** 后宫主理权运行态（六宫主理）。凤后正常时为 empress；禁足期间由侍君/内务府代理。 */
   haremAdministration: HaremAdministrationState;
+  /** 司法记录持久层（PUNISH-3B1）。 */
+  justice: JusticeState;
   rngSeed: number;
 }
 

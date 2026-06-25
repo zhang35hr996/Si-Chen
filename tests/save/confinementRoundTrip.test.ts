@@ -23,19 +23,21 @@ function storeWith(setup: (s: ReturnType<typeof createGameStore>) => void) {
 }
 
 describe("禁足存档兼容与 round-trip", () => {
-  it("旧档（无 statusEffects 字段）正常读取，补空数组", () => {
+  it("旧档（formatVersion 8）以 OBSOLETE_VERSION 拒绝，不隔离", () => {
     const storage = createMemoryStorage();
     const fresh = createSaveData(db, createNewGameState(db), "slot1");
-    // 降级为缺 statusEffects 的旧档（formatVersion 8）。
+    // 降级为 formatVersion 8（无 statusEffects）的存档。
     const oldState = { ...(fresh.state as unknown as Record<string, unknown>) };
     delete oldState["statusEffects"];
     const old = { ...fresh, formatVersion: 8, state: oldState, checksum: checksumOf(oldState) };
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(old));
 
     const loaded = readSlot(storage, db, "slot1", { now: () => 1 });
-    expect(loaded.ok).toBe(true);
-    if (!loaded.ok) return;
-    expect(loaded.value.state.statusEffects).toEqual([]);
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok) return;
+    expect(loaded.error.code).toBe("OBSOLETE_VERSION");
+    // Not quarantined — expected obsolete saves are not treated as corrupt.
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).not.toBeNull();
   });
 
   it("有期限禁足保存/读取一致", () => {

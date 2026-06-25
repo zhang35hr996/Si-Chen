@@ -9,6 +9,7 @@ import type { ContentDB } from "../content/loader";
 import { generateOfficialWorld } from "../officials/worldgen";
 import { assertGeneratedOfficialWorld } from "../officials/validation";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
+import { createEmptyJusticeState } from "../justice/types";
 
 /** 新游戏私库种子（id 须存在于 content/items.json）。 */
 const STOREHOUSE_SEED: Record<string, number> = {
@@ -129,6 +130,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     chronicle: [],
     statusEffects: [],
     haremAdministration: { mode: "empress" },
+    justice: createEmptyJusticeState(),
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],

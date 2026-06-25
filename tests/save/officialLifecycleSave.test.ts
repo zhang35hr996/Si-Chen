@@ -49,7 +49,7 @@ describe("official lifecycle save", () => {
     expect(getOfficialRelativesOfConsort(r, "shen_zhibai").length).toBeGreaterThanOrEqual(0);
   });
 
-  it("v10 old save (no pendingRetirements/officialHistory) migrates to current via MIGRATIONS[10]", () => {
+  it("v10 old save is rejected as OBSOLETE_VERSION (not quarantined)", () => {
     const s = createNewGameState(db, 1);
     const stateV10 = { ...s } as Record<string, unknown>;
     delete stateV10["pendingRetirements"];
@@ -63,9 +63,10 @@ describe("official lifecycle save", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(env));
     const loaded = readSlot(storage, db, "slot1", { now: () => 2 });
-    expect(loaded.ok).toBe(true);
-    if (!loaded.ok) return;
-    expect(loaded.value.state.pendingRetirements).toEqual([]);
-    expect(loaded.value.state.officialHistory).toEqual([]);
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok) return;
+    expect(loaded.error.code).toBe("OBSOLETE_VERSION");
+    // Not quarantined — obsolete saves are not treated as corrupt.
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).not.toBeNull();
   });
 });

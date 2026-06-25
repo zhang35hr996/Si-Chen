@@ -5,6 +5,7 @@
  */
 import { createCalendar, type CalendarStart } from "../calendar/time";
 import type { GameState } from "./types";
+import { createEmptyJusticeState } from "../justice/types";
 
 export interface InitialStateOverrides {
   calendar?: CalendarStart;
@@ -66,6 +67,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     chronicle: [],
     statusEffects: [],
     haremAdministration: { mode: "empress" },
+    justice: createEmptyJusticeState(),
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],
