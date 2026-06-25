@@ -29,6 +29,10 @@ export interface CaseResult {
   forbiddenHits: string[];
   /** Whether zero-hits expectation was satisfied. */
   zeroHitsMet: boolean;
+  /** Whether the intent classifier routed this query away from static retrieval. */
+  retrievalSkipped: boolean;
+  /** Whether expectedRetrievalSkipped matched actual retrievalSkipped. */
+  intentMet: boolean;
 
   /** Retrieval-specific details per result position. */
   details: ResultDetail[];
@@ -55,6 +59,8 @@ export interface AggregateMetrics {
   unexpectedZeroHits: number;
   /** Cases where expectedAll was specified but at least one required ID was missing. */
   expectedAllViolationCount: number;
+  /** Cases where expectedRetrievalSkipped: true but the intent classifier returned static_lore. */
+  intentMismatchCount: number;
   duplicateHits: number;
   visibilityLeakage: number;
   temporalLeakage: number;
@@ -73,6 +79,7 @@ export function computeCaseResult(
   evalCase: KnowledgeEvalCase,
   actualIds: string[],
   details: ResultDetail[],
+  retrievalSkipped = false,
 ): CaseResult {
   const expectedAnyOf = evalCase.expectedAnyOf ?? [];
   const expectedAll = evalCase.expectedAll ?? [];
@@ -103,6 +110,9 @@ export function computeCaseResult(
 
   const zeroHitsMet = expectedZeroHits ? actualIds.length === 0 : true;
 
+  const expectedSkip = evalCase.expectedRetrievalSkipped === true;
+  const intentMet = !expectedSkip || retrievalSkipped;
+
   return {
     caseId: evalCase.id,
     category: evalCase.category,
@@ -117,6 +127,8 @@ export function computeCaseResult(
     allMet,
     forbiddenHits,
     zeroHitsMet,
+    retrievalSkipped,
+    intentMet,
     details,
   };
 }
@@ -135,6 +147,7 @@ export function computeAggregateMetrics(
   let forbiddenHitCount = 0;
   let unexpectedZeroHits = 0;
   let expectedAllViolationCount = 0;
+  let intentMismatchCount = 0;
   let duplicateHits = 0;
 
   const byCat: Record<string, { total: number; hitAt5: number; forbidden: number }> = {};
@@ -162,6 +175,9 @@ export function computeAggregateMetrics(
     // expectedAll violations
     if (r.expectedAll.length > 0 && !r.allMet) expectedAllViolationCount++;
 
+    // Intent classification mismatches
+    if (!r.intentMet) intentMismatchCount++;
+
     // Hit@k and MRR (only for cases with expectedAnyOf or expectedAll)
     const hasPositiveExpectation =
       r.expectedAnyOf.length > 0 || r.expectedAll.length > 0;
@@ -183,7 +199,8 @@ export function computeAggregateMetrics(
       r.anyOfMet &&
       r.allMet &&
       r.forbiddenHits.length === 0 &&
-      r.zeroHitsMet;
+      r.zeroHitsMet &&
+      r.intentMet;
 
     if (!passed) failedCases.push(r);
   }
@@ -203,6 +220,7 @@ export function computeAggregateMetrics(
     forbiddenHitCount,
     unexpectedZeroHits,
     expectedAllViolationCount,
+    intentMismatchCount,
     duplicateHits,
     visibilityLeakage: visibilityLeakCount,
     temporalLeakage: temporalLeakCount,

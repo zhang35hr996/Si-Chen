@@ -68,6 +68,13 @@ export const evalCaseSchema = z
      */
     expectedZeroHits: z.boolean().optional(),
 
+    /**
+     * When true: the intent classifier must route this query to the runtime
+     * state system, bypassing static corpus retrieval entirely.
+     * Mutually exclusive with expectedAnyOf, expectedAll, and expectedZeroHits.
+     */
+    expectedRetrievalSkipped: z.boolean().optional(),
+
     category: evalCategorySchema,
     note: z.string().optional(),
   })
@@ -78,11 +85,12 @@ export const evalCaseSchema = z
         (c.expectedAnyOf?.length ?? 0) > 0 || (c.expectedAll?.length ?? 0) > 0;
       const hasForbidden = (c.forbiddenIds?.length ?? 0) > 0;
       const hasZero = c.expectedZeroHits === true;
-      return hasPositive || hasForbidden || hasZero;
+      const hasSkipIntent = c.expectedRetrievalSkipped === true;
+      return hasPositive || hasForbidden || hasZero || hasSkipIntent;
     },
     {
       message:
-        "Case must have at least one assertion: expectedAnyOf/expectedAll with items, forbiddenIds with items, or expectedZeroHits: true",
+        "Case must have at least one assertion: expectedAnyOf/expectedAll with items, forbiddenIds with items, expectedZeroHits: true, or expectedRetrievalSkipped: true",
     },
   )
   .refine(
@@ -94,6 +102,19 @@ export const evalCaseSchema = z
     {
       message:
         "expectedZeroHits: true cannot coexist with expectedAnyOf or expectedAll",
+    },
+  )
+  .refine(
+    (c) => {
+      // expectedRetrievalSkipped is mutually exclusive with all result-based assertions.
+      if (c.expectedRetrievalSkipped !== true) return true;
+      const hasPositive =
+        (c.expectedAnyOf?.length ?? 0) > 0 || (c.expectedAll?.length ?? 0) > 0;
+      return !hasPositive && (c.forbiddenIds?.length ?? 0) === 0 && c.expectedZeroHits !== true;
+    },
+    {
+      message:
+        "expectedRetrievalSkipped: true cannot coexist with expectedAnyOf, expectedAll, forbiddenIds, or expectedZeroHits",
     },
   )
   .refine(

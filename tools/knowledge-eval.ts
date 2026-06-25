@@ -134,6 +134,7 @@ console.log(`  required misses  : ${metrics.requiredMisses}`);
 console.log(`  forbidden hits   : ${metrics.forbiddenHitCount}`);
 console.log(`  unexpected 0hits : ${metrics.unexpectedZeroHits}`);
 console.log(`  expectedAll viol : ${metrics.expectedAllViolationCount}`);
+console.log(`  intent mismatch  : ${metrics.intentMismatchCount}`);
 console.log(`  visibility leak  : ${metrics.visibilityLeakage}`);
 console.log(`  temporal leak    : ${metrics.temporalLeakage}`);
 console.log(`  duplicate hits   : ${metrics.duplicateHits}`);
@@ -193,6 +194,12 @@ if (metrics.temporalLeakage > 0) {
 }
 if (metrics.forbiddenHitCount > 0) {
   violations.push(`forbidden hits: ${metrics.forbiddenHitCount} (must be 0)`);
+}
+if (metrics.intentMismatchCount > 0) {
+  violations.push(`intent mismatches: ${metrics.intentMismatchCount} (must be 0)`);
+  for (const c of metrics.failedCases.filter((r) => !r.intentMet)) {
+    violations.push(`  case '${c.caseId}': expectedRetrievalSkipped but classifier returned static_lore`);
+  }
 }
 if (metrics.duplicateHits > 0) {
   violations.push(`duplicate result IDs: ${metrics.duplicateHits} (must be 0)`);

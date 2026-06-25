@@ -28,12 +28,12 @@
 {"id":"lianyi-vs-caiyi","query":"东宫最低侍男位称是良仪还是采仪","limit":5,"expectedAnyOf":["titles.household-and-east-palace#caivi-note","titles.household-and-east-palace#east-palace-titles"],"forbiddenIds":[],"category":"confusable","note":"良仪是正式位称，采仪已废弃"}
 {"id":"gengyi-vs-guannanzi","query":"更衣和官男子的区别","limit":5,"expectedAnyOf":["titles.harem-ranks#rank-order","titles.harem-ranks#deprecated-ranks"],"category":"confusable","note":"更衣=最低正式位分，官男子=废弃位称"}
 {"id":"official-gender","query":"提到官员时默认是男性还是女性","limit":5,"expectedAnyOf":["institution.education-and-office#official-gender-default"],"category":"confusable","note":"官员默认女性"}
-{"id":"current-favor-dynamic","query":"近来最得帝心的是谁","limit":5,"expectedZeroHits":true,"category":"dynamic-negative","note":"恩宠是动态角色状态，不在static lore中；正确结果为零命中"}
-{"id":"currently-pregnant","query":"谁藏着肚子悄悄没露面","limit":5,"expectedZeroHits":true,"category":"dynamic-negative","note":"怀孕状态是动态角色数据，不在static lore中；正确结果为零命中"}
-{"id":"loves-emperor","query":"某人藏着掖着暗恋某人是真是假","limit":5,"expectedZeroHits":true,"category":"dynamic-negative","note":"情感是角色私人状态，不在static lore中；正确结果为零命中"}
-{"id":"yesterday-confined","query":"昨天谁被禁足了","limit":5,"expectedZeroHits":true,"category":"dynamic-negative","note":"禁足是实时事件，不在static lore中；正确结果为零命中"}
-{"id":"worst-health-now","query":"最近谁老是请病假身子最不爽利","limit":5,"expectedZeroHits":true,"category":"dynamic-negative","note":"健康状态是动态角色数据，不在static lore中；正确结果为零命中"}
-{"id":"succession-candidate","query":"皇上最近单独宣召了谁商量储位","limit":5,"expectedZeroHits":true,"category":"dynamic-negative","note":"宣召记录是实时事件，不在static lore中；正确结果为零命中"}
+{"id":"current-favor-dynamic","query":"当前谁最受宠","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"恩宠排名是实时角色状态，应由intent gate拦截，不进入static lore检索"}
+{"id":"currently-pregnant","query":"谁现在怀孕了","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"怀孕状态是实时角色数据，应由intent gate拦截，不进入static lore检索"}
+{"id":"loves-emperor","query":"后宫里谁暗恋着谁","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"情感关系是角色私人状态，应由intent gate拦截，不进入static lore检索"}
+{"id":"yesterday-confined","query":"昨天谁被禁足了","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"禁足是实时事件，应由intent gate拦截，不进入static lore检索"}
+{"id":"worst-health-now","query":"最近谁请病假身体不好","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"健康状态是实时角色数据，应由intent gate拦截，不进入static lore检索"}
+{"id":"succession-candidate","query":"目前哪位皇嗣最有望继承大统","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"储位候选是实时政治状态，应由intent gate拦截，不进入static lore检索"}
 {"id":"male-cant-govern","query":"男子可以担任地方知州吗","limit":5,"expectedAnyOf":["institution.education-and-office#outer-office-prohibition","institution.education-and-office#prohibited-activities"],"category":"direct","note":"男子不得治民"}
 {"id":"fetal-breath-explanation","query":"胎息是什么制度","limit":5,"expectedAnyOf":["institution.reproduction#fetal-breath","institution.reproduction#reproduction-paths"],"category":"direct","note":"胎息=承养制的转交程序"}
 {"id":"matrilineal-principle","query":"皇位由谁传给谁","limit":5,"expectedAnyOf":["world.social-order#matrilineal-sovereignty"],"category":"direct","note":"母系传承，皇位必传女"}

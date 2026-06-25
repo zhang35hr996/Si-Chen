@@ -20,7 +20,7 @@ visibility: public
 
 ## 臣下自称 {#official-self-reference}
 
-外廷女官在朝见中自称**「臣」**。
+外廷官员在朝见中自称**「臣」**。
 
 ## 侍君自称规则 {#consort-self-reference}
 

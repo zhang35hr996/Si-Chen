@@ -11,6 +11,7 @@ import type { KnowledgeChunk, KnowledgeSourceType, KnowledgeVisibility } from ".
 import type { KnowledgeKeywordIndex, KnowledgeKeywordQuery } from "../index/keyword-index";
 import type { KnowledgeEvalCase } from "./schema";
 import { computeCaseResult, type CaseResult, type ResultDetail } from "./metrics";
+import { classifyQueryIntent } from "../intent";
 
 export interface EvalRunnerOptions {
   /** All chunks in the corpus (used for ID existence validation). */
@@ -58,6 +59,27 @@ export function runKeywordEval(
   const results: CaseResult[] = [];
 
   for (const c of cases) {
+    // Pre-retrieval intent gate: if the case declares expectedRetrievalSkipped,
+    // check whether the classifier agrees before running the index search.
+    const requiresSkip = c.expectedRetrievalSkipped === true;
+    let retrievalSkipped = false;
+    let actualIds: string[];
+    let details: ResultDetail[];
+
+    if (requiresSkip) {
+      const intent = classifyQueryIntent(c.query);
+      if (intent === "runtime_state") {
+        // Classifier correctly identified this as a runtime state query.
+        retrievalSkipped = true;
+        actualIds = [];
+        details = [];
+        results.push(computeCaseResult(c, actualIds, details, retrievalSkipped));
+        continue;
+      }
+      // Classifier failed to classify as runtime_state — fall through to
+      // retrieval so the failure report shows what would have been returned.
+    }
+
     const query: KnowledgeKeywordQuery = {
       text: c.query,
       limit: c.limit,
@@ -68,8 +90,8 @@ export function runKeywordEval(
 
     const hits = opts.keywordIndex.search(query);
 
-    const actualIds = hits.map((h) => h.chunk.id);
-    const details: ResultDetail[] = hits.map((h, i) => ({
+    actualIds = hits.map((h) => h.chunk.id);
+    details = hits.map((h, i) => ({
       rank: i + 1,
       id: h.chunk.id,
       keywordRank: i + 1,
@@ -107,7 +129,7 @@ export function runKeywordEval(
       }
     }
 
-    results.push(computeCaseResult(c, actualIds, details));
+    results.push(computeCaseResult(c, actualIds, details, retrievalSkipped));
   }
 
   return { results, visibilityLeakCount, temporalLeakCount, missingReferencedIds };

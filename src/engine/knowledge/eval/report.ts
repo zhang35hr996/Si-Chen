@@ -61,6 +61,7 @@ export function renderMarkdownReport(report: EvalReport): string {
     `| Forbidden hits | ${m.forbiddenHitCount} |`,
     `| Unexpected zero hits | ${m.unexpectedZeroHits} |`,
     `| ExpectedAll violations | ${m.expectedAllViolationCount} |`,
+    `| Intent mismatches | ${m.intentMismatchCount} |`,
     `| Duplicate hits | ${m.duplicateHits} |`,
     `| Visibility leakage | ${m.visibilityLeakage} |`,
     `| Temporal leakage | ${m.temporalLeakage} |`,
