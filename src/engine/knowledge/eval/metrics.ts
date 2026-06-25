@@ -59,7 +59,7 @@ export interface AggregateMetrics {
   unexpectedZeroHits: number;
   /** Cases where expectedAll was specified but at least one required ID was missing. */
   expectedAllViolationCount: number;
-  /** Cases where expectedRetrievalSkipped: true but the intent classifier returned static_lore. */
+  /** Cases where expectedRetrievalSkipped did not match what the classifier actually did (both directions). */
   intentMismatchCount: number;
   duplicateHits: number;
   visibilityLeakage: number;

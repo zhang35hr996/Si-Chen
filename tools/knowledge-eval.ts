@@ -198,7 +198,11 @@ if (metrics.forbiddenHitCount > 0) {
 if (metrics.intentMismatchCount > 0) {
   violations.push(`intent mismatches: ${metrics.intentMismatchCount} (must be 0)`);
   for (const c of metrics.failedCases.filter((r) => !r.intentMet)) {
-    violations.push(`  case '${c.caseId}': expectedRetrievalSkipped but classifier returned static_lore`);
+    // When intentMet=false, expected and actual are always opposite.
+    const expectedSkip = !c.retrievalSkipped;
+    violations.push(
+      `  case '${c.caseId}': expected skipped=${expectedSkip}, actual skipped=${c.retrievalSkipped}`,
+    );
   }
 }
 if (metrics.duplicateHits > 0) {

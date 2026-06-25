@@ -20,6 +20,7 @@ import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gate
 import {
   buildDialogueKnowledgeQuery,
   extractProvenance,
+  getLatestTargetUtterance,
   packPromptKnowledge,
   resolveVisibilityCeiling,
 } from "./knowledge/index";
@@ -603,9 +604,11 @@ export async function produceDialogueTurn(
     const ceiling = resolveVisibilityCeiling(request.speakerId, db, state);
     const query = buildDialogueKnowledgeQuery(request, ceiling);
 
-    // Intent gate: runtime_state queries (who is pregnant, current rankings…)
-    // cannot be answered from static lore — skip retrieval entirely.
-    const intent = classifyQueryIntent(query.text);
+    // Intent gate: classify only the user's latest utterance, not the full
+    // composite query (which includes sceneDirective and topicTags that may
+    // contain static-rule vocabulary and would corrupt the signal).
+    const utterance = getLatestTargetUtterance(request);
+    const intent = utterance ? classifyQueryIntent(utterance) : "static_lore";
     if (intent === "runtime_state") {
       finalRequest = {
         ...request,

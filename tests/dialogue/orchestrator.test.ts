@@ -904,10 +904,14 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
   });
 
   describe("intent gate — runtime_state bypasses retriever", () => {
-    function makeRequestWithTarget(targetText: string) {
-      // Inject a player transcript line so buildDialogueKnowledgeQuery uses it as query text.
+    function makeRequestWithTarget(
+      targetText: string,
+      opts?: { sceneDirective?: string; topicTags?: string[] },
+    ) {
       const r = assembleDialogueRequest(db, state, TURN_SPEAKER, "zichendian", {
         transcript: [{ speaker: "player", text: targetText }],
+        sceneDirective: opts?.sceneDirective,
+        topicTags: opts?.topicTags,
       });
       if (!r.ok) throw new Error(r.error.message);
       return r.value;
@@ -918,14 +922,13 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
       const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
       const { provider } = makeCapturingProvider();
 
-      // 谁 + 现在 → runtime_state → retriever must be bypassed
-      const request = makeRequestWithTarget("谁现在怀孕了");
-      const result = await produceDialogueTurn(db, provider, request, state, { retriever });
+      const result = await produceDialogueTurn(
+        db, provider, makeRequestWithTarget("谁现在怀孕了"), state, { retriever },
+      );
 
       expect(retrieverCalls.count).toBe(0);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      // Provenance should show a wired-but-skipped retrieval (not undefined, not degraded)
       expect(result.value.line.meta.knowledge).toBeDefined();
       expect(result.value.line.meta.knowledge?.degraded).toBe(false);
       expect(result.value.line.meta.knowledge?.chunkIds).toEqual([]);
@@ -936,9 +939,9 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
       const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
       const { provider } = makeCapturingProvider();
 
-      // 怀孕 alone without a PERSON_OR_RECORD_SELECTOR → static_lore
-      const request = makeRequestWithTarget("怀孕期间是否照常视事");
-      await produceDialogueTurn(db, provider, request, state, { retriever });
+      await produceDialogueTurn(
+        db, provider, makeRequestWithTarget("怀孕期间是否照常视事"), state, { retriever },
+      );
 
       expect(retrieverCalls.count).toBe(1);
     });
@@ -948,9 +951,54 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
       const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
       const { provider } = makeCapturingProvider();
 
-      // 目前 without a person selector → static_lore (asks about rank system, not specific person)
-      const request = makeRequestWithTarget("目前正式使用的后宫位分有哪些");
-      await produceDialogueTurn(db, provider, request, state, { retriever });
+      await produceDialogueTurn(
+        db, provider, makeRequestWithTarget("目前正式使用的后宫位分有哪些"), state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(1);
+    });
+
+    it("sceneDirective containing '礼制' does NOT prevent runtime query from being skipped", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // sceneDirective contains a STATIC_RULE_MARKER — must not contaminate intent classification
+      await produceDialogueTurn(
+        db, provider,
+        makeRequestWithTarget("谁现在怀孕了", { sceneDirective: "须遵后宫礼制回答" }),
+        state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(0);
+    });
+
+    it("topicTags containing '位分' do NOT prevent runtime query from being skipped", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // topicTag contains a STATIC_RULE_MARKER — must not contaminate intent classification
+      await produceDialogueTurn(
+        db, provider,
+        makeRequestWithTarget("当前谁最受宠", { topicTags: ["位分", "宠爱"] }),
+        state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(0);
+    });
+
+    it("sceneDirective containing temporal word does NOT incorrectly skip a static query", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // sceneDirective contains temporal vocab but user is asking about an institution
+      await produceDialogueTurn(
+        db, provider,
+        makeRequestWithTarget("承养制度是什么", { sceneDirective: "最近宫廷风波不断" }),
+        state, { retriever },
+      );
 
       expect(retrieverCalls.count).toBe(1);
     });
