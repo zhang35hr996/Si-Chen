@@ -2,14 +2,14 @@
 import { gestationRoll } from "../engine/characters/gestation";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
-import type { EventEffect } from "../engine/content/schemas";
+import { isAssignableRank, type EventEffect } from "../engine/content/schemas";
 import type { GameState } from "../engine/state/types";
 
 export const DECREE_CHANCE = 3; // 每行动点 3%
 export const PROMOTE_FAVOR = 65;
 export const DEMOTE_FAVOR = 35;
 export const DECREE_RANK_CEILING = 100; // 贵人
-export const DECREE_RANK_FLOOR = 40; // 官男子
+export const DECREE_RANK_FLOOR = 50; // 更衣（最低正式位分）
 
 export type { ReactionBeat as DecreeReaction } from "../engine/punishments/types";
 import type { ReactionBeat } from "../engine/punishments/types";
@@ -23,7 +23,7 @@ type Dir = "promote" | "demote";
 
 function bandRanks(db: ContentDB): { id: string; order: number }[] {
   return Object.values(db.ranks)
-    .filter((r) => r.domain === "harem" && r.order >= DECREE_RANK_FLOOR && r.order <= DECREE_RANK_CEILING)
+    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.order >= DECREE_RANK_FLOOR && r.order <= DECREE_RANK_CEILING)
     .map((r) => ({ id: r.id, order: r.order }))
     .sort((a, b) => a.order - b.order);
 }
@@ -49,7 +49,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
     const st = state.standing[c.id];
     if (!st || st.lifecycle === "deceased") return false;
     const rank = db.ranks[st.rank];
-    return !!rank && rank.domain === "harem" && rank.order >= DECREE_RANK_FLOOR && rank.order <= DECREE_RANK_CEILING;
+    return !!rank && isAssignableRank(rank) && rank.domain === "harem" && rank.order >= DECREE_RANK_FLOOR && rank.order <= DECREE_RANK_CEILING;
   });
   if (candidates.length === 0) return null;
 

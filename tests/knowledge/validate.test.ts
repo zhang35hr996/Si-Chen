@@ -1,24 +1,20 @@
 /**
- * Tests for the canonical consistency validator (knowledge:validate).
+ * Tests for the canonical consistency validator.
  *
- * Because the validator is a CLI tool (tools/knowledge-validate.ts) that reads
- * from the filesystem, we test its core logic by invoking the underlying
- * Markdown parser and checking the invariants the validator enforces.
- *
- * Covers:
- *  1. Production heading (H2) without anchor → validator-level check identifies it
- *  2. Production heading (H3) without anchor → validator-level check identifies it
- *  3. Duplicate anchor within same document is detected
- *  4. Anchor format — only lowercase a-z, 0-9, hyphens, starts with letter
- *  5. No TODO / TBD / 【待定】 in production corpus body
- *  6. Deprecated alias detection logic
- *  7. Rank ID uniqueness contract (invariant via schema)
- *  8. Rank order uniqueness within domain
- *  9. Validator does not modify any runtime state
- * 10. Document with all valid anchors produces correct chunk IDs
+ * These tests call the REAL production functions from
+ * src/engine/knowledge/authoring/validate.ts — not re-implementations.
+ * This ensures that the parser and validator share the same anchor logic.
  */
 import { describe, expect, it } from "vitest";
+import {
+  validateCanonicalRanks,
+  validateLoreDocument,
+  validateLoreBodyForDeprecatedTerms,
+  collectDeprecatedTerms,
+} from "../../src/engine/knowledge/authoring/validate";
 import { parseMarkdownLore } from "../../src/engine/knowledge/ingestion/markdown";
+import { loadRealContent } from "../helpers/contentFixture";
+import type { CharacterRank } from "../../src/engine/content/schemas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,223 +31,248 @@ visibility: public
 ${body}`;
 }
 
-/**
- * Scan raw Markdown lines for headings that lack {#anchor} syntax.
- * Mirrors what knowledge-validate.ts does.
- */
-function findHeadingsWithoutAnchors(content: string): string[] {
-  const ANCHOR_RE = /\{#([a-z][a-z0-9-]*)\}/;
-  const missing: string[] = [];
-  const lines = content.split("\n");
-  let inBody = false;
-  let frontmatterClosed = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-    if (i === 0 && line.trimEnd() === "---") continue;
-    if (!frontmatterClosed && line.trimEnd() === "---") {
-      frontmatterClosed = true;
-      inBody = true;
-      continue;
-    }
-    if (!inBody) continue;
-
-    const h2 = /^## (.+)/.exec(line);
-    const h3 = /^### (.+)/.exec(line);
-    const heading = h2 ?? h3;
-    if (heading && !ANCHOR_RE.test(heading[1]!)) {
-      missing.push(heading[1]!.trim());
-    }
-  }
-  return missing;
+function makeRank(overrides: Partial<CharacterRank> = {}): CharacterRank {
+  return {
+    id: "test-rank",
+    name: "测试位",
+    aliases: [],
+    deprecatedAliases: [],
+    grade: "正五品",
+    selfRefs: { toPlayer: ["妾"], formal: ["妾"] },
+    order: 100,
+    domain: "harem",
+    favorTerm: "恩宠",
+    deprecated: false,
+    ...overrides,
+  };
 }
 
-/** Find duplicate anchors within a document. */
-function findDuplicateAnchors(content: string): string[] {
-  const ANCHOR_RE = /\{#([a-z][a-z0-9-]*)\}/;
-  const seen = new Set<string>();
-  const duplicates: string[] = [];
-  let inBody = false;
-  let frontmatterClosed = false;
-
-  for (const [i, line] of content.split("\n").entries()) {
-    if (i === 0 && line.trimEnd() === "---") continue;
-    if (!frontmatterClosed && line.trimEnd() === "---") {
-      frontmatterClosed = true;
-      inBody = true;
-      continue;
-    }
-    if (!inBody) continue;
-
-    const m = ANCHOR_RE.exec(line);
-    if (m) {
-      const anchor = m[1]!;
-      if (seen.has(anchor)) duplicates.push(anchor);
-      seen.add(anchor);
-    }
-  }
-  return duplicates;
+function errCodes(findings: ReturnType<typeof validateCanonicalRanks>) {
+  return findings.filter((f) => f.kind === "error").map((f) => f.code);
 }
 
-/** Find forbidden keywords in body text. */
-function findForbiddenKeywords(content: string): string[] {
-  const KEYWORDS = ["TODO", "TBD", "【待定】", "暂定原则"];
-  const found: string[] = [];
-  let inBody = false;
-  let frontmatterClosed = false;
+// ── validateCanonicalRanks ────────────────────────────────────────────────────
 
-  for (const [i, line] of content.split("\n").entries()) {
-    if (i === 0 && line.trimEnd() === "---") continue;
-    if (!frontmatterClosed && line.trimEnd() === "---") {
-      frontmatterClosed = true;
-      inBody = true;
-      continue;
-    }
-    if (!inBody) continue;
-    for (const kw of KEYWORDS) {
-      if (line.includes(kw) && !found.includes(kw)) found.push(kw);
-    }
-  }
-  return found;
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-describe("validator: anchor enforcement", () => {
-  it("H2 without anchor is flagged", () => {
-    const content = makeDoc("## 后宫位分顺序\n\n位分按品级排列。\n");
-    const missing = findHeadingsWithoutAnchors(content);
-    expect(missing).toContain("后宫位分顺序");
+describe("validateCanonicalRanks", () => {
+  it("passes for a minimal valid rank list", () => {
+    const ranks = [makeRank({ id: "a", name: "甲", order: 10 }), makeRank({ id: "b", name: "乙", order: 20 })];
+    expect(validateCanonicalRanks(ranks)).toHaveLength(0);
   });
 
-  it("H3 without anchor is flagged", () => {
-    const content = makeDoc(
-      "## 位分 {#ranks}\n\n位分概述。\n\n### 对皇帝的自称\n\n对皇帝用臣。\n",
-    );
-    const missing = findHeadingsWithoutAnchors(content);
-    expect(missing).toContain("对皇帝的自称");
-    expect(missing).not.toContain("位分 {#ranks}");
+  it("detects duplicate rank IDs", () => {
+    const ranks = [makeRank({ id: "dup", name: "甲", order: 10 }), makeRank({ id: "dup", name: "乙", order: 20 })];
+    expect(errCodes(validateCanonicalRanks(ranks))).toContain("DUPLICATE_RANK_ID");
   });
 
-  it("all headings with anchors passes with no missing list", () => {
-    const content = makeDoc(
-      "## 位分 {#ranks}\n\n概述。\n\n### 高位 {#high-rank}\n\n高位说明。\n",
-    );
-    expect(findHeadingsWithoutAnchors(content)).toHaveLength(0);
+  it("detects duplicate non-deprecated names", () => {
+    const ranks = [
+      makeRank({ id: "a", name: "甲", order: 10 }),
+      makeRank({ id: "b", name: "甲", order: 20 }),
+    ];
+    expect(errCodes(validateCanonicalRanks(ranks))).toContain("DUPLICATE_RANK_NAME");
+  });
+
+  it("allows deprecated rank to share name with another deprecated rank (both excluded from name check)", () => {
+    const ranks = [
+      makeRank({ id: "a", name: "甲", order: 10, deprecated: true }),
+      makeRank({ id: "b", name: "甲", order: 20, deprecated: true }),
+    ];
+    const codes = errCodes(validateCanonicalRanks(ranks));
+    expect(codes).not.toContain("DUPLICATE_RANK_NAME");
+  });
+
+  it("detects duplicate order within the same domain", () => {
+    const ranks = [makeRank({ id: "a", name: "甲", order: 50 }), makeRank({ id: "b", name: "乙", order: 50 })];
+    expect(errCodes(validateCanonicalRanks(ranks))).toContain("DUPLICATE_RANK_ORDER");
+  });
+
+  it("allows same order in different domains", () => {
+    const ranks = [
+      makeRank({ id: "a", name: "甲", order: 50, domain: "harem" }),
+      makeRank({ id: "b", name: "乙", order: 50, domain: "official" }),
+    ];
+    expect(validateCanonicalRanks(ranks)).toHaveLength(0);
+  });
+
+  it("detects cross-rank alias conflict", () => {
+    const ranks = [
+      makeRank({ id: "a", name: "甲", order: 10, aliases: ["共享别名"] }),
+      makeRank({ id: "b", name: "乙", order: 20, aliases: ["共享别名"] }),
+    ];
+    expect(errCodes(validateCanonicalRanks(ranks))).toContain("AMBIGUOUS_TERM");
+  });
+
+  it("detects alias-deprecatedAlias conflict on same rank", () => {
+    const ranks = [makeRank({ id: "a", name: "甲", aliases: ["别"], deprecatedAliases: ["别"] })];
+    expect(errCodes(validateCanonicalRanks(ranks))).toContain("ALIAS_DEPRECATED_CONFLICT");
+  });
+
+  it("detects intra-rank duplicate terms", () => {
+    const ranks = [makeRank({ id: "a", name: "甲", aliases: ["同", "同"] })];
+    expect(errCodes(validateCanonicalRanks(ranks))).toContain("INTRA_RANK_DUPLICATE");
   });
 });
 
-describe("validator: duplicate anchor detection", () => {
+// ── validateLoreDocument ──────────────────────────────────────────────────────
+
+describe("validateLoreDocument: anchor enforcement", () => {
+  it("H2 without anchor is flagged when requireAnchors=true", () => {
+    const content = makeDoc("## 后宫位分顺序\n\n位分按品级排列，不得僭越。\n");
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: true });
+    expect(errCodes(findings)).toContain("MISSING_ANCHOR");
+  });
+
+  it("H3 without anchor is flagged when requireAnchors=true", () => {
+    const content = makeDoc("## 位分 {#ranks}\n\n位分概述。\n\n### 对皇帝的自称\n\n对皇帝用臣妾。\n");
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: true });
+    expect(errCodes(findings)).toContain("MISSING_ANCHOR");
+  });
+
+  it("headings without anchors are NOT flagged when requireAnchors=false (fixture mode)", () => {
+    const content = makeDoc("## 后宫位分顺序\n\n位分按品级排列，不得僭越。\n");
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: false });
+    expect(errCodes(findings)).not.toContain("MISSING_ANCHOR");
+  });
+
+  it("all headings with anchors passes clean", () => {
+    const content = makeDoc("## 位分 {#ranks}\n\n概述。\n\n### 高位 {#high-rank}\n\n说明。\n");
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: true });
+    expect(findings).toHaveLength(0);
+  });
+});
+
+describe("validateLoreDocument: anchor uses SAME regex as parser", () => {
+  it("anchor in middle of heading is NOT recognised — parser and validator agree", () => {
+    // "{#rank-order} 旧备注" after the anchor would make the heading fail the end-anchor check
+    // The parser won't extract the anchor either, so both agree: no stable anchor.
+    const headingContent = `## 后宫位分 {#rank-order} 旧备注`;
+    const content = makeDoc(`${headingContent}\n\n位分按品级排列，不得僭越。\n`);
+
+    // Validator must flag it as MISSING_ANCHOR (because anchor is not at end)
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: true });
+    expect(errCodes(findings)).toContain("MISSING_ANCHOR");
+
+    // Parser must also NOT extract the anchor (chunk ID uses full heading text, not just "rank-order")
+    const result = parseMarkdownLore(content, "test.md");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Chunk ID should be the full heading text including the {#...} notation — not just the anchor value
+    expect(result.value[0]!.id).not.toBe("test.doc#rank-order");
+    // The full heading text is used as the path component
+    expect(result.value[0]!.id).toContain("后宫位分");
+  });
+
+  it("valid end-anchor is recognised by both validator and parser", () => {
+    const content = makeDoc("## 后宫位分 {#rank-order}\n\n位分按品级排列，不得僭越。\n");
+
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: true });
+    expect(findings).toHaveLength(0);
+
+    const result = parseMarkdownLore(content, "test.md");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]!.id).toContain("rank-order");
+  });
+});
+
+describe("validateLoreDocument: duplicate anchors", () => {
   it("duplicate anchor within a document is detected", () => {
     const content = makeDoc(
-      "## 第一节 {#section-one}\n\n内容一。\n\n## 第二节 {#section-one}\n\n内容二。\n",
+      "## 第一节 {#section-one}\n\n内容一，足够长度。\n\n## 第二节 {#section-one}\n\n内容二，足够长度。\n",
     );
-    const dups = findDuplicateAnchors(content);
-    expect(dups).toContain("section-one");
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: true });
+    expect(errCodes(findings)).toContain("DUPLICATE_ANCHOR");
   });
 
-  it("unique anchors produce empty duplicate list", () => {
+  it("unique anchors produce no duplicate error", () => {
     const content = makeDoc(
-      "## 第一节 {#section-one}\n\n内容一。\n\n## 第二节 {#section-two}\n\n内容二。\n",
+      "## 第一节 {#section-one}\n\n内容一，足够长度。\n\n## 第二节 {#section-two}\n\n内容二，足够长度。\n",
     );
-    expect(findDuplicateAnchors(content)).toHaveLength(0);
+    const findings = validateLoreDocument({ content, label: "test.md", requireAnchors: true });
+    expect(errCodes(findings)).not.toContain("DUPLICATE_ANCHOR");
   });
 });
 
-describe("validator: forbidden keywords", () => {
-  it("TODO in body text is flagged", () => {
-    const content = makeDoc(
-      "## 规则 {#rules}\n\nTODO: 待补充具体规则。\n",
-    );
-    expect(findForbiddenKeywords(content)).toContain("TODO");
+describe("validateLoreDocument: forbidden keywords", () => {
+  it("TODO is flagged", () => {
+    const content = makeDoc("## 规则 {#rules}\n\nTODO: 待补充具体规则。\n");
+    expect(errCodes(validateLoreDocument({ content, label: "test.md", requireAnchors: true }))).toContain("FORBIDDEN_KEYWORD");
   });
 
-  it("【待定】 in body text is flagged", () => {
-    const content = makeDoc(
-      "## 规则 {#rules}\n\n承养月数【待定】，以下为参考。\n",
-    );
-    expect(findForbiddenKeywords(content)).toContain("【待定】");
-  });
-
-  it("TBD in body text is flagged", () => {
+  it("TBD is flagged", () => {
     const content = makeDoc("## 规则 {#rules}\n\n转胎月数 TBD。\n");
-    expect(findForbiddenKeywords(content)).toContain("TBD");
+    expect(errCodes(validateLoreDocument({ content, label: "test.md", requireAnchors: true }))).toContain("FORBIDDEN_KEYWORD");
   });
 
-  it("暂定原则 in body text is flagged", () => {
-    const content = makeDoc(
-      "## 规则 {#rules}\n\n暂定原则：三月转胎。\n",
-    );
-    expect(findForbiddenKeywords(content)).toContain("暂定原则");
+  it("【待定】 is flagged", () => {
+    const content = makeDoc("## 规则 {#rules}\n\n承养月数【待定】。\n");
+    expect(errCodes(validateLoreDocument({ content, label: "test.md", requireAnchors: true }))).toContain("FORBIDDEN_KEYWORD");
   });
 
-  it("clean body text produces no forbidden keywords", () => {
-    const content = makeDoc(
-      "## 规则 {#rules}\n\n承养制度规则已确定。\n",
-    );
-    expect(findForbiddenKeywords(content)).toHaveLength(0);
-  });
-});
-
-describe("validator: deprecated alias detection in corpus", () => {
-  it("deprecated alias 采仪 in lore body is detected", () => {
-    const deprecatedAliases = ["采仪"];
-    const loreText = "太子低位侧室称采仪，有时也称良仪。";
-    const found = deprecatedAliases.filter((da) => loreText.includes(da));
-    expect(found).toContain("采仪");
+  it("暂定原则 is flagged", () => {
+    const content = makeDoc("## 规则 {#rules}\n\n暂定原则：三月转胎。\n");
+    expect(errCodes(validateLoreDocument({ content, label: "test.md", requireAnchors: true }))).toContain("FORBIDDEN_KEYWORD");
   });
 
-  it("canonical name 良仪 does not trigger deprecated check", () => {
-    const deprecatedAliases = ["采仪"];
-    const loreText = "太子低位侧室称良仪。";
-    const found = deprecatedAliases.filter((da) => loreText.includes(da));
-    expect(found).toHaveLength(0);
+  it("clean body passes", () => {
+    const content = makeDoc("## 规则 {#rules}\n\n承养制度规则已确定，请遵守。\n");
+    expect(errCodes(validateLoreDocument({ content, label: "test.md", requireAnchors: true }))).not.toContain("FORBIDDEN_KEYWORD");
   });
 });
 
-describe("validator: document and chunk ID uniqueness via parser", () => {
-  it("two documents with different IDs produce disjoint chunk ID sets", () => {
-    const doc1 = makeDoc("## 规则 {#rules}\n\n第一份文档的规则内容，适用于所有后宫位分。\n", "doc.one");
-    const doc2 = makeDoc("## 规则 {#rules}\n\n第二份文档的另一份规则，具有独立的适用范围。\n", "doc.two");
+// ── validateLoreBodyForDeprecatedTerms ────────────────────────────────────────
 
-    const r1 = parseMarkdownLore(doc1, "test1.md");
-    const r2 = parseMarkdownLore(doc2, "test2.md");
-    expect(r1.ok).toBe(true);
-    expect(r2.ok).toBe(true);
-    if (!r1.ok || !r2.ok) return;
-
-    const ids1 = new Set(r1.value.map((c) => c.id));
-    const ids2 = new Set(r2.value.map((c) => c.id));
-    const overlap = [...ids1].filter((id) => ids2.has(id));
-    expect(overlap).toHaveLength(0);
+describe("validateLoreBodyForDeprecatedTerms", () => {
+  it("deprecated alias in body text is flagged", () => {
+    const findings = validateLoreBodyForDeprecatedTerms(
+      "太子低位侧室称采仪，有时也称良仪。",
+      "test.md",
+      ["采仪"],
+    );
+    expect(errCodes(findings)).toContain("DEPRECATED_TERM_IN_LORE");
   });
 
-  it("all chunks from one document share the same doc-id prefix", () => {
-    const doc = makeDoc(
-      "## 甲规则 {#section-a}\n\n甲规则适用于所有后宫位分，不得违反。\n\n### 甲子细则 {#section-a-1}\n\n甲子细则为甲规则的补充说明，需配合主规则理解。\n\n## 乙规则 {#section-b}\n\n乙规则是后宫礼仪的补充规定，同样具有约束力。\n",
-      "my.lore",
+  it("canonical name does not trigger the check", () => {
+    const findings = validateLoreBodyForDeprecatedTerms(
+      "太子低位侧室称良仪。",
+      "test.md",
+      ["采仪"],
     );
-    const r = parseMarkdownLore(doc, "test.md");
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    for (const chunk of r.value) {
-      expect(chunk.id).toMatch(/^my\.lore#/);
-    }
+    expect(findings).toHaveLength(0);
+  });
+
+  it("deprecated rank name (官男子) is included in deprecated terms", () => {
+    const db = loadRealContent();
+    const terms = collectDeprecatedTerms(Object.values(db.ranks));
+    expect(terms).toContain("官男子");
   });
 });
 
-describe("validator does not modify runtime state", () => {
-  it("calling the anchor scan function multiple times is idempotent", () => {
-    const content = makeDoc("## 规则 {#rules}\n\n内容。\n");
-    const first = findHeadingsWithoutAnchors(content);
-    const second = findHeadingsWithoutAnchors(content);
-    expect(first).toEqual(second);
+// ── collectDeprecatedTerms ────────────────────────────────────────────────────
+
+describe("collectDeprecatedTerms", () => {
+  it("includes deprecatedAliases from all ranks", () => {
+    const ranks = [makeRank({ id: "a", name: "甲", deprecatedAliases: ["旧甲"] })];
+    expect(collectDeprecatedTerms(ranks)).toContain("旧甲");
   });
 
-  it("parseMarkdownLore is pure — same input always produces same output", () => {
-    const doc = makeDoc("## 规则 {#rules}\n\n内容。\n");
-    const r1 = parseMarkdownLore(doc, "test.md");
-    const r2 = parseMarkdownLore(doc, "test.md");
-    expect(r1).toEqual(r2);
+  it("includes name of deprecated ranks", () => {
+    const ranks = [makeRank({ id: "old", name: "官男子", deprecated: true })];
+    expect(collectDeprecatedTerms(ranks)).toContain("官男子");
+  });
+
+  it("does NOT include name of non-deprecated ranks", () => {
+    const ranks = [makeRank({ id: "a", name: "更衣", deprecated: false })];
+    expect(collectDeprecatedTerms(ranks)).not.toContain("更衣");
+  });
+});
+
+// ── Integration: real world.json passes rank validation ───────────────────────
+
+describe("world.json rank integrity", () => {
+  it("all ranks in world.json pass canonical rank validation", () => {
+    const db = loadRealContent();
+    const findings = validateCanonicalRanks(Object.values(db.ranks));
+    expect(findings.filter((f) => f.kind === "error")).toHaveLength(0);
   });
 });

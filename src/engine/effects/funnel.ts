@@ -24,7 +24,7 @@ import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../characters/
 import { nextHeirId } from "../characters/heirs";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
-import { eventEffectSchema, type EventEffect } from "../content/schemas";
+import { isAssignableRank, eventEffectSchema, type EventEffect } from "../content/schemas";
 import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import { memoryEntryId } from "../state/newGame";
@@ -161,6 +161,8 @@ export function validateEffects(
           const r = db.ranks[e.rank];
           if (!r || r.domain !== "harem" || e.rank === "fenghou") {
             bad(index, "BAD_EFFECT", `set_rank to invalid rank "${e.rank}"`, { rank: e.rank });
+          } else if (!isAssignableRank(r)) {
+            bad(index, "BAD_EFFECT", `set_rank to deprecated rank "${e.rank}"`, { rank: e.rank });
           } else if (e.authority.kind === "harem_administrator") {
             const check = e.authority.office === "empress"
               ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, e.rank)

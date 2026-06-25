@@ -57,11 +57,11 @@ describe("punishment ID allocation", () => {
 
   it("ID3. rank demotion returns pun_000001", () => {
     const store = makeStore();
-    // Find current rank and a lower rank.
+    // Find current rank and a lower assignable (non-deprecated) rank.
     const standing = store.getState().standing[TARGET]!;
     const curRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[curRankId]!.order && id !== curRankId);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[curRankId]!.order && id !== curRankId && !r.deprecated);
     if (!lowerRank) return; // skip if no lower rank available
     const result = store.applyPunitiveRankChangeWithConsequences(db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, {});
     expect(result.ok).toBe(true);
@@ -136,7 +136,7 @@ describe("PunishmentRecord created for each kind", () => {
     const standing = store.getState().standing[TARGET]!;
     const fromRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated);
     if (!lowerRank) return;
     store.applyPunitiveRankChangeWithConsequences(db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, {});
     const pun = store.getState().justice.punishments["pun_000001"]!;
@@ -372,7 +372,7 @@ describe("case linkage", () => {
     const standing = store.getState().standing[TARGET]!;
     const fromRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated);
     if (!lowerRank) return;
     const result = store.applyPunitiveRankChangeWithConsequences(
       db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, { caseId: "case_000001" },
@@ -404,7 +404,7 @@ describe("chronicle links provenance", () => {
     const standing = store.getState().standing[TARGET]!;
     const fromRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated);
     if (!lowerRank) return;
     store.applyPunitiveRankChangeWithConsequences(db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, {});
     const chronicle = store.getState().chronicle;

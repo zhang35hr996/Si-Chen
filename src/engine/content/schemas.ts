@@ -529,6 +529,14 @@ export const characterRankSchema = z.strictObject({
 
 export type CharacterRank = z.infer<typeof characterRankSchema>;
 
+/** A rank is assignable when it is not marked deprecated.
+ *  Use this everywhere a rank list is presented to users or used in new assignments.
+ *  Characters who already hold a deprecated rank are unaffected; this only blocks
+ *  new assignments (promotions, demotions, grand-selection initial ranks, etc.). */
+export function isAssignableRank(rank: CharacterRank): boolean {
+  return !rank.deprecated;
+}
+
 // ── map boards & portals (world.json — data-driven 主图/子图 graph) ─────
 // A board is one navigable map screen (宫城图 / 后宫 / 京城 / 郊外). Portals are
 // the免行动点 buttons that switch from one board to another (出宫, 后宫, 郊外…).

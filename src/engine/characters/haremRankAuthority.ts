@@ -9,7 +9,7 @@
  * 此模块不依赖 UI 层；可在 funnel.ts 验证中直接调用。
  */
 import type { ContentDB } from "../content/loader";
-import type { RankOperationAuthority } from "../content/schemas";
+import { isAssignableRank, type RankOperationAuthority } from "../content/schemas";
 import type { GameState } from "../state/types";
 import { isConfined } from "./confinement";
 
@@ -120,6 +120,7 @@ export function canAdministratorAdjustRank(
   }
   const newRank = db.ranks[newRankId];
   if (!newRank) return { ok: false, reason: "目标位分不存在。" };
+  if (!isAssignableRank(newRank)) return { ok: false, reason: "该位分已废弃，不可新设。" };
   if (newRank.order >= actorRank.order) {
     return {
       ok: false,
@@ -178,6 +179,7 @@ export function canEmpressAdjustRank(
   }
   const newRank = db.ranks[newRankId];
   if (!newRank) return { ok: false, reason: "目标位分不存在。" };
+  if (!isAssignableRank(newRank)) return { ok: false, reason: "该位分已废弃，不可新设。" };
 
   return { ok: true };
 }

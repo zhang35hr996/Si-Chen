@@ -203,8 +203,13 @@ interface Section {
   text: string;
 }
 
-/** Strip `{#kebab-anchor}` suffix and return anchor + remaining display text. */
-function extractHeadingAnchor(raw: string): { anchor: string | undefined; text: string } {
+/**
+ * Strip `{#kebab-anchor}` suffix and return anchor + remaining display text.
+ * The anchor must appear at the END of the heading line (after optional whitespace)
+ * and have no trailing text.  Anchors in the middle of a heading are not recognised.
+ * Exported so the canonical consistency validator can reuse the same regex.
+ */
+export function extractHeadingAnchor(raw: string): { anchor: string | undefined; text: string } {
   const m = /^(.*?)\s*\{#([a-z][a-z0-9-]*)\}\s*$/.exec(raw);
   if (m) return { anchor: m[2], text: m[1]!.trim() };
   return { anchor: undefined, text: raw };

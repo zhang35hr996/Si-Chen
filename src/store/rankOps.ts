@@ -9,7 +9,7 @@
 import { effectiveOrder } from "../engine/characters/standing";
 import { renderRankReaction, type RankOpKind, type RankReactionAuthority } from "../engine/characters/rankReaction";
 import type { ContentDB } from "../engine/content/loader";
-import type { EventEffect } from "../engine/content/schemas";
+import { isAssignableRank, type EventEffect } from "../engine/content/schemas";
 import type { RankOperationAuthority } from "../engine/characters/haremRankAuthority";
 import type { GameState } from "../engine/state/types";
 
@@ -45,6 +45,7 @@ export function buildRankOp(
   if (req.kind === "set_rank") {
     const target = db.ranks[req.rank];
     if (!target || req.rank === standing.rank) return null; // unknown or no-op
+    if (!isAssignableRank(target)) return null; // deprecated ranks cannot be newly assigned
     kind = effectiveOrder(target, standing.title !== undefined) > effectiveOrder(curRank, standing.title !== undefined)
       ? "promote"
       : "demote";
