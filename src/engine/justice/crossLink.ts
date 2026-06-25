@@ -177,6 +177,46 @@ export function validateJusticeLinks(state: GameState): GameError[] {
         `ColdPalaceEffect ${effect.id} is lifted (liftedTurn=${effect.liftedTurn}) but linked punishment ${pun.id} is still active`,
       ));
     }
+
+    if (pun.kind !== "cold_palace") {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} (lifted) links to punishment ${pun.id} of kind ${pun.kind} (expected cold_palace)`,
+      ));
+      continue;
+    }
+
+    if (pun.targetId !== effect.characterId) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} (lifted) characterId=${effect.characterId} but punishment ${pun.id} targetId=${pun.targetId}`,
+      ));
+    }
+
+    const histDetails = pun.details as { statusEffectId?: string; previousResidenceId?: string; coldPalaceResidenceId?: string; previousChamber?: string };
+    if (histDetails.statusEffectId !== effect.id) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} (lifted) links to punishment ${pun.id} but punishment.details.statusEffectId=${histDetails.statusEffectId}`,
+      ));
+    }
+
+    if (histDetails.previousResidenceId !== effect.previousResidenceId) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} (lifted) previousResidenceId=${effect.previousResidenceId} but punishment details.previousResidenceId=${histDetails.previousResidenceId}`,
+      ));
+    }
+
+    if (histDetails.coldPalaceResidenceId !== effect.coldPalaceResidenceId) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} (lifted) coldPalaceResidenceId=${effect.coldPalaceResidenceId} but punishment details.coldPalaceResidenceId=${histDetails.coldPalaceResidenceId}`,
+      ));
+    }
+
+    if (effect.previousChamber !== undefined || histDetails.previousChamber !== undefined) {
+      if (effect.previousChamber !== histDetails.previousChamber) {
+        errors.push(crossLinkErr(
+          `ColdPalaceEffect ${effect.id} (lifted) previousChamber=${effect.previousChamber} but punishment details.previousChamber=${histDetails.previousChamber}`,
+        ));
+      }
+    }
   }
 
   // ── PunishmentRecord → ColdPalaceEffect checks ────────────────────────────
@@ -210,6 +250,32 @@ export function validateJusticeLinks(state: GameState): GameError[] {
     if (pun.targetId !== effect.characterId) {
       errors.push(crossLinkErr(
         `PunishmentRecord ${pun.id} targetId=${pun.targetId} but ColdPalaceEffect.characterId=${effect.characterId}`,
+      ));
+    }
+
+    const punDetails = pun.details as { statusEffectId?: string; previousResidenceId?: string; coldPalaceResidenceId?: string; previousChamber?: string };
+
+    if (punDetails.statusEffectId !== effect.id) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} details.statusEffectId=${punDetails.statusEffectId} but ColdPalaceEffect.id=${effect.id}`,
+      ));
+    }
+
+    if (punDetails.previousResidenceId !== effect.previousResidenceId) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} details.previousResidenceId=${punDetails.previousResidenceId} != ColdPalaceEffect.previousResidenceId=${effect.previousResidenceId}`,
+      ));
+    }
+
+    if (punDetails.coldPalaceResidenceId !== effect.coldPalaceResidenceId) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} details.coldPalaceResidenceId=${punDetails.coldPalaceResidenceId} != ColdPalaceEffect.coldPalaceResidenceId=${effect.coldPalaceResidenceId}`,
+      ));
+    }
+
+    if ((punDetails.previousChamber ?? undefined) !== (effect.previousChamber ?? undefined)) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} details.previousChamber=${punDetails.previousChamber} != ColdPalaceEffect.previousChamber=${effect.previousChamber}`,
       ));
     }
 

@@ -468,6 +468,11 @@ export function validateEffects(
               bad(index, "BAD_EFFECT", `acting consort cannot be fenghou: "${ns.charId}"`, { char: ns.charId });
             } else if (st.lifecycle === "deceased" || st.lifecycle === "candidate") {
               bad(index, "BAD_EFFECT_TARGET", `acting consort is deceased or candidate: "${ns.charId}"`, { char: ns.charId });
+            } else {
+              const eligible = eligibleHaremAdministrators(db, state);
+              if (!eligible.some((c) => c.id === ns.charId)) {
+                bad(index, "BAD_EFFECT", `character "${ns.charId}" is not eligible to administer the harem`, {});
+              }
             }
           }
         } else {
@@ -1029,17 +1034,15 @@ export function applyEffects(
           }
         }
         // Resolve all active PunishmentRecords for the deceased character.
-        // Skip for imperial_execution: the execution justice plan (run after effects) handles
-        // prior punishment resolution to avoid a double-resolve conflict with its own mutations.
-        if (effect.cause !== "imperial_execution") {
-          for (const punId of Object.keys(next.justice.punishments)) {
-            const pun = next.justice.punishments[punId]!;
-            if (pun.targetId === effect.char && pun.lifecycle.status === "active") {
-              next.justice.punishments[punId] = {
-                ...pun,
-                lifecycle: { status: "completed" as const, resolvedAt: effect.at, resolution: "target_deceased" as const },
-              };
-            }
+        // The execution PunishmentRecord (if any) is created AFTER effects run in commitPlannedTransaction,
+        // so it doesn't exist yet when consort_decease fires — the guard is unnecessary.
+        for (const punId of Object.keys(next.justice.punishments)) {
+          const pun = next.justice.punishments[punId]!;
+          if (pun.targetId === effect.char && pun.lifecycle.status === "active") {
+            next.justice.punishments[punId] = {
+              ...pun,
+              lifecycle: { status: "completed" as const, resolvedAt: effect.at, resolution: "target_deceased" as const },
+            };
           }
         }
         if (next.overnightWith?.charId === effect.char) delete next.overnightWith;

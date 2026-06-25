@@ -827,6 +827,7 @@ export class GameStore {
     reactionBeats: ReactionBeat[],
     source: TraceSource,
     justicePlan?: JusticePlan,
+    postEffectsEntries?: (state: GameState) => Omit<CourtEvent, "id">[],
   ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
     const collector = this.makeCollector();
     const beforeState = this.state;
@@ -861,8 +862,12 @@ export class GameStore {
       collector?.capturePhaseScheduled("justice_plan", diffGameState(beforeJustice, candidate));
     }
 
+    // Collect post-effects chronicle entries (e.g., harem administration change audit).
+    const extraEntries: Omit<CourtEvent, "id">[] = postEffectsEntries ? postEffectsEntries(candidate) : [];
+    const allChronicleEntries = [...chronicle, ...extraEntries];
+
     const beforeChronicle = candidate;
-    for (const draft of chronicle) {
+    for (const draft of allChronicleEntries) {
       const ap = appendCourtEvent(candidate, draft);
       if (!ap.ok) {
         for (const e of ap.error) this.logger?.logGameError(e);
@@ -960,20 +965,11 @@ export class GameStore {
           : { details: { deathCause: "imperial_execution" as const } }),
     } as PunishmentRecord;
 
-    // Resolve all other active punishments for the same target when executing.
-    const priorActivePunishments = kind === "execution"
-      ? Object.values(this.state.justice.punishments).filter(
-          (p) => p.targetId === command.targetId && p.lifecycle.status === "active",
-        )
-      : [];
-    const resolveDeceased = priorActivePunishments.map((p) => ({
-      type: "resolve_punishment" as const,
-      punishmentId: p.id,
-      lifecycle: { status: "completed" as const, resolvedAt: now, resolution: "target_deceased" as const },
-    }));
+    // Prior active punishments for the target are resolved by the consort_decease effect in the funnel
+    // (which runs before the justice plan). No duplicate resolve_punishment mutations needed here.
 
     const justicePlan: JusticePlan = {
-      mutations: [...resolveDeceased, { type: "create_punishment", record: punishmentRecord }],
+      mutations: [{ type: "create_punishment", record: punishmentRecord }],
       nextSeq: alloc.nextSeq,
     };
 
@@ -1831,7 +1827,7 @@ export class GameStore {
       ...liftConfinementEffects,
       ...conseq.effects.map((e) => {
         if (e.type === "memory") {
-          return { ...e, entry: { ...e.entry, sourcePunishmentId: punishmentId } };
+          return { ...e, entry: { ...e.entry, sourcePunishmentId: punishmentId, ...(meta.caseId ? { sourceCaseId: meta.caseId } : {}) } };
         }
         return e;
       }),
@@ -1869,6 +1865,9 @@ export class GameStore {
 
     const allChronicle = [...primaryChronicle, ...conseqChronicle];
 
+    // Capture harem administration state before effects so we can detect changes post-apply.
+    const prevHaremAdmin = structuredClone(this.state.haremAdministration);
+
     const txResult = this.commitPlannedTransaction(
       db,
       augmentedEffects,
@@ -1876,6 +1875,29 @@ export class GameStore {
       conseq.reactionBeats,
       { kind: "imperial_command", sourceId: "send_to_cold_palace", label: `cold palace: ${targetId}` },
       justicePlan,
+      (newState) => {
+        const newHaremAdmin = newState.haremAdministration;
+        if (JSON.stringify(prevHaremAdmin) === JSON.stringify(newHaremAdmin)) return [];
+        const newReason = newHaremAdmin.mode !== "empress" ? (newHaremAdmin as { reason?: string }).reason : undefined;
+        return [{
+          type: "harem_administration_changed" as const,
+          occurredAt: now,
+          participants: [],
+          payload: {
+            from: prevHaremAdmin.mode,
+            to: newHaremAdmin.mode,
+            ...(newHaremAdmin.mode === "acting_consort" ? { toCharId: (newHaremAdmin as { charId: string }).charId } : {}),
+            ...(prevHaremAdmin.mode === "acting_consort" ? { fromCharId: (prevHaremAdmin as { charId: string }).charId } : {}),
+            ...(newReason ? { reason: newReason } : {}),
+            imposedOnId: targetId,
+            punishmentId,
+          },
+          publicity: { scope: "palace", persistence: "institutional" } as const,
+          publicSalience: 70,
+          retention: "permanent" as const,
+          tags: ["harem_administration", "cold_palace"],
+        }];
+      },
     );
     if (!txResult.ok) return txResult;
     return ok({ baseLines: [], punishmentId });
