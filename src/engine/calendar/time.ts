@@ -29,10 +29,10 @@ export interface CalendarState extends GameTime {
   readonly eraName: string;
 }
 
-export const DEFAULT_AP_MAX = 6;
+export const DEFAULT_AP_MAX = 5;
 
 // ── 时辰 / 时段 (skeleton-plan §4 Time, art pass) ─────────────────────
-// A day has apMax = 6 action slots; the slot you are about to act in maps to
+// A day has apMax action slots; the slot you are about to act in maps to
 // a 时辰 and a time-of-day bucket that drives which background variant shows.
 // Slot index = apMax − ap (fresh day = slot 0). The clock never rests at ap=0:
 // spending the last AP rolls the day (reducer), so slot ∈ [0, apMax−1].

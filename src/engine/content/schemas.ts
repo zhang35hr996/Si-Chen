@@ -512,14 +512,30 @@ export type OfficialPost = z.infer<typeof officialPostSchema>;
 export const characterRankSchema = z.strictObject({
   id: idSchema,
   name: nonEmpty,
+  /** Acceptable alternate names (e.g. common short forms). Empty by default. */
+  aliases: z.array(nonEmpty).default([]),
+  /** Former names now replaced. Recognised by old-content readers but MUST NOT
+   *  appear in new production lore or new content files. */
+  deprecatedAliases: z.array(nonEmpty).default([]),
   grade: nonEmpty,
   selfRefs: selfRefsSchema,
   order: z.number().int().min(0),
   domain: z.enum(["harem", "official"]),
   favorTerm: nonEmpty, // 恩宠 (consort) / 圣眷 (official) — display label
+  /** True when the rank is no longer part of the canonical set.
+   *  Kept in world.json for save-file compatibility; new content must not use it. */
+  deprecated: z.boolean().default(false),
 });
 
 export type CharacterRank = z.infer<typeof characterRankSchema>;
+
+/** A rank is assignable when it is not marked deprecated.
+ *  Use this everywhere a rank list is presented to users or used in new assignments.
+ *  Characters who already hold a deprecated rank are unaffected; this only blocks
+ *  new assignments (promotions, demotions, grand-selection initial ranks, etc.). */
+export function isAssignableRank(rank: CharacterRank): boolean {
+  return !rank.deprecated;
+}
 
 // ── map boards & portals (world.json — data-driven 主图/子图 graph) ─────
 // A board is one navigable map screen (宫城图 / 后宫 / 京城 / 郊外). Portals are

@@ -10,7 +10,7 @@ describe("createNewGameState", () => {
 
   it("starts at 元年一月上旬 / 6 AP at the world's starting location", () => {
     expect(formatGameTime(state.calendar)).toBe("元年一月上旬");
-    expect(formatAp(state.calendar)).toBe("行动点：6/6");
+    expect(formatAp(state.calendar)).toBe("行动点：5/5");
     expect(state.playerLocation).toBe("zichendian");
   });
 

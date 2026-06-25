@@ -10,6 +10,7 @@ import { useState, type ReactNode } from "react";
 import { effectiveOrder, resolveDisplayName, resolveIdentityLabel } from "../../engine/characters/standing";
 import { getHaremRankAuthority } from "../../engine/characters/haremRankAuthority";
 import type { ContentDB } from "../../engine/content/loader";
+import { isAssignableRank } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import type { HaremAdminRankCommand } from "../../store/haremAdminCommands";
 
@@ -216,7 +217,7 @@ function RankSelectStep({
   const targetName = targetChar && targetSt ? resolveIdentityLabel(targetChar, targetSt, targetRankMeta) : targetId;
 
   const rankLadder = Object.values(db.ranks)
-    .filter((r) => r.domain === "harem" && r.id !== "fenghou" && r.order < actorRankOrder)
+    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "fenghou" && r.order < actorRankOrder)
     .sort((a, b) => effectiveOrder(b, false) - effectiveOrder(a, false));
 
   const [selectedRank, setSelectedRank] = useState(targetSt?.rank ?? "");

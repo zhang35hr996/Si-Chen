@@ -70,12 +70,12 @@ describe("buildTravelBatch + reducer", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.state.playerLocation).toBe("kunninggong");
-    expect(result.value.state.calendar.ap).toBe(6);
+    expect(result.value.state.calendar.ap).toBe(5);
     expect(result.value.rolledOver).toBe(false);
   });
 
   it("free travel never rolls the action-day, even on the last AP", () => {
-    const state = drainAp(fresh(), 5); // 1 AP left
+    const state = drainAp(fresh(), 4); // 1 AP left
     const batch = buildTravelBatch(db, state, "yuhuayuan");
     expect(batch.ok).toBe(true);
     if (!batch.ok) return;

@@ -54,7 +54,7 @@ describe("GameStore", () => {
 
     store.reset();
     expect(store.getState().flags).toEqual({});
-    expect(store.getState().calendar.ap).toBe(6);
+    expect(store.getState().calendar.ap).toBe(5);
   });
 });
 

@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { effectiveOrder, resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
-import type { CharacterContent } from "../../engine/content/schemas";
+import { isAssignableRank, type CharacterContent } from "../../engine/content/schemas";
 import type { CharacterStanding } from "../../engine/state/types";
 import type { RankOpRequest } from "../../store/rankOps";
 
@@ -25,7 +25,7 @@ export function RankAdminModal({
   const [target, setTarget] = useState(standing.rank);
   const [title, setTitle] = useState("");
   const ladder = Object.values(db.ranks)
-    .filter((r) => r.domain === "harem" && r.id !== "fenghou")
+    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "fenghou")
     .sort((a, b) => effectiveOrder(b, false) - effectiveOrder(a, false));
   const titleValid = /^[一-龥]{1,4}$/.test(title);
 

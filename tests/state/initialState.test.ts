@@ -5,10 +5,10 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 
 describe("createInitialState", () => {
-  it("starts at 元年一月上旬 with 行动点：6/6 (skeleton-plan §13 #2)", () => {
+  it("starts at 元年一月上旬 with 行动点：5/5 (skeleton-plan §13 #2)", () => {
     const state = createInitialState();
     expect(formatGameTime(state.calendar)).toBe("元年一月上旬");
-    expect(formatAp(state.calendar)).toBe("行动点：6/6");
+    expect(formatAp(state.calendar)).toBe("行动点：5/5");
   });
 
   it("initializes the resource pillars with placeholder values", () => {

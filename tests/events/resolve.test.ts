@@ -28,7 +28,7 @@ describe("resolveEvent — one transaction", () => {
     const { state, rolledOver } = result.value;
     expect(state.flags["rite_scheduled"]).toBe(true);
     expect(state.memories["wei_sui"]?.entries).toHaveLength(2);
-    expect(state.calendar.ap).toBe(5); // 6 - apCost 1
+    expect(state.calendar.ap).toBe(4); // 5 - apCost 1
     expect(rolledOver).toBe(false);
     expect(hasEventFired(state, "ev_menses_rite")).toBe(true);
     expect(state.eventLog[0]?.firedAt).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
@@ -42,7 +42,7 @@ describe("resolveEvent — one transaction", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.rolledOver).toBe(true);
-    expect(result.value.state.calendar).toMatchObject({ period: "mid", ap: 6 });
+    expect(result.value.state.calendar).toMatchObject({ period: "mid", ap: 5 });
     expect(result.value.state.eventLog[0]?.firedAt.period).toBe("early"); // pre-rollover stamp
   });
 
@@ -63,7 +63,7 @@ describe("resolveEvent — one transaction", () => {
       { type: "favor", char: "char_ghost", delta: 2 },
     ]);
     expect(result.ok).toBe(false);
-    expect(state.calendar.ap).toBe(6);
+    expect(state.calendar.ap).toBe(5);
     expect(state.eventLog).toEqual([]);
   });
 

@@ -11,8 +11,12 @@
  *  - If a section body exceeds ~400 characters, it is split at paragraph
  *    boundaries (blank lines) deterministically.  Never splits mid-sentence.
  *  - Empty sections (no text after trimming) are discarded.
- *  - Stable ID = "${docId}#${headingText}" (or "${docId}#${headingText}:${n}"
+ *  - Stable ID = "${docId}#${anchorOrHeadingText}" (or "${docId}#...${n}"
  *    for split sub-chunks).  The intro uses "${docId}#_intro".
+ *  - Headings may carry an explicit stable anchor: `## 标题 {#kebab-anchor}`.
+ *    When present the anchor becomes the ID component; the Chinese heading is
+ *    used only for display.  Without an anchor the heading text is used as
+ *    before (backwards-compatible for test fixtures and legacy documents).
  *
  * Frontmatter format (YAML-subset, no external dependency):
  * ```
@@ -192,23 +196,39 @@ function splitFrontmatter(
 }
 
 interface Section {
-  /** ID path component: "_intro" | H2text | "H2text/H3text" */
+  /** ID path component: "_intro" | anchorOrH2text | "anchorOrH2text/anchorOrH3text" */
   headingPath: string | undefined;
-  /** Display title component: undefined for intro, H2text, or "H2text — H3text" */
+  /** Display title: undefined for intro, H2text, or "H2text — H3text" (no anchor) */
   headingTitle: string | undefined;
   text: string;
+}
+
+/**
+ * Strip `{#kebab-anchor}` suffix and return anchor + remaining display text.
+ * The anchor must appear at the END of the heading line (after optional whitespace)
+ * and have no trailing text.  Anchors in the middle of a heading are not recognised.
+ * Exported so the canonical consistency validator can reuse the same regex.
+ */
+export function extractHeadingAnchor(raw: string): { anchor: string | undefined; text: string } {
+  const m = /^(.*?)\s*\{#([a-z][a-z0-9-]*)\}\s*$/.exec(raw);
+  if (m) return { anchor: m[2], text: m[1]!.trim() };
+  return { anchor: undefined, text: raw };
 }
 
 /**
  * Split Markdown body into sections by ## and ### headings.
  *
  * IDs use the heading hierarchy so two `### 职责` sections under different
- * `## X` parents produce distinct IDs: `doc#中书省/职责` vs `doc#尚书省/职责`.
+ * `## X` parents produce distinct IDs.  When a heading carries a stable anchor
+ * (`## 标题 {#kebab-id}`) the anchor is used as the ID component; the Chinese
+ * display text is used only for titles.  Without an anchor the heading text is
+ * used as before (backwards-compatible).
  */
 function splitIntoSections(body: string): Section[] {
   const lines = body.split("\n");
   const sections: Section[] = [];
-  let currentH2: string | undefined = undefined;
+  let currentH2Text: string | undefined = undefined;    // for display title
+  let currentH2PathKey: string | undefined = undefined; // for ID (anchor if present)
   let currentPath: string | undefined = undefined;
   let currentTitle: string | undefined = undefined;
   let currentLines: string[] = [];
@@ -226,17 +246,20 @@ function splitIntoSections(body: string): Section[] {
     const h3Match = /^### (.+)/.exec(line);
     if (h2Match) {
       flush();
-      currentH2 = h2Match[1]!.trim();
-      currentPath = currentH2;
-      currentTitle = currentH2;
+      const { anchor, text } = extractHeadingAnchor(h2Match[1]!.trim());
+      currentH2Text = text;
+      currentH2PathKey = anchor ?? text; // stable anchor wins over heading text
+      currentPath = currentH2PathKey;
+      currentTitle = text;
       currentLines = [];
     } else if (h3Match) {
       flush();
-      const h3Title = h3Match[1]!.trim();
-      // Include parent H2 in both ID path and display title so sibling H3s
-      // with identical text get unique IDs and meaningful titles.
-      currentPath = currentH2 !== undefined ? `${currentH2}/${h3Title}` : h3Title;
-      currentTitle = currentH2 !== undefined ? `${currentH2} — ${h3Title}` : h3Title;
+      const { anchor, text: h3Text } = extractHeadingAnchor(h3Match[1]!.trim());
+      const h3PathKey = anchor ?? h3Text;
+      // Include parent H2 key in ID path so sibling H3s with identical text
+      // get unique IDs: `doc#parent-anchor/h3-anchor` vs `doc#other/h3-anchor`.
+      currentPath = currentH2PathKey !== undefined ? `${currentH2PathKey}/${h3PathKey}` : h3PathKey;
+      currentTitle = currentH2Text !== undefined ? `${currentH2Text} — ${h3Text}` : h3Text;
       currentLines = [];
     } else {
       currentLines.push(line);

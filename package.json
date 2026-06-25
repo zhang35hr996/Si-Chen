@@ -31,6 +31,7 @@
     "eval:score": "tsx tools/eval-score.ts",
     "eval:export": "tsx tools/eval-export.ts",
     "eval:report": "tsx tools/eval-report.ts",
+    "knowledge:validate": "tsx tools/knowledge-validate.ts",
     "knowledge:build": "tsx tools/knowledge-build.ts",
     "knowledge:inspect": "tsx tools/knowledge-inspect.ts",
     "knowledge:embed": "tsx tools/knowledge-embed.ts",

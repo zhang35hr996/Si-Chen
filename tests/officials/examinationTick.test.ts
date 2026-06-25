@@ -90,7 +90,7 @@ describe("annual examination fires through the time transaction", () => {
   function storeAt(year: number, month: number): GameStore {
     const s = createNewGameState(db, 3);
     const store = new GameStore();
-    store.loadState({ ...s, calendar: { ...s.calendar, year, month, period: "early", dayIndex: dayIndexOf(year, month, "early"), ap: 6 }, examinationResults: [] });
+    store.loadState({ ...s, calendar: { ...s.calendar, year, month, period: "early", dayIndex: dayIndexOf(year, month, "early"), ap: 5 }, examinationResults: [] });
     return store;
   }
 
