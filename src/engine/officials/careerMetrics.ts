@@ -30,9 +30,12 @@ export function deriveOfficialAptitude(officialId: string, rngSeed: number): Off
 
 const clamp100 = (n: number) => Math.max(0, Math.min(100, n));
 
-/** 当前官职任职年数（按 appointedAt；无则 0）。 */
+/**
+ * 当前官职任职年数。衡量的是「当前在任官职」的年资——故仅 active 且确占官职（postId 非空）才计；
+ * 无职/退休/下狱/流放一律 0（这些状态下 appointedAt 仍保留「最近一次任职」时刻，不应继续累计）。
+ */
 export function seniorityYears(official: Official, calendar: Pick<CalendarState, "year">): number {
-  if (!official.appointedAt) return 0;
+  if (official.status !== "active" || official.postId === null || !official.appointedAt) return 0;
   return Math.max(0, calendar.year - official.appointedAt.year);
 }
 /** 年资归一化 0–100（SENIORITY_FULL_YEARS 年计满）。 */
@@ -40,21 +43,23 @@ export function seniorityScore(official: Official, calendar: Pick<CalendarState,
   return clamp100((seniorityYears(official, calendar) / SENIORITY_FULL_YEARS) * 100);
 }
 
-/** 后宫位分中的最大 order（用于把侍君位分归一化到 0–100）。 */
-function maxHaremRankOrder(db: ContentDB): number {
-  let max = 0;
-  for (const r of Object.values(db.ranks)) if (r.domain === "harem" && r.order > max) max = r.order;
-  return max || 1;
+/**
+ * 后宫位分归一化分 0–100，**按位分序位**而非 order 比例——content 的 order 非等距（凤后 order=1000
+ * 是礼制特殊值，直接除会把其余位分压扁到 <20）。最低位≈0、中位≈50、最高位（凤后）=100，保留相对排序。
+ * 其它系统需要位分标准化时统一复用本函数，勿再对 order 直接做比例。
+ */
+export function haremRankScore(db: ContentDB, rankId: string): number {
+  const ranks = Object.values(db.ranks).filter((r) => r.domain === "harem").sort((a, b) => a.order - b.order);
+  if (ranks.length <= 1) return ranks.length === 1 && ranks[0]!.id === rankId ? 100 : 0;
+  const idx = ranks.findIndex((r) => r.id === rankId);
+  return idx < 0 ? 0 : (idx / (ranks.length - 1)) * 100;
 }
 
 /** 单名侍君的支持分：位分 0.60 + 恩宠 0.40（0–100）。 */
-function consortScore(state: GameState, db: ContentDB, consortId: string, maxOrder: number): number {
+function consortScore(state: GameState, db: ContentDB, consortId: string): number {
   const st = state.standing[consortId];
   if (!st) return 0;
-  const rank = db.ranks[st.rank];
-  const rankScore = rank && rank.domain === "harem" ? clamp100((rank.order / maxOrder) * 100) : 0;
-  const favorScore = clamp100(st.favor);
-  return rankScore * 0.6 + favorScore * 0.4;
+  return haremRankScore(db, st.rank) * 0.6 + clamp100(st.favor) * 0.4;
 }
 
 /**
@@ -65,10 +70,9 @@ function consortScore(state: GameState, db: ContentDB, consortId: string, maxOrd
 export function familyBacking(state: GameState, db: ContentDB, familyId: string): number {
   const fam = state.officialFamilies[familyId];
   if (!fam) return 0;
-  const maxOrder = maxHaremRankOrder(db);
   const scores = Object.entries(state.standing)
     .filter(([, s]) => s.birthFamilyId === familyId && s.lifecycle !== "deceased")
-    .map(([id]) => consortScore(state, db, id, maxOrder))
+    .map(([id]) => consortScore(state, db, id))
     .sort((a, b) => b - a);
   const consortBacking = (scores[0] ?? 0) * 0.75 + (scores[1] ?? 0) * 0.25;
   return clamp100(fam.influence * 0.55 + fam.imperialFavor * 0.15 + consortBacking * 0.3);

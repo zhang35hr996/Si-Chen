@@ -4,6 +4,7 @@ import {
   deriveOfficialAptitude,
   familyBacking,
   gradeWeightFactor,
+  haremRankScore,
   initialReviewState,
   promotionScore,
   seniorityScore,
@@ -47,12 +48,26 @@ describe("aptitude backfill", () => {
   });
 });
 
-describe("seniority", () => {
-  it("counts years in the current post from appointedAt", () => {
-    const off = { appointedAt: { year: 3, month: 1, period: "early" as const, dayIndex: 0 } } as Official;
-    expect(seniorityYears(off, { year: 8 })).toBe(5);
-    expect(seniorityScore(off, { year: 13 })).toBe(100); // 10 年计满
-    expect(seniorityYears({} as Official, { year: 5 })).toBe(0); // 无 appointedAt
+describe("seniority — only active + seated accrues current-post tenure", () => {
+  const mk = (status: Official["status"], postId: string | null): Official =>
+    ({ status, postId, appointedAt: { year: 3, month: 1, period: "early", dayIndex: 0 } }) as Official;
+
+  it("active + seated accrues from appointedAt; full at 10 years", () => {
+    expect(seniorityYears(mk("active", "taibao"), { year: 8 })).toBe(5);
+    expect(seniorityScore(mk("active", "taibao"), { year: 13 })).toBe(100);
+  });
+
+  it("无职/退休/下狱/流放 与无 appointedAt 一律 0", () => {
+    expect(seniorityYears(mk("active", null), { year: 8 })).toBe(0); // 无职待任
+    expect(seniorityYears(mk("retired", null), { year: 8 })).toBe(0);
+    expect(seniorityYears(mk("imprisoned", null), { year: 8 })).toBe(0);
+    expect(seniorityYears(mk("exiled", null), { year: 8 })).toBe(0);
+    expect(seniorityYears({ status: "active", postId: "taibao" } as Official, { year: 8 })).toBe(0); // 无 appointedAt
+  });
+
+  it("重新授任后从新的 appointedAt 重新累计", () => {
+    const reappointed = { status: "active", postId: "taibao", appointedAt: { year: 7, month: 1, period: "early", dayIndex: 0 } } as Official;
+    expect(seniorityYears(reappointed, { year: 9 })).toBe(2);
   });
 });
 
@@ -91,6 +106,25 @@ function controlledState(level: 0 | 100): { s: GameState; off: Official } {
   };
   return { s, off };
 }
+
+describe("haremRankScore —序位归一化，不被凤后 order=1000 压扁", () => {
+  it("严格按位分序位单调上升，中高位有有效差异", () => {
+    const id = (name: string) => Object.values(db.ranks).find((r) => r.domain === "harem" && r.name === name)?.id;
+    const score = (name: string) => { const i = id(name); return i ? haremRankScore(db, i) : NaN; };
+    // 内容中存在的位分（自低而高）。
+    const huangguijun = score("皇贵君"), guijun = score("贵君"), fu = score("驸"), guiren = score("贵人"), guannanzi = score("官男子");
+    expect(huangguijun).toBeGreaterThan(guijun);
+    expect(guijun).toBeGreaterThan(fu);
+    expect(fu).toBeGreaterThan(guiren);
+    expect(guiren).toBeGreaterThan(guannanzi);
+    // 皇贵君不应被压扁到 ~18（旧 order 比例的弊端）。
+    expect(huangguijun).toBeGreaterThan(80);
+    // 凤后封顶 100，最低位接近 0。
+    const fenghou = Object.values(db.ranks).filter((r) => r.domain === "harem").sort((a, b) => b.order - a.order)[0]!;
+    expect(haremRankScore(db, fenghou.id)).toBe(100);
+    expect(haremRankScore(db, "rank_ghost")).toBe(0);
+  });
+});
 
 describe("familyBacking", () => {
   it("is 0 for a family with no consorts; rises with influence/favor/consort", () => {
