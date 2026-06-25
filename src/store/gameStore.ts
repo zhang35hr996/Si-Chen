@@ -596,15 +596,6 @@ export class GameStore {
    * untouched, notifies no one, and logs every collected error once.
    */
   applyEffects(db: ContentDB, effects: readonly EventEffect[]): Result<GameState, GameError[]> {
-    // Internal-only effect types must not be submitted via the public API.
-    const INTERNAL_ONLY: ReadonlySet<string> = new Set(["send_to_cold_palace", "restore_from_cold_palace"]);
-    for (const e of effects) {
-      if (INTERNAL_ONLY.has((e as { type: string }).type)) {
-        const error = stateError("BAD_EFFECT", `effect type "${(e as { type: string }).type}" is internal-only and cannot be applied via applyEffects`);
-        this.logger?.logGameError(error);
-        return err([error]);
-      }
-    }
     const collector = this.makeCollector();
     const beforeState = this.state;
     const source: TraceSource = { kind: "action", label: "applyEffects" };
@@ -837,7 +828,7 @@ export class GameStore {
   ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
     const collector = this.makeCollector();
     const beforeState = this.state;
-    const applied = applyEffects(db, this.state, effects, collector ? { collector } : {});
+    const applied = applyEffects(db, this.state, effects, { ...(collector ? { collector } : {}), allowInternalEffects: true });
     if (!applied.ok) {
       for (const e of applied.error) this.logger?.logGameError(e);
       this.lastEffectReport = { effects: [...effects], outcome: "rejected", errors: applied.error };
@@ -1928,7 +1919,13 @@ export class GameStore {
       Object.entries(this.state.standing).some(
         ([id, s]) => id !== targetId && s.lifecycle !== "deceased" && s.residence === prevRes,
       );
-    const restoreResidenceId = isOccupied ? undefined : prevRes;
+    // When original chamber is occupied, fall back to the character's default location
+    // from static content data. If that's also unavailable, use the original residence
+    // anyway (two consorts temporarily sharing is better than a contradiction state).
+    const charDefault = db.characters[targetId]?.kind === "consort"
+      ? db.characters[targetId]!.defaultLocation
+      : undefined;
+    const restoreResidenceId = isOccupied ? (charDefault ?? prevRes) : prevRes;
 
     const restoreEffect = {
       type: "restore_from_cold_palace" as const,
@@ -1939,16 +1936,38 @@ export class GameStore {
       liftedTurn: currentTurn,
     };
 
+    const restoreChronicle: Omit<CourtEvent, "id">[] = [
+      {
+        type: "punished",
+        occurredAt: now,
+        participants: [{ charId: targetId, role: "pardoned" }],
+        payload: {
+          decree: "cold_palace_restored",
+          targetId,
+          sourcePunishmentId: activeEffect.sourcePunishmentId,
+          liftReason,
+          ...(meta?.caseId ? { caseId: meta.caseId } : {}),
+        },
+        links: {
+          sourcePunishmentId: activeEffect.sourcePunishmentId,
+          ...(meta?.caseId ? { caseId: meta.caseId } : {}),
+        },
+        publicity: { scope: "palace", persistence: "institutional" },
+        publicSalience: 70,
+        retention: "permanent",
+        tags: ["imperial_decree", "cold_palace", "restored"],
+      },
+    ];
+
     const txResult = this.commitPlannedTransaction(
       db,
       [restoreEffect],
-      [],
+      restoreChronicle,
       [],
       { kind: "imperial_command", sourceId: "restore_from_cold_palace", label: `restore from cold palace: ${targetId}` },
       justicePlan,
     );
     if (!txResult.ok) return txResult;
-    void meta;
     return ok({ punishmentId: activeEffect.sourcePunishmentId ?? "" });
   }
 

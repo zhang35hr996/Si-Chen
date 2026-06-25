@@ -392,6 +392,137 @@ describe("cold palace — atomicity", () => {
   });
 });
 
+// ── CP-AUTH: Empress authority after send_to_cold_palace ─────────────────────
+
+describe("cold palace — empress authority (Fix 1)", () => {
+  it("CP-AUTH1. lift_confinement applied after send_to_cold_palace does not restore empress haremAdmin", () => {
+    // shen_zhibai is the empress (rank=fenghou) in test fixtures.
+    const EMPRESS = "shen_zhibai";
+    const store = makeStore();
+
+    // Send empress to cold palace — this transfers haremAdmin to neiwu_proxy.
+    const sendResult = store.sendConsortToColdPalace(db, EMPRESS, {});
+    expect(sendResult.ok).toBe(true);
+    expect(store.getState().haremAdministration.mode).not.toBe("empress");
+
+    // Apply lift_confinement for the empress (simulates the effect order scenario).
+    // Even if lift_confinement runs, haremAdmin must NOT be restored while she's in cold palace.
+    const gameTime = toGameTime(store.getState().calendar);
+    store.applyEffects(db, [{
+      type: "lift_confinement",
+      char: EMPRESS,
+      at: gameTime,
+      reason: "lifted_by_emperor",
+    }]);
+    // lift_confinement on someone with no active confinement is a no-op (not rejected).
+    // Either way, haremAdmin must NOT be empress while she is in cold palace.
+    expect(store.getState().haremAdministration.mode).not.toBe("empress");
+  });
+});
+
+// ── CP-DEATH: Natural death resolves ColdPalaceEffect's PunishmentRecord ─────
+
+describe("cold palace — death reconciliation (Fix 2)", () => {
+  it("CP-DEATH1. consort_decease while in cold palace resolves PunishmentRecord as target_deceased", () => {
+    const store = makeStore();
+    const sendResult = store.sendConsortToColdPalace(db, TARGET, {});
+    expect(sendResult.ok).toBe(true);
+    if (!sendResult.ok) return;
+    const punishmentId = sendResult.value.punishmentId;
+
+    const gameTime = toGameTime(store.getState().calendar);
+
+    // Apply consort_decease.
+    const deathResult = store.applyEffects(db, [{
+      type: "consort_decease",
+      char: TARGET,
+      at: gameTime,
+      cause: "illness",
+    }]);
+    expect(deathResult.ok).toBe(true);
+
+    // PunishmentRecord should be resolved as completed/target_deceased.
+    const pun = store.getState().justice.punishments[punishmentId]!;
+    expect(pun.lifecycle.status).toBe("completed");
+    if (pun.lifecycle.status === "completed") {
+      expect(pun.lifecycle.resolution).toBe("target_deceased");
+    }
+
+    // ColdPalaceEffect should be lifted.
+    const se = store.getState().statusEffects.find(
+      (e) => e.kind === "cold_palace" && e.characterId === TARGET,
+    );
+    expect(se?.liftedTurn).toBeDefined();
+  });
+});
+
+// ── CP-BYPASS: Internal effect guard ─────────────────────────────────────────
+
+describe("cold palace — internal effect guard (Fix 3)", () => {
+  it("CP-BYPASS1. applyEffects rejects send_to_cold_palace without allowInternalEffects", () => {
+    const store = makeStore();
+    const result = store.applyEffects(db, [
+      // Cast via unknown because send_to_cold_palace is not in the public EventEffect union.
+      {
+        type: "send_to_cold_palace",
+        char: TARGET,
+        statusEffectId: "status_lu_huaijin_000001",
+        punishmentId: "pun_000001",
+        coldPalaceResidenceId: "changmengong",
+        previousResidenceId: "zhongcui_gong",
+        startedAt: toGameTime(store.getState().calendar),
+        startTurn: store.getState().calendar.dayIndex,
+      } as unknown as Parameters<typeof store.applyEffects>[1][number],
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const firstErr = Array.isArray(result.error) ? result.error[0] : result.error;
+    expect((firstErr as { code?: string })?.code).toBe("BAD_EFFECT");
+  });
+});
+
+// ── CP-RELOC: Relocate blocked for cold-palace consorts ──────────────────────
+
+describe("cold palace — relocate validation (Fix 4)", () => {
+  it("CP-RELOC1. relocate effect rejected while consort is in cold palace", () => {
+    const store = makeStore();
+    const sendResult = store.sendConsortToColdPalace(db, TARGET, {});
+    expect(sendResult.ok).toBe(true);
+
+    const result = store.applyEffects(db, [{
+      type: "relocate",
+      char: TARGET,
+      location: "chengqian_gong",
+      chamber: "east_side",
+    }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const firstErr = Array.isArray(result.error) ? result.error[0] : result.error;
+    expect((firstErr as { message?: string })?.message ?? "").toContain("cold palace");
+  });
+});
+
+// ── CP-REST-CHRONICLE: Restore chronicle provenance ──────────────────────────
+
+describe("cold palace — restore chronicle (Fix 7)", () => {
+  it("CP-REST-CHRONICLE1. restoreFromColdPalace writes cold_palace_restored chronicle entry", () => {
+    const store = makeStore();
+    const sendResult = store.sendConsortToColdPalace(db, TARGET, {});
+    expect(sendResult.ok).toBe(true);
+    if (!sendResult.ok) return;
+
+    store.restoreFromColdPalace(db, TARGET, "pardoned");
+
+    const chronicle = store.getState().chronicle;
+    const restoreEntry = chronicle.find(
+      (e) => (e.payload as { decree?: string })?.decree === "cold_palace_restored",
+    );
+    expect(restoreEntry).toBeDefined();
+    expect((restoreEntry?.payload as { targetId?: string })?.targetId).toBe(TARGET);
+    expect((restoreEntry?.links as { sourcePunishmentId?: string })?.sourcePunishmentId).toBe(sendResult.value.punishmentId);
+  });
+});
+
 // ── CP-LEGACY: Legacy state compatibility ─────────────────────────────────────
 
 describe("cold palace — legacy cold_palace statusEffect injection", () => {

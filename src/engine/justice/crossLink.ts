@@ -149,6 +149,29 @@ export function validateJusticeLinks(state: GameState): GameError[] {
         `ColdPalaceEffect ${effect.id} is active but linked punishment ${pun.id} has lifecycle.status=${pun.lifecycle.status}`,
       ));
     }
+
+    // Active effect: character's current residence must match the cold palace location.
+    const charResidence = state.standing[characterId]?.residence;
+    if (charResidence !== effect.coldPalaceResidenceId) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} is active but ${characterId} residence="${charResidence}" != coldPalaceResidenceId="${effect.coldPalaceResidenceId}"`,
+      ));
+    }
+  }
+
+  // ── Historical: lifted ColdPalaceEffect → punishment must not be active ────────
+  for (const effect of statusEffects) {
+    if (effect.kind !== "cold_palace") continue;
+    if (effect.liftedTurn === undefined) continue; // only lifted/historical
+
+    const pun = justice.punishments[effect.sourcePunishmentId];
+    if (!pun) continue; // already reported above if active
+
+    if (pun.lifecycle.status === "active") {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} is lifted (liftedTurn=${effect.liftedTurn}) but linked punishment ${pun.id} is still active`,
+      ));
+    }
   }
 
   // ── PunishmentRecord → ColdPalaceEffect checks ────────────────────────────

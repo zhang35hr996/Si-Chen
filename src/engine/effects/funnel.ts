@@ -384,6 +384,8 @@ export function validateEffects(
           bad(index, "BAD_EFFECT_TARGET", `relocate needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "fenghou") {
           bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not relocatable: "${e.char}"`, { char: e.char });
+        } else if (isInColdPalace(state, e.char)) {
+          bad(index, "BAD_EFFECT", `cannot relocate "${e.char}" while in cold palace`, { char: e.char });
         } else if (!hasChambers(e.location)) {
           bad(index, "BAD_EFFECT", `relocate target "${e.location}" is not a 设宫室 palace`, { location: e.location });
         } else {
@@ -488,6 +490,9 @@ export interface EffectContext {
   sceneId?: string;
   /** Dev-only trace collector; undefined = tracing off (production). Never changes game behaviour. */
   collector?: TraceCollector;
+  /** Allow internal-only effect types (send_to_cold_palace, restore_from_cold_palace).
+   *  Only commitPlannedTransaction sets this to true. */
+  allowInternalEffects?: boolean;
 }
 
 /** Human-readable one-line summary of an effect's intent (for trace panel). */
@@ -542,6 +547,14 @@ export function applyEffects(
   effects: readonly EventEffect[],
   context: EffectContext = {},
 ): Result<GameState, GameError[]> {
+  if (!context.allowInternalEffects) {
+    const INTERNAL_ONLY = new Set(["send_to_cold_palace", "restore_from_cold_palace"]);
+    for (const [i, e] of effects.entries()) {
+      if (INTERNAL_ONLY.has((e as { type: string }).type)) {
+        return err([stateError("BAD_EFFECT", `effect #${i}: "${(e as { type: string }).type}" is internal-only and requires a JusticePlan`)]);
+      }
+    }
+  }
   const errors = validateEffects(db, state, effects);
   if (errors.length > 0) return err(errors);
 
@@ -895,7 +908,10 @@ export function applyEffects(
           }
         }
         // 凤后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
-        if (next.standing[effect.char]?.rank === "fenghou" && next.haremAdministration.mode !== "empress") {
+        // Guard: do NOT restore if the empress is currently in the cold palace.
+        if (next.standing[effect.char]?.rank === "fenghou"
+            && next.haremAdministration.mode !== "empress"
+            && !isInColdPalace(next, effect.char, next.calendar.dayIndex)) {
           next.haremAdministration = { mode: "empress" };
         }
         break;
@@ -921,6 +937,13 @@ export function applyEffects(
         next.standing[ch]!.residence = e.coldPalaceResidenceId;
         // Clear overnight schedule if it involves this character.
         if (next.overnightWith?.charId === ch) delete next.overnightWith;
+        // Clear excusedFromGreeting for cold-palace-bound consort.
+        if (next.excusedFromGreeting?.charIds.includes(ch)) {
+          next.excusedFromGreeting = {
+            ...next.excusedFromGreeting,
+            charIds: next.excusedFromGreeting.charIds.filter((id) => id !== ch),
+          };
+        }
         // Cold palace empress cannot administer harem — transfer to neiwu_proxy fallback.
         if (next.standing[ch]?.rank === "fenghou" && next.haremAdministration.mode === "empress") {
           next.haremAdministration = {
@@ -982,6 +1005,16 @@ export function applyEffects(
             if (se.kind === "confinement" || se.kind === "cold_palace") {
               se.liftedTurn = effect.at.dayIndex;
               se.liftedAt = effect.at;
+              // Resolve the linked cold_palace PunishmentRecord so justice state stays consistent.
+              if (se.kind === "cold_palace") {
+                const linkedPun = next.justice.punishments[se.sourcePunishmentId];
+                if (linkedPun && linkedPun.lifecycle.status === "active") {
+                  next.justice.punishments[se.sourcePunishmentId] = {
+                    ...linkedPun,
+                    lifecycle: { status: "completed" as const, resolvedAt: effect.at, resolution: "target_deceased" as const },
+                  };
+                }
+              }
             }
           }
         }
