@@ -21,6 +21,7 @@ import type {
   OfficialFamily,
 } from "../state/types";
 import { gestationRoll } from "../characters/gestation";
+import { deriveOfficialAptitude, initialReviewState } from "./careerMetrics";
 import { ARISTOCRATIC_MALE_GIVEN_NAME_POOL, ARISTOCRATIC_SURNAME_POOL } from "../characters/shijunNames";
 import {
   MEMBER_MIN_AGE,
@@ -247,6 +248,8 @@ export function generateOfficialWorld(db: ContentDB, rngSeed: number, appointedA
       age: headAge,
       familyId: famId,
       status: "active",
+      aptitude: deriveOfficialAptitude(headId, rngSeed),
+      reviewState: initialReviewState(),
       appointedAt,
     };
     if (post) {

@@ -14,12 +14,13 @@ import { validateOfficialWorld } from "../officials/validation";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
-import type { GameState } from "../state/types";
+import type { GameState, Official } from "../state/types";
+import { deriveOfficialAptitude, initialReviewState } from "../officials/careerMetrics";
 import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 13;
+export const SAVE_FORMAT_VERSION = 14;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -224,6 +225,29 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       formatVersion: 13,
       state: state as GameState,
       checksum: checksumOf(state as GameState),
+    };
+  },
+  // v13 → v14: 官员增静态能力 aptitude + 动态履历 reviewState（PR3C-1）。现有官员按稳定 seed
+  // 一次性确定性回填 aptitude（与 worldgen 同口径），reviewState 取初值；物化入档，读档不重算。
+  13: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    const rngSeed = state.rngSeed;
+    const officials: Record<string, Official> = {};
+    for (const [id, o] of Object.entries(state.officials)) {
+      const off = o as Official & Partial<Pick<Official, "aptitude" | "reviewState">>;
+      officials[id] = {
+        ...off,
+        aptitude: off.aptitude ?? deriveOfficialAptitude(id, rngSeed),
+        reviewState: off.reviewState ?? initialReviewState(),
+      };
+    }
+    const next = { ...state, officials };
+    return {
+      ...env,
+      formatVersion: 14,
+      state: next,
+      checksum: checksumOf(next),
     };
   },
 };

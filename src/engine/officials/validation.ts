@@ -111,6 +111,14 @@ export function validateOfficialWorld(state: GameState, db: ContentDB): GameErro
     if (!(o.age >= 1 && o.age <= 120)) {
       e("OFFICIAL_BAD_AGE", `官员「${o.id}」年龄不合理（${o.age}）`, { officialId: o.id, age: o.age });
     }
+    // 能力四维 0–100；履历 merit 0–100、连续不合格年数 ≥0（PR3C-1）。
+    const ap = o.aptitude;
+    if (![ap.governance, ap.scholarship, ap.military, ap.integrity].every((v) => v >= 0 && v <= 100)) {
+      e("OFFICIAL_BAD_APTITUDE", `官员「${o.id}」能力越界`, { officialId: o.id });
+    }
+    if (!(o.reviewState.merit >= 0 && o.reviewState.merit <= 100) || o.reviewState.underperformanceYears < 0) {
+      e("OFFICIAL_BAD_REVIEW_STATE", `官员「${o.id}」履历越界`, { officialId: o.id });
+    }
     // 状态↔原因/时刻一致性。
     if (o.status === "active") {
       if (o.statusReason !== undefined) e("OFFICIAL_ACTIVE_WITH_REASON", `在任官员「${o.id}」不应带 statusReason`, { officialId: o.id });
