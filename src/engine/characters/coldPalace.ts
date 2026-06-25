@@ -46,3 +46,16 @@ export function isInColdPalace(
 ): boolean {
   return activeColdPalaceEffectFor(state, charId, turn) !== undefined;
 }
+
+/** UI 前置校验：该侍君是否可被打入冷宫（状态层校验，不替代后端约束）。 */
+export function canSendToColdPalace(
+  state: GameState,
+  charId: string,
+): { ok: true } | { ok: false; reason: string } {
+  const standing = state.standing[charId];
+  if (!standing) return { ok: false, reason: "此人无在案记录" };
+  if (standing.lifecycle === "deceased") return { ok: false, reason: "斯人已逝，无从处置" };
+  if (standing.lifecycle === "candidate") return { ok: false, reason: "候选人不受此令" };
+  if (isInColdPalace(state, charId)) return { ok: false, reason: "已身处冷宫" };
+  return { ok: true };
+}

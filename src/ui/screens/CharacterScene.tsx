@@ -14,6 +14,8 @@ import { CHAMBERS, chamberOf, hasChambers } from "../../engine/characters/chambe
 import { canSummon } from "../../store/bedchamber";
 import { activeConfinement } from "../../engine/characters/confinement";
 import { describeActiveConfinement } from "../format/confinement";
+import { activeColdPalaceEffectFor } from "../../engine/characters/coldPalace";
+import { formatGameTime } from "../../engine/calendar/time";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import { reportingAttendant } from "../../engine/characters/gongli";
 import { getGreetingLocation } from "../../engine/characters/haremAdministration";
@@ -42,6 +44,7 @@ export function CharacterScene({
   onRelocate,
   onHaremAdminManage,
   onSummonPhysician,
+  onRestoreFromColdPalace,
 }: {
   db: ContentDB;
   state: GameState;
@@ -61,6 +64,8 @@ export function CharacterScene({
   onHaremAdminManage?: (actorId: string) => void;
   /** 禁足宫门专用：奉旨传太医入内诊治。 */
   onSummonPhysician?: () => void;
+  /** 冷宫专用：召回幽居侍君。 */
+  onRestoreFromColdPalace?: (charId: string) => void;
 }) {
   const chambered = hasChambers(location.id);
   const occupantOf = (id: ChamberId): CharacterContent | undefined =>
@@ -85,6 +90,8 @@ export function CharacterScene({
   const actionable = !!character && state.calendar.ap >= 1 && canSummon(state, character.id);
   // 禁足：宫门闭锁，普通往来不可，仅留管理/解除与奉旨传太医（后者经紫宸殿）。
   const confinement = character ? activeConfinement(state, character.id) : undefined;
+  // 冷宫：幽居长门宫，不可召见/侍寝/搬迁，仅留查看详情与召回操作。
+  const coldPalace = character ? activeColdPalaceEffectFor(state, character.id) : undefined;
   // 协理六宫：若当前场景侍君是协理者，显示标识。
   const admin = state.haremAdministration;
   const isActingAdmin = character && (
@@ -158,7 +165,7 @@ export function CharacterScene({
       )}
 
       <div className="char-scene__sprite-wrap" style={{ backgroundImage: `url("${background}")` }}>
-        {character && !confinement ? (
+        {character && !confinement && !coldPalace ? (
           <img
             className="char-scene__sprite"
             src={registry.portrait(servant ? servant.portraitSet : character.portraitSet, "neutral").url}
@@ -167,7 +174,7 @@ export function CharacterScene({
           />
         ) : (
           <div className="char-scene__empty" aria-hidden="true">
-            {confinement ? "此宫宫门闭锁" : "此宫室空置"}
+            {confinement ? "此宫宫门闭锁" : coldPalace ? "幽居长门宫" : "此宫室空置"}
           </div>
         )}
       </div>
@@ -182,12 +189,46 @@ export function CharacterScene({
                   协理六宫
                 </span>
               )}
+              {coldPalace && (
+                <span className="char-scene__admin-badge char-scene__admin-badge--cold" title="幽居冷宫">
+                  幽居冷宫
+                </span>
+              )}
               <span className="char-scene__sub">
                 {servant ? `${character.profile.name}的宫人 · ` : rank ? `${rank.name} · ` : ""}
                 {location.name}
               </span>
             </div>
-            {confinement ? (
+            {coldPalace ? (
+              // 冷宫幽居：仅显示状态 + 召回操作，禁用对话/侍寝/搬迁。
+              <>
+                <p className="char-scene__line char-scene__line--confined">
+                  {character.profile.name}幽居长门宫，未经圣旨不得出。
+                  {coldPalace.startedAt && (
+                    <>
+                      <br />
+                      入宫时间：{formatGameTime({ ...coldPalace.startedAt, eraName: state.calendar.eraName })}。
+                    </>
+                  )}
+                </p>
+                <div className="action-dock">
+                  <div className="action-dock__primary">
+                    <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
+                      查看详情
+                    </button>
+                    {onRestoreFromColdPalace && (
+                      <button
+                        type="button"
+                        className="action-btn action-btn--key"
+                        onClick={() => onRestoreFromColdPalace(character.id)}
+                      >
+                        召回
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : confinement ? (
               // 禁足宫门：仅显示状态 + 解除 + 传太医，不显示立绘/对话/侍寝等普通操作。
               <>
                 <p className="char-scene__line char-scene__line--confined">

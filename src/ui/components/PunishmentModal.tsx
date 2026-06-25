@@ -18,6 +18,7 @@ import {
 import { eligibleHaremAdministrators } from "../../engine/characters/haremAdministration";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import { addTurns, formatGameTime, toGameTime } from "../../engine/calendar/time";
+import { canSendToColdPalace } from "../../engine/characters/coldPalace";
 import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
@@ -31,19 +32,22 @@ type Step =
   | { kind: "confine_replacement_select"; duration: ConfinementDurationKey }
   | { kind: "confine_confirm"; duration: ConfinementDurationKey; administrator?: HaremAdministratorChoice; administratorReplacement?: HaremAdministratorChoice }
   | { kind: "execute_replacement_select" }
-  | { kind: "execute_confirm"; administratorReplacement?: HaremAdministratorChoice };
+  | { kind: "execute_confirm"; administratorReplacement?: HaremAdministratorChoice }
+  | { kind: "cold_palace_confirm" };
 
 export function PunishmentModal({
   db,
   state,
   character,
   onCommand,
+  onSendToColdPalace,
   onClose,
 }: {
   db: ContentDB;
   state: GameState;
   character: CharacterContent;
   onCommand: (command: ImperialCommand) => void;
+  onSendToColdPalace?: (charId: string) => void;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<Step>({ kind: "menu" });
@@ -55,6 +59,7 @@ export function PunishmentModal({
   const eraName = state.calendar.eraName;
   const confinement = activeConfinement(state, character.id);
   const isEmpress = standing?.rank === "fenghou";
+  const coldPalaceEligibility = canSendToColdPalace(state, character.id);
 
   const haremAdmin = state.haremAdministration;
   const isActingAdmin = haremAdmin.mode === "acting_consort" && haremAdmin.charId === character.id;
@@ -434,6 +439,49 @@ export function PunishmentModal({
     );
   }
 
+  // ── 打入冷宫确认 ────────────────────────────────────────────────────
+  if (step.kind === "cold_palace_confirm") {
+    const now = toGameTime(state.calendar);
+    const nowLabel = formatGameTime({ ...now, eraName });
+    const isActingAdmin = state.haremAdministration.mode === "acting_consort" && state.haremAdministration.charId === character.id;
+    return (
+      <Backdrop onClose={onClose}>
+        <h2>{name}　打入冷宫</h2>
+        <p className="punish-modal__confirm">
+          【{name}】将自{nowLabel}起迁居长门宫，幽禁于此。
+          <br />
+          幽居期间不得召见、侍寝、搬迁或出宫。
+          {isActingAdmin && (
+            <>
+              <br />
+              六宫主理权将自动移交（内务府代理或其他合资格侍君）。
+            </>
+          )}
+          <br />
+          此次幽居须由皇帝下旨方可解除，正式记录在案。
+        </p>
+        <div className="punish-modal__actions">
+          <button
+            type="button"
+            className="punish-btn punish-btn--confine"
+            onClick={() => {
+              onSendToColdPalace?.(character.id);
+            }}
+          >
+            确认下旨
+          </button>
+          <button
+            type="button"
+            className="punish-btn punish-btn--minor"
+            onClick={() => setStep({ kind: "menu" })}
+          >
+            返回
+          </button>
+        </div>
+      </Backdrop>
+    );
+  }
+
   // ── 惩罚主菜单 ────────────────────────────────────────────────────────
   return (
     <Backdrop onClose={onClose}>
@@ -442,6 +490,25 @@ export function PunishmentModal({
         <button type="button" className="punish-btn" onClick={() => setStep({ kind: "confine_duration" })}>
           禁足
         </button>
+        {coldPalaceEligibility.ok ? (
+          <button
+            type="button"
+            className="punish-btn punish-btn--danger"
+            onClick={() => setStep({ kind: "cold_palace_confirm" })}
+            disabled={!onSendToColdPalace}
+          >
+            打入冷宫
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="punish-btn"
+            disabled
+            title={coldPalaceEligibility.reason}
+          >
+            打入冷宫（{coldPalaceEligibility.reason}）
+          </button>
+        )}
         <button type="button" className="punish-btn" disabled title="尚未开放">
           下狱（尚未开放）
         </button>
