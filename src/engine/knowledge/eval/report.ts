@@ -10,25 +10,31 @@
  */
 import type { AggregateMetrics } from "./metrics";
 
+export interface MissingReferencedId {
+  caseId: string;
+  missingId: string;
+  role: "expected" | "forbidden";
+}
+
 export interface EvalReport {
   timestamp: string;
   mode: "keyword" | "hybrid";
   totalCases: number;
   metrics: AggregateMetrics;
-  missingExpectedIds: Array<{ caseId: string; missingId: string }>;
+  missingReferencedIds: MissingReferencedId[];
 }
 
 export function buildReport(
   mode: "keyword" | "hybrid",
   metrics: AggregateMetrics,
-  missingExpectedIds: Array<{ caseId: string; missingId: string }>,
+  missingReferencedIds: MissingReferencedId[],
 ): EvalReport {
   return {
     timestamp: new Date().toISOString(),
     mode,
     totalCases: metrics.totalCases,
     metrics,
-    missingExpectedIds,
+    missingReferencedIds,
   };
 }
 
@@ -54,6 +60,7 @@ export function renderMarkdownReport(report: EvalReport): string {
     `| Required misses | ${m.requiredMisses} |`,
     `| Forbidden hits | ${m.forbiddenHitCount} |`,
     `| Unexpected zero hits | ${m.unexpectedZeroHits} |`,
+    `| ExpectedAll violations | ${m.expectedAllViolationCount} |`,
     `| Duplicate hits | ${m.duplicateHits} |`,
     `| Visibility leakage | ${m.visibilityLeakage} |`,
     `| Temporal leakage | ${m.temporalLeakage} |`,
@@ -69,11 +76,11 @@ export function renderMarkdownReport(report: EvalReport): string {
     ``,
   ];
 
-  if (report.missingExpectedIds.length > 0) {
-    lines.push(`## Missing Expected IDs`, ``);
-    lines.push(`> These expected IDs do not exist in the corpus — fix cases.jsonl or rebuild.`, ``);
-    for (const { caseId, missingId } of report.missingExpectedIds) {
-      lines.push(`- Case \`${caseId}\`: \`${missingId}\``);
+  if (report.missingReferencedIds.length > 0) {
+    lines.push(`## Missing Referenced IDs`, ``);
+    lines.push(`> These IDs do not exist in the corpus — fix cases.jsonl or rebuild.`, ``);
+    for (const { caseId, missingId, role } of report.missingReferencedIds) {
+      lines.push(`- Case \`${caseId}\` [${role}]: \`${missingId}\``);
     }
     lines.push(``);
   }

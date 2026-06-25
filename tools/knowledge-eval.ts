@@ -118,13 +118,8 @@ const { results, visibilityLeakCount, temporalLeakCount, missingReferencedIds } 
 
 index.close();
 
-// Normalize to the shape report expects (backward-compat rename)
-const missingExpectedIds = missingReferencedIds
-  .filter((m) => m.role === "expected")
-  .map(({ caseId, missingId }) => ({ caseId, missingId }));
-
 const metrics = computeAggregateMetrics(results, visibilityLeakCount, temporalLeakCount);
-const report = buildReport("keyword", metrics, missingExpectedIds);
+const report = buildReport("keyword", metrics, missingReferencedIds);
 const md = renderMarkdownReport(report);
 
 // ── Print summary ─────────────────────────────────────────────────────────────
@@ -137,6 +132,8 @@ console.log(`  Hit@5            : ${(metrics.hitAt5 * 100).toFixed(1)}%`);
 console.log(`  MRR              : ${metrics.mrr.toFixed(3)}`);
 console.log(`  required misses  : ${metrics.requiredMisses}`);
 console.log(`  forbidden hits   : ${metrics.forbiddenHitCount}`);
+console.log(`  unexpected 0hits : ${metrics.unexpectedZeroHits}`);
+console.log(`  expectedAll viol : ${metrics.expectedAllViolationCount}`);
 console.log(`  visibility leak  : ${metrics.visibilityLeakage}`);
 console.log(`  temporal leak    : ${metrics.temporalLeakage}`);
 console.log(`  duplicate hits   : ${metrics.duplicateHits}`);

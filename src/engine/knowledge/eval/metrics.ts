@@ -53,6 +53,8 @@ export interface AggregateMetrics {
   requiredMisses: number;
   forbiddenHitCount: number;
   unexpectedZeroHits: number;
+  /** Cases where expectedAll was specified but at least one required ID was missing. */
+  expectedAllViolationCount: number;
   duplicateHits: number;
   visibilityLeakage: number;
   temporalLeakage: number;
@@ -132,6 +134,7 @@ export function computeAggregateMetrics(
   let requiredMisses = 0;
   let forbiddenHitCount = 0;
   let unexpectedZeroHits = 0;
+  let expectedAllViolationCount = 0;
   let duplicateHits = 0;
 
   const byCat: Record<string, { total: number; hitAt5: number; forbidden: number }> = {};
@@ -155,6 +158,9 @@ export function computeAggregateMetrics(
 
     // Zero-hits
     if (r.expectedZeroHits && !r.zeroHitsMet) unexpectedZeroHits++;
+
+    // expectedAll violations
+    if (r.expectedAll.length > 0 && !r.allMet) expectedAllViolationCount++;
 
     // Hit@k and MRR (only for cases with expectedAnyOf or expectedAll)
     const hasPositiveExpectation =
@@ -196,6 +202,7 @@ export function computeAggregateMetrics(
     requiredMisses,
     forbiddenHitCount,
     unexpectedZeroHits,
+    expectedAllViolationCount,
     duplicateHits,
     visibilityLeakage: visibilityLeakCount,
     temporalLeakage: temporalLeakCount,
