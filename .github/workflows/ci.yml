@@ -21,6 +21,7 @@ jobs:
       - run: npm run validate-content
       - run: npm run validate-manifest
       - run: npm run knowledge:validate
+      - run: npm run knowledge:eval
       - run: npm run build
 
   e2e:
