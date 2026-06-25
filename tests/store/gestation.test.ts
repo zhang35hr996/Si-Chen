@@ -3,7 +3,7 @@ import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { makeGameTime, monthOrdinal } from "../../src/engine/calendar/time";
-import { gestationConfig, buildBirth, plannedBirth, birthDue, birthPhrase } from "../../src/store/gestation";
+import { gestationConfig, buildBirth, plannedBirth, birthDue, birthPhrase, collectNewbornIds } from "../../src/store/gestation";
 import type { GameState } from "../../src/engine/state/types";
 
 const content = loadGameContent();
@@ -130,5 +130,121 @@ describe("buildBirth narrative — twin phrases", () => {
       }
     }
     throw new Error("No twoSons seed found in first 100 seeds for sovereign — unexpected");
+  });
+});
+
+describe("collectNewbornIds", () => {
+  it("single birth: beforeCount=0, 1 heir → [heir_000001]", () => {
+    expect(collectNewbornIds(0, [{ id: "heir_000001" }])).toEqual(["heir_000001"]);
+  });
+
+  it("twin birth: beforeCount=0, 2 heirs → both IDs in push order", () => {
+    expect(collectNewbornIds(0, [{ id: "heir_000001" }, { id: "heir_000002" }])).toEqual(["heir_000001", "heir_000002"]);
+  });
+
+  it("second birth when first already exists: beforeCount=1 → only new ID", () => {
+    expect(collectNewbornIds(1, [{ id: "heir_000001" }, { id: "heir_000002" }])).toEqual(["heir_000002"]);
+  });
+
+  it("no survivors: beforeCount equals length → empty", () => {
+    expect(collectNewbornIds(1, [{ id: "heir_000001" }])).toEqual([]);
+  });
+
+  it("empty heirs → empty", () => {
+    expect(collectNewbornIds(0, [])).toEqual([]);
+  });
+});
+
+describe("twin naming queue — funnel integration", () => {
+  const baseBirth = {
+    type: "birth" as const,
+    sex: "daughter" as const,
+    fatherId: "lu_huaijin",
+    bearer: "lu_huaijin",
+    legitimate: false,
+    favor: 25,
+    recoverUntilMonth: 20,
+  };
+
+  function consortCarrying(): ReturnType<typeof createNewGameState> {
+    const s0 = createNewGameState(db);
+    const a = applyEffects(db, s0, [{ type: "pregnancy", op: "begin" }]);
+    if (!a.ok) throw new Error();
+    const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "carry" }]);
+    if (!b.ok) throw new Error();
+    const c = applyEffects(db, b.value, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]);
+    if (!c.ok) throw new Error();
+    return c.value;
+  }
+
+  it("single safe birth → 1 ID in newborn list", () => {
+    const before = 0;
+    const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "safe" }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ids = collectNewbornIds(before, r.value.resources.bloodline.heirs);
+    expect(ids).toEqual(["heir_000001"]);
+  });
+
+  it("twin safe → 2 IDs in push order", () => {
+    const before = 0;
+    const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "safe", twinSex: "son" as const, twinFavor: 20 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ids = collectNewbornIds(before, r.value.resources.bloodline.heirs);
+    expect(ids).toEqual(["heir_000001", "heir_000002"]);
+  });
+
+  it("twin bearer_dies → 2 IDs (children survive, bearer dies)", () => {
+    const before = 0;
+    const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "bearer_dies", twinSex: "son" as const, twinFavor: 20 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ids = collectNewbornIds(before, r.value.resources.bloodline.heirs);
+    expect(ids).toHaveLength(2);
+  });
+
+  it("twin child_dies → empty queue (both children die)", () => {
+    const before = 0;
+    const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "child_dies", twinSex: "son" as const, twinFavor: 20 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(collectNewbornIds(before, r.value.resources.bloodline.heirs)).toHaveLength(0);
+  });
+
+  it("twin both → empty queue (everyone dies)", () => {
+    const before = 0;
+    const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "both", twinSex: "son" as const, twinFavor: 20 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(collectNewbornIds(before, r.value.resources.bloodline.heirs)).toHaveLength(0);
+  });
+
+  it("process queue: name each twin in order → both petNames set", () => {
+    const before = 0;
+    const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "safe", twinSex: "son" as const, twinFavor: 20 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ids = collectNewbornIds(before, r.value.resources.bloodline.heirs);
+    expect(ids).toEqual(["heir_000001", "heir_000002"]);
+
+    // Name first child (queue head)
+    const r2 = applyEffects(db, r.value, [{ type: "heir_name", heirId: ids[0]!, field: "pet", name: "小一" }]);
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+    // Queue shifts: [ids[1]] remains
+    const remainingIds = ids.slice(1);
+    expect(remainingIds).toEqual(["heir_000002"]);
+
+    // Name second child
+    const r3 = applyEffects(db, r2.value, [{ type: "heir_name", heirId: remainingIds[0]!, field: "pet", name: "小二" }]);
+    expect(r3.ok).toBe(true);
+    if (!r3.ok) return;
+
+    // Both have petNames; queue is empty
+    const h1 = r3.value.resources.bloodline.heirs.find((h) => h.id === "heir_000001");
+    const h2 = r3.value.resources.bloodline.heirs.find((h) => h.id === "heir_000002");
+    expect(h1!.petName).toBe("小一");
+    expect(h2!.petName).toBe("小二");
   });
 });

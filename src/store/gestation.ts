@@ -154,6 +154,17 @@ export function birthPhrase(sex: BirthVerdict["sex"], twinSex?: BirthVerdict["tw
   return "两位双生皇郎";
 }
 
+/**
+ * 生产前皇嗣数与生产后皇嗣数组 → 新生皇嗣 ID 列表（顺序与 funnel 推入顺序一致）。
+ * 用于 commitBirth 构建待命名队列：snapshot beforeCount，applyEffects 后调用即可。
+ */
+export function collectNewbornIds(
+  beforeCount: number,
+  heirs: ReadonlyArray<{ id: string }>,
+): string[] {
+  return heirs.slice(beforeCount).map((h) => h.id);
+}
+
 function omenLine(omen: BirthVerdict["omen"] | undefined, text: string | undefined, childLabel: string): string | null {
   if (!omen || !text) return null;
   if (omen === "auspicious") return `${childLabel}降生之时，${text}，宫人皆以为天降吉兆，陛下对此子倍加垂怜。`;
