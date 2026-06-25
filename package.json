@@ -34,6 +34,7 @@
     "knowledge:validate": "tsx tools/knowledge-validate.ts",
     "knowledge:build": "tsx tools/knowledge-build.ts",
     "knowledge:inspect": "tsx tools/knowledge-inspect.ts",
+    "knowledge:eval": "tsx tools/knowledge-eval.ts",
     "knowledge:embed": "tsx tools/knowledge-embed.ts",
     "knowledge:hybrid-inspect": "tsx tools/knowledge-hybrid-inspect.ts",
     "smoke:knowledge:openai": "tsx tools/knowledge-embed.ts --provider openai --model text-embedding-3-small",

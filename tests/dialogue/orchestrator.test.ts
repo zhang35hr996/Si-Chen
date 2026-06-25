@@ -902,4 +902,105 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
     expect(dupFindings).toEqual([{ code: "unknown_context_ref", ref: hallucRef }]);
     expect(logger2.entries().filter((e) => e.message.includes("UNKNOWN_CONTEXT_REF"))).toHaveLength(1);
   });
+
+  describe("intent gate — runtime_state bypasses retriever", () => {
+    function makeRequestWithTarget(
+      targetText: string,
+      opts?: { sceneDirective?: string; topicTags?: string[] },
+    ) {
+      const r = assembleDialogueRequest(db, state, TURN_SPEAKER, "zichendian", {
+        transcript: [{ speaker: "player", text: targetText }],
+        sceneDirective: opts?.sceneDirective,
+        topicTags: opts?.topicTags,
+      });
+      if (!r.ok) throw new Error(r.error.message);
+      return r.value;
+    }
+
+    it("runtime_state query: retriever NOT called, meta.knowledge present, degraded=false", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      const result = await produceDialogueTurn(
+        db, provider, makeRequestWithTarget("谁现在怀孕了"), state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(0);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.line.meta.knowledge).toBeDefined();
+      expect(result.value.line.meta.knowledge?.degraded).toBe(false);
+      expect(result.value.line.meta.knowledge?.chunkIds).toEqual([]);
+    });
+
+    it("static query containing '怀孕': retriever IS called (no false positive)", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      await produceDialogueTurn(
+        db, provider, makeRequestWithTarget("怀孕期间是否照常视事"), state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(1);
+    });
+
+    it("static query containing '目前': retriever IS called (no false positive)", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      await produceDialogueTurn(
+        db, provider, makeRequestWithTarget("目前正式使用的后宫位分有哪些"), state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(1);
+    });
+
+    it("sceneDirective containing '礼制' does NOT prevent runtime query from being skipped", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // sceneDirective contains a STATIC_RULE_MARKER — must not contaminate intent classification
+      await produceDialogueTurn(
+        db, provider,
+        makeRequestWithTarget("谁现在怀孕了", { sceneDirective: "须遵后宫礼制回答" }),
+        state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(0);
+    });
+
+    it("topicTags containing '位分' do NOT prevent runtime query from being skipped", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // topicTag contains a STATIC_RULE_MARKER — must not contaminate intent classification
+      await produceDialogueTurn(
+        db, provider,
+        makeRequestWithTarget("当前谁最受宠", { topicTags: ["位分", "宠爱"] }),
+        state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(0);
+    });
+
+    it("sceneDirective containing temporal word does NOT incorrectly skip a static query", async () => {
+      const retrieverCalls = { count: 0 };
+      const retriever = makeFakeRetriever({ hits: [] }, retrieverCalls);
+      const { provider } = makeCapturingProvider();
+
+      // sceneDirective contains temporal vocab but user is asking about an institution
+      await produceDialogueTurn(
+        db, provider,
+        makeRequestWithTarget("承养制度是什么", { sceneDirective: "最近宫廷风波不断" }),
+        state, { retriever },
+      );
+
+      expect(retrieverCalls.count).toBe(1);
+    });
+  });
 });

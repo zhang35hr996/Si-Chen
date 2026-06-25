@@ -1,5 +1,5 @@
 export type { PromptKnowledgeChunk, KnowledgeRetriever } from "./types";
-export { buildDialogueKnowledgeQuery } from "./queryBuilder";
+export { buildDialogueKnowledgeQuery, getLatestTargetUtterance } from "./queryBuilder";
 export { resolveVisibilityCeiling } from "./visibility";
 export { packPromptKnowledge } from "./promptKnowledge";
 export { extractProvenance, extractKnowledgeProvenance } from "./provenance";

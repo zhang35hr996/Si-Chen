@@ -1,0 +1,45 @@
+{"id":"male-official-prohibition","query":"男子可以入仕做官吗","limit":5,"expectedAnyOf":["institution.education-and-office#outer-office-prohibition","institution.education-and-office#prohibited-activities","institution.education-and-office#exam-prohibition"],"category":"direct","note":"男子不得受外官 — 核心制度禁令"}
+{"id":"imperial-son-title","query":"皇帝的男性子嗣叫什么","limit":5,"expectedAnyOf":["titles.imperial-kinship#imperial-sons"],"category":"direct","note":"皇郎=男，皇子=女"}
+{"id":"imperial-daughter-title","query":"皇子在这个世界指男性还是女性","limit":5,"expectedAnyOf":["titles.imperial-kinship#imperial-daughters","titles.imperial-kinship#no-confusion"],"category":"direct","note":"皇子是女性皇嗣 — 与现代汉语相反"}
+{"id":"official-consort-title","query":"官员的正室配偶叫什么","limit":5,"expectedAnyOf":["titles.household-and-east-palace#household-male-titles"],"category":"direct","note":"内卿=官员正室"}
+{"id":"nursing-parent-replacement","query":"承养人可以更换吗","limit":5,"expectedAnyOf":["institution.reproduction#nursing-parent-restrictions"],"category":"direct","note":"承养人一旦确定不得中途替换"}
+{"id":"emperor-selects-male-verb","query":"皇帝选男子进宫应使用什么动词","limit":5,"expectedAnyOf":["titles.marriage-verbs#emperor-selects-male"],"category":"direct","note":"入宫"}
+{"id":"imperial-son-marriage-verb","query":"皇郎选择正室使用什么动词","limit":5,"expectedAnyOf":["titles.marriage-verbs#imperial-son-marriage"],"category":"direct","note":"下赘/尚皇郎"}
+{"id":"east-palace-lowest-rank","query":"东宫最低正式侍男位称叫什么","limit":5,"expectedAnyOf":["titles.household-and-east-palace#east-palace-titles","titles.household-and-east-palace#caivi-note"],"forbiddenIds":[],"category":"direct","note":"良仪（废弃旧称采仪）"}
+{"id":"bengong-usage","query":"谁可以自称本宫","limit":5,"expectedAnyOf":["titles.harem-ranks#high-rank-self-reference","titles.harem-ranks#high-rank-self-reference/to-emperor","etiquette.address-and-audience#consort-self-reference"],"category":"direct","note":"侍宸及以上对低位者可自称本宫；本宫不得对皇帝使用"}
+{"id":"male-nursing-weakness","query":"男子为什么承养后容易体虚","limit":5,"expectedAnyOf":["world.biology#male-nursing-weakness"],"category":"direct","note":"以血脉孕育胎息，气血消耗显著高于女性自孕"}
+{"id":"ritual-legitimacy","query":"经血与祭祀合法性","limit":5,"expectedAnyOf":["world.biology#female-physiology-ritual"],"category":"direct","note":"经血与祭祀正统性直接相关"}
+{"id":"emperor-address","query":"对皇帝应该称什么","limit":5,"expectedAnyOf":["etiquette.address-and-audience#address-emperor"],"category":"direct","note":"陛下"}
+{"id":"male-exam-direct","query":"男人能不能参加科举","limit":5,"expectedAnyOf":["institution.education-and-office#exam-prohibition"],"category":"paraphrase","note":"科举禁止的改写表达"}
+{"id":"nursing-replacement-paraphrase","query":"胎息交给一个男子以后还能换承养人吗","limit":5,"expectedAnyOf":["institution.reproduction#nursing-parent-restrictions"],"category":"paraphrase","note":"承养人不可替换的改写"}
+{"id":"imperial-son-confusion-paraphrase","query":"皇帝的儿子是不是叫皇子","limit":5,"expectedAnyOf":["titles.imperial-kinship#imperial-sons","titles.imperial-kinship#no-confusion"],"category":"paraphrase","note":"皇帝儿子→皇郎，不是皇子"}
+{"id":"marry-male-paraphrase","query":"女官把男子收作正室应该怎么说","limit":5,"expectedAnyOf":["titles.marriage-verbs#principal-marriage"],"category":"paraphrase","note":"赘婚"}
+{"id":"high-rank-self-ref-paraphrase","query":"贵人在皇帝面前如何自称","limit":5,"expectedAnyOf":["titles.harem-ranks#informal-terms","titles.harem-ranks#high-rank-self-reference/to-emperor","etiquette.address-and-audience#consort-self-reference"],"category":"paraphrase","note":"贵人（第十四位）属美人及以上、驸以下，对皇帝自称侍/侍身"}
+{"id":"male-inner-school-paraphrase","query":"男子可以读书受教育吗","limit":5,"expectedAnyOf":["institution.education-and-office#inner-learning"],"category":"paraphrase","note":"内学=男子教育机构"}
+{"id":"surrogacy-paraphrase","query":"代养皇嗣是违法的吗","limit":5,"expectedAnyOf":["institution.reproduction#surrogacy-prohibition"],"category":"paraphrase","note":"代养属严重违制"}
+{"id":"female-strength","query":"女性和男性哪个体能更强","limit":5,"expectedAnyOf":["world.biology#female-pregnancy-strength"],"category":"paraphrase","note":"女性怀胎不被视为虚弱，女官怀胎照常视事"}
+{"id":"huang-zi-vs-huang-lang","query":"皇子和皇郎有什么区别","limit":5,"expectedAnyOf":["titles.imperial-kinship#no-confusion","titles.imperial-kinship#imperial-daughters","titles.imperial-kinship#imperial-sons"],"forbiddenIds":[],"category":"confusable","note":"核心混淆：皇子=女，皇郎=男"}
+{"id":"guijun-vs-guizhu","query":"贵君和贵主是同一个称谓吗","limit":5,"expectedAnyOf":["titles.harem-ranks#rank-order","titles.imperial-kinship#princess-titles"],"forbiddenIds":[],"category":"confusable","note":"贵君=后宫第三位分，贵主=皇郎（男性皇嗣）成年后的封号"}
+{"id":"guifu-vs-huangzifu","query":"贵驸和皇子驸有什么不同","limit":5,"expectedAnyOf":["titles.harem-ranks#rank-order","titles.household-and-east-palace#imperial-daughter-household"],"category":"confusable","note":"贵驸=后宫第五位分，皇子驸=皇子正室的口语称谓（非侧室）"}
+{"id":"zhu-vs-na","query":"收作正室称赘收作侧室称纳","limit":5,"expectedAnyOf":["titles.marriage-verbs#principal-marriage","titles.marriage-verbs#taking-concubine"],"category":"confusable","note":"赘=正式婚配（正室及正式侧室），纳=近侍小宠等非正式侧室"}
+{"id":"rugong-vs-zhu","query":"入宫和赘的区别","limit":5,"expectedAnyOf":["titles.marriage-verbs#emperor-selects-male","titles.marriage-verbs#principal-marriage"],"category":"confusable","note":"入宫=进后宫为侍君，赘=正式婚配正室或正式侧室"}
+{"id":"xiazhu-vs-shanghuan","query":"下赘和尚皇郎的区别","limit":5,"expectedAnyOf":["titles.marriage-verbs#imperial-son-marriage"],"category":"confusable","note":"下赘=皇郎嫁入，尚皇郎=女子迎娶皇郎"}
+{"id":"bengong-vs-chenshi","query":"本宫和臣侍分别在什么情况下用","limit":5,"expectedAnyOf":["titles.harem-ranks#high-rank-self-reference","titles.harem-ranks#chen-shi","etiquette.address-and-audience#consort-self-reference"],"category":"confusable","note":"本宫=侍宸及以上对低位者；臣侍=驸及以上对皇帝/高位者"}
+{"id":"lianyi-vs-caiyi","query":"东宫最低侍男位称是良仪还是采仪","limit":5,"expectedAnyOf":["titles.household-and-east-palace#caivi-note","titles.household-and-east-palace#east-palace-titles"],"forbiddenIds":[],"category":"confusable","note":"良仪是正式位称，采仪已废弃"}
+{"id":"gengyi-vs-guannanzi","query":"更衣和官男子的区别","limit":5,"expectedAnyOf":["titles.harem-ranks#rank-order","titles.harem-ranks#deprecated-ranks"],"category":"confusable","note":"更衣=最低正式位分，官男子=废弃位称"}
+{"id":"official-gender","query":"提到官员时默认是男性还是女性","limit":5,"expectedAnyOf":["institution.education-and-office#official-gender-default"],"category":"confusable","note":"官员默认女性"}
+{"id":"current-favor-dynamic","query":"当前谁最受宠","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"恩宠排名是实时角色状态，应由intent gate拦截，不进入static lore检索"}
+{"id":"currently-pregnant","query":"谁现在怀孕了","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"怀孕状态是实时角色数据，应由intent gate拦截，不进入static lore检索"}
+{"id":"loves-emperor","query":"后宫里谁暗恋着谁","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"情感关系是角色私人状态，应由intent gate拦截，不进入static lore检索"}
+{"id":"yesterday-confined","query":"昨天谁被禁足了","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"禁足是实时事件，应由intent gate拦截，不进入static lore检索"}
+{"id":"worst-health-now","query":"最近谁请病假身体不好","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"健康状态是实时角色数据，应由intent gate拦截，不进入static lore检索"}
+{"id":"succession-candidate","query":"目前哪位皇嗣最有望继承大统","limit":5,"expectedRetrievalSkipped":true,"category":"dynamic-negative","note":"储位候选是实时政治状态，应由intent gate拦截，不进入static lore检索"}
+{"id":"male-cant-govern","query":"男子可以担任地方知州吗","limit":5,"expectedAnyOf":["institution.education-and-office#outer-office-prohibition","institution.education-and-office#prohibited-activities"],"category":"direct","note":"男子不得治民"}
+{"id":"fetal-breath-explanation","query":"胎息是什么制度","limit":5,"expectedAnyOf":["institution.reproduction#fetal-breath","institution.reproduction#reproduction-paths"],"category":"direct","note":"胎息=承养制的转交程序"}
+{"id":"matrilineal-principle","query":"皇位由谁传给谁","limit":5,"expectedAnyOf":["world.social-order#matrilineal-sovereignty"],"category":"direct","note":"母系传承，皇位必传女"}
+{"id":"shangguizhu-verb","query":"女子与贵主成婚用什么动词","limit":5,"expectedAnyOf":["titles.marriage-verbs#marrying-noble-lady"],"category":"direct","note":"尚贵主"}
+{"id":"rank-system-static","query":"目前正式使用的后宫位分有哪些","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["titles.harem-ranks#rank-order"],"category":"confusable","note":"含'目前'但问的是固定制度位分，intent gate 不应拦截，应检索 static lore"}
+{"id":"nursing-system-static","query":"现在的承养制度是怎样的","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["institution.reproduction#fetal-breath","institution.reproduction#nursing-parent-restrictions"],"category":"confusable","note":"含'现在'但问的是制度规则，intent gate 不应拦截"}
+{"id":"confinement-rule-static","query":"禁足在礼制中属于什么处罚","limit":5,"expectedRetrievalSkipped":false,"category":"confusable","note":"含'禁足'但问的是制度分类，不是实时事件，intent gate 不应拦截"}
+{"id":"pregnancy-duty-static","query":"怀孕期间是否照常视事","limit":5,"expectedRetrievalSkipped":false,"category":"confusable","note":"含'怀孕'但问的是规则，不是询问具体人物状态，intent gate 不应拦截"}
+{"id":"summon-etiquette-static","query":"宣召臣下应遵循什么礼仪","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["etiquette.address-and-audience#audience-protocol"],"category":"confusable","note":"含'宣召'但问的是固定礼仪，intent gate 不应拦截"}

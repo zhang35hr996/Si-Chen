@@ -36,6 +36,20 @@ function cap(s: string, max: number): string {
  * - `vectorFailureMode: "keyword_only"` degrades gracefully when the vector index
  *   is absent — dialogue turns must never fail on a missing embedding index.
  */
+/**
+ * Returns the raw text of the latest line spoken by `request.targetId`
+ * (normally "player") from the transcript, or `undefined` if none exists.
+ *
+ * Used for intent classification: only the user's actual utterance should
+ * determine whether to skip static-corpus retrieval — not the sceneDirective
+ * or topicTags which belong to the retrieval ranking query but must not
+ * contaminate intent signals.
+ */
+export function getLatestTargetUtterance(request: DialogueRequest): string | undefined {
+  const targetLines = request.transcript.filter((l) => l.speaker === request.targetId);
+  return targetLines.at(-1)?.text;
+}
+
 export function buildDialogueKnowledgeQuery(
   request: DialogueRequest,
   visibilityCeiling: KnowledgeVisibility,
@@ -54,10 +68,9 @@ export function buildDialogueKnowledgeQuery(
 
   // Find the latest transcript line from the target (player) — prevents feedback loop
   // where the speaker's own prior words influence knowledge retrieval.
-  const targetLines = request.transcript.filter((l) => l.speaker === request.targetId);
-  const lastTargetLine = targetLines[targetLines.length - 1];
-  if (lastTargetLine !== undefined) {
-    const tl = cap(normalizeWs(lastTargetLine.text), MAX_TARGET_CHARS);
+  const lastTargetUtterance = getLatestTargetUtterance(request);
+  if (lastTargetUtterance !== undefined) {
+    const tl = cap(normalizeWs(lastTargetUtterance), MAX_TARGET_CHARS);
     if (tl) parts.push(`target: ${tl}`);
   }
 

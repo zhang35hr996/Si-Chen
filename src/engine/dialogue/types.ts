@@ -176,7 +176,9 @@ export type KnowledgeRetrievalStatus =
   | { readonly kind: "not_configured" }
   | { readonly kind: "ok" }
   | { readonly kind: "vector_degraded"; readonly reason: import("../knowledge/retrieval/types").VectorDegradation["reason"] }
-  | { readonly kind: "fatal_degraded" };
+  | { readonly kind: "fatal_degraded" }
+  /** Retriever was configured but query was classified as runtime_state — retrieval intentionally skipped. */
+  | { readonly kind: "skipped_runtime_state" };
 
 /** What the UI renders — it never sees scene nodes. */
 export interface DialogueLine {
