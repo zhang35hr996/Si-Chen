@@ -547,11 +547,14 @@ export class GameStore {
     if (!matchesPendingDianxuan(this.state, year)) {
       return err(stateError("NO_PENDING_DAXUAN", `no unresolved dianxuan pending for year ${year}`, { context: { year } }));
     }
+    const pd = this.state.pendingDaxuan!;
+    const pdId = `${pd.kind}:${pd.year}`;
     const batch = this.applyConsortBatch(db, kept);
     if (!batch.ok) return batch;
     this.tracedSet(
       { ...batch.value, flags: { ...batch.value.flags, [daxuanDianxuanFlagKey(year)]: true }, pendingDaxuan: undefined },
       { kind: "system", sourceId: "resolveDaxuanByDelegate", label: `resolveDaxuanByDelegate: year ${year}` },
+      [{ kind: "queue", queue: "pendingDaxuan", operation: "resolved", itemId: pdId, itemType: pd.kind, reason: "delegate_selected", phase: "direct_mutation" }],
     );
     return ok(undefined);
   }

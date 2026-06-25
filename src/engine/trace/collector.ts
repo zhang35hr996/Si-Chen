@@ -160,8 +160,8 @@ export class TraceCollector {
     this._domainEvents.push({
       kind: "eligibility",
       ...event,
-      failedBefore: [...event.failedBefore],
-      failedAfter: [...event.failedAfter],
+      failedBefore: event.failedBefore.map((f) => ({ ...f })),
+      failedAfter: event.failedAfter.map((f) => ({ ...f })),
     });
   }
 
@@ -205,7 +205,11 @@ export class TraceCollector {
 
 function cloneDomainEvent(event: TraceDomainEvent): TraceDomainEvent {
   if (event.kind === "eligibility") {
-    return { ...event, failedBefore: [...event.failedBefore], failedAfter: [...event.failedAfter] };
+    return {
+      ...event,
+      failedBefore: event.failedBefore.map((f) => ({ ...f })),
+      failedAfter: event.failedAfter.map((f) => ({ ...f })),
+    };
   }
   return { ...event };
 }

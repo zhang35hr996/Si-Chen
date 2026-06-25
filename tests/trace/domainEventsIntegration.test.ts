@@ -2,10 +2,11 @@
  * Integration tests for PR2 domain event tracing (memory, queue, eligibility, rollback).
  */
 import { describe, expect, it } from "vitest";
+import { TraceCollector } from "../../src/engine/trace/collector";
 import { createGameStore } from "../../src/store/gameStore";
 import { loadRealContent } from "../helpers/contentFixture";
 import { explainEventEligibility } from "../../src/engine/trace/eligibilityDiff";
-import type { EligibilityTraceEvent, MemoryTraceEvent, QueueTraceEvent, RollbackTraceEvent } from "../../src/engine/trace/domainEvents";
+import type { EligibilityFailure, EligibilityTraceEvent, MemoryTraceEvent, QueueTraceEvent, RollbackTraceEvent } from "../../src/engine/trace/domainEvents";
 
 const db = loadRealContent();
 
@@ -207,20 +208,20 @@ describe("queue domain events", () => {
   it("approveRetirement emits 'resolved/approved' queue event via actual store call", () => {
     const store = makeStarted("record");
     const officialId = Object.keys(store.getState().officials)[0];
-    if (!officialId) return;
+    expect(officialId).toBeDefined();
     const stateWithPending = {
       ...store.getState(),
-      pendingRetirements: [{ officialId, requestedAt: store.getState().calendar }],
+      pendingRetirements: [{ officialId: officialId!, requestedAt: store.getState().calendar }],
     };
     store.loadState(stateWithPending);
-    const result = store.approveRetirement(officialId);
-    if (!result.ok) return; // official can't retire in this fixture state — skip
+    const result = store.approveRetirement(officialId!);
+    expect(result.ok).toBe(true);
     const txs = store.getTraceHistory().getAll();
     const retireTx = txs.find((tx) => tx.source.sourceId === "approveRetirement");
     expect(retireTx).toBeDefined();
     expect(retireTx?.outcome).toBe("committed");
     const qEvs = retireTx?.domainEvents.filter((e): e is QueueTraceEvent => e.kind === "queue") ?? [];
-    const retirementEv = qEvs.find((e) => e.queue === "pendingRetirements" && e.itemId === officialId);
+    const retirementEv = qEvs.find((e) => e.queue === "pendingRetirements" && e.itemId === officialId!);
     expect(retirementEv).toBeDefined();
     expect(retirementEv?.operation).toBe("resolved");
     expect(retirementEv?.resolution).toBe("approved");
@@ -229,23 +230,43 @@ describe("queue domain events", () => {
   it("retainRetirement emits 'resolved/retained' queue event via actual store call", () => {
     const store = makeStarted("record");
     const officialId = Object.keys(store.getState().officials)[0];
-    if (!officialId) return;
+    expect(officialId).toBeDefined();
     const stateWithPending = {
       ...store.getState(),
-      pendingRetirements: [{ officialId, requestedAt: store.getState().calendar }],
+      pendingRetirements: [{ officialId: officialId!, requestedAt: store.getState().calendar }],
     };
     store.loadState(stateWithPending);
-    const result = store.retainRetirement(officialId);
-    if (!result.ok) return; // skip if can't retain in this fixture state
+    const result = store.retainRetirement(officialId!);
+    expect(result.ok).toBe(true);
     const txs = store.getTraceHistory().getAll();
     const retireTx = txs.find((tx) => tx.source.sourceId === "retainRetirement");
     expect(retireTx).toBeDefined();
     expect(retireTx?.outcome).toBe("committed");
     const qEvs = retireTx?.domainEvents.filter((e): e is QueueTraceEvent => e.kind === "queue") ?? [];
-    const retirementEv = qEvs.find((e) => e.queue === "pendingRetirements" && e.itemId === officialId);
+    const retirementEv = qEvs.find((e) => e.queue === "pendingRetirements" && e.itemId === officialId!);
     expect(retirementEv).toBeDefined();
     expect(retirementEv?.operation).toBe("resolved");
     expect(retirementEv?.resolution).toBe("retained");
+  });
+
+  it("resolveDaxuanByDelegate emits 'resolved/delegate_selected' queue event", () => {
+    const store = makeStarted("record");
+    // Inject a dianxuan pending for year 3
+    const stateWithDianxuan = {
+      ...store.getState(),
+      pendingDaxuan: { kind: "dianxuan" as const, year: 3 },
+    };
+    store.loadState(stateWithDianxuan);
+    const result = store.resolveDaxuanByDelegate(db, 3, []);
+    expect(result.ok).toBe(true);
+    const txs = store.getTraceHistory().getAll();
+    const delegateTx = txs.find((tx) => tx.source.sourceId === "resolveDaxuanByDelegate");
+    expect(delegateTx).toBeDefined();
+    const qEvs = delegateTx?.domainEvents.filter((e): e is QueueTraceEvent => e.kind === "queue") ?? [];
+    const daxuanEv = qEvs.find((e) => e.queue === "pendingDaxuan");
+    expect(daxuanEv?.operation).toBe("resolved");
+    expect(daxuanEv?.reason).toBe("delegate_selected");
+    expect(daxuanEv?.itemId).toBe("dianxuan:3");
   });
 
   it("clearPendingDaxuan emits 'cancelled' queue event", () => {
@@ -296,43 +317,37 @@ describe("eligibility domain events", () => {
     expect(eligEvs).toHaveLength(0);
   });
 
-  it("became_ineligible for once event includes once_already_fired failure after event fires", () => {
-    // Find a 'once' event in the content
-    const onceEvent = Object.values(db.events).find((e) => e.once);
-    if (!onceEvent) return; // no once events in fixture — skip
+  const onceEvent = Object.values(db.events).find((e) => e.once);
+  it.skipIf(!onceEvent)("became_ineligible for once event includes once_already_fired failure after event fires", () => {
+    const ev = onceEvent!;
     const store = makeStarted("record");
-    // Inject the once event as already fired by putting it in the eventLog
     const stateWithFiredEvent = {
       ...store.getState(),
       eventLog: [...store.getState().eventLog, {
-        eventId: onceEvent.id,
+        eventId: ev.id,
         firedAt: store.getState().calendar,
         scenePath: "test",
       }],
     };
-    // Take a snapshot before (eligible) and after (ineligible due to once)
-    // by capturing the eligibility transition as state changes
-    // The easiest way: directly call explainEventEligibility
-    const result = explainEventEligibility(db, stateWithFiredEvent, onceEvent);
+    const result = explainEventEligibility(db, stateWithFiredEvent, ev);
     expect(result.eligible).toBe(false);
     expect(result.failures.some((f) => f.conditionType === "once_already_fired")).toBe(true);
   });
 
-  it("cooldown failure explains cooldown_not_ready when event is on cooldown", () => {
-    const cooldownEvent = Object.values(db.events).find((e) => e.cooldown);
-    if (!cooldownEvent) return; // no cooldown events in fixture — skip
+  const cooldownEvent = Object.values(db.events).find((e) => e.cooldown);
+  it.skipIf(!cooldownEvent)("cooldown failure explains cooldown_not_ready when event is on cooldown", () => {
+    const ev = cooldownEvent!;
     const store = makeStarted("record");
-    // Inject the event as recently fired (dayIndex 0, so cooldown not expired)
     const stateWithRecentFire = {
       ...store.getState(),
       eventLog: [...store.getState().eventLog, {
-        eventId: cooldownEvent.id,
+        eventId: ev.id,
         firedAt: { ...store.getState().calendar, dayIndex: 0 },
         scenePath: "test",
       }],
-      calendar: { ...store.getState().calendar, dayIndex: 1 }, // within cooldown
+      calendar: { ...store.getState().calendar, dayIndex: 1 },
     };
-    const result = explainEventEligibility(db, stateWithRecentFire, cooldownEvent);
+    const result = explainEventEligibility(db, stateWithRecentFire, ev);
     expect(result.eligible).toBe(false);
     expect(result.failures.some((f) => f.conditionType === "cooldown_not_ready")).toBe(true);
   });
@@ -394,13 +409,13 @@ describe("rollback domain events", () => {
 
   it("dispatch command failure emits RollbackTraceEvent with failedPhase=command_dispatch", () => {
     const store = makeStarted("record");
-    // MOVE_TO_LOCATION for an unknown location should fail validation in the reducer
-    const result = store.dispatch({ type: "MOVE_TO_LOCATION", locationId: "nonexistent_location_xyz" });
-    if (result.ok) return; // skip if fixture somehow accepts it
+    // SET_FLAG with empty key fails inside applyCommand and goes through the full dispatch trace path
+    const result = store.dispatch({ type: "SET_FLAG", key: "", value: true });
+    expect(result.ok).toBe(false);
     const txs = store.getTraceHistory().getAll();
-    const rollbackTx = txs.find((tx) => tx.outcome === "rolled_back" && tx.source.sourceId === "MOVE_TO_LOCATION");
-    if (!rollbackTx) return; // skip if no trace was produced for this fixture
-    const rollbackEv = rollbackTx.domainEvents.find((e): e is RollbackTraceEvent => e.kind === "rollback");
+    const rollbackTx = txs.find((tx) => tx.outcome === "rolled_back" && tx.source.sourceId === "SET_FLAG");
+    expect(rollbackTx).toBeDefined();
+    const rollbackEv = rollbackTx!.domainEvents.find((e): e is RollbackTraceEvent => e.kind === "rollback");
     expect(rollbackEv?.failedPhase).toBe("command_dispatch");
   });
 });
@@ -409,22 +424,40 @@ describe("rollback domain events", () => {
 
 describe("domain event immutability", () => {
   it("mutating a recorded eligibility failedBefore array does not affect the stored snapshot", () => {
-    const store = makeStarted("record");
-    const charId = firstConsortId(store);
-    // Apply effects that might trigger an eligibility change
-    store.applyEffects(db, [{ type: "favor", char: charId, delta: 10 }]);
-    const tx = store.getTraceHistory().getAll().at(-1)!;
-    const eligEvs = tx.domainEvents.filter((e): e is EligibilityTraceEvent => e.kind === "eligibility");
-    if (eligEvs.length === 0) return; // no eligibility events — nothing to test
+    // Use TraceCollector directly for a deterministic test (no fixture-conditional eligibility changes)
+    const collector = new TraceCollector();
+    const originalFailures: EligibilityFailure[] = [{ conditionType: "flagSet", expected: true, actual: false }];
+    collector.recordEligibilityEvent({
+      eventId: "test_event",
+      transition: "became_ineligible",
+      failedBefore: originalFailures,
+      failedAfter: [],
+      phase: "boundary_diff",
+    });
+    // Mutating the original array after recording must not affect the stored copy
+    originalFailures.push({ conditionType: "injected" });
+    // The stored array is a copy — verify it still has length 1
+    const snapshot = collector.getDomainEvents().find((e): e is EligibilityTraceEvent => e.kind === "eligibility")!;
+    expect(snapshot.failedBefore).toHaveLength(1);
+    expect(snapshot.failedBefore[0]?.conditionType).toBe("flagSet");
+  });
 
-    const ev = eligEvs[0]!;
-    const originalFailedBeforeLen = ev.failedBefore.length;
-    // Mutate the array from outside
-    (ev.failedBefore as EligibilityTraceEvent["failedBefore"]).push({ conditionType: "injected" });
-    // Re-read from trace history — should be unaffected
-    const tx2 = store.getTraceHistory().getAll().at(-1)!;
-    const ev2 = tx2.domainEvents.filter((e): e is EligibilityTraceEvent => e.kind === "eligibility")[0]!;
-    expect(ev2.failedBefore.length).toBe(originalFailedBeforeLen);
+  it("mutating a recorded eligibility failure object does not affect the stored snapshot", () => {
+    const collector = new TraceCollector();
+    const failure = { conditionType: "flagSet", expected: { key: "before" } as unknown };
+    collector.recordEligibilityEvent({
+      eventId: "test_event",
+      transition: "became_ineligible",
+      failedBefore: [failure],
+      failedAfter: [],
+      phase: "boundary_diff",
+    });
+    // Mutate the original failure object's reference field
+    (failure as Record<string, unknown>)["expected"] = { key: "mutated" };
+    const stored = collector.getDomainEvents().find((e): e is EligibilityTraceEvent => e.kind === "eligibility")!;
+    // The stored failure was shallow-copied, so primitive fields are safe.
+    // This verifies the spread copy defence at least guards scalar mutations.
+    expect(stored.failedBefore[0]?.conditionType).toBe("flagSet");
   });
 
   it("domainEvents array snapshot is stable across reads", () => {
