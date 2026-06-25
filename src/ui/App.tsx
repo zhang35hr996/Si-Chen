@@ -123,6 +123,8 @@ import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
 import { HaremAdminRankModal } from "./components/HaremAdminRankModal";
 import { PunishmentModal } from "./components/PunishmentModal";
+import { ColdPalaceRestoreModal } from "./components/ColdPalaceModal";
+import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
@@ -193,6 +195,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   // 禁足令在侍君宫殿内发布后需回主图：confinement 成功 + 人在该宫→ 反应播完后 goHome。
   const [punishGoHome, setPunishGoHome] = useState(false);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
+  const [restoreCharId, setRestoreCharId] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 过场（对话/反应/初夜提示）若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
@@ -580,6 +583,39 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       } else {
         reopenConsortListIfReturning();
       }
+    }
+  };
+
+  const applySendToColdPalace = (charId: string): string | null => {
+    const result = store.sendConsortToColdPalace(db, charId, {
+      sourceLocation: store.getState().playerLocation ?? undefined,
+    });
+    if (result.ok) {
+      setPunishCharId(null); // close only on success
+      doAutosave();
+      const char = db.characters[charId] ?? store.getState().generatedConsorts[charId];
+      const st = store.getState().standing[charId];
+      const rk = st ? db.ranks[st.rank] : undefined;
+      const name = char
+        ? (st?.title ? `${st.title}${char.profile.name}` : (rk ? `${rk.name}${char.profile.name}` : char.profile.name))
+        : charId;
+      setReaction({ speakerId: charId, lines: [`${name}奉旨迁居长门宫。`] });
+      return null;
+    } else {
+      return result.error[0]?.message ?? "操作失败，请重试。";
+    }
+  };
+
+  const applyRestoreFromColdPalace = (charId: string, reason: ColdPalaceLiftReason): string | null => {
+    const result = store.restoreFromColdPalace(db, charId, reason);
+    if (result.ok) {
+      setRestoreCharId(null); // close only on success
+      doAutosave();
+      const label = reason === "pardoned" ? "特旨赦免" : "奉旨召回";
+      setReaction({ speakerId: charId, lines: [`叩首谢恩，${label}。`] });
+      return null;
+    } else {
+      return result.error[0]?.message ?? "操作失败，请重试。";
     }
   };
 
@@ -1718,6 +1754,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onPunish={(id) => setPunishCharId(id)}
           onRelocate={(id) => setRelocateCharId(id)}
           onHaremAdminManage={(actorId) => setHaremAdminActorId(actorId)}
+          onRestoreFromColdPalace={(id) => setRestoreCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
@@ -2070,6 +2107,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onOfferIncense={() => templeAction("incense")}
           onDrawFortune={() => templeAction("fortune")}
           onViewProfile={(id) => setProfileCharId(id)}
+          onRestoreFromColdPalace={(id) => setRestoreCharId(id)}
         />
       )}
       {view === "event" && activeEventId && (
@@ -2204,10 +2242,20 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           state={liveState}
           character={(db.characters[punishCharId] ?? liveState.generatedConsorts[punishCharId])!}
           onCommand={(command) => applyImperialCommand(punishCharId, command)}
+          onSendToColdPalace={applySendToColdPalace}
           onClose={() => {
             setPunishCharId(null);
             reopenConsortListIfReturning(); // 取消也回到列表
           }}
+        />
+      )}
+      {restoreCharId && (db.characters[restoreCharId] ?? liveState.generatedConsorts[restoreCharId]) && liveState.standing[restoreCharId] && (
+        <ColdPalaceRestoreModal
+          db={db}
+          state={liveState}
+          charId={restoreCharId}
+          onConfirm={(reason) => applyRestoreFromColdPalace(restoreCharId, reason)}
+          onClose={() => setRestoreCharId(null)}
         />
       )}
       {relocateCharId && db.characters[relocateCharId] && store.getState().standing[relocateCharId] && (
