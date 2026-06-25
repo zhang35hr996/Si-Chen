@@ -1961,7 +1961,7 @@ export class GameStore {
         ([id, s]) =>
           id !== targetId &&
           s.lifecycle !== "deceased" &&
-          (s.residence ?? db.characters[id]?.defaultLocation) === loc &&
+          (getCharacterLocation(db, this.state, id) ?? s.residence) === loc &&
           ((s.chamber ?? "main") as ChamberId) === ch,
       );
 

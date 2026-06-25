@@ -11,6 +11,7 @@ import { effectiveOrder } from "./standing";
 import { shichenSlot, MAO_SLOT } from "../calendar/time";
 import { isExcused, wanderChance, wanders } from "./greeting";
 import { getGreetingLocation } from "./haremAdministration";
+import { isInColdPalace } from "./coldPalace";
 import { canCharacterParticipate } from "./restrictions";
 
 export function getCharacterLocation(
@@ -18,9 +19,10 @@ export function getCharacterLocation(
   state: GameState,
   charId: string,
 ): string | null {
-  if (!db.characters[charId]) return null;
+  const character = db.characters[charId] ?? state.generatedConsorts[charId];
+  if (!character) return null;
   // 搬迁后 standing.residence 覆盖 content 的 defaultLocation。
-  return state.standing[charId]?.residence ?? db.characters[charId]!.defaultLocation ?? null;
+  return state.standing[charId]?.residence ?? character.defaultLocation ?? null;
 }
 
 /** Characters present at a location, sorted by rank order (highest first). */
@@ -65,7 +67,8 @@ export function inPalaceConsorts(db: ContentDB, state: GameState): CharacterCont
       (c) =>
         c.kind === "consort" &&
         state.standing[c.id]?.lifecycle !== "deceased" &&
-        c.defaultLocation !== "changmengong",
+        !isInColdPalace(state, c.id) &&
+        (state.standing[c.id]?.residence ?? c.defaultLocation) !== "changmengong",
     )
     .sort(byRankDesc(db, state));
 }

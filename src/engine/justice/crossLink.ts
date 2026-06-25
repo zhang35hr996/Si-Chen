@@ -84,6 +84,34 @@ export function validateJusticeLinks(state: GameState): GameError[] {
       continue;
     }
 
+    if (pun.kind !== "finite_confinement" && pun.kind !== "indefinite_confinement") {
+      errors.push(crossLinkErr(
+        `ConfinementEffect ${effect.id} (lifted) links to punishment ${pun.id} of kind ${pun.kind} (expected finite_confinement or indefinite_confinement)`,
+      ));
+      continue;
+    }
+
+    if (pun.targetId !== effect.characterId) {
+      errors.push(crossLinkErr(
+        `ConfinementEffect ${effect.id} (lifted) characterId=${effect.characterId} but punishment ${pun.id} targetId=${pun.targetId}`,
+      ));
+    }
+
+    const histDetails = pun.details as { statusEffectId?: string; endTurnExclusive?: number };
+    if (histDetails.statusEffectId !== effect.id) {
+      errors.push(crossLinkErr(
+        `ConfinementEffect ${effect.id} (lifted) links to punishment ${pun.id} but punishment.details.statusEffectId=${histDetails.statusEffectId}`,
+      ));
+    }
+
+    if (pun.kind === "finite_confinement") {
+      if (histDetails.endTurnExclusive !== effect.endTurnExclusive) {
+        errors.push(crossLinkErr(
+          `ConfinementEffect ${effect.id} (lifted) endTurnExclusive=${effect.endTurnExclusive} but punishment ${pun.id} details.endTurnExclusive=${histDetails.endTurnExclusive}`,
+        ));
+      }
+    }
+
     if (pun.lifecycle.status === "active") {
       errors.push(crossLinkErr(
         `ConfinementEffect ${effect.id} is lifted (liftedTurn=${effect.liftedTurn}) but linked punishment ${pun.id} is still active`,
@@ -118,8 +146,23 @@ export function validateJusticeLinks(state: GameState): GameError[] {
         ));
       }
     } else {
-      // Resolved/completed punishment → linked ConfinementEffect should be lifted.
-      if (!effect) continue; // effect was not preserved in history — skip (allowed)
+      // Resolved/completed punishment → linked ConfinementEffect must exist and be lifted.
+      if (!effect) {
+        errors.push(crossLinkErr(
+          `PunishmentRecord ${pun.id} (${pun.lifecycle.status}, ${pun.kind}) references statusEffectId=${statusEffectId} but no matching ConfinementEffect found`,
+        ));
+        continue;
+      }
+      if ((effect as { sourcePunishmentId?: string }).sourcePunishmentId !== pun.id) {
+        errors.push(crossLinkErr(
+          `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but ConfinementEffect.sourcePunishmentId=${(effect as { sourcePunishmentId?: string }).sourcePunishmentId}`,
+        ));
+      }
+      if ((effect as { characterId?: string }).characterId !== pun.targetId) {
+        errors.push(crossLinkErr(
+          `PunishmentRecord ${pun.id} targetId=${pun.targetId} but linked ConfinementEffect ${statusEffectId} characterId=${(effect as { characterId?: string }).characterId}`,
+        ));
+      }
       if ((effect as { liftedTurn?: number }).liftedTurn === undefined) {
         errors.push(crossLinkErr(
           `PunishmentRecord ${pun.id} is ${pun.lifecycle.status} but linked ConfinementEffect ${statusEffectId} is still active (no liftedTurn)`,

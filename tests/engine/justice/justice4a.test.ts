@@ -23,6 +23,7 @@ import { toGameTime } from "../../../src/engine/calendar/time";
 import type { ImperialCommand } from "../../../src/store/imperialCommands";
 import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../../../src/engine/characters/chambers";
 import type { GameError } from "../../../src/engine/infra/errors";
+import { validateJusticeLinks } from "../../../src/engine/justice/crossLink";
 
 const db = loadRealContent();
 
@@ -742,11 +743,15 @@ describe("cold palace — chamber-level restore (Fix 3)", () => {
     }
     store.loadState({ ...stateAfterSend, standing: synStanding as typeof stateAfterSend.standing });
 
+    const stateBeforeRestore = JSON.parse(JSON.stringify(store.getState()));
+
     // Now restore should fail — no available slot.
     const r = store.restoreFromColdPalace(db, TARGET, "pardoned");
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.some((e: GameError) => e.code === "COLD_PALACE_INVALID")).toBe(true);
+    // Atomicity: failed restore must leave state unchanged.
+    expect(store.getState()).toEqual(stateBeforeRestore);
   });
 });
 
@@ -790,6 +795,16 @@ describe("cold palace — case provenance in memory (Fix 5)", () => {
     expect((punMemory as { sourceCaseId?: string })?.sourceCaseId).toBe(fakeCaseId);
   });
 
+  it("CP-PROV2a. empress → acting_consort reason is imperial_deprivation (not imperial_reassignment)", () => {
+    const EMPRESS = "shen_zhibai";
+    const store = makeStore();
+    const r = store.sendConsortToColdPalace(db, EMPRESS, {});
+    expect(r.ok).toBe(true);
+    const admin = store.getState().haremAdministration;
+    // Either acting_consort or neiwu_proxy — both must use imperial_deprivation.
+    expect((admin as { reason?: string }).reason).toBe("imperial_deprivation");
+  });
+
   it("CP-PROV2. restoreFromColdPalace derives caseId from PunishmentRecord (not meta)", () => {
     const store = makeStore();
     // Create a case and send to cold palace with it.
@@ -828,5 +843,142 @@ describe("cold palace — case provenance in memory (Fix 5)", () => {
     );
     expect(restoreEntry).toBeDefined();
     expect((restoreEntry?.links as { caseId?: string })?.caseId).toBe("case_000001");
+  });
+});
+
+// ── CP-BATCH: Same-batch harem bypass prevention ──────────────────────────────
+
+describe("cold palace — same-batch set_harem_administration bypass", () => {
+  it("CP-BATCH1. send_to_cold_palace(empress) + set_harem_administration(empress) in same batch is rejected", () => {
+    const EMPRESS = "shen_zhibai";
+    const store = makeStore();
+    const gameTime = toGameTime(store.getState().calendar);
+
+    // Attempt: send empress to cold palace AND restore her to empress in one batch.
+    const r = store.applyEffects(db, [
+      {
+        type: "send_to_cold_palace" as const,
+        char: EMPRESS,
+        statusEffectId: "se_shen_zhibai_000001",
+        punishmentId: "pun_000001",
+        coldPalaceResidenceId: "changmengong",
+        previousResidenceId: "zhongcui_gong",
+        startedAt: gameTime,
+        startTurn: store.getState().calendar.dayIndex,
+      },
+      {
+        type: "set_harem_administration",
+        state: { mode: "empress" },
+      },
+    ]);
+    // The batch must fail — set_harem_administration to empress is invalid when empress is being sent to cold palace.
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── CP-XLINK: Confinement historical cross-link corruption tests ──────────────
+
+describe("cold palace — confinement historical cross-link validation", () => {
+  it("CP-XLINK1. lifted ConfinementEffect pointing at wrong-kind punishment is detected", () => {
+    const store = makeStore();
+    // Send TARGET to cold palace to create a cold_palace PunishmentRecord.
+    store.sendConsortToColdPalace(db, TARGET, {});
+    const state = store.getState();
+    const coldPalacePun = Object.values(state.justice.punishments).find(p => p.kind === "cold_palace");
+    expect(coldPalacePun).toBeDefined();
+
+    // Inject a lifted ConfinementEffect that (wrongly) points to the cold_palace PunishmentRecord.
+    const corruptedState = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: "se_corrupt_001",
+          kind: "confinement" as const,
+          characterId: TARGET,
+          startedAt: toGameTime(state.calendar),
+          startTurn: state.calendar.dayIndex,
+          sourcePunishmentId: coldPalacePun!.id,
+          liftedTurn: state.calendar.dayIndex + 1,
+          liftedAt: toGameTime(state.calendar),
+          liftReason: "lifted_by_emperor" as const,
+        },
+      ],
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+  });
+
+  it("CP-XLINK2. resolved confinement punishment referencing missing effect is detected", () => {
+    const store = makeStore();
+    const state = store.getState();
+    const now = toGameTime(state.calendar);
+
+    // Inject a completed confinement PunishmentRecord referencing a non-existent effect.
+    const corruptedState = {
+      ...state,
+      justice: {
+        ...state.justice,
+        punishments: {
+          ...state.justice.punishments,
+          "pun_corrupt_001": {
+            id: "pun_corrupt_001",
+            kind: "indefinite_confinement" as const,
+            targetId: TARGET,
+            actorId: "player",
+            severity: "moderate" as const,
+            imposedAt: now,
+            publicity: "palace" as const,
+            lifecycle: { status: "completed" as const, resolvedAt: now, resolution: "target_deceased" as const },
+            details: { statusEffectId: "se_does_not_exist" },
+          },
+        },
+      },
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
+  });
+
+  it("CP-XLINK3. resolved confinement punishment with still-active effect is detected", () => {
+    const store = makeStore();
+    const state = store.getState();
+    const now = toGameTime(state.calendar);
+    const effectId = "se_corrupt_002";
+
+    // Inject: completed punishment + active ConfinementEffect (contradiction).
+    const corruptedState = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: effectId,
+          kind: "confinement" as const,
+          characterId: TARGET,
+          startedAt: now,
+          startTurn: state.calendar.dayIndex,
+          sourcePunishmentId: "pun_corrupt_002",
+          // liftedTurn deliberately omitted — effect is still "active"
+        },
+      ],
+      justice: {
+        ...state.justice,
+        punishments: {
+          ...state.justice.punishments,
+          "pun_corrupt_002": {
+            id: "pun_corrupt_002",
+            kind: "indefinite_confinement" as const,
+            targetId: TARGET,
+            actorId: "player",
+            severity: "moderate" as const,
+            imposedAt: now,
+            publicity: "palace" as const,
+            lifecycle: { status: "completed" as const, resolvedAt: now, resolution: "target_deceased" as const },
+            details: { statusEffectId: effectId },
+          },
+        },
+      },
+    };
+    const errors = validateJusticeLinks(corruptedState as unknown as Parameters<typeof validateJusticeLinks>[0]);
+    expect(errors.some(e => e.code === "BAD_JUSTICE_CROSSLINK")).toBe(true);
   });
 });

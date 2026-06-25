@@ -451,9 +451,12 @@ export function validateEffects(
         const requiresConfinement = "reason" in ns && CONFINEMENT_REASONS.has(ns.reason);
         if (ns.mode === "empress") {
           const fenghouInColdPalace = fenghousId ? isInColdPalace(state, fenghousId) : false;
+          const coldPalaceInBatch = effects.some(
+            (be) => be.type === "send_to_cold_palace" && (be as { char?: string }).char === fenghousId,
+          );
           if (effectivelyConfined) {
             bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is confined", {});
-          } else if (fenghouInColdPalace) {
+          } else if (fenghouInColdPalace || coldPalaceInBatch) {
             bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is in cold palace", {});
           }
         } else if (ns.mode === "acting_consort") {
@@ -954,6 +957,7 @@ export function applyEffects(
           };
         }
         // Cold palace empress cannot administer harem — transfer to acting_consort if eligible, else neiwu_proxy.
+        // reason is always "imperial_deprivation": punitive removal of empress authority.
         if (next.standing[ch]?.rank === "fenghou" && next.haremAdministration.mode === "empress") {
           const eligible = eligibleHaremAdministrators(db, next);
           if (eligible.length > 0) {
@@ -961,7 +965,7 @@ export function applyEffects(
               mode: "acting_consort",
               charId: eligible[0]!.id,
               appointedAt: toGameTime(next.calendar),
-              reason: "imperial_reassignment",
+              reason: "imperial_deprivation",
             };
           } else {
             next.haremAdministration = {
@@ -1004,11 +1008,10 @@ export function applyEffects(
         };
         const ch = e.char;
         const active = activeColdPalaceEffectFor(next, ch, next.calendar.dayIndex);
-        if (active) {
-          active.liftedAt = e.liftedAt;
-          active.liftedTurn = e.liftedTurn;
-          active.liftReason = e.liftReason;
-        }
+        if (!active) break; // no-op: no active cold palace effect
+        active.liftedAt = e.liftedAt;
+        active.liftedTurn = e.liftedTurn;
+        active.liftReason = e.liftReason;
         if (e.restoreResidenceId) {
           next.standing[ch]!.residence = e.restoreResidenceId;
         }
@@ -1019,7 +1022,36 @@ export function applyEffects(
       }
       case "set_harem_administration": {
         const ns = effect.state as typeof next.haremAdministration;
-        if (ns.mode === "acting_consort") {
+        if (ns.mode === "empress") {
+          // Defensive recheck: a prior effect in this batch may have sent the empress to
+          // cold palace or confined her. If so, redirect to a legal proxy state.
+          const fenghouIdNow = Object.keys(next.standing).find(
+            (id) => next.standing[id]?.rank === "fenghou" && next.standing[id]?.lifecycle !== "deceased",
+          );
+          const fenghouBlockedNow = fenghouIdNow &&
+            (isInColdPalace(next, fenghouIdNow) ||
+              next.statusEffects.some(
+                (se) => se.kind === "confinement" && se.characterId === fenghouIdNow && se.liftedTurn === undefined,
+              ));
+          if (fenghouBlockedNow) {
+            const eligible = eligibleHaremAdministrators(db, next);
+            if (eligible.length > 0) {
+              next.haremAdministration = {
+                mode: "acting_consort",
+                charId: eligible[0]!.id,
+                appointedAt: toGameTime(next.calendar),
+                reason: "imperial_deprivation",
+              };
+            } else {
+              next.haremAdministration = {
+                mode: "neiwu_proxy",
+                appointedAt: toGameTime(next.calendar),
+                reason: "imperial_deprivation",
+              };
+            }
+            break;
+          }
+        } else if (ns.mode === "acting_consort") {
           // Re-check eligibility against accumulated batch state — a prior effect
           // may have confined or cold-palace'd the proposed consort in this same batch.
           const eligible = eligibleHaremAdministrators(db, next);
