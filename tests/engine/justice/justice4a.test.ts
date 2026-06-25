@@ -587,3 +587,167 @@ describe("cold palace — legacy cold_palace statusEffect injection", () => {
     expect(restore.ok).toBe(true);
   });
 });
+
+// ── CP-AUTH2: set_harem_administration empress rejected when empress in cold palace ─────
+
+describe("cold palace — set_harem_administration empress guard (Fix 1b)", () => {
+  it("CP-AUTH2. set_harem_administration to empress rejected when empress is in cold palace", () => {
+    const EMPRESS = "shen_zhibai";
+    const store = makeStore();
+
+    // Send empress to cold palace.
+    const r = store.sendConsortToColdPalace(db, EMPRESS, {});
+    expect(r.ok).toBe(true);
+    expect(store.getState().haremAdministration.mode).not.toBe("empress");
+
+    // Try to restore empress authority via set_harem_administration.
+    const restoreAttempt = store.applyEffects(db, [
+      { type: "set_harem_administration", state: { mode: "empress" } },
+    ]);
+    expect(restoreAttempt.ok).toBe(false);
+  });
+});
+
+// ── CP-DEATH2: confined consort natural death resolves confinement PunishmentRecord ─────
+
+describe("cold palace — death reconciliation for confinement (Fix 2)", () => {
+  it("CP-DEATH2. natural death while confined resolves confinement PunishmentRecord as target_deceased", () => {
+    const store = makeStore();
+
+    // Impose confinement.
+    const confineCmd: ImperialCommand = { type: "impose_confinement", targetId: TARGET, durationTurns: 9 };
+    const confineResult = store.applyImperialPunishmentWithConsequences(db, confineCmd, {});
+    expect(confineResult.ok).toBe(true);
+
+    // Find the confinement PunishmentRecord.
+    const punishments = Object.values(store.getState().justice.punishments);
+    const confinePun = punishments.find(
+      (p) => p.kind === "finite_confinement" || p.kind === "indefinite_confinement",
+    );
+    expect(confinePun).toBeDefined();
+    if (!confinePun) return;
+    expect(confinePun.lifecycle.status).toBe("active");
+    const confinePunId = confinePun.id;
+
+    // Apply natural death.
+    const now = store.getState().calendar;
+    const deathResult = store.applyEffects(db, [{
+      type: "consort_decease",
+      char: TARGET,
+      at: { year: now.year, month: now.month, period: now.period, dayIndex: now.dayIndex },
+      cause: "illness",
+    }]);
+    expect(deathResult.ok).toBe(true);
+
+    // PunishmentRecord must now be resolved.
+    const updatedPun = store.getState().justice.punishments[confinePunId];
+    expect(updatedPun?.lifecycle.status).toBe("completed");
+    expect((updatedPun?.lifecycle as { resolution?: string }).resolution).toBe("target_deceased");
+  });
+});
+
+// ── CP-CHAMBER1: restore uses chamber-level occupancy check ─────────────────────────────
+
+describe("cold palace — chamber-level restore (Fix 3)", () => {
+  it("CP-CHAMBER1. restoreFromColdPalace uses original chamber when free", () => {
+    const store = makeStore();
+
+    store.sendConsortToColdPalace(db, TARGET, {});
+
+    // Capture previousResidenceId and previousChamber from the ColdPalaceEffect
+    // (this is what we expect to be restored — the effect records the source slot).
+    const se = store.getState().statusEffects.find(
+      (e) => e.kind === "cold_palace" && e.characterId === TARGET,
+    );
+    expect(se).toBeDefined();
+    if (!se || se.kind !== "cold_palace") return;
+    const expectedResidence = se.previousResidenceId;
+    const expectedChamber = se.previousChamber ?? "main";
+
+    const r = store.restoreFromColdPalace(db, TARGET, "pardoned");
+    expect(r.ok).toBe(true);
+    expect(store.getState().standing[TARGET]?.residence).toBe(expectedResidence);
+    expect(store.getState().standing[TARGET]?.chamber ?? "main").toBe(expectedChamber);
+  });
+});
+
+// ── CP-PROV1: sourceCaseId flows into target memory when caseId provided ────────────────
+
+describe("cold palace — case provenance in memory (Fix 5)", () => {
+  it("CP-PROV1. sendConsortToColdPalace with caseId writes sourceCaseId into target memory", () => {
+    const store = makeStore();
+    // Create a case first.
+    const baseState = store.getState();
+    const now = toGameTime(baseState.calendar);
+    const caseRecord: CaseRecord = {
+      id: "case_000001",
+      status: "open",
+      subjectIds: [TARGET],
+      openedAt: now,
+      openedBy: "player",
+      source: { kind: "imperial" },
+      publicity: "palace",
+      charges: [],
+      evidence: [],
+      confessions: [],
+      punishmentIds: [],
+    };
+    const caseAlloc = allocateJusticeIds(baseState.justice, { cases: 1 });
+    const casePlan = { mutations: [{ type: "create_case" as const, record: caseRecord }], nextSeq: caseAlloc.nextSeq };
+    const withCase = applyJusticePlan(baseState, casePlan);
+    expect(withCase.ok).toBe(true);
+    if (!withCase.ok) return;
+    store.loadState(withCase.value);
+
+    const fakeCaseId = "case_000001";
+    const r = store.sendConsortToColdPalace(db, TARGET, { caseId: fakeCaseId });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    // Find memory entry for TARGET with sourcePunishmentId.
+    const memories = store.getState().memories[TARGET]?.entries ?? [];
+    const punMemory = memories.find((m) => m.sourcePunishmentId === r.value.punishmentId);
+    expect(punMemory).toBeDefined();
+    expect((punMemory as { sourceCaseId?: string })?.sourceCaseId).toBe(fakeCaseId);
+  });
+
+  it("CP-PROV2. restoreFromColdPalace derives caseId from PunishmentRecord (not meta)", () => {
+    const store = makeStore();
+    // Create a case and send to cold palace with it.
+    const baseState = store.getState();
+    const now = toGameTime(baseState.calendar);
+    const caseRecord: CaseRecord = {
+      id: "case_000001",
+      status: "open",
+      subjectIds: [TARGET],
+      openedAt: now,
+      openedBy: "player",
+      source: { kind: "imperial" },
+      publicity: "palace",
+      charges: [],
+      evidence: [],
+      confessions: [],
+      punishmentIds: [],
+    };
+    const caseAlloc = allocateJusticeIds(baseState.justice, { cases: 1 });
+    const casePlan = { mutations: [{ type: "create_case" as const, record: caseRecord }], nextSeq: caseAlloc.nextSeq };
+    const withCase = applyJusticePlan(baseState, casePlan);
+    expect(withCase.ok).toBe(true);
+    if (!withCase.ok) return;
+    store.loadState(withCase.value);
+
+    store.sendConsortToColdPalace(db, TARGET, { caseId: "case_000001" });
+
+    // Restore WITHOUT passing meta.caseId — it should still derive the caseId from the punishment.
+    const restoreResult = store.restoreFromColdPalace(db, TARGET, "pardoned");
+    expect(restoreResult.ok).toBe(true);
+
+    // Verify chronicle entry has caseId derived from PunishmentRecord.
+    const chronicle = store.getState().chronicle;
+    const restoreEntry = chronicle.find(
+      (e) => (e.payload as { decree?: string })?.decree === "cold_palace_restored",
+    );
+    expect(restoreEntry).toBeDefined();
+    expect((restoreEntry?.links as { caseId?: string })?.caseId).toBe("case_000001");
+  });
+});

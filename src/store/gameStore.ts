@@ -53,6 +53,8 @@ import { deriveQueueTraceEvents } from "../engine/trace/queueDiff";
 import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
 import type { QueueTraceEvent } from "../engine/trace/domainEvents";
 import { applyJusticePlan, type JusticePlan } from "../engine/justice/mutations";
+import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../engine/characters/chambers";
+import type { ChamberId } from "../engine/state/types";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -1726,6 +1728,7 @@ export class GameStore {
     const currentTurn = this.state.calendar.dayIndex;
 
     const previousResidenceId = standing.residence ?? (db.characters[targetId]?.kind === "consort" ? db.characters[targetId]!.defaultLocation : undefined) ?? "unknown";
+    const previousChamber = standing.chamber;  // undefined means "main"
     const coldPalaceResidenceId = "changmengong";
 
     // Check if there is an active confinement to resolve in the same transaction.
@@ -1756,6 +1759,7 @@ export class GameStore {
       details: {
         statusEffectId,
         previousResidenceId,
+        ...(previousChamber !== undefined ? { previousChamber } : {}),
         coldPalaceResidenceId,
       },
     } as PunishmentRecord;
@@ -1790,6 +1794,7 @@ export class GameStore {
       punishmentId,
       coldPalaceResidenceId,
       previousResidenceId,
+      ...(previousChamber !== undefined ? { previousChamber } : {}),
       startedAt: now,
       startTurn: currentTurn,
     };
@@ -1809,6 +1814,7 @@ export class GameStore {
         unresolved: true,
         emotions: { fear: 55, shame: 45 },
         sourcePunishmentId: punishmentId,
+        ...(meta.caseId ? { sourceCaseId: meta.caseId } : {}),
       },
     };
 
@@ -1884,7 +1890,7 @@ export class GameStore {
     db: ContentDB,
     targetId: string,
     liftReason: "lifted_by_emperor" | "pardoned",
-    meta?: { caseId?: string },
+    _meta?: { caseId?: string },
   ): Result<{ punishmentId: string }, GameError[]> {
     const activeEffect = activeColdPalaceEffectFor(this.state, targetId);
     if (!activeEffect) {
@@ -1913,28 +1919,59 @@ export class GameStore {
       ? { mutations: resolveMutations, nextSeq: alloc.nextSeq }
       : undefined;
 
-    // Check if original residence is still available (not occupied by another consort).
+    // ── Find restore destination ─────────────────────────────────────────────
     const prevRes = activeEffect.previousResidenceId;
-    const isOccupied = prevRes !== undefined &&
+    const prevChamber: ChamberId = (activeEffect.previousChamber as ChamberId | undefined) ?? "main";
+
+    // Helper: is a (location, chamber) slot currently occupied by a living consort (excluding target)?
+    const isSlotOccupied = (loc: string, ch: ChamberId) =>
       Object.entries(this.state.standing).some(
-        ([id, s]) => id !== targetId && s.lifecycle !== "deceased" && s.residence === prevRes,
+        ([id, s]) =>
+          id !== targetId &&
+          s.lifecycle !== "deceased" &&
+          s.residence === loc &&
+          ((s.chamber ?? "main") as ChamberId) === ch,
       );
-    // When original chamber is occupied, fall back to the character's default location
-    // from static content data. If that's also unavailable, use the original residence
-    // anyway (two consorts temporarily sharing is better than a contradiction state).
-    const charDefault = db.characters[targetId]?.kind === "consort"
-      ? db.characters[targetId]!.defaultLocation
-      : undefined;
-    const restoreResidenceId = isOccupied ? (charDefault ?? prevRes) : prevRes;
+
+    let restoreSlot: { res: string; ch: ChamberId } | null = null;
+
+    if (!isSlotOccupied(prevRes, prevChamber)) {
+      // Original slot available — restore there.
+      restoreSlot = { res: prevRes, ch: prevChamber };
+    } else {
+      // Try to find any available slot in any chambered palace.
+      outer: for (const palace of CHAMBERED_PALACE_ORDER) {
+        for (const { id: chamberId } of CHAMBERS) {
+          if (!isSlotOccupied(palace, chamberId)) {
+            restoreSlot = { res: palace, ch: chamberId };
+            break outer;
+          }
+        }
+      }
+    }
+
+    if (!restoreSlot) {
+      // No available slot — fail the entire restore.
+      const error = stateError("COLD_PALACE_INVALID", `cannot restore "${targetId}" from cold palace: no available chamber`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
+
+    const { res: restoreResidenceId, ch: restoreChamber } = restoreSlot;
 
     const restoreEffect = {
       type: "restore_from_cold_palace" as const,
       char: targetId,
       liftReason,
       restoreResidenceId,
+      restoreChamber,
       liftedAt: now,
       liftedTurn: currentTurn,
     };
+
+    // Derive caseId from the original PunishmentRecord for provenance integrity.
+    const linkedPunishment = this.state.justice.punishments[activeEffect.sourcePunishmentId];
+    const derivedCaseId = linkedPunishment?.caseId;
 
     const restoreChronicle: Omit<CourtEvent, "id">[] = [
       {
@@ -1946,11 +1983,11 @@ export class GameStore {
           targetId,
           sourcePunishmentId: activeEffect.sourcePunishmentId,
           liftReason,
-          ...(meta?.caseId ? { caseId: meta.caseId } : {}),
+          ...(derivedCaseId ? { caseId: derivedCaseId } : {}),
         },
         links: {
           sourcePunishmentId: activeEffect.sourcePunishmentId,
-          ...(meta?.caseId ? { caseId: meta.caseId } : {}),
+          ...(derivedCaseId ? { caseId: derivedCaseId } : {}),
         },
         publicity: { scope: "palace", persistence: "institutional" },
         publicSalience: 70,

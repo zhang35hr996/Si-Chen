@@ -636,6 +636,7 @@ export interface ColdPalaceEffect {
   startedAt: GameTime;
   startTurn: number;
   previousResidenceId: string;
+  previousChamber?: ChamberId;  // undefined means "main" (default)
   coldPalaceResidenceId: string;
   sourcePunishmentId: string;
   liftedAt?: GameTime;

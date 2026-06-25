@@ -30,7 +30,7 @@ import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import { memoryEntryId } from "../state/newGame";
 import type { GameTime } from "../calendar/time";
-import type { ColdPalaceEffect, GameState } from "../state/types";
+import type { ChamberId, ColdPalaceEffect, GameState } from "../state/types";
 import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 
 /** Max |cumulative delta| per axis (char×field / pillar×field) per batch. */
@@ -450,8 +450,11 @@ export function validateEffects(
         const CONFINEMENT_REASONS = new Set(["empress_confined", "no_eligible_consort"]);
         const requiresConfinement = "reason" in ns && CONFINEMENT_REASONS.has(ns.reason);
         if (ns.mode === "empress") {
+          const fenghouInColdPalace = fenghousId ? isInColdPalace(state, fenghousId) : false;
           if (effectivelyConfined) {
             bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is confined", {});
+          } else if (fenghouInColdPalace) {
+            bad(index, "BAD_EFFECT", "cannot set haremAdministration to empress while empress is in cold palace", {});
           }
         } else if (ns.mode === "acting_consort") {
           if (requiresConfinement && !effectivelyConfined) {
@@ -920,7 +923,7 @@ export function applyEffects(
         const e = effect as {
           char: string; statusEffectId: string; punishmentId: string;
           coldPalaceResidenceId: string; previousResidenceId: string;
-          startedAt: GameTime; startTurn: number;
+          previousChamber?: string; startedAt: GameTime; startTurn: number;
         };
         const ch = e.char;
         const coldPalaceEntry: ColdPalaceEffect = {
@@ -930,6 +933,7 @@ export function applyEffects(
           startedAt: e.startedAt,
           startTurn: e.startTurn,
           previousResidenceId: e.previousResidenceId,
+          ...(e.previousChamber !== undefined ? { previousChamber: e.previousChamber as ChamberId } : {}),
           coldPalaceResidenceId: e.coldPalaceResidenceId,
           sourcePunishmentId: e.punishmentId,
         };
@@ -949,26 +953,39 @@ export function applyEffects(
           next.haremAdministration = {
             mode: "neiwu_proxy",
             appointedAt: toGameTime(next.calendar),
-            reason: "empress_confined",
+            reason: "imperial_deprivation",
           };
         }
-        // If the target is the current acting consort admin, fall back to neiwu_proxy.
+        // If the target is the current acting consort admin, find a real replacement.
         if (
           next.haremAdministration.mode === "acting_consort" &&
           (next.haremAdministration as { charId: string }).charId === ch
         ) {
-          next.haremAdministration = {
-            mode: "neiwu_proxy",
-            appointedAt: toGameTime(next.calendar),
-            reason: "no_eligible_consort",
-          };
+          // At this point ch's residence is already changed to changmengong,
+          // so eligibleHaremAdministrators(db, next) will correctly exclude them.
+          const eligible = eligibleHaremAdministrators(db, next);
+          if (eligible.length > 0) {
+            next.haremAdministration = {
+              mode: "acting_consort",
+              charId: eligible[0]!.id,
+              appointedAt: toGameTime(next.calendar),
+              reason: "imperial_reassignment",
+            };
+          } else {
+            next.haremAdministration = {
+              mode: "neiwu_proxy",
+              appointedAt: toGameTime(next.calendar),
+              reason: "no_eligible_consort",
+            };
+          }
         }
         break;
       }
       case "restore_from_cold_palace": {
         const e = effect as {
           char: string; liftReason: "lifted_by_emperor" | "pardoned";
-          restoreResidenceId?: string; liftedAt: GameTime; liftedTurn: number;
+          restoreResidenceId?: string; restoreChamber?: string;
+          liftedAt: GameTime; liftedTurn: number;
         };
         const ch = e.char;
         const active = activeColdPalaceEffectFor(next, ch, next.calendar.dayIndex);
@@ -979,6 +996,9 @@ export function applyEffects(
         }
         if (e.restoreResidenceId) {
           next.standing[ch]!.residence = e.restoreResidenceId;
+        }
+        if (e.restoreChamber) {
+          next.standing[ch]!.chamber = e.restoreChamber as ChamberId;
         }
         break;
       }
@@ -1005,16 +1025,20 @@ export function applyEffects(
             if (se.kind === "confinement" || se.kind === "cold_palace") {
               se.liftedTurn = effect.at.dayIndex;
               se.liftedAt = effect.at;
-              // Resolve the linked cold_palace PunishmentRecord so justice state stays consistent.
-              if (se.kind === "cold_palace") {
-                const linkedPun = next.justice.punishments[se.sourcePunishmentId];
-                if (linkedPun && linkedPun.lifecycle.status === "active") {
-                  next.justice.punishments[se.sourcePunishmentId] = {
-                    ...linkedPun,
-                    lifecycle: { status: "completed" as const, resolvedAt: effect.at, resolution: "target_deceased" as const },
-                  };
-                }
-              }
+            }
+          }
+        }
+        // Resolve all active PunishmentRecords for the deceased character.
+        // Skip for imperial_execution: the execution justice plan (run after effects) handles
+        // prior punishment resolution to avoid a double-resolve conflict with its own mutations.
+        if (effect.cause !== "imperial_execution") {
+          for (const punId of Object.keys(next.justice.punishments)) {
+            const pun = next.justice.punishments[punId]!;
+            if (pun.targetId === effect.char && pun.lifecycle.status === "active") {
+              next.justice.punishments[punId] = {
+                ...pun,
+                lifecycle: { status: "completed" as const, resolvedAt: effect.at, resolution: "target_deceased" as const },
+              };
             }
           }
         }

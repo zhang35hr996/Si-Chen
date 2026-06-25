@@ -222,6 +222,7 @@ const coldPalaceEffectSchema = z.strictObject({
   startedAt: gameTimeSchema,
   startTurn: z.number().int().min(0),
   previousResidenceId: z.string().min(1),
+  previousChamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
   coldPalaceResidenceId: z.string().min(1),
   sourcePunishmentId: z.string().regex(/^pun_\d{6}$/),
   liftedAt: gameTimeSchema.optional(),
@@ -341,7 +342,7 @@ const punishmentRecordSchema = z.discriminatedUnion("kind", [
   punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("strip_title"), details: z.strictObject({ removedTitle: z.string() }) }),
   punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("finite_confinement"), details: z.strictObject({ statusEffectId: z.string(), endTurnExclusive: z.number().int() }) }),
   punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("indefinite_confinement"), details: z.strictObject({ statusEffectId: z.string() }) }),
-  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("cold_palace"), details: z.strictObject({ statusEffectId: z.string(), previousResidenceId: z.string(), coldPalaceResidenceId: z.string() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("cold_palace"), details: z.strictObject({ statusEffectId: z.string(), previousResidenceId: z.string(), previousChamber: z.string().optional(), coldPalaceResidenceId: z.string() }) }),
   punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("execution"), details: z.strictObject({ deathCause: z.literal("imperial_execution") }) }),
   punishmentBaseSchema.extend({
     targetKind: z.literal("consort"),

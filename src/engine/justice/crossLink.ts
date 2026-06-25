@@ -165,7 +165,12 @@ export function validateJusticeLinks(state: GameState): GameError[] {
     if (effect.liftedTurn === undefined) continue; // only lifted/historical
 
     const pun = justice.punishments[effect.sourcePunishmentId];
-    if (!pun) continue; // already reported above if active
+    if (!pun) {
+      errors.push(crossLinkErr(
+        `ColdPalaceEffect ${effect.id} (lifted) has sourcePunishmentId=${effect.sourcePunishmentId} but punishment not found`,
+      ));
+      continue;
+    }
 
     if (pun.lifecycle.status === "active") {
       errors.push(crossLinkErr(
@@ -177,7 +182,6 @@ export function validateJusticeLinks(state: GameState): GameError[] {
   // ── PunishmentRecord → ColdPalaceEffect checks ────────────────────────────
   for (const pun of Object.values(justice.punishments)) {
     if (pun.kind !== "cold_palace") continue;
-    if (pun.lifecycle.status !== "active") continue;
 
     const details = pun.details as { statusEffectId: string };
     const statusEffectId = details.statusEffectId;
@@ -185,7 +189,7 @@ export function validateJusticeLinks(state: GameState): GameError[] {
     const effect = statusEffects.find((e) => e.id === statusEffectId);
     if (!effect) {
       errors.push(crossLinkErr(
-        `PunishmentRecord ${pun.id} (active, cold_palace) references statusEffectId=${statusEffectId} but no matching ColdPalaceEffect found`,
+        `PunishmentRecord ${pun.id} (cold_palace, ${pun.lifecycle.status}) references statusEffectId=${statusEffectId} but no matching ColdPalaceEffect found`,
       ));
       continue;
     }
@@ -197,17 +201,32 @@ export function validateJusticeLinks(state: GameState): GameError[] {
       continue;
     }
 
-    // Active punishment must have a not-yet-lifted ColdPalaceEffect.
-    if (effect.liftedTurn !== undefined) {
-      errors.push(crossLinkErr(
-        `PunishmentRecord ${pun.id} is active but linked ColdPalaceEffect ${statusEffectId} is lifted (liftedTurn=${effect.liftedTurn})`,
-      ));
-    }
-
     if (effect.sourcePunishmentId !== pun.id) {
       errors.push(crossLinkErr(
         `PunishmentRecord ${pun.id} references statusEffectId=${statusEffectId} but ColdPalaceEffect.sourcePunishmentId=${effect.sourcePunishmentId}`,
       ));
+    }
+
+    if (pun.targetId !== effect.characterId) {
+      errors.push(crossLinkErr(
+        `PunishmentRecord ${pun.id} targetId=${pun.targetId} but ColdPalaceEffect.characterId=${effect.characterId}`,
+      ));
+    }
+
+    if (pun.lifecycle.status === "active") {
+      // Active punishment → effect must not be lifted.
+      if (effect.liftedTurn !== undefined) {
+        errors.push(crossLinkErr(
+          `PunishmentRecord ${pun.id} is active but linked ColdPalaceEffect ${statusEffectId} is lifted (liftedTurn=${effect.liftedTurn})`,
+        ));
+      }
+    } else {
+      // Resolved/completed punishment → effect should be lifted.
+      if (effect.liftedTurn === undefined) {
+        errors.push(crossLinkErr(
+          `PunishmentRecord ${pun.id} is ${pun.lifecycle.status} but linked ColdPalaceEffect ${statusEffectId} is still active (no liftedTurn)`,
+        ));
+      }
     }
   }
 
