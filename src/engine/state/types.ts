@@ -281,6 +281,8 @@ export interface OfficialHistoryEntry {
   vacatedPostId?: string;
   /** 由候补授官转正而来的溯源（status=active 的授官条目专有；其它条目不设）。 */
   appointment?: OfficialAppointmentProvenance;
+  /** 皇帝亲发惩戒性处置（降职/免官）关联的 PunishmentRecord id；行政性变迁不设（PR3C-3a）。 */
+  punishmentId?: string;
 }
 
 /** 候补授官转正的可追溯溯源（写入 officialHistory，留存科举出身）。 */

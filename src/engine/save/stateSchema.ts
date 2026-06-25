@@ -148,6 +148,7 @@ const officialHistorySchema = z.strictObject({
       ageAtAppointment: z.number().int().min(1),
     })
     .optional(),
+  punishmentId: z.string().regex(/^pun_\d{6}$/).optional(),
 });
 
 const candidateAptitudeSchema = z.strictObject({
@@ -298,6 +299,7 @@ const punishmentBaseSchema = z.object({
   id: punishmentIdSchema,
   caseId: caseIdSchema.optional(),
   targetId: z.string(),
+  targetKind: z.enum(["consort", "official"]),
   actorId: z.string(),
   severity: z.enum(["minor", "moderate", "severe", "terminal"]),
   imposedAt: gameTimeSchema,
@@ -307,13 +309,14 @@ const punishmentBaseSchema = z.object({
 });
 
 const punishmentRecordSchema = z.discriminatedUnion("kind", [
-  punishmentBaseSchema.extend({ kind: z.literal("rank_demotion"), details: z.strictObject({ fromRankId: z.string(), toRankId: z.string() }) }),
-  punishmentBaseSchema.extend({ kind: z.literal("strip_title"), details: z.strictObject({ removedTitle: z.string() }) }),
-  punishmentBaseSchema.extend({ kind: z.literal("finite_confinement"), details: z.strictObject({ statusEffectId: z.string(), endTurnExclusive: z.number().int() }) }),
-  punishmentBaseSchema.extend({ kind: z.literal("indefinite_confinement"), details: z.strictObject({ statusEffectId: z.string() }) }),
-  punishmentBaseSchema.extend({ kind: z.literal("cold_palace"), details: z.strictObject({ previousResidenceId: z.string(), coldPalaceResidenceId: z.string() }) }),
-  punishmentBaseSchema.extend({ kind: z.literal("execution"), details: z.strictObject({ deathCause: z.literal("imperial_execution") }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("rank_demotion"), details: z.strictObject({ fromRankId: z.string(), toRankId: z.string() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("strip_title"), details: z.strictObject({ removedTitle: z.string() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("finite_confinement"), details: z.strictObject({ statusEffectId: z.string(), endTurnExclusive: z.number().int() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("indefinite_confinement"), details: z.strictObject({ statusEffectId: z.string() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("cold_palace"), details: z.strictObject({ previousResidenceId: z.string(), coldPalaceResidenceId: z.string() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("consort"), kind: z.literal("execution"), details: z.strictObject({ deathCause: z.literal("imperial_execution") }) }),
   punishmentBaseSchema.extend({
+    targetKind: z.literal("consort"),
     kind: z.literal("strip_harem_authority"),
     details: z.strictObject({
       fromMode: z.literal("empress"),
@@ -323,6 +326,8 @@ const punishmentRecordSchema = z.discriminatedUnion("kind", [
       ]),
     }),
   }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("official"), kind: z.literal("official_demotion"), details: z.strictObject({ fromPostId: z.string(), toPostId: z.string().nullable() }) }),
+  punishmentBaseSchema.extend({ targetKind: z.literal("official"), kind: z.literal("official_dismissal"), details: z.strictObject({ fromPostId: z.string() }) }),
 ]);
 
 const justiceNextSeqSchema = z.strictObject({

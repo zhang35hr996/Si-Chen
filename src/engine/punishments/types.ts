@@ -27,7 +27,18 @@ export type PunishmentKind =
   | "execution"
   | "strip_harem_authority";
 
+/**
+ * 官员目标的惩戒种类（Phase 3 PR3C-3a）。与侍君 PunishmentKind 分立——官员后果走独立 planner
+ * （忠心/家族皇恩），**绝不**经侍君属性后果。两者皆即时完成（completed）。
+ */
+export type OfficialPunishmentKind = "official_demotion" | "official_dismissal";
+
 export type PunishmentSeverity = "minor" | "moderate" | "severe" | "terminal";
+
+/** 官员惩戒严重度（降职=中度；免官=重度）。 */
+export function officialPunishmentSeverity(kind: OfficialPunishmentKind): PunishmentSeverity {
+  return kind === "official_dismissal" ? "severe" : "moderate";
+}
 
 /** Severity derived from PunishmentKind. Used by personality modifiers and consequence planner. */
 export function punishmentSeverity(kind: PunishmentKind): PunishmentSeverity {

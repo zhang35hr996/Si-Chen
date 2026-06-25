@@ -33,6 +33,7 @@ import { dismissOfficial, restoreOfficialToActive, retireOfficial } from "../eng
 import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { EXAM_MONTH, acknowledgeExaminationResult, hasGeneratedExaminationForYear, settleAnnualExamination } from "../engine/officials/examination";
 import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/officials/annualReview";
+import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmentCommand } from "../engine/officials/officialPunishment";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
@@ -354,6 +355,24 @@ export class GameStore {
     const result = appointOfficialCandidate(this.state, db, candidateId, postId, toGameTime(this.state.calendar));
     if (!result.ok) return result;
     this.tracedSet(result.value, { kind: "action", sourceId: "appointOfficialCandidate", label: `appoint candidate: ${candidateId}→${postId}` });
+    return ok(undefined);
+  }
+
+  /** 皇帝亲发官员惩戒（降职/免官）：进 PUNISH 记录 + 独立后果 + 自动补缺（PR3C-3a）。 */
+  punishOfficial(db: ContentDB, command: OfficialPunishmentCommand): Result<{ punishmentId: string }, GameError> {
+    const r = punishOfficial(this.state, db, command, toGameTime(this.state.calendar));
+    if (!r.ok) return r;
+    this.state = r.value.state;
+    this.emit();
+    return ok({ punishmentId: r.value.punishmentId });
+  }
+
+  /** 行政升迁（不算惩罚，不创建 PunishmentRecord；PR3C-3a）。 */
+  promoteOfficialAdministratively(db: ContentDB, officialId: string, toPostId: string): Result<void, GameError> {
+    const r = promoteOfficialAdministratively(this.state, db, officialId, toPostId, toGameTime(this.state.calendar));
+    if (!r.ok) return r;
+    this.state = r.value;
+    this.emit();
     return ok(undefined);
   }
 
@@ -921,6 +940,7 @@ export class GameStore {
       id: punishmentId,
       targetId: command.targetId,
       actorId: "player",
+      targetKind: "consort",
       kind,
       severity: punishmentSeverity(kind),
       imposedAt: now,
@@ -1059,6 +1079,7 @@ export class GameStore {
     const rankPunishment: PunishmentRecord = {
       id: punishmentId,
       targetId,
+      targetKind: "consort",
       actorId: "player",
       kind,
       severity: punishmentSeverity(kind),
@@ -1182,6 +1203,7 @@ export class GameStore {
         kind: "strip_harem_authority",
         targetId,
         actorId: "player",
+        targetKind: "consort",
         severity: punishmentSeverity("strip_harem_authority"),
         imposedAt: now,
         sourceLocation: "zichendian",
