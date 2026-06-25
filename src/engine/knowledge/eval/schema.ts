@@ -1,8 +1,8 @@
 /**
  * Schema for deterministic knowledge retrieval evaluation cases.
  *
- * All expected IDs must be stable chunk IDs (using the {#anchor} syntax from PR7A).
- * The eval runner validates that all expected IDs actually exist in the corpus.
+ * All expected and forbidden IDs must be stable chunk IDs (using the {#anchor} syntax from PR7A).
+ * The eval runner validates that all referenced IDs actually exist in the corpus.
  */
 import { z } from "zod";
 
@@ -17,56 +17,101 @@ export const evalCategorySchema = z.enum([
 
 export type EvalCategory = z.infer<typeof evalCategorySchema>;
 
-export const evalCaseSchema = z.object({
-  id: z.string().min(1),
-  query: z.string().min(1),
-  limit: z.number().int().min(1).max(20),
+const knowledgeSourceTypeSchema = z.enum([
+  "world_rule",
+  "etiquette",
+  "location",
+  "official_system",
+  "character_public_profile",
+  "historical_archive",
+]);
 
-  /** Restrict search to these source types. */
-  sourceTypes: z.array(z.string()).optional(),
-  /** Maximum visibility the caller may see. */
-  visibilityCeiling: z.string().optional(),
-  /** In-game time for temporal filtering (year/month/period/dayIndex). */
-  currentTime: z.object({
-    year: z.number(),
-    month: z.number(),
-    period: z.enum(["early", "mid", "late"]),
-    dayIndex: z.number(),
-  }).optional(),
+const knowledgeVisibilitySchema = z.enum(["public", "restricted", "imperial"]);
 
-  /**
-   * At least one of these chunk IDs must appear in the top-`limit` results.
-   * Used for "any relevant chunk is fine" assertions.
-   */
-  expectedAnyOf: z.array(z.string()).optional(),
+export const evalCaseSchema = z
+  .object({
+    id: z.string().min(1),
+    query: z.string().min(1),
+    limit: z.number().int().min(1).max(20),
 
-  /**
-   * All of these chunk IDs must appear in the top-`limit` results.
-   * Used for assertions where every ID is required.
-   */
-  expectedAll: z.array(z.string()).optional(),
+    /** Restrict search to these source types. */
+    sourceTypes: z.array(knowledgeSourceTypeSchema).optional(),
+    /** Maximum visibility the caller may see. */
+    visibilityCeiling: knowledgeVisibilitySchema.optional(),
+    /** In-game time for temporal filtering (year/month/period/dayIndex). */
+    currentTime: z
+      .object({
+        year: z.number(),
+        month: z.number(),
+        period: z.enum(["early", "mid", "late"]),
+        dayIndex: z.number(),
+      })
+      .optional(),
 
-  /**
-   * None of these chunk IDs may appear in any position of the results.
-   * Primary gate for confusable and dynamic-negative cases.
-   */
-  forbiddenIds: z.array(z.string()).optional(),
+    /**
+     * At least one of these chunk IDs must appear in the top-`limit` results.
+     */
+    expectedAnyOf: z.array(z.string()).optional(),
 
-  /**
-   * When true: the result set must be completely empty (zero hits).
-   * Used for cases where no static lore should match.
-   */
-  expectedZeroHits: z.boolean().optional(),
+    /**
+     * All of these chunk IDs must appear in the top-`limit` results.
+     */
+    expectedAll: z.array(z.string()).optional(),
 
-  category: evalCategorySchema,
-  /** Human-readable note about what this case is testing. */
-  note: z.string().optional(),
-});
+    /**
+     * None of these chunk IDs may appear in any position of the results.
+     */
+    forbiddenIds: z.array(z.string()).optional(),
+
+    /**
+     * When true: the result set must be completely empty (zero hits).
+     */
+    expectedZeroHits: z.boolean().optional(),
+
+    category: evalCategorySchema,
+    note: z.string().optional(),
+  })
+  .refine(
+    (c) => {
+      // A case must have at least one meaningful assertion.
+      const hasPositive =
+        (c.expectedAnyOf?.length ?? 0) > 0 || (c.expectedAll?.length ?? 0) > 0;
+      const hasForbidden = (c.forbiddenIds?.length ?? 0) > 0;
+      const hasZero = c.expectedZeroHits === true;
+      return hasPositive || hasForbidden || hasZero;
+    },
+    {
+      message:
+        "Case must have at least one assertion: expectedAnyOf/expectedAll with items, forbiddenIds with items, or expectedZeroHits: true",
+    },
+  )
+  .refine(
+    (c) => {
+      // expectedZeroHits: true cannot coexist with positive expectations.
+      if (c.expectedZeroHits !== true) return true;
+      return (c.expectedAnyOf?.length ?? 0) === 0 && (c.expectedAll?.length ?? 0) === 0;
+    },
+    {
+      message:
+        "expectedZeroHits: true cannot coexist with expectedAnyOf or expectedAll",
+    },
+  )
+  .refine(
+    (c) => {
+      // Expected IDs and forbidden IDs must be disjoint.
+      const expected = new Set([...(c.expectedAnyOf ?? []), ...(c.expectedAll ?? [])]);
+      const forbidden = c.forbiddenIds ?? [];
+      return forbidden.every((id) => !expected.has(id));
+    },
+    {
+      message: "An ID cannot appear in both expected and forbiddenIds",
+    },
+  );
 
 export type KnowledgeEvalCase = z.infer<typeof evalCaseSchema>;
 
 export function parseEvalCases(jsonlContent: string): KnowledgeEvalCase[] {
-  return jsonlContent
+  const cases = jsonlContent
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("//"))
@@ -78,4 +123,15 @@ export function parseEvalCases(jsonlContent: string): KnowledgeEvalCase[] {
       }
       return result.data;
     });
+
+  // Validate unique case IDs.
+  const seen = new Set<string>();
+  for (const c of cases) {
+    if (seen.has(c.id)) {
+      throw new Error(`cases.jsonl: duplicate case id '${c.id}'`);
+    }
+    seen.add(c.id);
+  }
+
+  return cases;
 }

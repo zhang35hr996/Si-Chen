@@ -111,12 +111,17 @@ if (mode !== "keyword") {
 const index = new SqliteKeywordIndex(":memory:");
 index.rebuild(chunks);
 
-const { results, visibilityLeakCount, temporalLeakCount, missingExpectedIds } = runKeywordEval(cases, {
+const { results, visibilityLeakCount, temporalLeakCount, missingReferencedIds } = runKeywordEval(cases, {
   chunks,
   keywordIndex: index,
 });
 
 index.close();
+
+// Normalize to the shape report expects (backward-compat rename)
+const missingExpectedIds = missingReferencedIds
+  .filter((m) => m.role === "expected")
+  .map(({ caseId, missingId }) => ({ caseId, missingId }));
 
 const metrics = computeAggregateMetrics(results, visibilityLeakCount, temporalLeakCount);
 const report = buildReport("keyword", metrics, missingExpectedIds);
@@ -135,7 +140,7 @@ console.log(`  forbidden hits   : ${metrics.forbiddenHitCount}`);
 console.log(`  visibility leak  : ${metrics.visibilityLeakage}`);
 console.log(`  temporal leak    : ${metrics.temporalLeakage}`);
 console.log(`  duplicate hits   : ${metrics.duplicateHits}`);
-console.log(`  missing IDs      : ${missingExpectedIds.length}`);
+console.log(`  missing IDs      : ${missingReferencedIds.length}`);
 
 if (metrics.failedCases.length > 0) {
   console.log(`\n  Failed cases (${metrics.failedCases.length}):`);
@@ -159,10 +164,27 @@ console.log(`\n[knowledge:eval] reports written to ${outDir}/`);
 
 const violations: string[] = [];
 
-if (missingExpectedIds.length > 0) {
-  violations.push(`${missingExpectedIds.length} expected chunk ID(s) not found in corpus`);
-  for (const { caseId, missingId } of missingExpectedIds) {
-    violations.push(`  case '${caseId}': missing '${missingId}'`);
+if (missingReferencedIds.length > 0) {
+  violations.push(`${missingReferencedIds.length} referenced chunk ID(s) not found in corpus`);
+  for (const { caseId, missingId, role } of missingReferencedIds) {
+    violations.push(`  case '${caseId}' [${role}]: missing '${missingId}'`);
+  }
+}
+
+if (metrics.unexpectedZeroHits > 0) {
+  violations.push(`unexpected zero hits: ${metrics.unexpectedZeroHits} case(s) required empty results but got hits`);
+}
+
+// Gate on expectedAll assertion violations — allMet=false means a required chunk wasn't found.
+const allMetViolations = metrics.failedCases.filter(
+  (c) => c.expectedAll.length > 0 && !c.allMet,
+);
+if (allMetViolations.length > 0) {
+  violations.push(
+    `expectedAll violations: ${allMetViolations.length} case(s) missing required chunk(s)`,
+  );
+  for (const c of allMetViolations) {
+    violations.push(`  case '${c.caseId}': not all expectedAll found`);
   }
 }
 

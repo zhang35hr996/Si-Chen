@@ -4,8 +4,8 @@
  * Keyword mode: fully deterministic, no network, suitable for CI.
  * Hybrid mode: requires an embedding provider, used for local benchmarking only.
  *
- * The runner validates that all expected IDs exist in the corpus before
- * running queries, so a stale cases.jsonl is caught immediately.
+ * The runner validates that all referenced IDs (expected AND forbidden) exist in the corpus
+ * before running queries, so a stale cases.jsonl is caught immediately.
  */
 import type { KnowledgeChunk, KnowledgeSourceType, KnowledgeVisibility } from "../model";
 import type { KnowledgeKeywordIndex, KnowledgeKeywordQuery } from "../index/keyword-index";
@@ -20,12 +20,15 @@ export interface EvalRunnerOptions {
 
 export interface EvalRunResult {
   results: CaseResult[];
-  /** Chunk IDs found in forbidden results that were in restricted/imperial visibility chunks. */
+  /** Chunks returned that had visibility above the requested ceiling. */
   visibilityLeakCount: number;
-  /** Chunk IDs returned that should have been filtered by currentTime. */
+  /** Chunks returned that should have been filtered by currentTime. */
   temporalLeakCount: number;
-  /** Cases where an expected chunk ID did not exist in the corpus at all. */
-  missingExpectedIds: Array<{ caseId: string; missingId: string }>;
+  /**
+   * IDs referenced in cases (expected OR forbidden) that do not exist in the corpus.
+   * A non-empty list means cases.jsonl is stale and must be updated.
+   */
+  missingReferencedIds: Array<{ caseId: string; missingId: string; role: "expected" | "forbidden" }>;
 }
 
 export function runKeywordEval(
@@ -35,12 +38,17 @@ export function runKeywordEval(
   const allChunkIds = new Set(opts.chunks.map((c) => c.id));
   const chunkById = new Map(opts.chunks.map((c) => [c.id, c]));
 
-  const missingExpectedIds: EvalRunResult["missingExpectedIds"] = [];
+  const missingReferencedIds: EvalRunResult["missingReferencedIds"] = [];
 
   for (const c of cases) {
     for (const id of [...(c.expectedAnyOf ?? []), ...(c.expectedAll ?? [])]) {
       if (!allChunkIds.has(id)) {
-        missingExpectedIds.push({ caseId: c.id, missingId: id });
+        missingReferencedIds.push({ caseId: c.id, missingId: id, role: "expected" });
+      }
+    }
+    for (const id of c.forbiddenIds ?? []) {
+      if (!allChunkIds.has(id)) {
+        missingReferencedIds.push({ caseId: c.id, missingId: id, role: "forbidden" });
       }
     }
   }
@@ -83,22 +91,18 @@ export function runKeywordEval(
       }
     }
 
-    // Temporal leak: a chunk appeared in results that should be excluded by currentTime
+    // Temporal leak: a chunk appeared in results that should be excluded by currentTime.
+    // Use dayIndex directly — the authoritative field for temporal comparison.
     if (c.currentTime) {
+      const currentDay = c.currentTime.dayIndex;
       for (const h of hits) {
         const chunk = chunkById.get(h.chunk.id);
         if (!chunk) continue;
-        const t = c.currentTime;
-        const currentDay = t.year * 10000 + t.month * 100 + (t.period === "early" ? 0 : t.period === "mid" ? 1 : 2);
-        if (chunk.validFrom) {
-          const vf = chunk.validFrom;
-          const fromDay = vf.year * 10000 + vf.month * 100 + (vf.period === "early" ? 0 : vf.period === "mid" ? 1 : 2);
-          if (currentDay < fromDay) temporalLeakCount++;
+        if (chunk.validFrom !== undefined && currentDay < chunk.validFrom.dayIndex) {
+          temporalLeakCount++;
         }
-        if (chunk.validUntil) {
-          const vu = chunk.validUntil;
-          const untilDay = vu.year * 10000 + vu.month * 100 + (vu.period === "early" ? 0 : vu.period === "mid" ? 1 : 2);
-          if (currentDay > untilDay) temporalLeakCount++;
+        if (chunk.validUntil !== undefined && currentDay > chunk.validUntil.dayIndex) {
+          temporalLeakCount++;
         }
       }
     }
@@ -106,5 +110,5 @@ export function runKeywordEval(
     results.push(computeCaseResult(c, actualIds, details));
   }
 
-  return { results, visibilityLeakCount, temporalLeakCount, missingExpectedIds };
+  return { results, visibilityLeakCount, temporalLeakCount, missingReferencedIds };
 }

@@ -102,9 +102,9 @@ describe("production lore docs: stable anchors", () => {
   }
 });
 
-// ── 3. All golden expected IDs exist in corpus ────────────────────────────────
+// ── 3. All golden referenced IDs exist in corpus (expected AND forbidden) ────
 
-describe("golden cases: expected IDs exist in corpus", () => {
+describe("golden cases: all referenced IDs exist in corpus", () => {
   const casesContent = readFileSync(CASES_PATH, "utf8");
   const cases = parseEvalCases(casesContent);
 
@@ -113,10 +113,14 @@ describe("golden cases: expected IDs exist in corpus", () => {
   });
 
   for (const c of cases) {
-    const allExpected = [...(c.expectedAnyOf ?? []), ...(c.expectedAll ?? [])];
-    if (allExpected.length === 0) continue;
-    it(`case '${c.id}': all expected IDs exist`, () => {
-      for (const id of allExpected) {
+    const allReferenced = [
+      ...(c.expectedAnyOf ?? []),
+      ...(c.expectedAll ?? []),
+      ...(c.forbiddenIds ?? []),
+    ];
+    if (allReferenced.length === 0) continue;
+    it(`case '${c.id}': all referenced IDs exist`, () => {
+      for (const id of allReferenced) {
         expect(chunkIds, `missing ID '${id}' in case '${c.id}'`).toContain(id);
       }
     });
@@ -375,7 +379,7 @@ describe("eval isolation", () => {
 // ── 15. Missing expected ID causes gate failure ───────────────────────────────
 
 describe("eval hard gates", () => {
-  it("missing expected ID is detected in missingExpectedIds", () => {
+  it("missing expected ID is detected in missingReferencedIds", () => {
     const fakeCases = parseEvalCases(
       JSON.stringify({
         id: "fake",
@@ -389,8 +393,28 @@ describe("eval hard gates", () => {
     index.rebuild(corpus);
     const result = runKeywordEval(fakeCases, { chunks: corpus, keywordIndex: index });
     index.close();
-    expect(result.missingExpectedIds).toHaveLength(1);
-    expect(result.missingExpectedIds[0]?.missingId).toBe("does.not#exist");
+    expect(result.missingReferencedIds).toHaveLength(1);
+    expect(result.missingReferencedIds[0]?.missingId).toBe("does.not#exist");
+    expect(result.missingReferencedIds[0]?.role).toBe("expected");
+  });
+
+  it("missing forbidden ID is detected in missingReferencedIds", () => {
+    const fakeCases = parseEvalCases(
+      JSON.stringify({
+        id: "fake-forbidden",
+        query: "test",
+        limit: 5,
+        forbiddenIds: ["does.not#forbidden"],
+        category: "direct",
+      }),
+    );
+    const index = new SqliteKeywordIndex(":memory:");
+    index.rebuild(corpus);
+    const result = runKeywordEval(fakeCases, { chunks: corpus, keywordIndex: index });
+    index.close();
+    const missing = result.missingReferencedIds.find((m) => m.missingId === "does.not#forbidden");
+    expect(missing).toBeDefined();
+    expect(missing?.role).toBe("forbidden");
   });
 
   it("forbidden hit is reported in CaseResult.forbiddenHits", () => {
