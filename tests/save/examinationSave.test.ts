@@ -62,7 +62,7 @@ describe("examination save", () => {
     expect(loaded.ok).toBe(true);
   });
 
-  it("v11 old save (no candidate fields) migrates to current via MIGRATIONS[11]", () => {
+  it("v11 old save is rejected as OBSOLETE_VERSION (not quarantined)", () => {
     const s = createNewGameState(db, 1);
     const stateV11 = { ...s } as Record<string, unknown>;
     delete stateV11["officialCandidates"];
@@ -76,9 +76,9 @@ describe("examination save", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(env));
     const loaded = readSlot(storage, db, "slot1", { now: () => 2 });
-    expect(loaded.ok).toBe(true);
-    if (!loaded.ok) return;
-    expect(loaded.value.state.officialCandidates).toEqual({});
-    expect(loaded.value.state.examinationResults).toEqual([]);
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok) return;
+    expect(loaded.error.code).toBe("OBSOLETE_VERSION");
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).not.toBeNull();
   });
 });

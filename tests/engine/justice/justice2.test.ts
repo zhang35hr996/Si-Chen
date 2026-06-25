@@ -610,8 +610,8 @@ describe("save schema — justice provenance fields", () => {
 // ── Section V11: v11 save rejection ──────────────────────────────────────────
 
 describe("save format version", () => {
-  it("VER1. SAVE_FORMAT_VERSION is 12", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(12);
+  it("VER1. SAVE_FORMAT_VERSION is 13", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(13);
   });
 
   it("VER2. v11 save is rejected with OBSOLETE_VERSION (not quarantined as corrupt)", () => {
