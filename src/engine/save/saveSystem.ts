@@ -20,7 +20,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 15;
+export const SAVE_FORMAT_VERSION = 16;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -227,27 +227,6 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       checksum: checksumOf(state as GameState),
     };
   },
-  // v14 → v15: canonical apMax changed from 6 to 5.  Clamp any saved ap/apMax
-  // values so existing saves continue to run at the correct action-point budget.
-  14: (old): SaveEnvelope => {
-    const env = old as SaveEnvelope;
-    const state = structuredClone(env.state) as GameState;
-    const cal = state.calendar;
-    if (cal.apMax === 6) {
-      (state as { calendar: typeof cal }).calendar = {
-        ...cal,
-        apMax: 5,
-        ap: Math.min(cal.ap, 5),
-      };
-    }
-    const next = state;
-    return {
-      ...env,
-      formatVersion: 15,
-      state: next,
-      checksum: checksumOf(next),
-    };
-  },
   // v13 → v14: 官员增静态能力 aptitude + 动态履历 reviewState（PR3C-1）。回填优先级：已有值 →
   // 候补出身者继承其候补能力（v13 已有 PR3B 授官记录，须保持同一人能力一致）→ 否则稳定 seed 确定性
   // 派生。reviewState 取初值。物化入档，读档不重算。
@@ -288,6 +267,21 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       state: state as GameState,
       checksum: checksumOf(state as GameState),
     };
+  },
+  // v15 → v16: canonical apMax changed from 6 to 5 (PR7A).  Clamp any saved
+  // ap/apMax so existing saves run at the correct action-point budget.
+  15: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    const cal = state.calendar;
+    if (cal.apMax === 6) {
+      (state as { calendar: typeof cal }).calendar = {
+        ...cal,
+        apMax: 5,
+        ap: Math.min(cal.ap, 5),
+      };
+    }
+    return { ...env, formatVersion: 16, state, checksum: checksumOf(state) };
   },
 };
 
