@@ -283,6 +283,16 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     }
     return { ...env, formatVersion: 16, state, checksum: checksumOf(state) };
   },
+  // v17 → v18: 冷宫事件通报队列（PUNISH-4C）。旧档无此字段，补空数组。
+  17: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (!Array.isArray(state.coldPalaceIncidents)) {
+      state.coldPalaceIncidents = [];
+    }
+    const gs = state as unknown as GameState;
+    return { ...env, formatVersion: 18, state: gs, checksum: checksumOf(gs) };
+  },
   // v16 → v17: PunishmentRecord domain-neutral 化（PR3C-3a）。旧档记录全部为侍君目标，补 targetKind="consort"。
   16: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;

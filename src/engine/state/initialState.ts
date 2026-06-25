@@ -75,6 +75,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     eventReactionLog: [],
     sceneHistory: [],
     pendingAftermath: [],
+    coldPalaceIncidents: [],
     rngSeed: overrides.rngSeed ?? 1,
   };
 }

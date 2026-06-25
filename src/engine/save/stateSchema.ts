@@ -594,6 +594,17 @@ export const gameStateSchema = z.strictObject({
       resolved: z.boolean(),
     }),
   ),
+  coldPalaceIncidents: z.array(
+    z.strictObject({
+      id: nonEmpty,
+      residentId: idSchema,
+      effectId: nonEmpty,
+      kind: z.enum(["petition", "health_deterioration"]),
+      occurredAt: gameTimeSchema,
+      acknowledged: z.boolean(),
+      healthDelta: z.number().int().optional(),
+    }),
+  ).default([]),
   pendingDaxuan: z.strictObject({ kind: z.enum(["announce", "dianxuan"]), year: z.number() }).optional(),
   gameOver: z.strictObject({ cause: z.literal("sovereign_death"), at: gameTimeSchema }).optional(),
   haremAdministration: z.discriminatedUnion("mode", [

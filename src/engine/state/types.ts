@@ -657,6 +657,27 @@ export interface PendingAftermath {
   resolved: boolean;
 }
 
+// ── 冷宫事件通报（PUNISH-4C）────────────────────────────────────────────────
+export type ColdPalaceIncidentKind = "petition" | "health_deterioration";
+
+/**
+ * 一次月度冷宫事件：由月度 tick 确定性生成，player 在全局中断界面确认后标 acknowledged。
+ * id = "cpi_{residentId}_{year}_{MM}"——每居民每月至多一条，天然去重。
+ */
+export interface ColdPalaceIncident {
+  /** "cpi_{residentId}_{year}_{MM}" — deterministic, idempotent dedup key. */
+  id: string;
+  residentId: string;
+  /** id of the ColdPalaceEffect active when this incident was generated. */
+  effectId: string;
+  kind: ColdPalaceIncidentKind;
+  occurredAt: GameTime;
+  /** false = awaiting player acknowledgement; true = already presented. */
+  acknowledged: boolean;
+  /** Health delta applied (always negative); only present for health_deterioration. */
+  healthDelta?: number;
+}
+
 // ── 角色持续状态（可复用：禁足 / 后续冷宫·下狱·守丧·卧病）─────────────────
 // 单一权威的「持续效果」时间线：append-mostly，解除时就地标记 lifted 而非物理删除，
 // 以保留历史。活跃判定只依据 startTurn/endTurnExclusive/liftedTurn，不存「剩余月份」。
@@ -871,6 +892,8 @@ export interface GameState {
   overnightWith?: { charId: string; morningDayIndex: number };
   /** 持久化身后事队列（皇帝不入队）。 */
   pendingAftermath: PendingAftermath[];
+  /** 月度冷宫事件通报队列（PUNISH-4C）。append-only；acknowledged=true 表已呈报。 */
+  coldPalaceIncidents: ColdPalaceIncident[];
   /**
    * 持久化「待消费的大选日历事件」：到点（catch-up）由时间事务统一入口探测置位，
    * 与具体行动路径无关；UI 消费后清空。announce 优先于 dianxuan。
