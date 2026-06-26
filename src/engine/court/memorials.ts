@@ -360,6 +360,13 @@ export function validateMemorials(state: GameState): GameError[] {
         if (!presentIds.has(req))
           e("MEMORIAL_MISSING_OPTION", `奏折「${m.id}」缺少必需选项「${req}」`, { id: m.id, missing: req });
       }
+      // 不允许多余选项（exact match）。
+      const TREASURY_REQUIRED = new Set(TREASURY_OPTION_IDS);
+      for (const opt of m.payload.options) {
+        if (!TREASURY_REQUIRED.has(opt.id as typeof TREASURY_OPTION_IDS[number])) {
+          e("MEMORIAL_EXTRA_OPTION", `财政奏折「${m.id}」包含多余选项「${opt.id}」`, { id: m.id, extraOption: opt.id });
+        }
+      }
     }
 
     // pending/resolved 一致性 + resolution ∈ 合法选项 + resolvedAt ≥ createdAt。

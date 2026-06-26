@@ -248,4 +248,13 @@ describe("validateMemorials — Group G: treasury payload", () => {
   it("TREASURY_OPTION_IDS contains exactly audit/surtax/defer", () => {
     expect([...TREASURY_OPTION_IDS]).toEqual(["audit", "surtax", "defer"]);
   });
+
+  it("treasury payload with extra option → MEMORIAL_EXTRA_OPTION", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const extraOpt: MemorialOption = { id: "unknown_opt", label: "多余选项", effects: [] };
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: [...m.payload.options, extraOpt] } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_EXTRA_OPTION");
+  });
 });

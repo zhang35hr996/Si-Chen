@@ -167,4 +167,16 @@ describe("Group F: store.resolveMemorial — treasury memorial", () => {
     expect(emits).toBe(0);
     expect(JSON.stringify(store.getState())).toBe(snap);
   });
+
+  // Coverage note: the top-level "store.resolveMemorial" disaster test already verifies emit-on-success
+  // for the same underlying method. This test explicitly documents that the treasury resolution path also
+  // triggers the autosave subscriber (onCommitted equivalent) on success.
+  it("onCommitted fires on treasury resolve success (emit triggers autosave subscriber)", () => {
+    const { store, memId } = storeWithTreasuryMemorial();
+    let callCount = 0;
+    store.subscribe(() => { callCount += 1; });
+    const r = store.resolveMemorial(db, memId, "defer");
+    expect(r.ok).toBe(true);
+    expect(callCount).toBe(1); // emit() fires exactly once → autosave subscriber is triggered
+  });
 });
