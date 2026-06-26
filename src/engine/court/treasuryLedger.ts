@@ -210,6 +210,14 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
       });
     }
 
+    // 12. option.treasuryDelta 与台账 delta 一致
+    const matchedOption = memorial.payload.options.find((o) => o.id === entry.source.optionId);
+    if (matchedOption?.treasuryDelta !== undefined && matchedOption.treasuryDelta !== entry.delta) {
+      e("TREASURY_LEDGER_OPTION_MISMATCH", `台账条目「${entry.id}」delta(${entry.delta})与选项「${entry.source.optionId}」treasuryDelta(${matchedOption.treasuryDelta})不一致`, {
+        id: entry.id, optionId: entry.source.optionId, ledgerDelta: entry.delta, optionDelta: matchedOption.treasuryDelta,
+      });
+    }
+
     // 13. 每个奏折至多一条台账
     if (seenSourceMemorials.has(entry.source.memorialId)) {
       e("TREASURY_LEDGER_DUP_SOURCE", `奏折「${entry.source.memorialId}」产生了多条台账条目`, {
@@ -225,6 +233,21 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
     e("TREASURY_LEDGER_CURRENT_MISMATCH", `国库当前余额（${state.resources.nation.treasury}）与台账末条目「${last.id}」balanceAfter（${last.balanceAfter}）不一致`, {
       currentTreasury: state.resources.nation.treasury, lastBalanceAfter: last.balanceAfter, lastId: last.id,
     });
+  }
+
+  // 16/17. 已批奏折中，选定选项有 treasuryDelta 者必须恰好有一条台账（多条由 check 13 覆盖，此处查缺失）。
+  for (const [, m] of Object.entries(state.memorials)) {
+    if (m.status !== "resolved") continue;
+    const chosenOption = m.payload.options.find((o) => o.id === m.resolution);
+    if (!chosenOption) continue;
+    if (chosenOption.treasuryDelta !== undefined) {
+      const ledgerForThis = state.treasuryLedger.filter((entry) => entry.source.memorialId === m.id);
+      if (ledgerForThis.length === 0) {
+        e("TREASURY_LEDGER_MISSING_ENTRY", `已批奏折「${m.id}」选项「${chosenOption.id}」有国库变化但无台账条目`, {
+          id: m.id, optionId: chosenOption.id, treasuryDelta: chosenOption.treasuryDelta,
+        });
+      }
+    }
   }
 
   return errors;
