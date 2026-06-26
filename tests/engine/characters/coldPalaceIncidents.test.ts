@@ -8,7 +8,7 @@
  *   - health delta bounds
  *   - selector semantics (pending, oldest)
  *   - generated-consort support
- *   - save migration (v17→v18)
+ *   - save migration (v18→v19)
  *   - store.acknowledgeIncident
  *   - settlement GlobalInterruptKind integration
  *   - UI: ColdPalaceIncidentModal rendering
@@ -438,21 +438,19 @@ describe("GameStore.acknowledgeIncident", () => {
   });
 });
 
-// ── Save migration v17 → v18 ─────────────────────────────────────────────────
+// ── Save migration v18 → v19 ─────────────────────────────────────────────────
 
-describe("save migration v17 → v18 (coldPalaceIncidents)", () => {
+describe("save migration v18 → v19 (coldPalaceIncidents)", () => {
   it("adds empty coldPalaceIncidents array to state missing the field", () => {
     // Verify the migration target: any state created without coldPalaceIncidents
-    // will have it added as [] via the v17→v18 migration (or the .default([]) schema).
-    // We verify via initialState (which must always carry the field post-migration).
+    // will have it added as [] via the v18→v19 migration (or the .default([]) schema).
     const baseS = baseState();
     expect(Array.isArray(baseS.coldPalaceIncidents)).toBe(true);
-    // A cloned object without the field (simulating old v17 state) shows we handle it
-    const stateV17 = { ...baseS } as Record<string, unknown>;
-    delete stateV17.coldPalaceIncidents;
-    expect(stateV17.coldPalaceIncidents).toBeUndefined();
+    // A cloned object without the field (simulating old v18 state)
+    const stateV18 = { ...baseS } as Record<string, unknown>;
+    delete stateV18.coldPalaceIncidents;
+    expect(stateV18.coldPalaceIncidents).toBeUndefined();
     // After migration logic would run, it would be [].
-    // The schema also .default([]) covers schema-parse path.
     expect(baseS.coldPalaceIncidents).toEqual([]);
   });
 
@@ -462,9 +460,9 @@ describe("save migration v17 → v18 (coldPalaceIncidents)", () => {
     expect(state.coldPalaceIncidents).toHaveLength(0);
   });
 
-  it("SAVE_FORMAT_VERSION is now 18", async () => {
+  it("SAVE_FORMAT_VERSION is now 19", async () => {
     const { SAVE_FORMAT_VERSION } = await import("../../../src/engine/save/saveSystem");
-    expect(SAVE_FORMAT_VERSION).toBe(18);
+    expect(SAVE_FORMAT_VERSION).toBe(19);
   });
 });
 
