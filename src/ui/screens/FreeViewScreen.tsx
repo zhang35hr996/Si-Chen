@@ -11,7 +11,7 @@ import { isColdPalaceEffectActiveAt } from "../../engine/characters/coldPalace";
 import { canInterveneInColdPalace } from "../../engine/characters/coldPalaceIncidents";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
-import type { ColdPalaceEffect, ColdPalaceInterventionKind } from "../../engine/state/types";
+import type { ColdPalaceEffect } from "../../engine/state/types";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { canHoldCourt } from "../../store/gating";
@@ -39,8 +39,8 @@ export function FreeViewScreen({
   onDrawFortune?: () => void;
   onViewProfile?: (charId: string) => void;
   onRestoreFromColdPalace?: (charId: string) => void;
-  /** 亲临探视 / 遣太医诊治 (PUNISH-4E) */
-  onInterveneColdPalace?: (charId: string, kind: ColdPalaceInterventionKind) => void;
+  /** 打开探视弹窗（PUNISH-4E）— modal handles kind selection and confirmation */
+  onInterveneColdPalace?: (charId: string) => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[locationId];
@@ -121,24 +121,17 @@ export function FreeViewScreen({
                     </button>
                   )}
                   {onInterveneColdPalace && (
-                    <>
-                      <button
-                        type="button"
-                        className="punish-btn"
-                        disabled={!canInterveneInColdPalace(state, char.id, "personal_visit")}
-                        onClick={() => onInterveneColdPalace(char.id, "personal_visit")}
-                      >
-                        亲临探视
-                      </button>
-                      <button
-                        type="button"
-                        className="punish-btn"
-                        disabled={!canInterveneInColdPalace(state, char.id, "physician")}
-                        onClick={() => onInterveneColdPalace(char.id, "physician")}
-                      >
-                        遣太医诊治
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      className="punish-btn"
+                      disabled={
+                        !canInterveneInColdPalace(state, char.id, "personal_visit") &&
+                        !canInterveneInColdPalace(state, char.id, "physician")
+                      }
+                      onClick={() => onInterveneColdPalace(char.id)}
+                    >
+                      亲临探视 / 遣太医
+                    </button>
                   )}
                   {onRestoreFromColdPalace && (
                     <button

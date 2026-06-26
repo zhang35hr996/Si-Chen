@@ -1,14 +1,14 @@
 /**
- * PUNISH-4E: 长门宫探视选项弹窗。
- * 供需要二次确认的调用方使用（例如：先点「探视/诊治」再选类型）。
- * FreeViewScreen 默认直接调用 interveneInColdPalace，无需本弹窗。
+ * PUNISH-4E: 长门宫探视确认弹窗。
+ * 玩家在长门宫场景点击「亲临探视 / 遣太医」后弹出；在此处选择具体方式并确认。
  *
  * 设计约束：
- *  - 点击遮罩不确认（需明确选择一项）；
- *  - 两个按钮均有 double-click guard；
- *  - disabled 时展示工具提示原因。
+ *  - 点击遮罩不确认；
+ *  - 每个选项按钮有 double-click guard；失败后 guard 自动重置以允许重试；
+ *  - 失败错误信息原地展示；
+ *  - 文案统一用"恩宠"（对应 favor 属性）。
  */
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { ContentDB } from "../../engine/content/loader";
 import type { ColdPalaceInterventionKind, GameState } from "../../engine/state/types";
 import { canInterveneInColdPalace, COLD_PALACE_VISIT_FAVOR_DELTA, COLD_PALACE_PHYSICIAN_HEALTH_DELTA } from "../../engine/characters/coldPalaceIncidents";
@@ -24,11 +24,12 @@ export function ColdPalaceInterventionModal({
   db: ContentDB;
   state: GameState;
   charId: string;
-  /** Called when user selects a kind. Returns error string on failure (displayed in-place), null on success (parent should close). */
+  /** Returns null on success (parent closes modal), error string on failure (shown in-place). */
   onSelect: (kind: ColdPalaceInterventionKind) => string | null;
   onClose: () => void;
 }) {
   const submitted = useRef(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const char = db.characters[charId] ?? state.generatedConsorts[charId];
   const standing = state.standing[charId];
@@ -39,12 +40,15 @@ export function ColdPalaceInterventionModal({
   const canVisit = canInterveneInColdPalace(state, charId, "personal_visit");
   const canPhysician = canInterveneInColdPalace(state, charId, "physician");
 
-  function guard(kind: ColdPalaceInterventionKind): () => void {
-    return () => {
-      if (submitted.current) return;
-      submitted.current = true;
-      onSelect(kind);
-    };
+  function handleSelect(kind: ColdPalaceInterventionKind): void {
+    if (submitted.current) return;
+    submitted.current = true;
+    setErrorMsg(null);
+    const result = onSelect(kind);
+    if (result !== null) {
+      setErrorMsg(result);
+      submitted.current = false; // reset so player can retry
+    }
   }
 
   return (
@@ -56,25 +60,26 @@ export function ColdPalaceInterventionModal({
       </p>
       <div className="punish-modal__confirm">
         <p>请选择探视方式：</p>
+        {errorMsg && <p className="punish-modal__error">{errorMsg}</p>}
       </div>
       <div className="punish-modal__actions">
         <button
           type="button"
           className="punish-btn"
           disabled={!canVisit}
-          onClick={guard("personal_visit")}
-          title={canVisit ? undefined : "本月已探视或行动点不足"}
+          onClick={() => handleSelect("personal_visit")}
+          title={canVisit ? undefined : "本月已探视、有待决病危，或行动点不足"}
         >
-          亲临探视（+{COLD_PALACE_VISIT_FAVOR_DELTA} 好感）
+          亲临探视（恩宠 +{COLD_PALACE_VISIT_FAVOR_DELTA}）
         </button>
         <button
           type="button"
           className="punish-btn"
           disabled={!canPhysician}
-          onClick={guard("physician")}
-          title={canPhysician ? undefined : "本月已探视或行动点不足"}
+          onClick={() => handleSelect("physician")}
+          title={canPhysician ? undefined : "本月已探视、有待决病危、健康已满，或行动点不足"}
         >
-          遣太医诊治（+{COLD_PALACE_PHYSICIAN_HEALTH_DELTA} 健康）
+          遣太医诊治（健康 +{COLD_PALACE_PHYSICIAN_HEALTH_DELTA}）
         </button>
         <button
           type="button"

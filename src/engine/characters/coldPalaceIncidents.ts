@@ -370,16 +370,20 @@ export function hasIntervenedThisMonth(
 /**
  * Eligibility check for a player intervention.
  *
- * Conditions:
+ * Conditions (all must hold):
  *  - Resident exists, not deceased/candidate.
  *  - Resident currently has an active cold-palace effect.
  *  - No intervention already recorded for this resident this month.
  *  - Player has ≥ 1 AP remaining.
+ *  - No pending critical_illness incident (must resolve through the crisis path first).
+ *  - No critical_illness incident occurred this month (block circumventing the outcome).
+ *  - kind=physician: resident health < 100 (otherwise effect is zero and AP is wasted).
+ *  - kind=personal_visit: resident favor < 100 (same reason).
  */
 export function canInterveneInColdPalace(
   state: GameState,
   charId: string,
-  _kind: ColdPalaceInterventionKind,
+  kind: ColdPalaceInterventionKind,
 ): boolean {
   const standing = state.standing[charId];
   if (!standing) return false;
@@ -388,6 +392,27 @@ export function canInterveneInColdPalace(
   if (activeColdPalaceEffectFor(state, charId, dayIndex) === undefined) return false;
   if (hasIntervenedThisMonth(state.coldPalaceInterventions, charId, year, month)) return false;
   if (state.calendar.ap < COLD_PALACE_INTERVENTION_AP_COST) return false;
+
+  // Block while a crisis incident is awaiting resolution.
+  const hasPendingCritical = state.coldPalaceIncidents.some(
+    (i) => i.residentId === charId && i.kind === "critical_illness" && i.status === "pending_response",
+  );
+  if (hasPendingCritical) return false;
+
+  // Block when a critical illness occurred this month — prevents circumventing the resolution.
+  const hasCriticalThisMonth = state.coldPalaceIncidents.some(
+    (i) =>
+      i.residentId === charId &&
+      i.kind === "critical_illness" &&
+      i.occurredAt.year === year &&
+      i.occurredAt.month === month,
+  );
+  if (hasCriticalThisMonth) return false;
+
+  // Kind-specific cap guards — reject when the effect would be zero.
+  if (kind === "physician" && (standing.health ?? 100) >= 100) return false;
+  if (kind === "personal_visit" && (standing.favor ?? 0) >= 100) return false;
+
   return true;
 }
 
@@ -395,32 +420,3 @@ export function canInterveneInColdPalace(
  * Pure planner — returns an unattached ColdPalaceIntervention record.
  * The caller must validate eligibility via canInterveneInColdPalace before calling this.
  */
-export function planColdPalaceIntervention(
-  state: GameState,
-  charId: string,
-  kind: ColdPalaceInterventionKind,
-): ColdPalaceIntervention {
-  const { year, month, period, dayIndex } = state.calendar;
-  const effect = activeColdPalaceEffectFor(state, charId, dayIndex)!;
-  const occurredAt = { year, month, period, dayIndex };
-  const id = coldPalaceInterventionId(charId, year, month);
-
-  if (kind === "personal_visit") {
-    return {
-      id,
-      residentId: charId,
-      effectId: effect.id,
-      kind: "personal_visit",
-      occurredAt,
-      favorDelta: COLD_PALACE_VISIT_FAVOR_DELTA,
-    };
-  }
-  return {
-    id,
-    residentId: charId,
-    effectId: effect.id,
-    kind: "physician",
-    occurredAt,
-    healthDelta: COLD_PALACE_PHYSICIAN_HEALTH_DELTA,
-  };
-}

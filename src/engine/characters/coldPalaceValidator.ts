@@ -256,7 +256,14 @@ export function validateColdPalaceInterventionLinks(state: GameState): GameError
       }
     }
 
-    // 7. Kind-specific delta sign rules.
+    // 7. occurredAt must not be in the future.
+    if (occurredAt.dayIndex > state.calendar.dayIndex) {
+      errors.push(interventionErr(
+        `ColdPalaceIntervention "${id}": occurredAt.dayIndex ${occurredAt.dayIndex} is in the future (calendar.dayIndex=${state.calendar.dayIndex})`,
+      ));
+    }
+
+    // 8. Kind-specific delta sign rules.
     if (kind === "personal_visit") {
       const delta = intervention.favorDelta;
       if (delta <= 0) {

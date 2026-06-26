@@ -6,22 +6,24 @@
  *  - coldPalaceInterventionId: deterministic format
  *  - hasIntervenedThisMonth: month-scoped deduplication
  *  - canInterveneInColdPalace: active resident, active effect, AP check, deduplication
- *  - planColdPalaceIntervention: returns correct record for each kind
- *  - interveneInColdPalace (store): atomicity, AP deduction, state mutation, emit
+ *  - interveneInColdPalace (store): atomicity, AP deduction, state mutation, one emit
  *  - interveneInColdPalace: idempotent failure when already intervened
  *  - interveneInColdPalace: reject when no AP
  *  - interveneInColdPalace: reject when not in cold palace
  *  - interveneInColdPalace: reject when deceased
+ *  - interveneInColdPalace: reject pending critical illness / this-month critical illness
+ *  - interveneInColdPalace: reject when stat cap reached (health=100, favor=100)
+ *  - interveneInColdPalace: records actual clamped delta
+ *  - interveneInColdPalace: failure leaves state unchanged and emits 0 times
  *  - validator: duplicate ID, wrong sign deltas, mismatched effectId
  */
 import { describe, expect, it, vi } from "vitest";
 import { createGameStore } from "../../../src/store/gameStore";
-import type { GameState } from "../../../src/engine/state/types";
+import type { ColdPalaceIntervention, GameState } from "../../../src/engine/state/types";
 import {
   canInterveneInColdPalace,
   coldPalaceInterventionId,
   hasIntervenedThisMonth,
-  planColdPalaceIntervention,
   COLD_PALACE_INTERVENTION_AP_COST,
   COLD_PALACE_VISIT_FAVOR_DELTA,
   COLD_PALACE_PHYSICIAN_HEALTH_DELTA,
@@ -29,6 +31,38 @@ import {
 import { validateColdPalaceInterventionLinks } from "../../../src/engine/characters/coldPalaceValidator";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+
+/** Build a minimal valid personal_visit intervention for use in validator tests. */
+function makeVisitIntervention(state: GameState, charId: string): ColdPalaceIntervention {
+  const { year, month, period, dayIndex } = state.calendar;
+  const effectId = state.statusEffects.find(
+    (e) => e.kind === "cold_palace" && e.characterId === charId,
+  )?.id ?? "eff_dummy";
+  return {
+    id: coldPalaceInterventionId(charId, year, month),
+    residentId: charId,
+    effectId,
+    kind: "personal_visit",
+    occurredAt: { year, month, period, dayIndex },
+    favorDelta: COLD_PALACE_VISIT_FAVOR_DELTA,
+  };
+}
+
+/** Build a minimal valid physician intervention for use in validator tests. */
+function makePhysicianIntervention(state: GameState, charId: string): ColdPalaceIntervention {
+  const { year, month, period, dayIndex } = state.calendar;
+  const effectId = state.statusEffects.find(
+    (e) => e.kind === "cold_palace" && e.characterId === charId,
+  )?.id ?? "eff_dummy";
+  return {
+    id: coldPalaceInterventionId(charId, year, month),
+    residentId: charId,
+    effectId,
+    kind: "physician",
+    occurredAt: { year, month, period, dayIndex },
+    healthDelta: COLD_PALACE_PHYSICIAN_HEALTH_DELTA,
+  };
+}
 
 const db = loadRealContent();
 const REAL_TARGET_ID = "lu_huaijin";
@@ -176,47 +210,6 @@ describe("canInterveneInColdPalace", () => {
   });
 });
 
-// ── planColdPalaceIntervention ────────────────────────────────────────────────
-
-describe("planColdPalaceIntervention", () => {
-  it("personal_visit returns correct record", () => {
-    const state = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(state, REAL_TARGET_ID, "personal_visit");
-    expect(plan.kind).toBe("personal_visit");
-    expect(plan.residentId).toBe(REAL_TARGET_ID);
-    if (plan.kind === "personal_visit") {
-      expect(plan.favorDelta).toBe(COLD_PALACE_VISIT_FAVOR_DELTA);
-    }
-    expect(plan.id).toBe(coldPalaceInterventionId(REAL_TARGET_ID, state.calendar.year, state.calendar.month));
-  });
-
-  it("physician returns correct record", () => {
-    const state = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(state, REAL_TARGET_ID, "physician");
-    expect(plan.kind).toBe("physician");
-    if (plan.kind === "physician") {
-      expect(plan.healthDelta).toBe(COLD_PALACE_PHYSICIAN_HEALTH_DELTA);
-    }
-  });
-
-  it("ID is deterministic for same month", () => {
-    const state = stateWithColdPalaceResident();
-    const a = planColdPalaceIntervention(state, REAL_TARGET_ID, "personal_visit");
-    const b = planColdPalaceIntervention(state, REAL_TARGET_ID, "physician");
-    expect(a.id).toBe(b.id);
-  });
-
-  it("effectId matches the active cold palace effect", () => {
-    const state = stateWithColdPalaceResident();
-    const activeEffect = state.statusEffects.find(
-      (e) => e.kind === "cold_palace" && e.characterId === REAL_TARGET_ID,
-    );
-    expect(activeEffect).toBeDefined();
-    const plan = planColdPalaceIntervention(state, REAL_TARGET_ID, "personal_visit");
-    expect(plan.effectId).toBe(activeEffect!.id);
-  });
-});
-
 // ── interveneInColdPalace (store command) ─────────────────────────────────────
 
 describe("interveneInColdPalace (store)", () => {
@@ -276,12 +269,101 @@ describe("interveneInColdPalace (store)", () => {
     expect(after.calendar.ap).toBe(beforeAp - COLD_PALACE_INTERVENTION_AP_COST);
   });
 
-  it("emits to subscribers exactly twice (resolveTimedAction + intervention append)", () => {
+  it("emits to subscribers exactly once (atomic transaction)", () => {
     const store = setupStore();
     const listener = vi.fn();
     store.subscribe(listener);
     store.interveneInColdPalace(db, REAL_TARGET_ID, "personal_visit");
-    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("failure emits 0 times and leaves state unchanged", () => {
+    const store = createGameStore();
+    store.loadState(createNewGameState(db));
+    const before = store.getState();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "personal_visit");
+    expect(result.ok).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(0);
+    expect(store.getState().coldPalaceInterventions).toHaveLength(0);
+    expect(store.getState().calendar.ap).toBe(before.calendar.ap);
+  });
+
+  it("records actual clamped favorDelta when near cap", () => {
+    const store = setupStore();
+    const s = store.getState();
+    // Set favor to 97 — actual delta should be 3, not 5
+    store.loadState({
+      ...s,
+      standing: { ...s.standing, [REAL_TARGET_ID]: { ...s.standing[REAL_TARGET_ID]!, favor: 97 } },
+    });
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "personal_visit");
+    expect(result.ok).toBe(true);
+    const iv = store.getState().coldPalaceInterventions[0]!;
+    expect(iv.kind).toBe("personal_visit");
+    if (iv.kind === "personal_visit") {
+      expect(iv.favorDelta).toBe(3);
+    }
+    expect(store.getState().standing[REAL_TARGET_ID]?.favor).toBe(100);
+  });
+
+  it("rejects personal_visit when favor is already at 100", () => {
+    const store = setupStore();
+    const s = store.getState();
+    store.loadState({
+      ...s,
+      standing: { ...s.standing, [REAL_TARGET_ID]: { ...s.standing[REAL_TARGET_ID]!, favor: 100 } },
+    });
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "personal_visit");
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects physician when health is already at 100", () => {
+    const store = setupStore(100);
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "physician");
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects when pending critical illness exists", () => {
+    const store = setupStore();
+    const s = store.getState();
+    store.loadState({
+      ...s,
+      coldPalaceIncidents: [{
+        id: `cpi_${REAL_TARGET_ID}_pending`,
+        residentId: REAL_TARGET_ID,
+        effectId: s.statusEffects.find((e) => e.kind === "cold_palace" && e.characterId === REAL_TARGET_ID)?.id ?? "eff_dummy",
+        kind: "critical_illness" as const,
+        status: "pending_response" as const,
+        acknowledged: false,
+        occurredAt: { year: s.calendar.year, month: s.calendar.month, period: s.calendar.period, dayIndex: s.calendar.dayIndex },
+      }],
+    });
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "personal_visit");
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects when critical illness occurred this month", () => {
+    const store = setupStore();
+    const s = store.getState();
+    store.loadState({
+      ...s,
+      coldPalaceIncidents: [{
+        id: `cpi_${REAL_TARGET_ID}_resolved_this_month`,
+        residentId: REAL_TARGET_ID,
+        effectId: s.statusEffects.find((e) => e.kind === "cold_palace" && e.characterId === REAL_TARGET_ID)?.id ?? "eff_dummy",
+        kind: "critical_illness" as const,
+        status: "resolved" as const,
+        acknowledged: true,
+        occurredAt: { year: s.calendar.year, month: s.calendar.month, period: s.calendar.period, dayIndex: s.calendar.dayIndex },
+        resolvedAt: { year: s.calendar.year, month: s.calendar.month, period: s.calendar.period, dayIndex: s.calendar.dayIndex },
+        resolution: "physician" as const,
+        healthDelta: 10,
+      }],
+    });
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "personal_visit");
+    expect(result.ok).toBe(false);
   });
 
   it("returns error and no mutation when resident not in cold palace", () => {
@@ -338,12 +420,12 @@ describe("interveneInColdPalace (store)", () => {
 // ── validateColdPalaceInterventionLinks ───────────────────────────────────────
 
 describe("validateColdPalaceInterventionLinks", () => {
-  function makeState(interventionOverrides: Partial<ReturnType<typeof planColdPalaceIntervention>> = {}): GameState {
+  function makeState(overrides: Partial<ColdPalaceIntervention> = {}): GameState {
     const base = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(base, REAL_TARGET_ID, "personal_visit");
+    const plan = makeVisitIntervention(base, REAL_TARGET_ID);
     return {
       ...base,
-      coldPalaceInterventions: [{ ...plan, ...interventionOverrides } as typeof plan],
+      coldPalaceInterventions: [{ ...plan, ...overrides } as ColdPalaceIntervention],
     };
   }
 
@@ -354,49 +436,50 @@ describe("validateColdPalaceInterventionLinks", () => {
 
   it("passes for valid physician intervention", () => {
     const base = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(base, REAL_TARGET_ID, "physician");
+    const plan = makePhysicianIntervention(base, REAL_TARGET_ID);
     const state = { ...base, coldPalaceInterventions: [plan] };
     expect(validateColdPalaceInterventionLinks(state)).toHaveLength(0);
   });
 
   it("rejects duplicate IDs", () => {
     const base = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(base, REAL_TARGET_ID, "personal_visit");
+    const plan = makeVisitIntervention(base, REAL_TARGET_ID);
     const state = { ...base, coldPalaceInterventions: [plan, plan] };
     const errors = validateColdPalaceInterventionLinks(state);
     expect(errors.some((e) => e.message.includes("not unique"))).toBe(true);
   });
 
   it("rejects ID with wrong format", () => {
-    const state = makeState({ id: "WRONG_FORMAT_123" } as never);
+    const state = makeState({ id: "WRONG_FORMAT_123" });
     const errors = validateColdPalaceInterventionLinks(state);
     expect(errors.some((e) => e.message.includes("canonical format"))).toBe(true);
   });
 
   it("rejects non-positive favorDelta for personal_visit", () => {
-    const state = makeState({ favorDelta: 0 } as never);
+    const base = stateWithColdPalaceResident();
+    const plan = makeVisitIntervention(base, REAL_TARGET_ID);
+    const state = { ...base, coldPalaceInterventions: [{ ...plan, favorDelta: 0 } as ColdPalaceIntervention] };
     const errors = validateColdPalaceInterventionLinks(state);
     expect(errors.some((e) => e.message.includes("favorDelta"))).toBe(true);
   });
 
   it("rejects non-positive healthDelta for physician", () => {
     const base = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(base, REAL_TARGET_ID, "physician");
+    const plan = makePhysicianIntervention(base, REAL_TARGET_ID);
     const state = { ...base, coldPalaceInterventions: [{ ...plan, healthDelta: -5 }] };
     const errors = validateColdPalaceInterventionLinks(state);
     expect(errors.some((e) => e.message.includes("healthDelta"))).toBe(true);
   });
 
   it("rejects effectId not found in statusEffects", () => {
-    const state = makeState({ effectId: "nonexistent_effect" } as never);
+    const state = makeState({ effectId: "nonexistent_effect" });
     const errors = validateColdPalaceInterventionLinks(state);
     expect(errors.some((e) => e.message.includes("effectId"))).toBe(true);
   });
 
   it("rejects intervention when effect was lifted before occurredAt", () => {
     const base = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(base, REAL_TARGET_ID, "personal_visit");
-    // Simulate a lifted effect (liftedTurn = 0, intervention at dayIndex > 0)
+    const plan = makeVisitIntervention(base, REAL_TARGET_ID);
     const liftedEffects = base.statusEffects.map((e) =>
       e.kind === "cold_palace" && e.id === plan.effectId
         ? { ...e, liftedTurn: 0 }
@@ -413,12 +496,10 @@ describe("validateColdPalaceInterventionLinks", () => {
 
   it("rejects duplicate resident/month slot", () => {
     const base = stateWithColdPalaceResident();
-    const plan = planColdPalaceIntervention(base, REAL_TARGET_ID, "personal_visit");
-    const plan2 = { ...plan, id: plan.id + "_dup", kind: "physician" as const, healthDelta: 10 };
-    delete (plan2 as Partial<typeof plan2> & { favorDelta?: number }).favorDelta;
-    const state = { ...base, coldPalaceInterventions: [plan, plan2] };
+    const visit = makeVisitIntervention(base, REAL_TARGET_ID);
+    const physician: ColdPalaceIntervention = { ...makePhysicianIntervention(base, REAL_TARGET_ID), id: visit.id + "_dup" };
+    const state = { ...base, coldPalaceInterventions: [visit, physician] };
     const errors = validateColdPalaceInterventionLinks(state);
-    // id uniqueness OR resident/month duplicates should fire
     expect(errors.length).toBeGreaterThan(0);
   });
 });

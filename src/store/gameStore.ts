@@ -60,7 +60,7 @@ import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
 import type { QueueTraceEvent } from "../engine/trace/domainEvents";
 import { applyJusticePlan, type JusticePlan } from "../engine/justice/mutations";
 import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../engine/characters/chambers";
-import type { ChamberId, ColdPalaceCriticalIllnessIncident } from "../engine/state/types";
+import type { ChamberId, ColdPalaceCriticalIllnessIncident, ColdPalaceIntervention } from "../engine/state/types";
 import {
   planColdPalaceIncidents,
   planColdPalaceCriticalIncident,
@@ -68,8 +68,10 @@ import {
   criticalIgnoreDelta,
   PHYSICIAN_RECOVERY_DELTA,
   canInterveneInColdPalace,
-  planColdPalaceIntervention,
+  coldPalaceInterventionId,
   COLD_PALACE_INTERVENTION_AP_COST,
+  COLD_PALACE_VISIT_FAVOR_DELTA,
+  COLD_PALACE_PHYSICIAN_HEALTH_DELTA,
 } from "../engine/characters/coldPalaceIncidents";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
@@ -1459,6 +1461,59 @@ export class GameStore {
   }
 
   /**
+   * Like resolveTimedAction but applies `postAdvance` to the settled candidate
+   * before the single final commit+emit.  Used by interveneInColdPalace to
+   * append the intervention record atomically — this.state is never set to a
+   * half-finished state and exactly one emit fires.
+   */
+  private resolveTimedActionWithPostAdvance(
+    db: ContentDB,
+    actionEffects: readonly EventEffect[],
+    command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
+    postAdvance: (s: GameState) => GameState,
+  ): Result<TimedOutcome, GameError[]> {
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "time_advance", sourceId: command.type, label: `time advance: ${command.type}` };
+    let candidate = this.state;
+    if (actionEffects.length > 0) {
+      const a = applyEffects(db, candidate, actionEffects, collector ? { collector } : {});
+      if (!a.ok) {
+        if (collector) {
+          collector.fail("effects", a.error);
+          const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+            a.error.map((e) => e.message).join("; "));
+          this.traceHistory.push(tx);
+        }
+        return err(a.error);
+      }
+      candidate = a.value;
+    }
+    const advance = this.advanceCandidate(db, candidate, command, collector);
+    if (!advance.ok) {
+      if (collector) {
+        collector.fail("advance_candidate", advance.error);
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          advance.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
+      return err(advance.error);
+    }
+    const { rolledOver, monthChanged, healthOutcome } = advance.value;
+    const nextState = postAdvance(advance.value.nextState);
+    if (collector) {
+      captureEligibilityTransitions(db, beforeState, nextState, collector);
+      const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
+      this.state = nextState;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = nextState;
+    }
+    this.emit();
+    return ok({ rolledOver, monthChanged, healthOutcome });
+  }
+
+  /**
    * Travel through the SAME atomic time-advancing core as resolveTimedAction.
    * Applies the MOVE command(s) to a local candidate (instant, no time cost),
    * then advances time via `advanceCommand` (the SPEND_AP), running the
@@ -2276,16 +2331,18 @@ export class GameStore {
   /**
    * 玩家干预长门宫（PUNISH-4E）。
    *
-   * personal_visit: 向居民施加 +COLD_PALACE_VISIT_FAVOR_DELTA 好感。
-   * physician:      向居民施加 +COLD_PALACE_PHYSICIAN_HEALTH_DELTA 健康回复（非致死封顶）。
-   * 两者均扣 1 AP（via resolveTimedAction，保留跨月结算语义）并 append 干预记录。
-   * 本月已干预过则返回错误（幂等失败）。
+   * personal_visit: 向居民施加恩宠+COLD_PALACE_VISIT_FAVOR_DELTA（记录实际 delta）。
+   * physician:      向居民施加健康+COLD_PALACE_PHYSICIAN_HEALTH_DELTA（planHealthChange 计算实际值）。
+   *
+   * 全程原子：effects + AP + 跨旬结算 + intervention record append = 一次 commit + 一次 emit。
+   * 返回 TimedOutcome 供调用方处理跨旬/驾崩/懿旨等行动节拍。
+   * 不满足 canInterveneInColdPalace 的所有情形均返回 err（含空效果拒绝）。
    */
   interveneInColdPalace(
     db: ContentDB,
     charId: string,
     kind: "personal_visit" | "physician",
-  ): Result<void, GameError[]> {
+  ): Result<TimedOutcome, GameError[]> {
     if (!canInterveneInColdPalace(this.state, charId, kind)) {
       const { year, month } = this.state.calendar;
       const standing = this.state.standing[charId];
@@ -2300,45 +2357,62 @@ export class GameStore {
       )) {
         return err([stateError("COLD_PALACE_INVALID", `"${charId}" already received an intervention this month (${year}-${String(month).padStart(2, "0")})`)]);
       }
+      const hasPending = this.state.coldPalaceIncidents.some(
+        (i) => i.residentId === charId && i.kind === "critical_illness" && i.status === "pending_response",
+      );
+      if (hasPending) {
+        return err([stateError("COLD_PALACE_INVALID", `"${charId}" has a pending critical illness — resolve it first`)]);
+      }
+      const hasCriticalThisMonth = this.state.coldPalaceIncidents.some(
+        (i) => i.residentId === charId && i.kind === "critical_illness" &&
+               i.occurredAt.year === year && i.occurredAt.month === month,
+      );
+      if (hasCriticalThisMonth) {
+        return err([stateError("COLD_PALACE_INVALID", `"${charId}" had a critical illness this month — intervention not allowed`)]);
+      }
+      if (kind === "physician" && (standing.health ?? 100) >= 100) {
+        return err([stateError("COLD_PALACE_INVALID", `"${charId}" health is already at maximum`)]);
+      }
+      if (kind === "personal_visit" && (standing.favor ?? 0) >= 100) {
+        return err([stateError("COLD_PALACE_INVALID", `"${charId}" favor is already at maximum`)]);
+      }
       return err([stateError("COLD_PALACE_INVALID", `"${charId}" is not currently in the cold palace`)]);
     }
 
-    // Plan record before AP spend (effectId may change after potential month-rollover).
-    const intervention = planColdPalaceIntervention(this.state, charId, kind);
-
+    // Build intervention record base (ID, effectId, occurredAt) before AP spend.
+    const { year, month, period, dayIndex } = this.state.calendar;
+    const activeEffect = activeColdPalaceEffectFor(this.state, charId, dayIndex)!;
+    const occurredAt = { year, month, period, dayIndex };
+    const interventionId = coldPalaceInterventionId(charId, year, month);
     const now = toGameTime(this.state.calendar);
+
     let actionEffects: readonly EventEffect[];
+    let intervention: ColdPalaceIntervention;
 
     if (kind === "personal_visit") {
-      const visitIntervention = intervention as Extract<typeof intervention, { kind: "personal_visit" }>;
-      actionEffects = [{ type: "favor", char: charId, delta: visitIntervention.favorDelta } as EventEffect];
+      const currentFavor = this.state.standing[charId]?.favor ?? 0;
+      const actualFavorDelta = Math.min(100, currentFavor + COLD_PALACE_VISIT_FAVOR_DELTA) - currentFavor;
+      actionEffects = [{ type: "favor", char: charId, delta: actualFavorDelta } as EventEffect];
+      intervention = { id: interventionId, residentId: charId, effectId: activeEffect.id, kind: "personal_visit", occurredAt, favorDelta: actualFavorDelta };
     } else {
-      const physicianIntervention = intervention as Extract<typeof intervention, { kind: "physician" }>;
-      const { effects: healthEffects } = planHealthChange(this.state, {
+      const { effects: healthEffects, outcome } = planHealthChange(this.state, {
         subject: { kind: "consort", id: charId },
-        healthDelta: physicianIntervention.healthDelta,
+        healthDelta: COLD_PALACE_PHYSICIAN_HEALTH_DELTA,
         cause: "illness",
         at: now,
       });
+      const actualHealthDelta = outcome.nextHealth - outcome.previousHealth;
       actionEffects = healthEffects;
+      intervention = { id: interventionId, residentId: charId, effectId: activeEffect.id, kind: "physician", occurredAt, healthDelta: actualHealthDelta };
     }
 
-    // SPEND_AP via the time-advance path (preserves month-boundary settlement).
-    const txResult = this.resolveTimedAction(
+    // Single atomic transaction: effects + AP + settlement + record append = one commit, one emit.
+    return this.resolveTimedActionWithPostAdvance(
       db,
       actionEffects,
       { type: "SPEND_AP", amount: COLD_PALACE_INTERVENTION_AP_COST },
+      (s) => ({ ...s, coldPalaceInterventions: [...s.coldPalaceInterventions, intervention] }),
     );
-    if (!txResult.ok) return err(txResult.error);
-
-    // Append intervention record in a second atomic write (resolveTimedAction already emitted).
-    this.state = {
-      ...this.state,
-      coldPalaceInterventions: [...this.state.coldPalaceInterventions, intervention],
-    };
-    this.emit();
-
-    return ok(undefined);
   }
 
   /**
