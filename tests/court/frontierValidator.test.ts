@@ -32,24 +32,31 @@ function makeValidAssessment(year: number): FrontierAssessment {
   };
 }
 
-/** State with a minimal valid memorial entry. */
-function stateWith(assessments: FrontierAssessment[], memorialId = "mem_000001") {
-  const base = createNewGameState(db);
-  const mem = {
-    id: memorialId,
+/**
+ * Build a minimal valid military memorial for a given assessment.
+ * Derives matter, urgency, theaterId, sourceId from the assessment so the fixture is always consistent.
+ */
+function makeValidMemorial(id: string, assessment: FrontierAssessment) {
+  // severity=watch → matter=border_fortification, urgency=routine
+  const matter = "border_fortification" as const;
+  const urgency = "routine" as const;
+  const theaterId = assessment.theaterId;
+  const sourceId = `military:${matter}:${theaterId}:${assessment.year}`;
+  return {
+    id,
     category: "military" as const,
     status: "pending" as const,
-    createdAt: atYear(1),
-    sourceId: `military:annual_readiness:northern_frontier:1`,
+    createdAt: assessment.assessedAt,
+    sourceId,
     title: "Test",
     summary: "Test",
     payload: {
       category: "military" as const,
-      matter: "border_fortification" as const,
-      urgency: "routine" as const,
-      theaterId: "northern_frontier" as const,
-      pressureAtCreation: 40,
-      militaryAtCreation: 50,
+      matter,
+      urgency,
+      theaterId,
+      pressureAtCreation: assessment.pressureAfter,
+      militaryAtCreation: assessment.militaryAtAssessment,
       options: [
         {
           id: "fortify_passes", label: "增修关隘",
@@ -68,10 +75,17 @@ function stateWith(assessments: FrontierAssessment[], memorialId = "mem_000001")
       ],
     },
   };
+}
+
+/** State with a minimal valid memorial entry for the first assessment. */
+function stateWith(assessments: FrontierAssessment[], memorialId = "mem_000001") {
+  const base = createNewGameState(db);
+  const a1 = assessments[0];
+  const mem = a1 ? makeValidMemorial(memorialId, a1) : null;
   return {
     ...base,
     frontierAssessments: assessments,
-    memorials: { [memorialId]: mem },
+    memorials: mem ? { [memorialId]: mem } : {},
   };
 }
 
@@ -86,27 +100,18 @@ describe("Group I: validateFrontierAssessments — valid state", () => {
   it("valid two assessments pass validation", () => {
     const a1 = makeValidAssessment(1);
     const a2 = makeValidAssessment(2);
-    const state = stateWith([a1, a2], "mem_000001");
-    // Add second memorial for a2 — createdAt must be at or after a2's assessedAt (year 2)
-    const state2 = {
-      ...state,
-      frontierAssessments: [a1, a2],
-      memorials: {
-        ...state.memorials,
-        "mem_000002": {
-          ...state.memorials["mem_000001"]!,
-          id: "mem_000002",
-          sourceId: "military:border_fortification:western_frontier:2",
-          createdAt: atYear(2), // must not be before a2.assessedAt
-        },
-      },
+    const mem1 = makeValidMemorial("mem_000001", a1);
+    const mem2 = makeValidMemorial("mem_000002", a2);
+    const base = createNewGameState(db);
+    const state = {
+      ...base,
+      frontierAssessments: [
+        a1,
+        { ...a2, generation: { status: "generated" as const, memorialId: "mem_000002" } },
+      ],
+      memorials: { "mem_000001": mem1, "mem_000002": mem2 },
     };
-    // Update a2's generation to point to mem_000002
-    state2.frontierAssessments = [
-      a1,
-      { ...a2, generation: { status: "generated" as const, memorialId: "mem_000002" } },
-    ];
-    expect(validateFrontierAssessments(state2)).toEqual([]);
+    expect(validateFrontierAssessments(state)).toEqual([]);
   });
 });
 
@@ -305,5 +310,105 @@ describe("Group I: validateFrontierAssessments — error codes", () => {
     const state = { ...base, frontierAssessments: [a], memorials: {} };
     const errors = validateFrontierAssessments(state);
     expect(errors.some((e) => e.code === "FRONTIER_MISSING_BLOCKING")).toBe(true);
+  });
+});
+
+// ── New cross-reference checks (P1 review fix) ────────────────────────────────
+
+describe("Group I: validateFrontierAssessments — cross-reference checks", () => {
+  it("FRONTIER_SOURCEID_MISMATCH: memorial sourceId does not match canonical", () => {
+    const a = makeValidAssessment(1);
+    const mem = makeValidMemorial("mem_000001", a);
+    const badMem = { ...mem, sourceId: "military:annual_readiness:northern_frontier:1" }; // wrong matter
+    const base = createNewGameState(db);
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": badMem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_SOURCEID_MISMATCH")).toBe(true);
+  });
+
+  it("FRONTIER_THEATER_MISMATCH: memorial theaterId differs from assessment theaterId", () => {
+    const a = makeValidAssessment(1);
+    const mem = makeValidMemorial("mem_000001", a);
+    const badPayload = { ...mem.payload, theaterId: "western_frontier" as const };
+    const badMem = { ...mem, payload: badPayload };
+    const base = createNewGameState(db);
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": badMem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_THEATER_MISMATCH")).toBe(true);
+  });
+
+  it("FRONTIER_PRESSURE_SNAPSHOT_MISMATCH: pressureAtCreation != assessment.pressureAfter", () => {
+    const a = makeValidAssessment(1);
+    const mem = makeValidMemorial("mem_000001", a);
+    const badPayload = { ...mem.payload, pressureAtCreation: 99 };
+    const badMem = { ...mem, payload: badPayload };
+    const base = createNewGameState(db);
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": badMem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_PRESSURE_SNAPSHOT_MISMATCH")).toBe(true);
+  });
+
+  it("FRONTIER_MILITARY_SNAPSHOT_MISMATCH: militaryAtCreation != assessment.militaryAtAssessment", () => {
+    const a = makeValidAssessment(1);
+    const mem = makeValidMemorial("mem_000001", a);
+    const badPayload = { ...mem.payload, militaryAtCreation: 99 };
+    const badMem = { ...mem, payload: badPayload };
+    const base = createNewGameState(db);
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": badMem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_MILITARY_SNAPSHOT_MISMATCH")).toBe(true);
+  });
+
+  it("FRONTIER_MATTER_MISMATCH: matter does not match matterFromSeverity(severity)", () => {
+    const a = makeValidAssessment(1); // severity=watch → expected matter=border_fortification
+    const mem = makeValidMemorial("mem_000001", a);
+    const badPayload = { ...mem.payload, matter: "annual_readiness" as const }; // wrong
+    const badMem = { ...mem, payload: badPayload };
+    const base = createNewGameState(db);
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": badMem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_MATTER_MISMATCH")).toBe(true);
+  });
+
+  it("FRONTIER_URGENCY_MISMATCH: urgency does not match urgencyFromSeverity(severity)", () => {
+    const a = makeValidAssessment(1); // severity=watch → expected urgency=routine
+    const mem = makeValidMemorial("mem_000001", a);
+    const badPayload = { ...mem.payload, urgency: "urgent" as const }; // wrong
+    const badMem = { ...mem, payload: badPayload };
+    const base = createNewGameState(db);
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": badMem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_URGENCY_MISMATCH")).toBe(true);
+  });
+
+  it("FRONTIER_BLOCKING_TOO_LATE: blocking memorial createdAt > assessedAt", () => {
+    const a: FrontierAssessment = {
+      ...makeValidAssessment(1),
+      generation: { status: "blocked_by_pending", blockingMemorialId: "mem_000001" },
+    };
+    const mem = {
+      ...makeValidMemorial("mem_000001", makeValidAssessment(1)),
+      // blocking memorial created AFTER the assessment — violation
+      createdAt: atYear(3),
+    };
+    const base = createNewGameState(db);
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": mem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_BLOCKING_TOO_LATE")).toBe(true);
+  });
+
+  it("FRONTIER_ORPHAN_MEMORIAL: resolved military memorial with no referencing assessment", () => {
+    const base = createNewGameState(db);
+    // A resolved military memorial that is NOT referenced by any assessment
+    const orphan = {
+      ...makeValidMemorial("mem_000001", makeValidAssessment(1)),
+      status: "resolved" as const,
+      resolvedAt: atYear(1),
+      resolution: "fortify_passes" as string,
+    };
+    // No frontier assessments at all
+    const state = { ...base, frontierAssessments: [], memorials: { "mem_000001": orphan } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_ORPHAN_MEMORIAL")).toBe(true);
   });
 });

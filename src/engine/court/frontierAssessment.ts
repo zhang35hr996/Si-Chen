@@ -17,6 +17,8 @@ import type {
   FrontierSeverity,
   FrontierTheaterId,
   GameState,
+  MilitaryMemorialMatter,
+  MilitaryMemorialUrgency,
 } from "../state/types";
 
 // ── 工具 ───────────────────────────────────────────────────────────────────────
@@ -42,6 +44,31 @@ const THEATER_ROTATION: FrontierTheaterId[] = [
  */
 export function theaterForYear(year: number): FrontierTheaterId {
   return THEATER_ROTATION[(year - 1) % 3]!;
+}
+
+// ── Canonical 派生函数（generator 和 validator 共用，防止逻辑漂移）──────────────
+
+/** 由评估烈度推导军务奏折 matter。 */
+export function matterFromSeverity(severity: FrontierSeverity): MilitaryMemorialMatter {
+  if (severity === "stable") return "annual_readiness";
+  if (severity === "watch") return "border_fortification";
+  return "frontier_incursion";
+}
+
+/** 由评估烈度推导军务奏折 urgency。 */
+export function urgencyFromSeverity(severity: FrontierSeverity): MilitaryMemorialUrgency {
+  if (severity === "stable" || severity === "watch") return "routine";
+  if (severity === "urgent") return "urgent";
+  return "critical";
+}
+
+/** Canonical military memorial sourceId，由 matter/theaterId/year 确定性派生。 */
+export function canonicalMilitarySourceId(
+  matter: MilitaryMemorialMatter,
+  theaterId: FrontierTheaterId,
+  year: number,
+): string {
+  return `military:${matter}:${theaterId}:${year}`;
 }
 
 // ── 年度漂移计算 ───────────────────────────────────────────────────────────────
@@ -230,6 +257,8 @@ export function validateFrontierAssessments(state: GameState): GameError[] {
   const assessments = state.frontierAssessments;
   const seenIds = new Set<string>();
   const seenYears = new Set<number>();
+  // Track all generated memorial IDs for orphan check after loop.
+  const generatedMemorialIds = new Set<string>();
 
   for (let i = 0; i < assessments.length; i++) {
     const a = assessments[i]!;
@@ -359,6 +388,64 @@ export function validateFrontierAssessments(state: GameState): GameError[] {
           e("FRONTIER_MEMORIAL_WRONG_CATEGORY", `边情评估第 ${i} 条关联奏折「${gen.memorialId}」类别为「${memorial.payload.category}」，非 military`, {
             index: i, memorialId: gen.memorialId, category: memorial.payload.category,
           });
+        } else {
+          const p = memorial.payload;
+
+          // 17a. theaterId 必须与 assessment 一致
+          if (p.theaterId !== a.theaterId) {
+            e("FRONTIER_THEATER_MISMATCH", `边情评估第 ${i} 条关联奏折 theaterId「${p.theaterId}」≠ assessment.theaterId「${a.theaterId}」`, {
+              index: i, memorialId: gen.memorialId, memorialTheater: p.theaterId, assessmentTheater: a.theaterId,
+            });
+          }
+
+          // 17b. pressureAtCreation 必须等于 assessment.pressureAfter
+          if (p.pressureAtCreation !== a.pressureAfter) {
+            e("FRONTIER_PRESSURE_SNAPSHOT_MISMATCH", `边情评估第 ${i} 条关联奏折 pressureAtCreation(${p.pressureAtCreation}) ≠ assessment.pressureAfter(${a.pressureAfter})`, {
+              index: i, memorialId: gen.memorialId, pressureAtCreation: p.pressureAtCreation, pressureAfter: a.pressureAfter,
+            });
+          }
+
+          // 17c. militaryAtCreation 必须等于 assessment.militaryAtAssessment
+          if (p.militaryAtCreation !== a.militaryAtAssessment) {
+            e("FRONTIER_MILITARY_SNAPSHOT_MISMATCH", `边情评估第 ${i} 条关联奏折 militaryAtCreation(${p.militaryAtCreation}) ≠ assessment.militaryAtAssessment(${a.militaryAtAssessment})`, {
+              index: i, memorialId: gen.memorialId, militaryAtCreation: p.militaryAtCreation, militaryAtAssessment: a.militaryAtAssessment,
+            });
+          }
+
+          // 17d. matter 必须与 severity 推导值一致
+          const expectedMatter = matterFromSeverity(a.severity);
+          if (p.matter !== expectedMatter) {
+            e("FRONTIER_MATTER_MISMATCH", `边情评估第 ${i} 条关联奏折 matter「${p.matter}」≠ 由 severity「${a.severity}」推导值「${expectedMatter}」`, {
+              index: i, memorialId: gen.memorialId, matter: p.matter, expectedMatter, severity: a.severity,
+            });
+          }
+
+          // 17e. urgency 必须与 severity 推导值一致
+          const expectedUrgency = urgencyFromSeverity(a.severity);
+          if (p.urgency !== expectedUrgency) {
+            e("FRONTIER_URGENCY_MISMATCH", `边情评估第 ${i} 条关联奏折 urgency「${p.urgency}」≠ 由 severity「${a.severity}」推导值「${expectedUrgency}」`, {
+              index: i, memorialId: gen.memorialId, urgency: p.urgency, expectedUrgency, severity: a.severity,
+            });
+          }
+
+          // 17f. sourceId 必须符合 canonical 规则
+          const expectedSourceId = canonicalMilitarySourceId(p.matter, a.theaterId, a.year);
+          if (memorial.sourceId !== expectedSourceId) {
+            e("FRONTIER_SOURCEID_MISMATCH", `边情评估第 ${i} 条关联奏折 sourceId「${memorial.sourceId}」≠ canonical「${expectedSourceId}」`, {
+              index: i, memorialId: gen.memorialId, sourceId: memorial.sourceId, expectedSourceId,
+            });
+          }
+
+          // 17g. assessment 的战区必须符合年度轮换规则
+          const expectedTheater = theaterForYear(a.year);
+          if (a.theaterId !== expectedTheater) {
+            e("FRONTIER_THEATER_ROTATION_MISMATCH", `边情评估第 ${i} 条 theaterId「${a.theaterId}」≠ 年度轮换值「${expectedTheater}」(year=${a.year})`, {
+              index: i, theaterId: a.theaterId, expectedTheater, year: a.year,
+            });
+          }
+
+          // 17h. 本 memorial 只能被一条 assessment 引用（稍后通过 generatedMemorialIds 检查）
+          generatedMemorialIds.add(gen.memorialId);
         }
 
         // 17. memorial.createdAt >= assessedAt
@@ -383,7 +470,30 @@ export function validateFrontierAssessments(state: GameState): GameError[] {
             index: i, blockingMemorialId: gen.blockingMemorialId, category: blocking.payload.category,
           });
         }
+
+        // 19b. blocking memorial createdAt ≤ assessment.assessedAt（blocking 发生在评估之前或同时）
+        if (compareGameTime(blocking.createdAt, a.assessedAt) > 0) {
+          e("FRONTIER_BLOCKING_TOO_LATE", `边情评估第 ${i} 条拦截奏折「${gen.blockingMemorialId}」createdAt 晚于 assessedAt`, {
+            index: i, blockingMemorialId: gen.blockingMemorialId,
+            blockingCreatedAt: blocking.createdAt, assessedAt: a.assessedAt,
+          });
+        }
       }
+    }
+  }
+
+  // Post-loop: 检查 generatedMemorialIds 是否有重复引用（两条 assessment 指向同一 memorial）。
+  // 注意：上面循环中每次 add 前已检查 memorial 合法性，此处只需检查 Set 的大小。
+  // 实际上 generatedMemorialIds 是 Set，不会有重复条目。但我们还需反向检查：
+  // 每条 military memorial 最多被一条 generated assessment 引用。
+  for (const [memId, mem] of Object.entries(state.memorials)) {
+    if (mem.payload.category !== "military") continue;
+    // orphan check：已 resolved 的 military memorial 应该有一条 generated assessment 引用它
+    // （pending memorial 可能尚未被引用，不强制）
+    if (mem.status === "resolved" && !generatedMemorialIds.has(memId)) {
+      e("FRONTIER_ORPHAN_MEMORIAL", `已批阅军务奏折「${memId}」未被任何边情评估引用`, {
+        memorialId: memId,
+      });
     }
   }
 

@@ -325,3 +325,75 @@ describe("Group J: validateMemorials — resolution validation", () => {
     expect(errors.some((e) => e.code === "MEMORIAL_BAD_RESOLUTION")).toBe(true);
   });
 });
+
+// ── Effect validation via eventEffectSchema (P2b fix) ─────────────────────────
+
+describe("Group J: validateMemorials — effect schema validation", () => {
+  it("MEMORIAL_BAD_EFFECT: effect with delta > 10 is rejected", () => {
+    const m = makeValidMilitary();
+    const p = m.payload as any;
+    const mBad = {
+      ...m,
+      payload: {
+        ...p,
+        options: [
+          {
+            id: "fortify_passes", label: "增修",
+            // delta=11 exceeds AXIS_CAP=10, eventEffectSchema rejects it
+            effects: [{ type: "resource", pillar: "nation", field: "borderPressure", delta: -11 }],
+            treasuryDelta: -1200,
+          },
+          { id: "rotate_garrison", label: "轮戍", effects: [{ type: "resource", pillar: "nation", field: "military", delta: 5 }], treasuryDelta: -700 },
+          { id: "local_levy", label: "募兵", effects: [{ type: "resource", pillar: "nation", field: "military", delta: 4 }] },
+        ],
+      },
+    };
+    const errors = validateMemorials(stateWithMem(mBad));
+    expect(errors.some((e) => e.code === "MEMORIAL_BAD_EFFECT")).toBe(true);
+  });
+
+  it("MEMORIAL_BAD_EFFECT: effect with treasury field is rejected", () => {
+    const m = makeValidMilitary();
+    const p = m.payload as any;
+    const mBad = {
+      ...m,
+      payload: {
+        ...p,
+        options: [
+          {
+            id: "fortify_passes", label: "增修",
+            // "treasury" field is not allowed in eventEffectSchema resource effects
+            effects: [{ type: "resource", pillar: "nation", field: "treasury", delta: -5 }],
+            treasuryDelta: -1200,
+          },
+          { id: "rotate_garrison", label: "轮戍", effects: [{ type: "resource", pillar: "nation", field: "military", delta: 5 }], treasuryDelta: -700 },
+          { id: "local_levy", label: "募兵", effects: [{ type: "resource", pillar: "nation", field: "military", delta: 4 }] },
+        ],
+      },
+    };
+    const errors = validateMemorials(stateWithMem(mBad));
+    expect(errors.some((e) => e.code === "MEMORIAL_BAD_EFFECT")).toBe(true);
+  });
+
+  it("MEMORIAL_BAD_EFFECT: effect with invalid type is rejected", () => {
+    const m = makeValidMilitary();
+    const p = m.payload as any;
+    const mBad = {
+      ...m,
+      payload: {
+        ...p,
+        options: [
+          {
+            id: "fortify_passes", label: "增修",
+            effects: [{ type: "mood", pillar: "nation", field: "military", delta: 3 }], // invalid type
+            treasuryDelta: -1200,
+          },
+          { id: "rotate_garrison", label: "轮戍", effects: [{ type: "resource", pillar: "nation", field: "military", delta: 5 }], treasuryDelta: -700 },
+          { id: "local_levy", label: "募兵", effects: [{ type: "resource", pillar: "nation", field: "military", delta: 4 }] },
+        ],
+      },
+    };
+    const errors = validateMemorials(stateWithMem(mBad));
+    expect(errors.some((e) => e.code === "MEMORIAL_BAD_EFFECT")).toBe(true);
+  });
+});

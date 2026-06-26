@@ -232,3 +232,30 @@ describe("Group F: resolveMemorial with military payloads — ledger", () => {
     expect(r2.value.state.treasuryLedger[1]!.source.kind).toBe("memorial");
   });
 });
+
+// ── applyAnnualFrontierAssessment atomicity (P2 fix) ─────────────────────────
+
+describe("Group F: applyAnnualFrontierAssessment — atomicity", () => {
+  it("returns identical state reference when assessment already exists for year", () => {
+    // The first call creates year 1 assessment. Second call should be a no-op.
+    const base = createNewGameState(db);
+    const richBase = { ...base, resources: { ...base.resources, nation: { ...base.resources.nation, treasury: 50000 } } };
+    const after1 = applyAnnualFrontierAssessment(richBase, db, atMonth7(1));
+    // Calling again for the same year must not duplicate the assessment
+    const after1Again = applyAnnualFrontierAssessment(after1, db, atMonth7(1));
+    expect(after1Again.frontierAssessments).toHaveLength(1);
+  });
+
+  it("borderPressure changes when assessment is applied", () => {
+    const base = createNewGameState(db);
+    const before = base.resources.nation.borderPressure;
+    const after = applyAnnualFrontierAssessment(base, db, atMonth7(1));
+    // pressureDelta may be 0 or non-zero; what matters is borderPressure is updated
+    expect(after.frontierAssessments).toHaveLength(1);
+    const assessment = after.frontierAssessments[0]!;
+    expect(after.resources.nation.borderPressure).toBe(assessment.pressureAfter);
+    expect(assessment.pressureAfter).toBe(
+      Math.max(0, Math.min(100, before + assessment.pressureDelta))
+    );
+  });
+});

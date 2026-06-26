@@ -5,6 +5,7 @@
  */
 import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
+import { eventEffectSchema } from "../content/schemas";
 import type { EventEffect } from "../content/schemas";
 import { compareGameTime } from "../calendar/time";
 import { stateError, type GameError } from "../infra/errors";
@@ -15,7 +16,6 @@ import { applyTreasuryTransaction } from "./treasuryLedger";
 import type {
   FrontierAssessment,
   FrontierTheaterId,
-  FrontierSeverity,
   GameState,
   Memorial,
   MemorialOption,
@@ -24,7 +24,13 @@ import type {
   MilitaryMemorialUrgency,
 } from "../state/types";
 import type { FrontierAssessmentPlan } from "./frontierAssessment";
-import { hasFrontierAssessmentForYear, planFrontierAssessment } from "./frontierAssessment";
+import {
+  canonicalMilitarySourceId,
+  hasFrontierAssessmentForYear,
+  matterFromSeverity,
+  planFrontierAssessment,
+  urgencyFromSeverity,
+} from "./frontierAssessment";
 
 /** 已知地域（id → 显示名）。灾情奏折只在此集合内生成；validator 据此判定 regionId 合法。 */
 export const DISASTER_REGIONS: Record<string, string> = {
@@ -431,17 +437,6 @@ function buildFrontierIncursionOptions(urgency: "urgent" | "critical"): Memorial
   ];
 }
 
-function matterFromSeverity(severity: FrontierSeverity): MilitaryMemorialMatter {
-  if (severity === "stable") return "annual_readiness";
-  if (severity === "watch") return "border_fortification";
-  return "frontier_incursion";
-}
-
-function urgencyFromSeverity(severity: FrontierSeverity): MilitaryMemorialUrgency {
-  if (severity === "stable" || severity === "watch") return "routine";
-  if (severity === "urgent") return "urgent";
-  return "critical";
-}
 
 const THEATER_DISPLAY: Record<FrontierTheaterId, string> = {
   northern_frontier: "北境",
@@ -505,7 +500,7 @@ export function generateMilitaryMemorial(
 
   const matter = matterFromSeverity(assessment.severity);
   const urgency = urgencyFromSeverity(assessment.severity);
-  const sourceId = `military:${matter}:${assessment.theaterId}:${assessment.year}`;
+  const sourceId = canonicalMilitarySourceId(matter, assessment.theaterId, assessment.year);
 
   // 2. 同源去重（pending 或 resolved 均算已存在）
   if (hasMemorialForSource(state, sourceId)) return null;
@@ -573,11 +568,12 @@ export function applyAnnualFrontierAssessment(
     delta: plan.pressureDelta,
   };
   const effectResult = applyEffects(db, state, [pressureEffect], { sceneId: "frontier_assessment" });
-  if (effectResult.ok) {
-    pressureUpdated = effectResult.value;
-  } else {
-    console.warn("[applyAnnualFrontierAssessment] borderPressure effect failed:", effectResult.error);
+  if (!effectResult.ok) {
+    // Effect failure is unexpected but must not leave a half-committed assessment.
+    // Return state unchanged so the seam can be retried next calendar tick.
+    return state;
   }
+  pressureUpdated = effectResult.value;
 
   // 4. 生成军务奏折
   const memorialResult = generateMilitaryMemorial(pressureUpdated, plan, at);
@@ -810,23 +806,15 @@ export function validateMemorials(state: GameState): GameError[] {
         }
       }
 
-      // effects fields：nation/sovereign 字段合法性
-      const NATION_FIELDS = new Set([
-        "military", "treasury", "publicSupport", "productivity", "governance",
-        "consortClanPower", "ministerLoyalty", "corruption", "clanDiscontent",
-        "rumor", "borderPressure",
-      ]);
-      const SOVEREIGN_FIELDS = new Set([
-        "health", "diligence", "prestige", "martial", "statecraft",
-        "cruelty", "fatigue", "regimeSecurity",
-      ]);
+      // effects 字段合法性：使用权威 eventEffectSchema 校验，禁止 treasury 字段及超出 ±10 的 delta。
       for (const opt of p.options) {
         for (const eff of opt.effects) {
-          const validSet = eff.pillar === "nation" ? NATION_FIELDS : SOVEREIGN_FIELDS;
-          if (!validSet.has(eff.field))
-            e("MEMORIAL_BAD_EFFECT_FIELD", `军务奏折「${m.id}」选项「${opt.id}」effect field「${eff.field}」(pillar=${eff.pillar})不合法`, {
-              id: m.id, optionId: opt.id, pillar: eff.pillar, field: eff.field,
+          const parsed = eventEffectSchema.safeParse(eff);
+          if (!parsed.success || parsed.data.type !== "resource") {
+            e("MEMORIAL_BAD_EFFECT", `军务奏折「${m.id}」选项「${opt.id}」effect 不合法：${JSON.stringify(eff)}`, {
+              id: m.id, optionId: opt.id, effect: eff,
             });
+          }
         }
       }
     }
