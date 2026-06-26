@@ -47,7 +47,7 @@ export function MemorialsScreen({ db, store, onBack, onCommitted }: MemorialsScr
             return (
               <li key={card.id} className="memorial-card">
                 <p className="memorial-card__kind">
-                  {card.categoryLabel}{card.regionName ? ` · ${card.regionName}` : ""}{card.severityLabel ? ` · ${card.severityLabel}` : ""}
+                  {card.urgencyLabel ?? `${card.categoryLabel}${card.regionName ? ` · ${card.regionName}` : ""}${card.severityLabel ? ` · ${card.severityLabel}` : ""}`}
                 </p>
                 <p className="memorial-card__title">{card.title}</p>
                 <p className="memorial-card__summary">{card.summary}</p>

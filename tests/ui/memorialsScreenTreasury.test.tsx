@@ -263,6 +263,37 @@ describe("MemorialsScreen — failure flow", () => {
   });
 });
 
+// ── P2: urgencyLabel 渲染测试 ──────────────────────────────────────────────────
+
+describe("MemorialsScreen — treasury urgencyLabel", () => {
+  it("routine treasury memorial renders 度支 · 常例", () => {
+    // treasury ≥ 3000 → routine
+    const base = withTreasury(createNewGameState(db, 1), 5000);
+    const g = generateTreasuryMemorial(base, NOW)!;
+    mount(g.state);
+    expect(screen.getByText("度支 · 常例")).toBeInTheDocument();
+  });
+
+  it("urgent treasury memorial renders 度支 · 急奏", () => {
+    // treasury < 3000 → urgent
+    const base = withTreasury(createNewGameState(db, 1), 1000);
+    const g = generateTreasuryMemorial(base, NOW)!;
+    mount(g.state);
+    expect(screen.getByText("度支 · 急奏")).toBeInTheDocument();
+  });
+
+  it("treasury audit option shows Chinese labels not raw field names", () => {
+    // audit option has effects on corruption/governance/ministerLoyalty
+    const base = withTreasury(createNewGameState(db, 1), 5000);
+    const g = generateTreasuryMemorial(base, NOW)!;
+    mount(g.state);
+    // Should show Chinese label for corruption (may match multiple elements — audit + defer both show 贪腐)
+    expect(screen.getAllByText(/贪腐/).length).toBeGreaterThan(0);
+    // Raw field name should not appear as text in the rendered output
+    expect(screen.queryByText(/^corruption$/)).toBeNull();
+  });
+});
+
 describe("MemorialsScreen — no direct state mutation", () => {
   it("MemorialsScreen.tsx does not directly write state.resources.nation.treasury", async () => {
     // Architectural test: the source file must not contain direct treasury writes

@@ -20,6 +20,9 @@ const FIELD_LABEL: Record<string, string> = {
   productivity: "生产力",
   rumor: "谣言",
   regimeSecurity: "皇权安全",
+  corruption: "贪腐",
+  governance: "朝政",
+  ministerLoyalty: "大臣忠心",
 };
 
 export interface MemorialOptionView {
@@ -46,6 +49,8 @@ export interface MemorialCardView {
   options: MemorialOptionView[];
   /** 当前国库余额展示，如「国库：10,000 两」。 */
   currentTreasury: string;
+  /** 财政奏折紧急度标签（仅 treasury），如「度支 · 常例」「度支 · 急奏」。 */
+  urgencyLabel?: string;
 }
 
 function fieldLabel(field: string): string {
@@ -104,6 +109,9 @@ export function memorialCard(m: Memorial, currentTreasury: number): MemorialCard
   if (m.payload.category === "disaster") {
     base.regionName = DISASTER_REGIONS[m.payload.regionId] ?? m.payload.regionId;
     base.severityLabel = m.payload.severity === "major" ? "大灾" : "灾情";
+  }
+  if (m.payload.category === "treasury") {
+    base.urgencyLabel = m.payload.urgency === "urgent" ? "度支 · 急奏" : "度支 · 常例";
   }
   return base;
 }
