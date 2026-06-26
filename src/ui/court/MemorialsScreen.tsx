@@ -43,7 +43,7 @@ export function MemorialsScreen({ db, store, onBack, onCommitted }: MemorialsScr
       ) : (
         <ul className="memorials-screen__list">
           {pending.map((m) => {
-            const card = memorialCard(m);
+            const card = memorialCard(m, state.resources.nation.treasury);
             return (
               <li key={card.id} className="memorial-card">
                 <p className="memorial-card__kind">
@@ -51,17 +51,26 @@ export function MemorialsScreen({ db, store, onBack, onCommitted }: MemorialsScr
                 </p>
                 <p className="memorial-card__title">{card.title}</p>
                 <p className="memorial-card__summary">{card.summary}</p>
+                <p className="memorial-card__treasury">{card.currentTreasury}</p>
                 <div className="memorial-card__options">
                   {card.options.map((o) => (
-                    <button
-                      key={o.id}
-                      type="button"
-                      className="memorial-option__btn"
-                      onClick={() => resolve(card.id, o.id, o.label)}
-                    >
-                      <span className="memorial-option__label">{o.label}</span>
-                      <span className="memorial-option__effects">{o.effectSummary}</span>
-                    </button>
+                    <div key={o.id} className="memorial-option">
+                      <button
+                        type="button"
+                        className="memorial-option__btn"
+                        disabled={o.disabled}
+                        onClick={() => resolve(card.id, o.id, o.label)}
+                      >
+                        <span className="memorial-option__label">{o.label}</span>
+                        <span className="memorial-option__effects">{o.effectSummary}</span>
+                        {o.treasuryCost && (
+                          <span className="memorial-option__treasury-cost">{o.treasuryCost}</span>
+                        )}
+                      </button>
+                      {o.disabledReason && (
+                        <p className="memorial-option__disabled-reason">{o.disabledReason}</p>
+                      )}
+                    </div>
                   ))}
                 </div>
               </li>
