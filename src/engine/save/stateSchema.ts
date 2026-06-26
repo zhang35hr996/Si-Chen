@@ -241,6 +241,22 @@ const memorialPayloadSchema = z.discriminatedUnion("category", [
     options: z.array(disasterOptionSchema).min(1),
   }),
 ]);
+// ── 国库台账（Phase 4B） ─────────────────────────────────────────────────────
+const treasuryLedgerSourceSchema = z.strictObject({
+  kind: z.literal("memorial"),
+  memorialId: z.string().min(1),
+  optionId: z.string().min(1),
+});
+const treasuryLedgerEntrySchema = z.strictObject({
+  id: z.string().regex(/^tre_\d{6}$/),
+  at: gameTimeSchema,
+  delta: z.number().int(),
+  balanceBefore: z.number().int().min(0),
+  balanceAfter: z.number().int().min(0),
+  source: treasuryLedgerSourceSchema,
+  reason: z.string().min(1),
+});
+
 const memorialSchema = z.strictObject({
   id: z.string().regex(/^mem_\d{6}$/),
   category: z.enum(["personnel", "treasury", "disaster", "military", "justice"]),
@@ -549,6 +565,7 @@ export const gameStateSchema = z.strictObject({
   annualReviews: z.array(annualReviewRecordSchema),
   personnelDecisions: z.record(z.string(), personnelDecisionSchema),
   memorials: z.record(z.string(), memorialSchema),
+  treasuryLedger: z.array(treasuryLedgerEntrySchema).default([]),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),

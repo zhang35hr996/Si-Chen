@@ -12,6 +12,7 @@
 import type { ContentDB } from "../content/loader";
 import { validateOfficialWorld } from "../officials/validation";
 import { validateMemorials } from "../court/memorials";
+import { validateTreasuryLedger } from "../court/treasuryLedger";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
@@ -553,6 +554,18 @@ function validateSave(
     return err({
       error: saveError("MEMORIAL_INTEGRITY", `存档奏折数据完整性校验失败（${first.code}）：${first.message}`, {
         context: { diagnostics: memorialErrors.map((e) => ({ code: e.code, message: e.message })) },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // 国库台账不变量（Phase 4B）：链接一致性/来源合法/余额链路。任一 error → 拒绝并 quarantine。
+  const ledgerErrors = validateTreasuryLedger(state);
+  if (ledgerErrors.length > 0) {
+    const first = ledgerErrors[0]!;
+    return err({
+      error: saveError("TREASURY_LEDGER_INTEGRITY", `存档国库台账完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: ledgerErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });

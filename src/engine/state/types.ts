@@ -391,6 +391,27 @@ export interface PersonnelDecision {
   resolution?: PersonnelDecisionResolution;
 }
 
+// ── 国库台账（Phase 4B） ──────────────────────────────────────────────────
+/**
+ * 国库流水台账条目。每次奏折批阅产生一条（delta 非零），原子写入，append-only。
+ * 绝不手动修改；验证见 treasuryLedger.ts。
+ */
+export interface TreasuryLedgerEntry {
+  /** "tre_000001" 格式，全局唯一。 */
+  id: string;
+  at: GameTime;
+  /** 非零安全整数；负数=支出，正数=收入。 */
+  delta: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  source: {
+    kind: "memorial";
+    memorialId: string;
+    optionId: string;
+  };
+  reason: string;
+}
+
 // ── 奏折框架（Phase 4A 第一刀） ─────────────────────────────────────────
 /**
  * 紫宸殿奏折类别。第一刀只实地实现 `disaster`（地方灾情）；其余为框架占位（不生成），人事奏折仍由
@@ -976,6 +997,8 @@ export interface GameState {
   personnelDecisions: Record<string, PersonnelDecision>;
   /** 待批阅/已批阅的紫宸殿奏折（Phase 4A：地方灾情等前朝事务）。 */
   memorials: Record<string, Memorial>;
+  /** 国库流水台账（Phase 4B）：奏折批阅产生的原子借贷记录，append-only。 */
+  treasuryLedger: TreasuryLedgerEntry[];
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;
