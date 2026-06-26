@@ -44,6 +44,7 @@ import {
   MADNESS_MAX_CHANCE,
 } from "../../../src/engine/characters/coldPalaceIncidents";
 import { validateColdPalaceMadnessLinks } from "../../../src/engine/characters/coldPalaceValidator";
+import { applyEffects } from "../../../src/engine/effects/funnel";
 import { dayIndexOf, makeGameTime, createCalendar } from "../../../src/engine/calendar/time";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
@@ -837,6 +838,7 @@ describe("mental breakdown settlement strict trace", () => {
     const lateCalendar = createCalendar({ year: 1, month: 6, period: "late", apMax: 1 });
     const earlyMonth7Cal = createCalendar({ year: 1, month: 7, period: "early", apMax: 1 });
 
+    let foundTriggerSeed = false;
     for (let seed = 1; seed <= 200; seed++) {
       // Simulate what settlement would see after advancing to month 7
       const simulatedState: GameState = {
@@ -845,6 +847,7 @@ describe("mental breakdown settlement strict trace", () => {
         calendar: { ...earlyMonth7Cal, eraName: base.calendar.eraName },
       };
       if (planColdPalaceMadnessBreakdown(simulatedState) === null) continue;
+      foundTriggerSeed = true;
 
       // This seed triggers — run the actual store advance in strict mode
       const prepState: GameState = {
@@ -856,16 +859,21 @@ describe("mental breakdown settlement strict trace", () => {
       store.loadState(prepState);
 
       const r = store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
-      if (!r.ok) continue;
+      expect(r.ok).toBe(true);
+      if (!r.ok) break;
 
       const hist = store.getTraceHistory().getAll();
       expect(hist.length).toBeGreaterThan(0);
       const lastTx = hist.at(-1)!;
       expect(lastTx.outcome).toBe("committed");
       expect(lastTx.untrackedCount).toBe(0);
-      return; // done
+      // The trace must include both the madness effect and the breakdown incident
+      const afterState = store.getState();
+      expect(afterState.statusEffects.some((e) => e.kind === "cold_palace_madness")).toBe(true);
+      expect(afterState.coldPalaceIncidents.some((i) => i.kind === "mental_breakdown")).toBe(true);
+      break;
     }
-    console.warn("strict trace test: could not find a seed that triggers madness in 200 attempts");
+    expect(foundTriggerSeed, "expected at least one seed (1-200) to trigger madness breakdown").toBe(true);
   });
 });
 
@@ -1083,5 +1091,154 @@ describe("save round-trip with madness effect", () => {
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(badEnv));
     const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
     expect(loaded.ok).toBe(false);
+  });
+});
+
+// ── Effect funnel gate (allowInternalEffects) ─────────────────────────────────
+
+describe("effect funnel: restore_from_cold_palace blocked for mad resident", () => {
+  it("applyEffects with allowInternalEffects rejects mad resident and leaves state unchanged", () => {
+    const store = createGameStore();
+    store.loadState(baseState());
+    store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
+    const state = store.getState();
+    const effect = activeColdPalaceEffectFor(state, REAL_TARGET_ID)!;
+    const madnessEffect: ColdPalaceMadnessEffect = {
+      id: `status_${REAL_TARGET_ID}_000099`,
+      kind: "cold_palace_madness",
+      characterId: REAL_TARGET_ID,
+      sourceColdPalaceEffectId: effect.id,
+      startedAt: state.calendar,
+      startTurn: state.calendar.dayIndex,
+    };
+    const incident: ColdPalaceMentalBreakdownIncident = {
+      id: `cpi_${REAL_TARGET_ID}_0001_01`,
+      residentId: REAL_TARGET_ID,
+      effectId: effect.id,
+      kind: "mental_breakdown",
+      occurredAt: state.calendar,
+      acknowledged: false,
+      madnessEffectId: madnessEffect.id,
+    };
+    const madState: GameState = {
+      ...state,
+      statusEffects: [...state.statusEffects, madnessEffect],
+      coldPalaceIncidents: [...state.coldPalaceIncidents, incident],
+    };
+
+    const result = applyEffects(
+      db,
+      madState,
+      [{
+        type: "restore_from_cold_palace",
+        char: REAL_TARGET_ID,
+        liftReason: "lifted_by_emperor",
+        liftedAt: madState.calendar,
+        liftedTurn: madState.calendar.dayIndex,
+      }],
+      { allowInternalEffects: true },
+    );
+
+    expect(result.ok).toBe(false);
+    // State must remain unchanged — mad resident is still in cold palace
+    expect(madState.statusEffects.some((e) => e.kind === "cold_palace_madness")).toBe(true);
+    expect(activeColdPalaceEffectFor(madState, REAL_TARGET_ID)).toBeDefined();
+  });
+});
+
+// ── Validator invariant edge cases ────────────────────────────────────────────
+
+describe("validateColdPalaceMadnessLinks — invariant 8 and 9", () => {
+  function buildMadState(): GameState {
+    const base = stateWithColdPalaceResident();
+    const effect = activeColdPalaceEffectFor(base, REAL_TARGET_ID)!;
+    const { year, month, period, dayIndex } = base.calendar;
+    const madnessEffectId = `status_${REAL_TARGET_ID}_000099`;
+    const madnessEffect: ColdPalaceMadnessEffect = {
+      id: madnessEffectId,
+      kind: "cold_palace_madness",
+      characterId: REAL_TARGET_ID,
+      sourceColdPalaceEffectId: effect.id,
+      startedAt: { year, month, period, dayIndex },
+      startTurn: dayIndex,
+    };
+    const incident: ColdPalaceMentalBreakdownIncident = {
+      id: `cpi_${REAL_TARGET_ID}_${year}_${String(month).padStart(2, "0")}`,
+      residentId: REAL_TARGET_ID,
+      effectId: effect.id,
+      kind: "mental_breakdown",
+      occurredAt: { year, month, period, dayIndex },
+      acknowledged: false,
+      madnessEffectId,
+    };
+    return {
+      ...base,
+      statusEffects: [...base.statusEffects, madnessEffect],
+      coldPalaceIncidents: [...base.coldPalaceIncidents, incident],
+    };
+  }
+
+  it("invariant 8: living mad resident with lifted cold-palace effect fails validator", () => {
+    const state = buildMadState();
+    // Lift the underlying cold palace effect while character is still alive
+    const withLifted: GameState = {
+      ...state,
+      statusEffects: state.statusEffects.map((e) =>
+        e.kind === "cold_palace" && e.characterId === REAL_TARGET_ID
+          ? { ...e, liftedTurn: state.calendar.dayIndex, liftReason: "lifted_by_emperor" as const }
+          : e,
+      ),
+    };
+    const errors = validateColdPalaceMadnessLinks(withLifted);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.message.includes("linked cold-palace effect") || e.message.includes("not lifted"))).toBe(true);
+  });
+
+  it("invariant 8: deceased mad resident with death-lifted cold-palace effect passes validator", () => {
+    const state = buildMadState();
+    // Mark character deceased + lift the cold palace effect at a later turn
+    // (dayIndex+1 ensures effect was still active when madness/incident occurred)
+    const withDeceased: GameState = {
+      ...state,
+      standing: {
+        ...state.standing,
+        [REAL_TARGET_ID]: { ...state.standing[REAL_TARGET_ID]!, lifecycle: "deceased" },
+      },
+      statusEffects: state.statusEffects.map((e) =>
+        e.kind === "cold_palace" && e.characterId === REAL_TARGET_ID
+          ? { ...e, liftedTurn: state.calendar.dayIndex + 1, liftReason: "lifted_by_emperor" as const }
+          : e,
+      ),
+    };
+    const errors = validateColdPalaceMadnessLinks(withDeceased);
+    expect(errors).toHaveLength(0);
+  });
+
+  it("invariant 9: madness effect with no breakdown incident fails validator", () => {
+    const state = buildMadState();
+    // Remove the breakdown incident
+    const withoutIncident: GameState = {
+      ...state,
+      coldPalaceIncidents: state.coldPalaceIncidents.filter((i) => i.kind !== "mental_breakdown"),
+    };
+    const errors = validateColdPalaceMadnessLinks(withoutIncident);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.message.includes("mental_breakdown incident"))).toBe(true);
+  });
+
+  it("invariant 9: madness effect with two breakdown incidents fails validator", () => {
+    const state = buildMadState();
+    const incident = state.coldPalaceIncidents.find((i) => i.kind === "mental_breakdown")!;
+    const duplicate: ColdPalaceMentalBreakdownIncident = {
+      ...(incident as ColdPalaceMentalBreakdownIncident),
+      id: `${incident.id}_dup`,
+    };
+    const withDuplicate: GameState = {
+      ...state,
+      coldPalaceIncidents: [...state.coldPalaceIncidents, duplicate],
+    };
+    const errors = validateColdPalaceMadnessLinks(withDuplicate);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.message.includes("mental_breakdown incident"))).toBe(true);
   });
 });

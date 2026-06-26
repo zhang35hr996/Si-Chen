@@ -17,7 +17,7 @@ import { loadRealContent } from "../../helpers/contentFixture";
 import type { ImperialCommand } from "../../../src/store/imperialCommands";
 import { PUNISHMENT_ID_REGEX } from "../../../src/engine/justice/types";
 import type { CaseRecord } from "../../../src/engine/justice/types";
-import type { CharacterStatusEffect } from "../../../src/engine/state/types";
+import type { CharacterStatusEffect, ConfinementEffect } from "../../../src/engine/state/types";
 import { allocateJusticeIds } from "../../../src/engine/justice/ids";
 import { applyJusticePlan } from "../../../src/engine/justice/mutations";
 import { toGameTime } from "../../../src/engine/calendar/time";
@@ -168,7 +168,7 @@ describe("ConfinementEffect.sourcePunishmentId linkage", () => {
     const cmd: ImperialCommand = { type: "impose_confinement", targetId: TARGET, durationTurns: 3 };
     store.applyImperialPunishmentWithConsequences(db, cmd, {});
     const se = store.getState().statusEffects.find(
-      (e) => e.kind === "confinement" && e.characterId === TARGET,
+      (e): e is ConfinementEffect => e.kind === "confinement" && e.characterId === TARGET,
     );
     expect(se?.sourcePunishmentId).toBe("pun_000001");
   });
@@ -178,7 +178,7 @@ describe("ConfinementEffect.sourcePunishmentId linkage", () => {
     const cmd: ImperialCommand = { type: "impose_confinement", targetId: TARGET, durationTurns: null };
     store.applyImperialPunishmentWithConsequences(db, cmd, {});
     const se = store.getState().statusEffects.find(
-      (e) => e.kind === "confinement" && e.characterId === TARGET,
+      (e): e is ConfinementEffect => e.kind === "confinement" && e.characterId === TARGET,
     );
     expect(se?.sourcePunishmentId).toBe("pun_000001");
   });
@@ -261,7 +261,7 @@ describe("punishment lifecycle transitions", () => {
     expect(store.getState().justice.nextSeq.punishment).toBe(seqBeforeExpiry);
 
     // The ConfinementEffect should be lifted.
-    const se = store.getState().statusEffects.find((e) => e.kind === "confinement" && e.characterId === TARGET);
+    const se = store.getState().statusEffects.find((e): e is ConfinementEffect => e.kind === "confinement" && e.characterId === TARGET);
     expect(se?.liftedTurn).toBeDefined();
 
     // The confinement_expired chronicle entry should have links.sourcePunishmentId.
@@ -496,7 +496,7 @@ describe("punishment atomicity", () => {
     expect(hasConfinement).toBe(true);
     // Both link to each other.
     const pun = state.justice.punishments["pun_000001"]!;
-    const se = state.statusEffects.find((e) => e.kind === "confinement" && e.characterId === TARGET)!;
+    const se = state.statusEffects.find((e): e is ConfinementEffect => e.kind === "confinement" && e.characterId === TARGET)!;
     expect(se.sourcePunishmentId).toBe("pun_000001");
     expect((pun.details as { statusEffectId: string }).statusEffectId).toBe(se.id);
   });

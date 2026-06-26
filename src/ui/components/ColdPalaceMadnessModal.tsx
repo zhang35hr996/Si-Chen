@@ -62,7 +62,7 @@ export function ColdPalaceMadnessModal({
           长门宫来报：{name}幽居日久，神志已乱，已不能辨识宫人，时常哭笑无常。
         </p>
         {sentAt && (
-          <p className="punish-modal__meta">入宫时间：{sentAt}</p>
+          <p className="punish-modal__meta">幽居始于：{sentAt}</p>
         )}
         <p className="punish-modal__meta">通报时间：{occurredLabel}</p>
         <p className="punish-modal__meta punish-modal__meta--warn">

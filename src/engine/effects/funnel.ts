@@ -19,7 +19,7 @@ import { diffGameState } from "../trace/diff";
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
-import { activeColdPalaceEffectFor, isInColdPalace } from "../characters/coldPalace";
+import { activeColdPalaceEffectFor, isInColdPalace, hasColdPalaceMadness } from "../characters/coldPalace";
 import { eligibleHaremAdministrators } from "../characters/haremAdministration";
 import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../characters/haremRankAuthority";
 import { nextHeirId } from "../characters/heirs";
@@ -429,6 +429,8 @@ export function validateEffects(
         const c = db.characters[ch] ?? state.generatedConsorts[ch];
         if (!c || c.kind !== "consort" || !state.standing[ch]) {
           bad(index, "BAD_EFFECT_TARGET", `restore_from_cold_palace needs a consort with standing: "${ch}"`, { char: ch });
+        } else if (hasColdPalaceMadness(state, ch)) {
+          bad(index, "BAD_EFFECT", `cannot restore mad cold-palace resident "${ch}"`, { char: ch });
         }
         // 幂等：无活跃冷宫效果时 apply 是 no-op，不在此报错。
         break;
@@ -1009,6 +1011,9 @@ export function applyEffects(
         const ch = e.char;
         const active = activeColdPalaceEffectFor(next, ch, next.calendar.dayIndex);
         if (!active) break; // no-op: no active cold palace effect
+        // Defensive guard: validation above should have rejected mad residents,
+        // but guard here too in case validation/apply diverge in future.
+        if (hasColdPalaceMadness(next, ch)) break;
         active.liftedAt = e.liftedAt;
         active.liftedTurn = e.liftedTurn;
         active.liftReason = e.liftReason;

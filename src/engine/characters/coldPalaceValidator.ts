@@ -341,6 +341,21 @@ export function validateColdPalaceMadnessLinks(state: GameState): GameError[] {
     if (startedAt.dayIndex > state.calendar.dayIndex) {
       errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": startedAt is in the future (dayIndex ${startedAt.dayIndex} > calendar.dayIndex ${state.calendar.dayIndex})`));
     }
+
+    // 8. Living mad resident must still be under the active source cold-palace effect.
+    if (st && st.lifecycle !== "deceased" && sourceEffect) {
+      if (!isColdPalaceEffectActiveAt(sourceEffect, state.calendar.dayIndex)) {
+        errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": living mad resident "${characterId}" must remain under the linked cold-palace effect (not lifted)`));
+      }
+    }
+
+    // 9. Exactly one mental_breakdown incident must exist for this madness effect.
+    const linkedIncidents = coldPalaceIncidents.filter(
+      (i) => i.kind === "mental_breakdown" && (i as { madnessEffectId: string }).madnessEffectId === id,
+    );
+    if (linkedIncidents.length !== 1) {
+      errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": expected exactly 1 mental_breakdown incident, found ${linkedIncidents.length}`));
+    }
   }
 
   // Validate mental_breakdown incidents.

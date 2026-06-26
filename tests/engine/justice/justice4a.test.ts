@@ -16,7 +16,7 @@ import { createNewGameState } from "../../../src/engine/state/newGame";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { PUNISHMENT_ID_REGEX } from "../../../src/engine/justice/types";
 import type { CaseRecord } from "../../../src/engine/justice/types";
-import type { CharacterStatusEffect } from "../../../src/engine/state/types";
+import type { CharacterStatusEffect, ConfinementEffect, ColdPalaceEffect } from "../../../src/engine/state/types";
 import { allocateJusticeIds } from "../../../src/engine/justice/ids";
 import { applyJusticePlan } from "../../../src/engine/justice/mutations";
 import { toGameTime } from "../../../src/engine/calendar/time";
@@ -179,7 +179,7 @@ describe("cold palace — ColdPalaceEffect", () => {
     const store = makeStore();
     store.sendConsortToColdPalace(db, TARGET, {});
     const se = store.getState().statusEffects.find(
-      (e) => e.kind === "cold_palace" && e.characterId === TARGET,
+      (e): e is ColdPalaceEffect => e.kind === "cold_palace" && e.characterId === TARGET,
     );
     expect(se?.sourcePunishmentId).toBe("pun_000001");
     // PunishmentRecord exists.
@@ -249,13 +249,13 @@ describe("cold palace — validation", () => {
 
     // Confinement effect should be lifted.
     const confineSe = store.getState().statusEffects.find(
-      (e) => e.kind === "confinement" && e.characterId === TARGET,
+      (e): e is ConfinementEffect => e.kind === "confinement" && e.characterId === TARGET,
     );
     expect(confineSe?.liftedTurn).toBeDefined();
 
     // Cold palace effect should be active.
     const cpSe = store.getState().statusEffects.find(
-      (e) => e.kind === "cold_palace" && e.characterId === TARGET,
+      (e): e is ColdPalaceEffect => e.kind === "cold_palace" && e.characterId === TARGET,
     );
     expect(cpSe).toBeDefined();
     expect(cpSe?.liftedTurn).toBeUndefined();
@@ -284,7 +284,7 @@ describe("cold palace — restore", () => {
     expect(restoreResult.ok).toBe(true);
 
     // Effect should be lifted.
-    const lifted = store.getState().statusEffects.find((e) => e.id === se.id);
+    const lifted = store.getState().statusEffects.find((e): e is ColdPalaceEffect => e.id === se.id && e.kind === "cold_palace");
     expect(lifted?.liftedTurn).toBeDefined();
     if (!lifted || lifted.kind !== "cold_palace") return;
     expect(lifted.liftReason).toBe("lifted_by_emperor");
@@ -459,7 +459,7 @@ describe("cold palace — death reconciliation (Fix 2)", () => {
 
     // ColdPalaceEffect should be lifted.
     const se = store.getState().statusEffects.find(
-      (e) => e.kind === "cold_palace" && e.characterId === TARGET,
+      (e): e is ColdPalaceEffect => e.kind === "cold_palace" && e.characterId === TARGET,
     );
     expect(se?.liftedTurn).toBeDefined();
   });

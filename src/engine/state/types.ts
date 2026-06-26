@@ -882,12 +882,7 @@ export interface ColdPalaceMadnessEffect {
   sourceColdPalaceEffectId: string;
   startedAt: GameTime;
   startTurn: number;
-  // Permanent, irrevocable — these fields are NEVER set at runtime.
-  // They exist here only for structural union compatibility with CharacterStatusEffect
-  // so that code accessing liftedTurn/sourcePunishmentId on the union without narrowing compiles.
-  liftedAt?: GameTime;
-  liftedTurn?: number;
-  sourcePunishmentId?: string;
+  // Permanent and irrevocable: no liftedAt, liftedTurn, or sourcePunishmentId ever set.
 }
 
 /** 角色持续状态的判别联合（禁足 / 冷宫；下狱/守丧待扩展）。 */

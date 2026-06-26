@@ -83,7 +83,7 @@ export function ColdPalaceCriticalIncidentModal({
           {healthLabel(health)}，宫人惶惶，急请圣上定夺。
         </p>
         {sentAt && (
-          <p className="punish-modal__meta">入宫时间：{sentAt}</p>
+          <p className="punish-modal__meta">幽居始于：{sentAt}</p>
         )}
         <p className="punish-modal__meta">通报时间：{occurredLabel}</p>
       </div>
