@@ -16,13 +16,13 @@ import { validateTreasuryLedger } from "../court/treasuryLedger";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
-import type { GameState, Official, OfficialAptitude, TreasuryLedgerEntry } from "../state/types";
+import type { GameState, Official, OfficialAptitude, TreasuryLedgerEntry, FrontierAssessment } from "../state/types";
 import { deriveOfficialAptitude, initialReviewState } from "../officials/careerMetrics";
 import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 24;
+export const SAVE_FORMAT_VERSION = 25;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -380,6 +380,24 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     const state = structuredClone(env.state) as GameState & Record<string, unknown>;
     // statusEffects already handled by Zod defaults; nothing to migrate structurally.
     return { ...env, formatVersion: 24, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+  // v24 → v25: 边患压力 + 年度边情评估（Phase 4C）。
+  // 旧档回填 borderPressure 默认值 35；frontierAssessments 初始化为空数组。
+  24: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+
+    const nation = (state as unknown as { resources: { nation: Record<string, unknown> } }).resources.nation;
+    if (nation.borderPressure === undefined || nation.borderPressure === null) {
+      nation.borderPressure = 35;
+    }
+
+    if (!Array.isArray((state as unknown as { frontierAssessments?: unknown }).frontierAssessments)) {
+      (state as unknown as { frontierAssessments: FrontierAssessment[] }).frontierAssessments = [];
+    }
+
+    const gs = state as unknown as GameState;
+    return { ...env, formatVersion: 25, state: gs, checksum: checksumOf(gs) };
   },
 };
 

@@ -40,6 +40,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
         corruption: 20,
         clanDiscontent: 20,
         rumor: 10,
+        borderPressure: 35,
       },
       bloodline: {
         menstrualStatus: "normal",
@@ -65,6 +66,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     personnelDecisions: {},
     memorials: {},
     treasuryLedger: [],
+    frontierAssessments: [],
     memories: {},
     bedchamber: {},
     eventLog: [],

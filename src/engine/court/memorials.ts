@@ -351,8 +351,9 @@ export function validateMemorials(state: GameState): GameError[] {
 
     // treasury 专属：matter/urgency/必需选项。
     if (m.payload.category === "treasury") {
-      if (m.payload.matter !== "annual_revenue_plan")
-        e("MEMORIAL_BAD_MATTER", `奏折「${m.id}」matter「${m.payload.matter}」非法`, { id: m.id });
+      const treasuryMatter = m.payload.matter as string;
+      if (treasuryMatter !== "annual_revenue_plan")
+        e("MEMORIAL_BAD_MATTER", `奏折「${m.id}」matter「${treasuryMatter}」非法`, { id: m.id });
       if (m.payload.urgency !== "routine" && m.payload.urgency !== "urgent")
         e("MEMORIAL_BAD_URGENCY", `奏折「${m.id}」urgency「${m.payload.urgency}」非法`, { id: m.id });
       const presentIds = new Set(m.payload.options.map((o) => o.id));
