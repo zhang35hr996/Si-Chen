@@ -21,7 +21,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 19;
+export const SAVE_FORMAT_VERSION = 20;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -316,14 +316,14 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     }
     return { ...env, formatVersion: 18, state, checksum: checksumOf(state) };
   },
-  // v18 → v19: 奏折框架（Phase 4A）。旧档无任何奏折，补空记录。
-  18: (old): SaveEnvelope => {
+  // v19 → v20: 奏折框架（Phase 4A）。旧档无任何奏折，补空记录。
+  19: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as GameState;
     if ((state as unknown as { memorials?: unknown }).memorials === undefined) {
       (state as unknown as { memorials: Record<string, never> }).memorials = {};
     }
-    return { ...env, formatVersion: 19, state, checksum: checksumOf(state) };
+    return { ...env, formatVersion: 20, state, checksum: checksumOf(state) };
   },
 };
 

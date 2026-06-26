@@ -1,4 +1,4 @@
-/** store 奏折批阅命令 + 年度灾情生产 seam + v18→v19 迁移（Phase 4A）。 */
+/** store 奏折批阅命令 + 年度灾情生产 seam + v19→v20 迁移（Phase 4A）。 */
 import { describe, expect, it } from "vitest";
 import { GameStore } from "../../src/store/gameStore";
 import { generateDisasterMemorial, getPendingMemorials } from "../../src/engine/court/memorials";
@@ -75,22 +75,22 @@ describe("annual disaster seam (production-reachable)", () => {
   });
 });
 
-describe("save migration v18 → v19 (memorials backfill)", () => {
-  it("SAVE_FORMAT_VERSION ≥ 19", () => {
-    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(19);
+describe("save migration v19 → v20 (memorials backfill)", () => {
+  it("SAVE_FORMAT_VERSION ≥ 20", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(20);
   });
 
-  function makeV18Save(): string {
+  function makeV19Save(): string {
     const s = createNewGameState(db);
-    const stateV18 = { ...s } as Record<string, unknown>;
-    delete stateV18.memorials;
-    const env = { ...createSaveData(db, s, "slot1"), formatVersion: 18, state: stateV18, checksum: checksumOf(stateV18 as unknown as GameState) };
+    const stateV19 = { ...s } as Record<string, unknown>;
+    delete stateV19.memorials;
+    const env = { ...createSaveData(db, s, "slot1"), formatVersion: 19, state: stateV19, checksum: checksumOf(stateV19 as unknown as GameState) };
     return JSON.stringify(env);
   }
 
-  it("v18 save without memorials migrates to v19 with an empty record", () => {
+  it("v19 save without memorials migrates to v20 with an empty record", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV18Save());
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV19Save());
     const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
