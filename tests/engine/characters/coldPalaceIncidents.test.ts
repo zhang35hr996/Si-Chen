@@ -460,7 +460,7 @@ describe("save migration v18 → v19 (coldPalaceIncidents)", () => {
     expect(state.coldPalaceIncidents).toHaveLength(0);
   });
 
-  it("SAVE_FORMAT_VERSION is now 19", async () => {
+  it("SAVE_FORMAT_VERSION includes the v19 migration", async () => {
     const { SAVE_FORMAT_VERSION } = await import("../../../src/engine/save/saveSystem");
     expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(19);
   });
