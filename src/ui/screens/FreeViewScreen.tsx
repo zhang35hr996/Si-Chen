@@ -8,6 +8,7 @@ import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
 import { getPresentAt } from "../../engine/characters/presence";
 import { isColdPalaceEffectActiveAt } from "../../engine/characters/coldPalace";
+import { canInterveneInColdPalace } from "../../engine/characters/coldPalaceIncidents";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
 import type { ColdPalaceEffect } from "../../engine/state/types";
@@ -26,6 +27,7 @@ export function FreeViewScreen({
   onDrawFortune,
   onViewProfile,
   onRestoreFromColdPalace,
+  onInterveneColdPalace,
 }: {
   db: ContentDB;
   store: GameStore;
@@ -37,6 +39,8 @@ export function FreeViewScreen({
   onDrawFortune?: () => void;
   onViewProfile?: (charId: string) => void;
   onRestoreFromColdPalace?: (charId: string) => void;
+  /** 打开探视弹窗（PUNISH-4E）— modal handles kind selection and confirmation */
+  onInterveneColdPalace?: (charId: string) => void;
 }) {
   const state = useGameState(store);
   const location = db.locations[locationId];
@@ -114,6 +118,19 @@ export function FreeViewScreen({
                       onClick={() => onViewProfile(char.id)}
                     >
                       查看详情
+                    </button>
+                  )}
+                  {onInterveneColdPalace && (
+                    <button
+                      type="button"
+                      className="punish-btn"
+                      disabled={
+                        !canInterveneInColdPalace(state, char.id, "personal_visit") &&
+                        !canInterveneInColdPalace(state, char.id, "physician")
+                      }
+                      onClick={() => onInterveneColdPalace(char.id)}
+                    >
+                      亲临探视 / 遣太医
                     </button>
                   )}
                   {onRestoreFromColdPalace && (

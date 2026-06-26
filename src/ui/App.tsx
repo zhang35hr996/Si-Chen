@@ -127,7 +127,9 @@ import { ColdPalaceRestoreModal } from "./components/ColdPalaceModal";
 import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
 import { ColdPalaceIncidentModal } from "./components/ColdPalaceIncidentModal";
 import { ColdPalaceCriticalIncidentModal } from "./components/ColdPalaceCriticalIncidentModal";
+import { ColdPalaceInterventionModal } from "./components/ColdPalaceInterventionModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
+import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
@@ -203,6 +205,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [punishGoHome, setPunishGoHome] = useState(false);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
   const [restoreCharId, setRestoreCharId] = useState<string | null>(null);
+  const [coldPalaceInterventionTarget, setColdPalaceInterventionTarget] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 过场（对话/反应/初夜提示）若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
@@ -2148,6 +2151,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onDrawFortune={() => templeAction("fortune")}
           onViewProfile={(id) => setProfileCharId(id)}
           onRestoreFromColdPalace={(id) => setRestoreCharId(id)}
+          onInterveneColdPalace={(charId) => setColdPalaceInterventionTarget(charId)}
         />
       )}
       {view === "event" && activeEventId && (
@@ -2287,6 +2291,27 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             setPunishCharId(null);
             reopenConsortListIfReturning(); // 取消也回到列表
           }}
+        />
+      )}
+      {coldPalaceInterventionTarget && (
+        <ColdPalaceInterventionModal
+          db={db}
+          state={liveState}
+          charId={coldPalaceInterventionTarget}
+          onSelect={(kind: ColdPalaceInterventionKind) => {
+            const before = store.getState().calendar;
+            const result = store.interveneInColdPalace(db, coldPalaceInterventionTarget, kind);
+            if (!result.ok) {
+              return result.error[0]?.message ?? "操作失败";
+            }
+            setColdPalaceInterventionTarget(null);
+            if (result.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return null; }
+            const decreeBeats = rollActionBeats(before, 1);
+            doAutosave();
+            playReactions(decreeBeats, result.value.rolledOver ? stationaryRequest() : null);
+            return null;
+          }}
+          onClose={() => setColdPalaceInterventionTarget(null)}
         />
       )}
       {restoreCharId && (db.characters[restoreCharId] ?? liveState.generatedConsorts[restoreCharId]) && liveState.standing[restoreCharId] && (

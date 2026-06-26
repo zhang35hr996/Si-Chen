@@ -66,9 +66,9 @@ function makeV17Save(): string {
 
 // ── Current version ──────────────────────────────────────────────────────────
 
-describe("save format v21", () => {
-  it("SAVE_FORMAT_VERSION is 21 (v20→v21 critical_illness discriminated union)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(21);
+describe("save format v21 migration behavior", () => {
+  it("SAVE_FORMAT_VERSION is at least 21 (v20→v21 critical_illness discriminated union)", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(21);
   });
 
   it("new game state coldPalaceIncidents defaults to empty array", () => {
@@ -104,9 +104,9 @@ describe("save migration v20 → v21 (discriminated union extension)", () => {
   });
 });
 
-// ── Chain migration v17 → v18 → v19 → v20 → v21 ─────────────────────────────
+// ── Chain migration (v17 → ... → current) ────────────────────────────────────
 
-describe("save migration chain v17 → v18 → v19 → v20 → v21", () => {
+describe("save migration chain v17 → v18 → v19 → v20 → v21 → ...", () => {
   it("v17 save migrates through all versions acquiring personnelDecisions, coldPalaceIncidents, and memorials", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV17Save());

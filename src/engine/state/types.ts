@@ -703,6 +703,35 @@ export interface PendingAftermath {
 }
 
 // ── 冷宫事件通报（PUNISH-4C / PUNISH-4D）──────────────────────────────────
+// ── PUNISH-4E: Cold-palace intervention records ──────────────────────────────
+
+export type ColdPalaceInterventionKind = "personal_visit" | "physician";
+
+interface ColdPalaceInterventionBase {
+  /** Canonical ID: cpa_{residentId}_{year}_{MM} — at most one per resident per month. */
+  id: string;
+  residentId: string;
+  /** ID of the ColdPalaceEffect active when this intervention was performed. */
+  effectId: string;
+  occurredAt: GameTime;
+}
+
+export interface ColdPalaceVisitIntervention extends ColdPalaceInterventionBase {
+  kind: "personal_visit";
+  favorDelta: number;
+}
+
+export interface ColdPalacePhysicianIntervention extends ColdPalaceInterventionBase {
+  kind: "physician";
+  healthDelta: number;
+}
+
+export type ColdPalaceIntervention =
+  | ColdPalaceVisitIntervention
+  | ColdPalacePhysicianIntervention;
+
+// ── ColdPalaceIncident (PUNISH-4C/4D) ───────────────────────────────────────
+
 export type ColdPalaceIncidentKind = "petition" | "health_deterioration" | "critical_illness";
 
 /** Player choice when resolving a critical_illness incident. */
@@ -970,6 +999,8 @@ export interface GameState {
   pendingAftermath: PendingAftermath[];
   /** 月度冷宫事件通报队列（PUNISH-4C）。append-only；acknowledged=true 表已呈报。 */
   coldPalaceIncidents: ColdPalaceIncident[];
+  /** 玩家主动干预记录（PUNISH-4E）。append-only；每位居民每月至多一条。 */
+  coldPalaceInterventions: ColdPalaceIntervention[];
   /**
    * 持久化「待消费的大选日历事件」：到点（catch-up）由时间事务统一入口探测置位，
    * 与具体行动路径无关；UI 消费后清空。announce 优先于 dianxuan。

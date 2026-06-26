@@ -21,7 +21,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 21;
+export const SAVE_FORMAT_VERSION = 22;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -331,6 +331,12 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   20: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     return { ...env, formatVersion: 21, checksum: checksumOf(env.state) };
+  },
+  // v21 → v22: 长门宫探视（PUNISH-4E）。新增 coldPalaceInterventions 字段；
+  // 旧档无此字段，schema.default([]) 负责填充，此处仅升版本号。
+  21: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    return { ...env, formatVersion: 22, checksum: checksumOf(env.state) };
   },
 };
 
