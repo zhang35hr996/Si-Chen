@@ -13,6 +13,8 @@
 import type {
   ColdPalaceIncident,
   ColdPalaceCriticalIllnessIncident,
+  ColdPalaceMadnessEffect,
+  ColdPalaceMentalBreakdownIncident,
   ColdPalaceIncidentKind,
   ColdPalaceEffect,
   ColdPalaceIntervention,
@@ -20,8 +22,9 @@ import type {
   GameState,
 } from "../state/types";
 import type { GameTime } from "../calendar/time";
-import { activeColdPalaceEffectFor, isColdPalaceEffectActiveAt } from "./coldPalace";
+import { activeColdPalaceEffectFor, coldPalaceMadnessEffectFor, isColdPalaceEffectActiveAt } from "./coldPalace";
 import { gestationRoll } from "./gestation";
+import { nextStatusEffectId } from "./confinement";
 
 // ── ID helpers ──────────────────────────────────────────────────────────────
 
@@ -138,7 +141,7 @@ export function isIncidentPresentable(
 
 /**
  * Returns the oldest unacknowledged incident that is still presentable.
- * critical_illness (pending_response) is always prioritised over other kinds.
+ * Priority: critical_illness (pending_response) > mental_breakdown > others (by date).
  */
 export function oldestPresentableIncident(
   state: GameState,
@@ -148,10 +151,14 @@ export function oldestPresentableIncident(
   );
   if (!candidates.length) return undefined;
   return candidates.reduce((a, b) => {
-    const aUrgent = a.kind === "critical_illness" && a.status === "pending_response";
-    const bUrgent = b.kind === "critical_illness" && b.status === "pending_response";
-    if (aUrgent && !bUrgent) return a;
-    if (!aUrgent && bUrgent) return b;
+    const urgencyOf = (i: ColdPalaceIncident): number => {
+      if (i.kind === "critical_illness" && i.status === "pending_response") return 2;
+      if (i.kind === "mental_breakdown") return 1;
+      return 0;
+    };
+    const ua = urgencyOf(a);
+    const ub = urgencyOf(b);
+    if (ua !== ub) return ua > ub ? a : b;
     const ordA = a.occurredAt.year * 12 + a.occurredAt.month;
     const ordB = b.occurredAt.year * 12 + b.occurredAt.month;
     return ordA <= ordB ? a : b;
@@ -269,6 +276,11 @@ export function planColdPalaceIncidents(state: GameState): ColdPalaceIncident[] 
     }
 
     const finalKind = healthDelta !== undefined ? kind : "petition";
+
+    // Mad residents: only health_deterioration permitted, no petition.
+    const isMad = coldPalaceMadnessEffectFor(state, charId) !== undefined;
+    if (isMad && finalKind === "petition") continue; // Skip petition for mad residents
+
     if (finalKind === "health_deterioration" && healthDelta !== undefined) {
       return [{
         id: coldPalaceIncidentId(charId, year, month),
@@ -420,3 +432,139 @@ export function canInterveneInColdPalace(
  * Pure planner — returns an unattached ColdPalaceIntervention record.
  * The caller must validate eligibility via canInterveneInColdPalace before calling this.
  */
+
+// ── PUNISH-4F: Mental breakdown planner ─────────────────────────────────────
+
+export const MADNESS_MIN_FULL_MONTHS = 6;
+export const MADNESS_BASE_CHANCE = 8;
+export const MADNESS_MONTHLY_STEP = 4;
+export const MADNESS_BASE_CAP = 32;
+export const MADNESS_LOW_HEALTH_BONUS = 8;
+export const MADNESS_LOW_HEALTH_THRESHOLD = 40;
+export const MADNESS_LOW_FAVOR_BONUS = 5;
+export const MADNESS_LOW_FAVOR_THRESHOLD = 10;
+export const MADNESS_PREVIOUS_VISIT_REDUCTION = 10;
+export const MADNESS_MAX_CHANCE = 45;
+
+/** Full calendar months elapsed since the cold-palace sentence began. */
+function fullMonthsInCurrentColdPalace(
+  state: GameState,
+  effect: ColdPalaceEffect,
+): number {
+  const { year: curYear, month: curMonth } = state.calendar;
+  const { year: startYear, month: startMonth } = effect.startedAt;
+  return (curYear - 1) * 12 + curMonth - ((startYear - 1) * 12 + startMonth);
+}
+
+/** True iff the resident had a personal_visit intervention in the previous calendar month. */
+function hadPersonalVisitLastMonth(
+  state: GameState,
+  charId: string,
+): boolean {
+  const { year, month } = state.calendar;
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevId = coldPalaceInterventionId(charId, prevYear, prevMonth);
+  return state.coldPalaceInterventions.some(
+    (i) => i.id === prevId && i.kind === "personal_visit",
+  );
+}
+
+/**
+ * Compute madness trigger chance for an eligible resident.
+ * Returns 0 if fewer than MADNESS_MIN_FULL_MONTHS have elapsed.
+ */
+export function coldPalaceMadnessChance(
+  state: GameState,
+  charId: string,
+  effect: ColdPalaceEffect,
+): number {
+  const fullMonths = fullMonthsInCurrentColdPalace(state, effect);
+  if (fullMonths < MADNESS_MIN_FULL_MONTHS) return 0;
+
+  let base = MADNESS_BASE_CHANCE + (fullMonths - MADNESS_MIN_FULL_MONTHS) * MADNESS_MONTHLY_STEP;
+  if (base > MADNESS_BASE_CAP) base = MADNESS_BASE_CAP;
+
+  const standing = state.standing[charId];
+  const health = standing?.health ?? 100;
+  const favor = standing?.favor ?? 0;
+
+  let chance = base;
+  if (health <= MADNESS_LOW_HEALTH_THRESHOLD) chance += MADNESS_LOW_HEALTH_BONUS;
+  if (favor <= MADNESS_LOW_FAVOR_THRESHOLD) chance += MADNESS_LOW_FAVOR_BONUS;
+  if (hadPersonalVisitLastMonth(state, charId)) chance -= MADNESS_PREVIOUS_VISIT_REDUCTION;
+
+  return Math.min(Math.max(chance, 0), MADNESS_MAX_CHANCE);
+}
+
+/**
+ * Mental-breakdown planner (PUNISH-4F).
+ * Returns a [ColdPalaceMadnessEffect, ColdPalaceMentalBreakdownIncident] pair,
+ * or null if no eligible resident triggers this month.
+ *
+ * Ordering: called AFTER planColdPalaceCriticalIncident so that same-month
+ * critical_illness (which consumes the incident slot) blocks mental breakdown.
+ * Called BEFORE planColdPalaceIncidents so that mental breakdown blocks regular incidents.
+ *
+ * Must be called only when monthChanged = true.
+ */
+export function planColdPalaceMadnessBreakdown(
+  state: GameState,
+): { effect: ColdPalaceMadnessEffect; incident: ColdPalaceMentalBreakdownIncident } | null {
+  const { year, month, period, dayIndex } = state.calendar;
+  const now: GameTime = { year, month, period, dayIndex };
+  const rngSeed = state.rngSeed;
+
+  const candidates = Object.entries(state.standing)
+    .filter(([charId, standing]) => {
+      if (standing.lifecycle === "deceased" || standing.lifecycle === "candidate") return false;
+      // Already mad — no repeat.
+      if (coldPalaceMadnessEffectFor(state, charId)) return false;
+      // Incident slot already occupied this month (critical_illness has priority).
+      if (hasColdPalaceIncidentThisMonth(state.coldPalaceIncidents, charId, year, month)) return false;
+      const effect = activeColdPalaceEffectFor(state, charId, dayIndex);
+      if (!effect) return false;
+      // Must have been here for at least MADNESS_MIN_FULL_MONTHS.
+      if (fullMonthsInCurrentColdPalace(state, effect) < MADNESS_MIN_FULL_MONTHS) return false;
+      return true;
+    })
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+
+  for (const [charId] of candidates) {
+    const effect = activeColdPalaceEffectFor(state, charId, dayIndex)!;
+    const chance = coldPalaceMadnessChance(state, charId, effect);
+    if (chance <= 0) continue;
+
+    const roll = gestationRoll(
+      `cold_palace_madness:${rngSeed}:${effect.id}:${charId}:${year}:${month}`,
+    );
+    if (roll >= chance) continue;
+
+    // Hit — generate both effect and incident atomically.
+    const madnessEffectId = nextStatusEffectId(state, charId);
+    const incidentId = coldPalaceIncidentId(charId, year, month);
+
+    const madnessEffect: ColdPalaceMadnessEffect = {
+      id: madnessEffectId,
+      kind: "cold_palace_madness",
+      characterId: charId,
+      sourceColdPalaceEffectId: effect.id,
+      startedAt: now,
+      startTurn: dayIndex,
+    };
+
+    const incident: ColdPalaceMentalBreakdownIncident = {
+      id: incidentId,
+      residentId: charId,
+      effectId: effect.id,
+      kind: "mental_breakdown",
+      occurredAt: now,
+      acknowledged: false,
+      madnessEffectId,
+    };
+
+    return { effect: madnessEffect, incident };
+  }
+
+  return null;
+}

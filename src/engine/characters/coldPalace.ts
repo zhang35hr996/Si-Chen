@@ -9,6 +9,7 @@
 import type {
   CharacterStatusEffect,
   ColdPalaceEffect,
+  ColdPalaceMadnessEffect,
   GameState,
 } from "../state/types";
 
@@ -57,5 +58,47 @@ export function canSendToColdPalace(
   if (standing.lifecycle === "deceased") return { ok: false, reason: "斯人已逝，无从处置" };
   if (standing.lifecycle === "candidate") return { ok: false, reason: "候选人不受此令" };
   if (isInColdPalace(state, charId)) return { ok: false, reason: "已身处冷宫" };
+  return { ok: true };
+}
+
+/** The cold-palace-madness effect for this character, or undefined if none. */
+export function coldPalaceMadnessEffectFor(
+  state: GameState,
+  charId: string,
+): ColdPalaceMadnessEffect | undefined {
+  return state.statusEffects.find(
+    (e): e is ColdPalaceMadnessEffect =>
+      e.kind === "cold_palace_madness" && e.characterId === charId,
+  );
+}
+
+/** True if this character has ever had a mental breakdown (even after death). */
+export function hasColdPalaceMadness(state: GameState, charId: string): boolean {
+  return coldPalaceMadnessEffectFor(state, charId) !== undefined;
+}
+
+/** True if character is alive, currently in cold palace, and has a madness effect. */
+export function isLivingMadColdPalaceResident(state: GameState, charId: string): boolean {
+  const standing = state.standing[charId];
+  if (!standing || standing.lifecycle === "deceased" || standing.lifecycle === "candidate") return false;
+  if (!isInColdPalace(state, charId)) return false;
+  return hasColdPalaceMadness(state, charId);
+}
+
+/**
+ * Single authoritative gate for restoring a consort from the cold palace.
+ * All restore paths MUST call this before proceeding.
+ */
+export function canRestoreFromColdPalace(
+  state: GameState,
+  charId: string,
+): { ok: true } | { ok: false; reason: string } {
+  const standing = state.standing[charId];
+  if (!standing) return { ok: false, reason: "此人无在案记录" };
+  if (standing.lifecycle === "deceased") return { ok: false, reason: "斯人已逝，无从处置" };
+  if (!activeColdPalaceEffectFor(state, charId)) return { ok: false, reason: "此人并非在冷宫幽居" };
+  if (hasColdPalaceMadness(state, charId)) {
+    return { ok: false, reason: "此人神志已乱，已不得离开长门宫。" };
+  }
   return { ok: true };
 }

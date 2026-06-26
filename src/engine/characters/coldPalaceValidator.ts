@@ -4,7 +4,7 @@
  * Called from gameStateSchema.superRefine() — validates persistent state.
  */
 import { gameError, type GameError } from "../infra/errors";
-import type { ColdPalaceEffect, GameState } from "../state/types";
+import type { ColdPalaceEffect, ColdPalaceMadnessEffect, ColdPalaceMentalBreakdownIncident, GameState } from "../state/types";
 import { isColdPalaceEffectActiveAt } from "./coldPalace";
 import { coldPalaceIncidentId, coldPalaceInterventionId } from "./coldPalaceIncidents";
 
@@ -274,6 +274,129 @@ export function validateColdPalaceInterventionLinks(state: GameState): GameError
       if (delta <= 0) {
         errors.push(interventionErr(`ColdPalaceIntervention "${id}": kind=physician healthDelta must be positive (got ${delta})`));
       }
+    }
+  }
+
+  return errors;
+}
+
+function madnessErr(msg: string): GameError {
+  return gameError("state", "BAD_COLD_PALACE_MADNESS", msg);
+}
+
+export function validateColdPalaceMadnessLinks(state: GameState): GameError[] {
+  const errors: GameError[] = [];
+  const { statusEffects, coldPalaceIncidents, standing } = state;
+
+  const madnessEffects = statusEffects.filter(
+    (e): e is ColdPalaceMadnessEffect => e.kind === "cold_palace_madness",
+  );
+
+  const seenMadnessIds = new Set<string>();
+  const seenMadnessCharIds = new Set<string>();
+
+  for (const effect of madnessEffects) {
+    const { id, characterId, sourceColdPalaceEffectId, startedAt, startTurn } = effect;
+
+    // 1. ID unique.
+    if (seenMadnessIds.has(id)) {
+      errors.push(madnessErr(`ColdPalaceMadnessEffect id "${id}" is not unique`));
+    }
+    seenMadnessIds.add(id);
+
+    // 2. At most one per character.
+    if (seenMadnessCharIds.has(characterId)) {
+      errors.push(madnessErr(`Duplicate ColdPalaceMadnessEffect for character "${characterId}"`));
+    }
+    seenMadnessCharIds.add(characterId);
+
+    // 3. Character standing exists.
+    const st = standing[characterId];
+    if (!st) {
+      errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": characterId "${characterId}" has no standing`));
+    }
+
+    // 4. sourceColdPalaceEffectId links to a real cold_palace effect for the same character.
+    const sourceEffect = statusEffects.find(
+      (e): e is ColdPalaceEffect => e.kind === "cold_palace" && e.id === sourceColdPalaceEffectId,
+    );
+    if (!sourceEffect) {
+      errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": sourceColdPalaceEffectId "${sourceColdPalaceEffectId}" not found`));
+    } else {
+      if (sourceEffect.characterId !== characterId) {
+        errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": source effect belongs to "${sourceEffect.characterId}", not "${characterId}"`));
+      }
+      // 5. Source effect was active at startedAt.dayIndex.
+      if (!isColdPalaceEffectActiveAt(sourceEffect, startedAt.dayIndex)) {
+        errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": source effect was not active at startedAt.dayIndex ${startedAt.dayIndex}`));
+      }
+    }
+
+    // 6. startTurn === startedAt.dayIndex.
+    if (startTurn !== startedAt.dayIndex) {
+      errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": startTurn ${startTurn} !== startedAt.dayIndex ${startedAt.dayIndex}`));
+    }
+
+    // 7. startedAt not in the future.
+    if (startedAt.dayIndex > state.calendar.dayIndex) {
+      errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": startedAt is in the future (dayIndex ${startedAt.dayIndex} > calendar.dayIndex ${state.calendar.dayIndex})`));
+    }
+  }
+
+  // Validate mental_breakdown incidents.
+  const breakdownIncidents = coldPalaceIncidents.filter(
+    (i): i is ColdPalaceMentalBreakdownIncident => i.kind === "mental_breakdown",
+  );
+  const seenBreakdownIds = new Set<string>();
+  const seenBreakdownBySource = new Map<string, string>(); // sourceColdPalaceEffectId → incidentId
+
+  for (const incident of breakdownIncidents) {
+    const { id, residentId, effectId, madnessEffectId, occurredAt } = incident;
+
+    // 1. ID unique.
+    if (seenBreakdownIds.has(id)) {
+      errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident id "${id}" is not unique`));
+    }
+    seenBreakdownIds.add(id);
+
+    // 2. madnessEffectId links to a real ColdPalaceMadnessEffect.
+    const linkedMadness = madnessEffects.find((e) => e.id === madnessEffectId);
+    if (!linkedMadness) {
+      errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": madnessEffectId "${madnessEffectId}" not found`));
+    } else {
+      // 3. madness.characterId === residentId.
+      if (linkedMadness.characterId !== residentId) {
+        errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": madness effect belongs to "${linkedMadness.characterId}", not "${residentId}"`));
+      }
+      // 4. effectId === madness.sourceColdPalaceEffectId.
+      if (effectId !== linkedMadness.sourceColdPalaceEffectId) {
+        errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": effectId "${effectId}" ≠ madness.sourceColdPalaceEffectId "${linkedMadness.sourceColdPalaceEffectId}"`));
+      }
+      // 5. occurredAt === madness.startedAt.dayIndex.
+      if (occurredAt.dayIndex !== linkedMadness.startedAt.dayIndex) {
+        errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": occurredAt.dayIndex ${occurredAt.dayIndex} ≠ madness.startedAt.dayIndex ${linkedMadness.startedAt.dayIndex}`));
+      }
+    }
+
+    // 6. At most one mental_breakdown per cold-palace sentence.
+    if (seenBreakdownBySource.has(effectId)) {
+      errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident duplicate for sentence "${effectId}": "${id}" and "${seenBreakdownBySource.get(effectId)}"`));
+    }
+    seenBreakdownBySource.set(effectId, id);
+
+    // 7. occurredAt not in the future.
+    if (occurredAt.dayIndex > state.calendar.dayIndex) {
+      errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": occurredAt is in the future`));
+    }
+
+    // 8. Source cold-palace effect active at occurredAt.
+    const sourceColdPalaceEffect = statusEffects.find(
+      (e): e is ColdPalaceEffect => e.kind === "cold_palace" && e.id === effectId,
+    );
+    if (!sourceColdPalaceEffect) {
+      errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": effectId "${effectId}" not found`));
+    } else if (!isColdPalaceEffectActiveAt(sourceColdPalaceEffect, occurredAt.dayIndex)) {
+      errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": source cold-palace effect was not active at occurredAt.dayIndex ${occurredAt.dayIndex}`));
     }
   }
 

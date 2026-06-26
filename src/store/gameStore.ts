@@ -12,7 +12,7 @@ import type { RingBufferLogger } from "../engine/infra/logger";
 import { err, ok, type Result } from "../engine/infra/result";
 import { formatGameTime, fromTurnIndex, monthOrdinal, toGameTime } from "../engine/calendar/time";
 import { activeConfinement, expiredUnrecordedConfinements, nextStatusEffectId } from "../engine/characters/confinement";
-import { activeColdPalaceEffectFor, isInColdPalace } from "../engine/characters/coldPalace";
+import { activeColdPalaceEffectFor, canRestoreFromColdPalace, isInColdPalace } from "../engine/characters/coldPalace";
 import { getCharacterLocation } from "../engine/characters/presence";
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { planImperialCommand, type ImperialCommand, type ImperialCommandPlan } from "./imperialCommands";
@@ -61,10 +61,11 @@ import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
 import type { QueueTraceEvent } from "../engine/trace/domainEvents";
 import { applyJusticePlan, type JusticePlan } from "../engine/justice/mutations";
 import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../engine/characters/chambers";
-import type { ChamberId, ColdPalaceCriticalIllnessIncident, ColdPalaceIntervention } from "../engine/state/types";
+import type { ChamberId, ColdPalaceCriticalIllnessIncident, ColdPalaceIntervention, ConfinementEffect } from "../engine/state/types";
 import {
   planColdPalaceIncidents,
   planColdPalaceCriticalIncident,
+  planColdPalaceMadnessBreakdown,
   staleIncidentIds,
   criticalIgnoreDelta,
   PHYSICIAN_RECOVERY_DELTA,
@@ -737,7 +738,8 @@ export class GameStore {
     // lift_confinement: if the active confinement has a sourcePunishmentId, resolve its PunishmentRecord.
     if (command.type === "lift_confinement") {
       const active = this.state.statusEffects.find(
-        (e) => e.kind === "confinement" && e.characterId === command.targetId && e.liftedTurn === undefined,
+        (e): e is ConfinementEffect =>
+          e.kind === "confinement" && e.characterId === command.targetId && e.liftedTurn === undefined,
       );
       if (active?.sourcePunishmentId) {
         const now = toGameTime(this.state.calendar);
@@ -767,7 +769,8 @@ export class GameStore {
     // lift_confinement: inject sourcePunishmentId into chronicle links if available.
     const liftSourcePunishmentId = command.type === "lift_confinement"
       ? this.state.statusEffects.find(
-          (e) => e.kind === "confinement" && e.characterId === command.targetId && e.liftedTurn === undefined,
+          (e): e is ConfinementEffect =>
+            e.kind === "confinement" && e.characterId === command.targetId && e.liftedTurn === undefined,
         )?.sourcePunishmentId
       : undefined;
     const adjustedChronicle = liftSourcePunishmentId
@@ -1663,7 +1666,29 @@ export class GameStore {
 
     // 5) Cold-palace incident generation (月度；replay-stable).
     if (monthChanged) {
-      // 5a) Regular incidents (petition / health_deterioration) — health > CRITICAL_HEALTH_THRESHOLD.
+      // 5a) Critical-illness incidents — health ≤ CRITICAL_HEALTH_THRESHOLD (PUNISH-4D).
+      //     Two-phase: no health effect at tick time; player resolves via resolveColdPalaceCriticalIncident().
+      const beforeCritical = candidate;
+      const criticalIncident = planColdPalaceCriticalIncident(candidate);
+      if (criticalIncident) {
+        candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, criticalIncident] };
+        collector?.capturePhaseScheduled("cold_palace_critical_incidents", diffGameState(beforeCritical, candidate));
+      }
+
+      // 5b) Mental breakdown — PUNISH-4F (after critical illness, before regular).
+      const beforeMadness = candidate;
+      const madnessResult = planColdPalaceMadnessBreakdown(candidate);
+      if (madnessResult) {
+        const { effect: madnessEffect, incident: madnessIncident } = madnessResult;
+        candidate = {
+          ...candidate,
+          statusEffects: [...candidate.statusEffects, madnessEffect],
+          coldPalaceIncidents: [...candidate.coldPalaceIncidents, madnessIncident],
+        };
+        collector?.capturePhaseScheduled("cold_palace_madness", diffGameState(beforeMadness, candidate));
+      }
+
+      // 5c) Regular incidents (petition / health_deterioration) — health > CRITICAL_HEALTH_THRESHOLD.
       //     Health delta applied immediately (non-lethal).
       const beforeIncidents = candidate;
       const newIncidents = planColdPalaceIncidents(candidate);
@@ -1689,15 +1714,6 @@ export class GameStore {
         }
         candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, ...newIncidents] };
         collector?.capturePhaseScheduled("cold_palace_incidents", diffGameState(beforeIncidents, candidate));
-      }
-
-      // 5b) Critical-illness incidents — health ≤ CRITICAL_HEALTH_THRESHOLD (PUNISH-4D).
-      //     Two-phase: no health effect at tick time; player resolves via resolveColdPalaceCriticalIncident().
-      const beforeCritical = candidate;
-      const criticalIncident = planColdPalaceCriticalIncident(candidate);
-      if (criticalIncident) {
-        candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, criticalIncident] };
-        collector?.capturePhaseScheduled("cold_palace_critical_incidents", diffGameState(beforeCritical, candidate));
       }
     }
 
@@ -2108,6 +2124,12 @@ export class GameStore {
     liftReason: "lifted_by_emperor" | "pardoned",
     _meta?: { caseId?: string },
   ): Result<{ punishmentId: string }, GameError[]> {
+    const restoreCheck = canRestoreFromColdPalace(this.state, targetId);
+    if (!restoreCheck.ok) {
+      const error = stateError("COLD_PALACE_INVALID", `cannot restore "${targetId}": ${restoreCheck.reason}`);
+      this.logger?.logGameError(error);
+      return err([error]);
+    }
     const activeEffect = activeColdPalaceEffectFor(this.state, targetId);
     if (!activeEffect) {
       const error = stateError("COLD_PALACE_INVALID", `no active cold palace effect for "${targetId}"`);

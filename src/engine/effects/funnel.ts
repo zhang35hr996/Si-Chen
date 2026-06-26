@@ -1093,11 +1093,9 @@ export function applyEffects(
         next.resources.bloodline.gestations = next.resources.bloodline.gestations.filter((g) => g.carrier !== effect.char); // 断胎
         // 统一死亡清理：作废活跃禁足/冷宫等持续状态、清留宿与免请安计划。
         for (const se of next.statusEffects) {
-          if (se.characterId === effect.char && se.liftedTurn === undefined) {
-            if (se.kind === "confinement" || se.kind === "cold_palace") {
-              se.liftedTurn = effect.at.dayIndex;
-              se.liftedAt = effect.at;
-            }
+          if (se.characterId === effect.char && (se.kind === "confinement" || se.kind === "cold_palace") && se.liftedTurn === undefined) {
+            se.liftedTurn = effect.at.dayIndex;
+            se.liftedAt = effect.at;
           }
         }
         // Resolve all active PunishmentRecords for the deceased character.
