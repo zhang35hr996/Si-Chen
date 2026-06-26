@@ -304,19 +304,23 @@ export function generateAnnualPersonnelEvents(state: GameState, db: ContentDB, a
 
   const review = getLatestAnnualReview(state);
   const severe = new Set<string>(review?.year === at.year ? review.dismissalCandidateIds ?? [] : []);
+  const officials = getActiveSeatedOfficials(state, db).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
 
+  // **全局**优先级（非每官内优先）：先把全部请免名额用尽，再请降，再荐升——确保严重失职的请免不被
+  // 普通奏折挤出年度 cap。每官至多一条（handled），总数受 ANNUAL_MEMORIAL_CAP 限。
+  const handled = new Set<string>();
   let memCount = 0;
-  for (const o of getActiveSeatedOfficials(state, db).slice().sort((a, b) => (a.id < b.id ? -1 : 1))) {
-    if (memCount >= ANNUAL_MEMORIAL_CAP) break;
-    if (severe.has(o.id)) {
-      const r = generateMemorialDismissalBySignal(cur, o.id, at);
-      if (r) { cur = r.state; memCount += 1; continue; }
+  const pass = (gen: (officialId: string) => { state: GameState; decision: PersonnelDecision } | null, skip?: (officialId: string) => boolean) => {
+    for (const o of officials) {
+      if (memCount >= ANNUAL_MEMORIAL_CAP) return;
+      if (handled.has(o.id) || (skip && skip(o.id))) continue;
+      const r = gen(o.id);
+      if (r) { cur = r.state; handled.add(o.id); memCount += 1; }
     }
-    const dem = generateMemorial(cur, db, o.id, "memorial_demotion", at);
-    if (dem) { cur = dem.state; memCount += 1; continue; }
-    const promo = generateMemorial(cur, db, o.id, "memorial_promotion", at);
-    if (promo) { cur = promo.state; memCount += 1; continue; }
-  }
+  };
+  pass((id) => (severe.has(id) ? generateMemorialDismissalBySignal(cur, id, at) : null)); // 1) 请免
+  pass((id) => generateMemorial(cur, db, id, "memorial_demotion", at)); // 2) 请降
+  pass((id) => generateMemorial(cur, db, id, "memorial_promotion", at)); // 3) 荐升
 
   // 侍君请托：按 id 遍历在宫侍君，确定性生成有界条目（资格/去重在生成器内）。
   let petCount = 0;

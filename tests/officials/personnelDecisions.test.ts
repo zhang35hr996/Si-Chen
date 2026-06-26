@@ -1,6 +1,7 @@
 /** 人事决策生成器（Phase 3 PR3C-3b）：资格门、确定性目标选择、去重。 */
 import { describe, expect, it } from "vitest";
 import {
+  generateAnnualPersonnelEvents,
   generateConsortPetition,
   generateFamilyImplication,
   generateMemorial,
@@ -188,6 +189,27 @@ describe("generateMemorial", () => {
     const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 20 });
     const first = generateMemorial(s, db, WEN_OFFICIAL, "memorial_demotion", at(3))!;
     expect(generateMemorial(first.state, db, WEN_OFFICIAL, "memorial_demotion", at(3))).toBeNull();
+  });
+
+  it("dismissal priority is GLOBAL: a late-id severe candidate is not starved out of the annual cap", () => {
+    // 3 名 id 更靠前的请降候选（merit 低 + 有低品空缺）+ 1 名 id 更靠后的严重失职请免候选；年度 cap=3。
+    // 若优先级只是「每官内」，3 个请降会先占满 cap，请免被挤出。全局优先则请免先入，挤出一个请降。
+    let s = createNewGameState(db, 1);
+    const demoteIds = ["official_fam_gen_0003", "official_fam_gen_0004", "official_fam_gen_0005"]; // g7/g9/g13，均有低品空缺
+    const SEVERE = "official_fam_xu_main"; // id 排序最后
+    for (const id of demoteIds) {
+      s = { ...s, officials: { ...s.officials, [id]: { ...s.officials[id]!, reviewState: { merit: 20, underperformanceYears: 0 } } } };
+    }
+    // 简报记录严重失职信号（请免凭据）。
+    s = { ...s, annualReviews: [{ year: 3, at: at(3), changes: [], dismissalCandidateIds: [SEVERE] }] };
+
+    const out = generateAnnualPersonnelEvents(s, db, at(3));
+    const memorials = Object.values(out.personnelDecisions).filter((d) => d.kind.startsWith("memorial_"));
+    expect(memorials.length).toBeLessThanOrEqual(3); // 受 cap 限
+    expect(memorials.some((d) => d.kind === "memorial_dismissal" && d.officialId === SEVERE)).toBe(true); // 请免不被饿死
+    // 至少一名靠前的请降候选被挤出（cap 被请免占去一格）。
+    const demotedGenerated = demoteIds.filter((id) => memorials.some((d) => d.officialId === id));
+    expect(demotedGenerated.length).toBeLessThan(demoteIds.length);
   });
 
   it("getPendingPersonnelDecisions returns pending sorted by id", () => {

@@ -54,7 +54,8 @@ PR3C-3 的第二刀：把官员升降落到**皇帝亲裁的人事事件**上。
 - **侍君请托 + 人事奏折**：在统一日历结算（`settleCalendarAdvance`）的吏部考课之后，由
   `generateAnnualPersonnelEvents` 一次性确定性生成有界条目（同 `hasReviewedYear` 守卫，每年仅一次；
   每名在任官员每年至多一条奏折，按 id 稳定遍历，上限 `ANNUAL_MEMORIAL_CAP` / `ANNUAL_PETITION_CAP`）。
-  奏折优先级**互斥**：请免（严重失职）> 请降 > 荐升。其中**请免**凭据取本年简报的
+  奏折优先级为**全局三阶段**（非每官内优先）：先把全部请免名额用尽，再请降，再荐升，确保严重失职的请免
+  不被普通奏折挤出年度 cap。其中**请免**凭据取本年简报的
   `AnnualReviewRecord.dismissalCandidateIds`（自动降级前的连年不合格者）——因为自动降级会清零
   `underperformanceYears`，生产路径不能再读清零后的计数。
 - **获罪牵连家族**：侍君获 severe/terminal 惩罚（幽禁/赐死/冷宫）时，由对应 store 命令经
