@@ -18,7 +18,7 @@ function rankDraft(state: ReturnType<typeof createNewGameState>, subject: string
 function setup() {
   const db = loadRealContent();
   const before = createNewGameState(db);
-  const c = Object.values(db.characters).find((x) => x.kind === "consort" && x.initialStanding && x.initialStanding.rank !== "fenghou")!;
+  const c = Object.values(db.characters).find((x) => x.kind === "consort" && x.initialStanding && x.initialStanding.rank !== "huanghou")!;
   return { db, before, id: c.id, from: before.standing[c.id]!.rank };
 }
 

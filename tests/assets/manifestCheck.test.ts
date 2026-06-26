@@ -52,7 +52,7 @@ describe("checkManifest", () => {
 
   it("content-referenced key absent from manifest is an error", () => {
     const manifest = realManifest();
-    delete manifest.entries["portrait.shen_zhibai.neutral"]; // 凤后's portrait
+    delete manifest.entries["portrait.shen_zhibai.neutral"]; // 皇后's portrait
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(
       result.errors.some(

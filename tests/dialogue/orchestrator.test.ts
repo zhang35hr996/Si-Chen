@@ -189,13 +189,13 @@ describe("validateDialogueProviderResult", () => {
   it("ok=false text gate rejects: GATE_REJECTED, textFindings non-empty", () => {
     const request = makeRequest();
     const policy = makePolicy();
-    // 皇上 is a forbidden term
+    // 娘娘 is a forbidden term
     const outcome = validateDialogueProviderResult(
       db,
       PROVIDER,
       request,
       policy,
-      makeResponse({ text: "皇上圣明。" }),
+      makeResponse({ text: "娘娘圣明。" }),
     );
 
     expect(outcome.ok).toBe(false);
@@ -207,7 +207,7 @@ describe("validateDialogueProviderResult", () => {
   });
 
   it("diagnostics.acceptedClaims present on ok=false text gate path", () => {
-    // Forbidden text "皇上" → GATE_REJECTED. No factual claims (CLOSED mode on fresh state).
+    // Forbidden text "娘娘" → GATE_REJECTED. No factual claims (CLOSED mode on fresh state).
     // Verifies that diagnostics.acceptedClaims is an accessible array even on the text-gate fail path.
     const request = makeRequest();
     const policy = makePolicy();
@@ -216,7 +216,7 @@ describe("validateDialogueProviderResult", () => {
       PROVIDER,
       request,
       policy,
-      makeResponse({ text: "皇上圣明。", proposedClaims: [] }),
+      makeResponse({ text: "娘娘圣明。", proposedClaims: [] }),
     );
 
     expect(outcome.ok).toBe(false);
@@ -360,7 +360,7 @@ describe("assembleDialogueRequest — promptContext", () => {
       { charId: "wenya",       toRank: "chenghui", salience: 90 },
       { charId: "xu_qinghuan", toRank: "jun",      salience: 80 },
       // orphan: lowest salience → excluded from the 3-slot promptEvents window
-      { charId: "shen_zhibai", toRank: "fenghou",  salience: 10 },
+      { charId: "shen_zhibai", toRank: "huanghou",  salience: 10 },
     ];
     const allEvents: CourtEvent[] = subjectConfigs.map((cfg, i) => ({
       ...makeEligibleEvent(`evt_orphan_${i}`, 0, cfg.charId, cfg.toRank),
@@ -373,7 +373,7 @@ describe("assembleDialogueRequest — promptContext", () => {
       id: "mem_orphan",
       ownerId: T8_SPEAKER,
       kind: "episodic",
-      summary: "申知白晋位凤后",
+      summary: "申知白晋位皇后",
       subjectIds: [T8_SPEAKER],
       triggerTags: ["rank"],
       perspective: "witness",

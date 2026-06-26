@@ -82,7 +82,7 @@ describe("golden scenarios smoke", () => {
     expect(result.schemaStatus).toBe("pass");
     expect(result.gateStatus).toBe("fail");
     // Raw text is preserved even when gate fails
-    expect(result.text).toBe("皇上圣明，臣侍领旨。");
+    expect(result.text).toBe("娘娘圣明，臣侍领旨。");
     expect(result.servedText).toBeUndefined();
     // textFindings should contain the forbidden_lexicon finding
     expect(result.textFindings.length).toBeGreaterThan(0);

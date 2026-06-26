@@ -107,19 +107,19 @@ function controlledState(level: 0 | 100): { s: GameState; off: Official } {
   return { s, off };
 }
 
-describe("haremRankScore —序位归一化，不被凤后 order=1000 压扁", () => {
+describe("haremRankScore —序位归一化，不被皇后 order=1000 压扁", () => {
   it("严格按位分序位单调上升，中高位有有效差异", () => {
     const id = (name: string) => Object.values(db.ranks).find((r) => r.domain === "harem" && r.name === name)?.id;
     const score = (name: string) => { const i = id(name); return i ? haremRankScore(db, i) : NaN; };
     // 内容中存在的位分（自低而高）。
-    const huangguijun = score("皇贵君"), guijun = score("贵君"), fu = score("驸"), guiren = score("贵人"), guannanzi = score("官男子");
-    expect(huangguijun).toBeGreaterThan(guijun);
-    expect(guijun).toBeGreaterThan(fu);
+    const huangguifu = score("皇贵驸"), guifu = score("贵驸"), fu = score("驸"), guiren = score("贵人"), guannanzi = score("官男子");
+    expect(huangguifu).toBeGreaterThan(guifu);
+    expect(guifu).toBeGreaterThan(fu);
     expect(fu).toBeGreaterThan(guiren);
     expect(guiren).toBeGreaterThan(guannanzi);
-    // 皇贵君不应被压扁到 ~18（旧 order 比例的弊端）。
-    expect(huangguijun).toBeGreaterThan(80);
-    // 凤后封顶 100，最低位接近 0。
+    // 皇贵驸不应被压扁到 ~18（旧 order 比例的弊端）。
+    expect(huangguifu).toBeGreaterThan(80);
+    // 皇后封顶 100，最低位接近 0。
     const fenghou = Object.values(db.ranks).filter((r) => r.domain === "harem").sort((a, b) => b.order - a.order)[0]!;
     expect(haremRankScore(db, fenghou.id)).toBe(100);
     expect(haremRankScore(db, "rank_ghost")).toBe(0);

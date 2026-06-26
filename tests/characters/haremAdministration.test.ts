@@ -120,9 +120,9 @@ describe("eligibleHaremAdministrators — 候选资格", () => {
 
 // ─── II. 命令校验 ─────────────────────────────────────────────────────────────
 
-describe("planImperialCommand — 凤后禁足命令校验", () => {
-  // T10: 凤后可以被禁足（有合格候选时携带候选）
-  it("T10: 凤后可以被禁足", () => {
+describe("planImperialCommand — 皇后禁足命令校验", () => {
+  // T10: 皇后可以被禁足（有合格候选时携带候选）
+  it("T10: 皇后可以被禁足", () => {
     const state = createNewGameState(db);
     const r = planImperialCommand(db, state, {
       type: "impose_confinement",
@@ -136,8 +136,8 @@ describe("planImperialCommand — 凤后禁足命令校验", () => {
     expect(r.plan.effects.some((e) => e.type === "set_harem_administration")).toBe(true);
   });
 
-  // T11: 凤后可以被解除禁足（先禁再解）
-  it("T11: 凤后可以被解除禁足", () => {
+  // T11: 皇后可以被解除禁足（先禁再解）
+  it("T11: 皇后可以被解除禁足", () => {
     const store = freshStore();
     store.applyImperialCommand(db, {
       type: "impose_confinement",
@@ -321,9 +321,9 @@ describe("consortLocationAt — 卯时路由", () => {
 
 // ─── IV. 自动恢复 ─────────────────────────────────────────────────────────────
 
-describe("凤后禁足解除后自动恢复", () => {
-  // T25: 手动解除凤后禁足后恢复坤宁宫请安
-  it("T25: 手动解除凤后禁足后，haremAdministration 自动恢复为 empress 模式", () => {
+describe("皇后禁足解除后自动恢复", () => {
+  // T25: 手动解除皇后禁足后恢复坤宁宫请安
+  it("T25: 手动解除皇后禁足后，haremAdministration 自动恢复为 empress 模式", () => {
     const store = freshStore();
     store.applyImperialCommand(db, {
       type: "impose_confinement",
@@ -338,7 +338,7 @@ describe("凤后禁足解除后自动恢复", () => {
   });
 
   // T26: 自动到期后恢复坤宁宫请安
-  it("T26: 凤后禁足到期后，haremAdministration 通过 sweep 自动恢复为 empress 模式", () => {
+  it("T26: 皇后禁足到期后，haremAdministration 通过 sweep 自动恢复为 empress 模式", () => {
     const store = freshStore();
     store.applyImperialCommand(db, {
       type: "impose_confinement",
@@ -358,7 +358,7 @@ describe("acting_consort 失格时自动切换", () => {
   // T27: 协理者死亡/禁足不会留下悬空引用
   it("T27a: 协理者被赐死后，自动切换到 neiwu_proxy（无其他候选时）", () => {
     const store = freshStore();
-    // 先禁足凤后（xu_qinghuan 协理）
+    // 先禁足皇后（xu_qinghuan 协理）
     store.applyImperialCommand(db, {
       type: "impose_confinement",
       targetId: "shen_zhibai",
@@ -435,9 +435,9 @@ describe("v9 → v10 migration", () => {
 
 describe("协理者失格时玩家选择接任者", () => {
   it("T33a: 禁足当前协理者且有其他候选时，须提供 administratorReplacement", () => {
-    // 先把凤后和另一位候选都设好
+    // 先把皇后和另一位候选都设好
     const store = freshStore();
-    // 先让凤后被禁足，xu_qinghuan 协理；添加另一合格候选需要 patch state
+    // 先让皇后被禁足，xu_qinghuan 协理；添加另一合格候选需要 patch state
     // 简化测试：把 lu_huaijin 临时升为 "fu" 使其合格，这样禁足 xu_qinghuan（协理者）时有候选
     store.applyImperialCommand(db, {
       type: "impose_confinement",
@@ -521,20 +521,20 @@ describe("协理者失格时玩家选择接任者", () => {
 // ─── VIII. set_harem_administration 语义校验（P1 Fix 3）───────────────────────
 
 describe("set_harem_administration 效果语义校验", () => {
-  it("T34a: 在凤后未禁足时，set empress 模式合法", () => {
+  it("T34a: 在皇后未禁足时，set empress 模式合法", () => {
     const state = createNewGameState(db);
-    // 凤后未禁足，设 empress 模式合法
+    // 皇后未禁足，设 empress 模式合法
     const r = applyEffects(db, state, [
       { type: "set_harem_administration", state: { mode: "empress" } },
     ]);
     expect(r.ok).toBe(true);
   });
 
-  it("T34b: 凤后被禁足时，设 acting_consort 模式合法（同批禁足+协理选择）", () => {
+  it("T34b: 皇后被禁足时，设 acting_consort 模式合法（同批禁足+协理选择）", () => {
     const baseState = createNewGameState(db);
     const now = toGameTime(baseState.calendar);
     const fenghousId = Object.keys(baseState.standing).find(
-      (id) => baseState.standing[id]!.rank === "fenghou",
+      (id) => baseState.standing[id]!.rank === "huanghou",
     )!;
     const r = applyEffects(db, baseState, [
       { type: "confine", char: fenghousId, startTurn: now.dayIndex, endTurnExclusive: now.dayIndex + 3, imposedAt: now },
@@ -546,7 +546,7 @@ describe("set_harem_administration 效果语义校验", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("T34c: 凤后未禁足时，设 acting_consort 模式被拒", () => {
+  it("T34c: 皇后未禁足时，设 acting_consort 模式被拒", () => {
     const state = createNewGameState(db);
     const now = toGameTime(state.calendar);
     const errors = validateEffects(db, state, [
@@ -559,7 +559,7 @@ describe("set_harem_administration 效果语义校验", () => {
     expect(errors[0]!.message).toContain("empress to be confined");
   });
 
-  it("T34d: 凤后未禁足时，设 neiwu_proxy 模式被拒", () => {
+  it("T34d: 皇后未禁足时，设 neiwu_proxy 模式被拒", () => {
     const state = createNewGameState(db);
     const now = toGameTime(state.calendar);
     const errors = validateEffects(db, state, [

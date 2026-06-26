@@ -688,7 +688,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
 
   /**
    * 初夜位分会话结束（close/no_op/failed/reaction_created）的统一收尾。纯决策 firstNightRankDrainAction
-   * 决定动作：有排队反应（凤后懿旨等）→ 先播队列（末条 onDone 再补跑结算，绝不抢跑/遗留）；无队列 → 直接
+   * 决定动作：有排队反应（皇后懿旨等）→ 先播队列（末条 onDone 再补跑结算，绝不抢跑/遗留）；无队列 → 直接
    * flush；reaction_created/normal → 交由反应 onDone 或不补跑。
    */
   const applyFirstNightRankDrain = (origin: RankAdminOrigin, outcome: RankAdminOutcome) => {
@@ -701,7 +701,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     }
   };
 
-  /** 为本次行动消耗的每个行动点掷骰凤后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
+  /** 为本次行动消耗的每个行动点掷骰皇后懿旨（命中即应用，至多一道/次）。返回台词节拍。 */
   const rollDecree = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): DecreeReaction[] => {
     const beats: DecreeReaction[] = [];
     for (let i = 0; i < amount; i++) {
@@ -837,11 +837,11 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
 
   /**
    * 集中化行动点消耗：经统一时间入口扣点（含跨月健康 tick / 皇帝死亡同事务写 gameOver）
-   * + 凤后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果、台词、皇帝是否崩逝。
+   * + 皇后懿旨掷骰 + 太后敲打掷骰 + 进贡掷骰 + 乘风汇报。返回扣点结果、台词、皇帝是否崩逝。
    * 皇帝崩逝时不再掷后续节拍（落在已 gameOver 的局上无意义），交调用方 short-circuit 回 title。
    */
   /**
-   * 行动结算后的随机节拍：凤后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报。
+   * 行动结算后的随机节拍：皇后懿旨 + 太后敲打 + 进贡（命中则改走 prompt）/ 乘风汇报。
    * 注：大选二月报告 / 四月殿选不在此处——它们由时间事务统一入口探测 pendingDaxuan，
    * 任意推进路径（含休息 / 旅行 / 看诊 / 承养）都会置位，由 pendingDaxuan 消费 effect 统一处理。
    */
@@ -880,7 +880,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   };
 
   /**
-   * 串播一组反应节拍（行动自身台词 + 凤后懿旨）。
+   * 串播一组反应节拍（行动自身台词 + 皇后懿旨）。
    * - `request` 非空 = 本段为转旬，反应结束后须按该请求结算；
    * - null = 非转旬（覆盖清空任何旧待处理上下文，杜绝串台）；
    * - "preserve" = 不修改 pendingReactionCheckpoint（用于初夜惩罚降位，避免清除已有 deferred checkpoint）。
@@ -1560,7 +1560,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const onTravelledSettle = (rolledOver: boolean, spentAp: boolean, sovereignDied = false, stayOnMapBoardId?: string) => {
     if (sovereignDied) { onSovereignDeath(); return; } // 跨月旅行皇帝崩逝：清场回 title。
     doAutosave();
-    // 宫内免行动点移动：保存位置即可，不掷凤后懿旨/太后敲打、不跑转旬 checkpoint。
+    // 宫内免行动点移动：保存位置即可，不掷皇后懿旨/太后敲打、不跑转旬 checkpoint。
     if (!spentAp) return;
     const cal = store.getState().calendar;
     const key = `${store.getState().rngSeed}:${cal.dayIndex}:travel:${cal.ap}`;
@@ -2479,7 +2479,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               onClick={() => {
                 setFirstNightPromptId(null);
                 if (reactionQueue.length > 0) {
-                  // 先串播待播的凤后懿旨；其 onDone 会接手转旬补跑（pending 上下文保留）。
+                  // 先串播待播的皇后懿旨；其 onDone 会接手转旬补跑（pending 上下文保留）。
                   const [next, ...rest] = reactionQueue;
                   setReactionQueue(rest);
                   setReaction(next!);

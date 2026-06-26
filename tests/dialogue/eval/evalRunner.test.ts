@@ -36,8 +36,8 @@ const state = createNewGameState(db);
 const SPEAKER = "shen_zhibai";
 const LOCATION = "zichendian";
 const VALID_TEXT = "本宫累了，陛下早些歇息。";
-// "皇上" is a forbidden term (triggers text gate reject)
-const GATE_REJECT_TEXT = "皇上圣明。";
+// "娘娘" is a forbidden term (triggers text gate reject)
+const GATE_REJECT_TEXT = "娘娘圣明。";
 
 function makeScenario(overrides: Partial<EvalScenario> = {}): EvalScenario {
   return {
@@ -88,7 +88,7 @@ function makeValidClaim(): ProposedClaim {
       id: "c_valid",
       predicate: "holds_rank",
       subjectId: SPEAKER,
-      object: "fenghou",
+      object: "huanghou",
       modality: "assert",
     },
     sourceRefs: [{ kind: "memory" as const, id: firstOfferedId }],
@@ -250,7 +250,7 @@ describe("runEvalScenario", () => {
     // Invalid speaker → assembly fails → gateStatus = not_run → expectations not_run
     const scenario = makeScenario({
       speakerId: "no_such_speaker",
-      expectations: { gatePass: false, forbiddenTexts: ["皇上"] },
+      expectations: { gatePass: false, forbiddenTexts: ["娘娘"] },
     });
     const result = await runEvalScenario(scenario, makeFixture(), "eval-1", 0);
 
@@ -494,7 +494,7 @@ describe("evaluateExpectations", () => {
         id: "c1",
         predicate: "holds_rank",
         subjectId: SPEAKER,
-        object: "fenghou",
+        object: "huanghou",
         modality: "assert",
       },
       sourceRefs: [{ kind: "memory" as const, id: "mem_001" }],

@@ -499,7 +499,7 @@ describe("SqliteKeywordIndex — natural language queries", () => {
   it("natural language sentence retrieves relevant chunks", () => {
     // Long query: many bigrams; any match earns a result; best-match ranks first
     const hits = index.search({
-      text: "皇后向皇帝解释凤后主持晨省的礼制，以及被禁足侍君是否仍需请安",
+      text: "皇后向皇帝解释皇后主持晨省的礼制，以及被禁足侍君是否仍需请安",
       limit: 10,
     });
     expect(hits.length).toBeGreaterThan(0);

@@ -1,14 +1,16 @@
 {
   "id": "sc_fenghou_rules",
   "locationId": "kunninggong",
-  "participants": ["shen_zhibai"],
+  "participants": [
+    "shen_zhibai"
+  ],
   "startNodeId": "n_open",
   "nodes": [
     {
       "type": "line",
       "id": "n_open",
       "speaker": "shen_zhibai",
-      "text": "陛下驾临，臣后正有一事启奏。近来各宫请安废弛，位分僭越之语渐起。臣后欲重申宫规，请陛下示下。",
+      "text": "陛下驾临，臣侍正有一事启奏。近来各宫请安废弛，位分僭越之语渐起。臣侍欲重申宫规，请陛下示下。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -16,9 +18,24 @@
       "type": "choice",
       "id": "n_choice",
       "choices": [
-        { "id": "c_adopt", "text": "凤印在你手中，照你的意思办。", "tone": "friendly", "next": "n_fx_adopt" },
-        { "id": "c_vague", "text": "此事……容朕再想想。", "tone": "neutral", "next": "n_fx_vague" },
-        { "id": "c_reject", "text": "小题大做。后宫安分得很，不必兴师动众。", "tone": "guarded", "next": "n_fx_reject" }
+        {
+          "id": "c_adopt",
+          "text": "凤印在你手中，照你的意思办。",
+          "tone": "friendly",
+          "next": "n_fx_adopt"
+        },
+        {
+          "id": "c_vague",
+          "text": "此事……容朕再想想。",
+          "tone": "neutral",
+          "next": "n_fx_vague"
+        },
+        {
+          "id": "c_reject",
+          "text": "小题大做。后宫安分得很，不必兴师动众。",
+          "tone": "guarded",
+          "next": "n_fx_reject"
+        }
       ]
     },
     {
@@ -33,11 +50,19 @@
             "summary": "陛下当面准我重申宫规。凤印的分量，还在。",
             "strength": 60,
             "retention": "slow",
-            "subjectIds": ["player", "shen_zhibai"],
+            "subjectIds": [
+              "player",
+              "shen_zhibai"
+            ],
             "perspective": "witness",
-            "triggerTags": ["rules", "authority"],
+            "triggerTags": [
+              "rules",
+              "authority"
+            ],
             "unresolved": false,
-            "emotions": { "relief": 30 }
+            "emotions": {
+              "relief": 30
+            }
           }
         }
       ],
@@ -47,7 +72,7 @@
       "type": "line",
       "id": "n_end_adopt",
       "speaker": "shen_zhibai",
-      "text": "臣后领旨。必不使后宫之事，再扰陛下分毫。",
+      "text": "臣侍领旨。必不使后宫之事，再扰陛下分毫。",
       "expression": "smile"
     },
     {
@@ -62,9 +87,15 @@
             "summary": "陛下对宫规之事含糊其辞。是不愿管，还是不愿我管？",
             "strength": 55,
             "retention": "slow",
-            "subjectIds": ["player", "shen_zhibai"],
+            "subjectIds": [
+              "player",
+              "shen_zhibai"
+            ],
             "perspective": "witness",
-            "triggerTags": ["rules", "doubt"],
+            "triggerTags": [
+              "rules",
+              "doubt"
+            ],
             "unresolved": true,
             "emotions": {}
           }
@@ -76,7 +107,7 @@
       "type": "line",
       "id": "n_end_vague",
       "speaker": "shen_zhibai",
-      "text": "……是。臣后静候陛下圣裁。",
+      "text": "……是。臣侍静候陛下圣裁。",
       "expression": "neutral"
     },
     {
@@ -91,11 +122,20 @@
             "summary": "陛下当面驳了我整肃宫规之奏，说是小题大做。殿上宫人都听见了。",
             "strength": 70,
             "retention": "permanent",
-            "subjectIds": ["player", "shen_zhibai"],
+            "subjectIds": [
+              "player",
+              "shen_zhibai"
+            ],
             "perspective": "witness",
-            "triggerTags": ["rules", "humiliation"],
+            "triggerTags": [
+              "rules",
+              "humiliation"
+            ],
             "unresolved": true,
-            "emotions": { "shame": 50, "anger": 20 }
+            "emotions": {
+              "shame": 50,
+              "anger": 20
+            }
           }
         }
       ],
@@ -105,7 +145,7 @@
       "type": "line",
       "id": "n_end_reject",
       "speaker": "shen_zhibai",
-      "text": "……臣后失言。恭送陛下。",
+      "text": "……臣侍失言。恭送陛下。",
       "expression": "frown"
     }
   ]

@@ -24,10 +24,10 @@ const SOVEREIGN_FALLBACK: Record<RankOpKind, { lines: string[]; memory: string }
 
 const ADMIN_FALLBACK: Record<"empress" | "acting_consort", Record<RankOpKind, { lines: string[]; memory: string }>> = {
   empress: {
-    promote: { lines: ["臣侍谨领凤后懿旨。"], memory: "凤后下旨晋我为{rank}。" },
-    demote: { lines: ["……{self}领旨。"], memory: "凤后下旨贬我为{rank}，{self}不敢有违。" },
-    grant_title: { lines: ["谢凤后赐号，{self}惶恐领旨。"], memory: "凤后赐我封号「{title}」。" },
-    strip_title: { lines: ["{self}领旨，不敢有违。"], memory: "凤后下令褫夺我封号。" },
+    promote: { lines: ["臣侍谨领皇后懿旨。"], memory: "皇后下旨晋我为{rank}。" },
+    demote: { lines: ["……{self}领旨。"], memory: "皇后下旨贬我为{rank}，{self}不敢有违。" },
+    grant_title: { lines: ["谢皇后赐号，{self}惶恐领旨。"], memory: "皇后赐我封号「{title}」。" },
+    strip_title: { lines: ["{self}领旨，不敢有违。"], memory: "皇后下令褫夺我封号。" },
   },
   acting_consort: {
     promote: { lines: ["侍身谨领协理六宫之令。"], memory: "协理六宫者晋我为{rank}。" },

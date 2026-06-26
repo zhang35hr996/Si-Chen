@@ -48,7 +48,7 @@ describe("projectMonthlyHealth – workloadLoss", () => {
 describe("buildMonthlyHealthTick – empress critical burden (C)", () => {
   function findEmpressId(state: ReturnType<typeof createNewGameState>): string {
     for (const [id, st] of Object.entries(state.standing)) {
-      if (st.rank === "fenghou" && st.lifecycle !== "deceased") return id;
+      if (st.rank === "huanghou" && st.lifecycle !== "deceased") return id;
     }
     throw new Error("no empress in state");
   }
@@ -58,7 +58,7 @@ describe("buildMonthlyHealthTick – empress critical burden (C)", () => {
     const empressId = findEmpressId(base0);
     // Two states: one with mode=empress (workload), one with mode=acting_consort (no workload)
     const consortId = Object.keys(base0.standing).find(
-      (id) => db.characters[id]?.kind === "consort" && base0.standing[id]?.rank !== "fenghou" && base0.standing[id]?.lifecycle !== "deceased",
+      (id) => db.characters[id]?.kind === "consort" && base0.standing[id]?.rank !== "huanghou" && base0.standing[id]?.lifecycle !== "deceased",
     );
     if (!consortId) throw new Error("need a non-empress consort");
 
@@ -97,7 +97,7 @@ describe("buildMonthlyHealthTick – empress critical burden (C)", () => {
     const state = createNewGameState(db);
     const empressId = findEmpressId(state);
     const consortId = Object.keys(state.standing).find(
-      (id) => db.characters[id]?.kind === "consort" && state.standing[id]?.rank !== "fenghou" && state.standing[id]?.lifecycle !== "deceased",
+      (id) => db.characters[id]?.kind === "consort" && state.standing[id]?.rank !== "huanghou" && state.standing[id]?.lifecycle !== "deceased",
     )!;
     state.standing[empressId]!.healthStatus = "critical";
     state.standing[empressId]!.health = 60;
@@ -130,7 +130,7 @@ describe("buildMonthlyHealthTick – empress critical burden (C)", () => {
     state.haremAdministration = { mode: "empress" };
 
     const consortId = Object.keys(state.standing).find(
-      (id) => db.characters[id]?.kind === "consort" && state.standing[id]?.rank !== "fenghou" && state.standing[id]?.lifecycle !== "deceased",
+      (id) => db.characters[id]?.kind === "consort" && state.standing[id]?.rank !== "huanghou" && state.standing[id]?.lifecycle !== "deceased",
     )!;
     const stateWithDelegate = createNewGameState(db);
     stateWithDelegate.standing[empressId]!.healthStatus = "sick";

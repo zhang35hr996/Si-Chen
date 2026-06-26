@@ -25,10 +25,10 @@ For male spouses in officials' and nobles' households (outside the 后宫):
 
 | Identity | Title | Note |
 |---|---|---|
-| an official's principal husband (正夫) | 内卿 | 文雅正称 |
-| high-rank official's principal husband | 命内卿 | 对应诰命性质的封赠 |
-| general household male spouse | 内卿 | refined catch-all |
-| formal secondary spouse (正式侧室) | 侧卿 | named status |
+| an official's principal husband (正夫) | 夫人 | 文雅正称 |
+| high-rank official's principal husband | 命夫 | 对应诰命性质的封赠 |
+| general household male spouse | 夫人 | refined catch-all |
+| formal secondary spouse (正式侧室) | 侧夫 | named status |
 | low-status concubine (低位通房) | 小宠 | low standing |
 
 These are lore for now; only the 后宫 + 官员 ranks are wired into the engine.

@@ -48,7 +48,7 @@ describe("buildTaihouRebuke", () => {
     expect(any).toBe(false);
   });
 
-  it("on hit: targets a non-凤后 consort, -5 favor + memory entry", () => {
+  it("on hit: targets a non-皇后 consort, -5 favor + memory entry", () => {
     const s = createNewGameState(db2);
     let seed = "";
     for (let i = 0; i < 300; i++) {
@@ -63,7 +63,7 @@ describe("buildTaihouRebuke", () => {
     expect(plan.beats.length).toBe(2);
   });
 
-  it("never targets 凤后 across many hits", () => {
+  it("never targets 皇后 across many hits", () => {
     const s = createNewGameState(db2);
     const counts: Record<string, number> = {};
     let hits = 0;

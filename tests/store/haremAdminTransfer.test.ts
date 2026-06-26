@@ -22,7 +22,7 @@ function makeStore() {
 /** Find the empress id in a state (fenghou rank, alive). */
 function findEmpressId(state: GameState): string {
   for (const [id, st] of Object.entries(state.standing)) {
-    if (st.rank === "fenghou" && st.lifecycle !== "deceased") return id;
+    if (st.rank === "huanghou" && st.lifecycle !== "deceased") return id;
   }
   throw new Error("no empress in test state");
 }
@@ -37,7 +37,7 @@ function findOrMakeEligibleConsortId(state: GameState): string {
   // Promote the first non-empress alive consort to "fu" (满足 harem admin 门槛)
   for (const [id, st] of Object.entries(state.standing)) {
     const char = db.characters[id];
-    if (char?.kind === "consort" && st.rank !== "fenghou" && st.lifecycle !== "deceased" && st.lifecycle !== "candidate") {
+    if (char?.kind === "consort" && st.rank !== "huanghou" && st.lifecycle !== "deceased" && st.lifecycle !== "candidate") {
       state.standing[id]!.rank = "fu" as (typeof st)["rank"];
       return id;
     }
@@ -303,7 +303,7 @@ describe("planHaremAdministrationTransfer – reassignment", () => {
     const nonEmpress = Object.keys(state.standing).filter((id) => {
       const char = db.characters[id];
       const st = state.standing[id];
-      return char?.kind === "consort" && st?.rank !== "fenghou" && st?.lifecycle !== "deceased" && st?.lifecycle !== "candidate";
+      return char?.kind === "consort" && st?.rank !== "huanghou" && st?.lifecycle !== "deceased" && st?.lifecycle !== "candidate";
     });
     if (nonEmpress.length < 2) return; // skip if fixture doesn't have two
     const [consort1, consort2] = nonEmpress as [string, string];

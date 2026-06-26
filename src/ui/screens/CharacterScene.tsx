@@ -99,7 +99,7 @@ export function CharacterScene({
   const admin = state.haremAdministration;
   const isActingAdmin = character && (
     (admin.mode === "acting_consort" && admin.charId === character.id) ||
-    (admin.mode === "empress" && state.standing[character.id]?.rank === "fenghou")
+    (admin.mode === "empress" && state.standing[character.id]?.rank === "huanghou")
   );
 
   const awayTo = character ? absence?.[character.id] : undefined;

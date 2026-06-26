@@ -20,7 +20,7 @@ export interface ShizhiPlan {
   beats: { speakerId: string; lines: string[] }[];
 }
 
-/** 在宫存活的侍君 + 凤后。 */
+/** 在宫存活的侍君 + 皇后。 */
 function attendantPool(db: ContentDB, state: GameState): string[] {
   return Object.values(db.characters)
     .filter((c) => {
@@ -32,7 +32,7 @@ function attendantPool(db: ContentDB, state: GameState): string[] {
     .map((c) => c.id);
 }
 
-/** 病中进慈宁宫遇侍君/凤后侍疾。seedKey 按旬钉死。无遭遇/无候选→null。 */
+/** 病中进慈宁宫遇侍君/皇后侍疾。seedKey 按旬钉死。无遭遇/无候选→null。 */
 export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: string): ShizhiPlan | null {
   if (state.taihou.deceased) return null; // 太后已薨：不再触发侍疾。
   if (!isIll(state.taihou.healthStatus)) return null;
@@ -80,7 +80,7 @@ export interface RebukePlan {
   beats: { speakerId: string; lines: string[] }[];
 }
 
-/** 候选：在宫存活侍君，排除凤后。 */
+/** 候选：在宫存活侍君，排除皇后。 */
 function rebukePool(db: ContentDB, state: GameState): { id: string; favor: number }[] {
   return Object.values(db.characters)
     .filter((c) => {

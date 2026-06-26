@@ -9,36 +9,33 @@
     "bloodline": { "menstrualStatus": "normal" }
   },
   "ranks": [
-    { "id": "fenghou", "name": "凤后", "grade": "正宫", "selfRefs": { "toPlayer": ["臣后"], "formal": ["本宫"] }, "order": 1000, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "huangguijun", "name": "皇贵君", "grade": "超品", "selfRefs": { "toPlayer": ["臣"], "formal": ["本宫"] }, "order": 180, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "guijun", "name": "贵君", "grade": "正一品", "selfRefs": { "toPlayer": ["臣", "臣侍"], "formal": ["本宫"] }, "order": 170, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "jun", "name": "君", "grade": "从一品", "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 160, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "guifu", "name": "贵驸", "grade": "正二品", "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 150, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "fu", "name": "驸", "grade": "从二品", "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 140, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "chenghui", "name": "承徽", "grade": "正三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 134, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "chengyi", "name": "承仪", "grade": "正三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 132, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "chengde", "name": "承德", "grade": "正三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 130, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "zhaohui", "name": "昭徽", "grade": "从三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 124, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "zhaoyi", "name": "昭仪", "grade": "从三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 122, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "zhaorong", "name": "昭容", "grade": "从三品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 120, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "shichen", "name": "侍宸", "grade": "正四品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 110, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "guiren", "name": "贵人", "grade": "从四品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本侍", "我"] }, "order": 100, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "meiren", "name": "美人", "grade": "正五品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本侍", "我"] }, "order": 90, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "cairen", "name": "才人", "grade": "从五品", "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本侍", "我"] }, "order": 80, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "changzai", "name": "常在", "grade": "六品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 70, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "daying", "name": "答应", "grade": "七品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 60, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "gengyi", "name": "更衣", "grade": "八品", "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 50, "domain": "harem", "favorTerm": "恩宠" },
-    {
-      "id": "guannanzi",
-      "name": "官男子",
-      "grade": "九品",
-      "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] },
-      "order": 40,
-      "domain": "harem",
-      "favorTerm": "恩宠",
-      "deprecated": true
-    },
-    { "id": "sili_zhang", "name": "司礼", "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" },
+    { "id": "huanghou",   "name": "皇后",   "grade": "正宫",       "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 1000, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "huangguifu", "name": "皇贵驸", "grade": "超品",       "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 194,  "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "guifu",      "name": "贵驸",   "grade": "正一品第一序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 188,  "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "xianfu",     "name": "贤驸",   "grade": "正一品第二序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 186,  "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "liangfu",    "name": "良驸",   "grade": "正一品第三序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 184,  "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "defu",       "name": "德驸",   "grade": "正一品第四序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 182,  "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "fu",         "name": "驸",     "grade": "从一品",     "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 176,  "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "zhaoyi",     "name": "昭仪",   "grade": "正二品第一序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 168, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "zhaohui",    "name": "昭徽",   "grade": "正二品第二序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 166, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "zhaode",     "name": "昭德",   "grade": "正二品第三序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 164, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "chengyi",    "name": "承仪",   "grade": "从二品第一序","selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 158, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "chenghui",   "name": "承徽",   "grade": "从二品第二序","selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 156, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "chengde",    "name": "承德",   "grade": "从二品第三序","selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 154, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "jieyu",      "name": "倢伃",   "grade": "正三品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 146, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "shichen",    "name": "侍宸",   "grade": "从三品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 140, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "changyu",    "name": "长御",   "grade": "正四品",     "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 132, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "shaoshi",    "name": "少使",   "grade": "从四品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 124, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "guiren",     "name": "贵人",   "grade": "正五品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 116, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "liangren",   "name": "良人",   "grade": "从五品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 108, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "meiren",     "name": "美人",   "grade": "正六品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 100, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "cairen",     "name": "才人",   "grade": "从六品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 92,  "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "changzai",   "name": "常在",   "grade": "正七品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 84, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "daying",     "name": "答应",   "grade": "从七品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 76, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "gengyi",     "name": "更衣",   "grade": "正八品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 68, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "xuanshi",    "name": "选侍",   "grade": "从八品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 60, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "guannanzi",  "name": "官男子", "grade": "正九品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 52, "domain": "harem", "favorTerm": "恩宠" },
+    { "id": "sili_zhang",   "name": "司礼",     "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" },
     { "id": "shiwei_zhang", "name": "侍卫总管", "grade": "正三品", "selfRefs": { "toPlayer": ["臣"], "formal": ["属下"] }, "order": 130, "domain": "official", "favorTerm": "圣眷" }
   ],
   "officialPosts": [
@@ -46,7 +43,7 @@
     { "id": "taifu",               "name": "太傅",       "grade": "从一品", "gradeOrder": 17, "department": "chancellery" },
     { "id": "taibao",              "name": "太保",       "grade": "从一品", "gradeOrder": 17, "department": "chancellery" },
     { "id": "dadudu",              "name": "大都督",     "grade": "从一品", "gradeOrder": 17, "department": "military" },
-    { "id": "yushi_dafu",          "name": "御史大夫",   "grade": "正二品", "gradeOrder": 16, "department": "censorate" },
+    { "id": "yushi_dafu",          "name": "御史",       "grade": "正二品", "gradeOrder": 16, "department": "censorate" },
     { "id": "zuo_cheng",           "name": "左丞",       "grade": "正二品", "gradeOrder": 16, "department": "chancellery" },
     { "id": "you_cheng",           "name": "右丞",       "grade": "正二品", "gradeOrder": 16, "department": "chancellery" },
     { "id": "libu_shangshu",       "name": "吏部尚书",   "grade": "从二品", "gradeOrder": 15, "department": "personnel" },
@@ -110,10 +107,10 @@
   },
   "administratorRankChangeReactions": {
     "empress": {
-      "promote":     { "lines": ["臣侍谨领凤后懿旨。"], "memory": "凤后下旨晋我为{rank}。" },
-      "demote":      { "lines": ["……{self}领旨。"], "memory": "凤后下旨贬我为{rank}，{self}不敢有违。" },
-      "grant_title": { "lines": ["谢凤后赐号，{self}惶恐领旨。"], "memory": "凤后赐我封号「{title}」。" },
-      "strip_title": { "lines": ["{self}领旨，不敢有违。"], "memory": "凤后下令褫夺我封号。" }
+      "promote":     { "lines": ["臣侍谨领皇后懿旨。"], "memory": "皇后下旨晋我为{rank}。" },
+      "demote":      { "lines": ["……{self}领旨。"], "memory": "皇后下旨贬我为{rank}，{self}不敢有违。" },
+      "grant_title": { "lines": ["谢皇后赐号，{self}惶恐领旨。"], "memory": "皇后赐我封号「{title}」。" },
+      "strip_title": { "lines": ["{self}领旨，不敢有违。"], "memory": "皇后下令褫夺我封号。" }
     },
     "acting_consort": {
       "promote":     { "lines": ["侍身谨领协理六宫之令。"], "memory": "协理六宫者晋我为{rank}。" },
@@ -171,7 +168,7 @@
     },
     "childFavor": {
       "selfPregnancy": 65,
-      "fenghouBonus": 15,
+      "empressBonus": 15,
       "tierValues": { "abundant": 46, "favored": 38, "small": 30, "fallen": 22, "none": 15 }
     }
   }

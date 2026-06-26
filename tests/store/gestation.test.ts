@@ -72,8 +72,8 @@ describe("buildBirth", () => {
 describe("birthPhrase", () => {
   it("single daughter → 一位皇子", () => expect(birthPhrase("daughter")).toBe("一位皇子"));
   it("single son → 一位皇郎", () => expect(birthPhrase("son")).toBe("一位皇郎"));
-  it("dragon-phoenix (son+daughter) → 一对龙凤胎", () => expect(birthPhrase("son", "daughter")).toBe("一对龙凤胎"));
-  it("dragon-phoenix reversed (daughter+son) → 一对龙凤胎", () => expect(birthPhrase("daughter", "son")).toBe("一对龙凤胎"));
+  it("mixed-sex twins (son+daughter) → 子郎双生", () => expect(birthPhrase("son", "daughter")).toBe("子郎双生"));
+  it("mixed-sex twins reversed (daughter+son) → 子郎双生", () => expect(birthPhrase("daughter", "son")).toBe("子郎双生"));
   it("twin daughters → 两位双生皇子", () => expect(birthPhrase("daughter", "daughter")).toBe("两位双生皇子"));
   it("twin sons → 两位双生皇郎", () => expect(birthPhrase("son", "son")).toBe("两位双生皇郎"));
   it("never produces 两位龙凤双胎", () => {
@@ -90,14 +90,14 @@ describe("birthPhrase", () => {
 });
 
 describe("buildBirth narrative — twin phrases", () => {
-  // seed=6 sovereign → dragonPhoenix (roll=1 < 5); seed=12 lu_huaijin → dragonPhoenix
-  it("dragon-phoenix twin narrative contains 一对龙凤胎 (sovereign seed=6)", () => {
+  // seed=6 sovereign → mixedSexTwins (roll=1 < 5); seed=12 lu_huaijin → mixedSexTwins
+  it("mixed-sex twin narrative contains 子郎双生 (sovereign seed=6)", () => {
     const s = sovereignCarrying(1);
     s.rngSeed = 6;
     s.calendar = { ...makeGameTime(1, 10, "early"), ap: 6, apMax: 6, eraName: "" };
     const plan = buildBirth(db, s);
     expect(plan).not.toBeNull();
-    expect(plan!.lines[0]).toContain("一对龙凤胎");
+    expect(plan!.lines[0]).toContain("子郎双生");
     expect(plan!.lines[0]).not.toContain("两位龙凤双胎");
   });
 

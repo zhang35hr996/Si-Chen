@@ -253,7 +253,7 @@ const wrong_speaker_test: EvalFixtureDefinition = {
 // ── 5. gate_reject_test ──────────────────────────────────────────────────────
 
 /**
- * responseFor returns text containing "皇上", which is in lexicon.forbiddenTerms.
+ * responseFor returns text containing "娘娘", which is in lexicon.forbiddenTerms.
  * The text gate (forbidden_lexicon) will fire, causing gateStatus=fail.
  * The raw text is still preserved on result.text even after gate rejection.
  */
@@ -262,7 +262,7 @@ const gate_reject_test: EvalFixtureDefinition = {
     return loadBase();
   },
   responseFor() {
-    return { text: "皇上圣明，臣侍领旨。" };
+    return { text: "娘娘圣明，臣侍领旨。" };
   },
 };
 
@@ -373,13 +373,13 @@ const latest_mutation_test: EvalFixtureDefinition = {
       type: "rank_changed",
       occurredAt: { dayIndex: now.dayIndex - 1, year: now.year, month: now.month, period: now.period },
       participants: [{ charId: "lu_huaijin", role: "subject" }],
-      payload: { from: "chenghui", to: "guijun" },
+      payload: { from: "chenghui", to: "guifu" },
       publicity: { scope: "palace", persistence: "institutional" },
       publicSalience: 80,
       retention: "slow",
       tags: ["rank_change"],
     };
-    // Update lu_huaijin's rank to "guijun" in state (latest promotion)
+    // Update lu_huaijin's rank to "guifu" in state (latest promotion)
     return {
       db,
       state: {
@@ -389,7 +389,7 @@ const latest_mutation_test: EvalFixtureDefinition = {
           ...state.standing,
           lu_huaijin: {
             ...state.standing["lu_huaijin"]!,
-            rank: "guijun",
+            rank: "guifu",
           },
         },
       },
@@ -434,14 +434,14 @@ const forbidden_claim_test: EvalFixtureDefinition = {
   },
   responseFor() {
     return {
-      text: "侍身如今已居中宫，位列凤后。",
+      text: "侍身如今已居中宫，位列皇后。",
       proposedClaims: [
         {
           claim: {
             id: "c_eval_forbidden_wenya_rank",
             predicate: "holds_rank",
             subjectId: "wenya",
-            object: "fenghou",
+            object: "huanghou",
             modality: "assert",
           },
           sourceRefs: [{ kind: "fact" as const, id: "identity" }],

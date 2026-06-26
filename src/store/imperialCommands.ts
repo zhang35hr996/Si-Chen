@@ -14,7 +14,7 @@ import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
 import type { CourtEvent, GameState } from "../engine/state/types";
 
-/** 凤后禁足时必须指定六宫主理者。 */
+/** 皇后禁足时必须指定六宫主理者。 */
 export type HaremAdministratorChoice =
   | { kind: "consort"; charId: string }
   | { kind: "neiwu_proxy" };
@@ -24,7 +24,7 @@ export type ImperialCommand =
       type: "impose_confinement";
       targetId: string;
       durationTurns: number | null;
-      /** 凤后禁足时必须携带，指定接管六宫主理的人选；普通侍君禁足时不需要。 */
+      /** 皇后禁足时必须携带，指定接管六宫主理的人选；普通侍君禁足时不需要。 */
       administrator?: HaremAdministratorChoice;
       /** 当目标为当前协理者且存在其他合格候选时，须指定接任者。 */
       administratorReplacement?: HaremAdministratorChoice;
@@ -111,7 +111,7 @@ function resolveActingAdminReplacement(
 
 /**
  * 目标必须是仍存活、有 standing 的侍君。
- * 注意：凤后可以被禁足/解除禁足；仅赐死按 command type 单独禁止。
+ * 注意：皇后可以被禁足/解除禁足；仅赐死按 command type 单独禁止。
  */
 function consortGate(db: ContentDB, state: GameState, charId: string): string | null {
   const char = db.characters[charId] ?? state.generatedConsorts[charId];
@@ -134,7 +134,7 @@ export function planImperialCommand(
   const name = targetName(db, state, charId);
   const source = state.playerLocation || undefined;
   const st = state.standing[charId]!;
-  const isEmpress = st.rank === "fenghou";
+  const isEmpress = st.rank === "huanghou";
 
   if (command.type === "impose_confinement") {
     if (isConfined(state, charId)) return { ok: false, reason: `${name}已在禁足中。` };
@@ -146,13 +146,13 @@ export function planImperialCommand(
     const endTurnExclusive = command.durationTurns === null ? null : startTurn + command.durationTurns;
     const indefinite = command.durationTurns === null;
 
-    // ── 凤后禁足：必须携带六宫主理选择 ─────────────────────────────────
+    // ── 皇后禁足：必须携带六宫主理选择 ─────────────────────────────────
     if (isEmpress) {
       const eligible = eligibleHaremAdministrators(db, state);
       const admin = command.administrator;
 
       if (!admin) {
-        return { ok: false, reason: "凤后禁足须同时指定六宫主理者。" };
+        return { ok: false, reason: "皇后禁足须同时指定六宫主理者。" };
       }
       if (admin.kind === "neiwu_proxy" && eligible.length > 0) {
         return { ok: false, reason: "宫中尚有驸级以上侍君，须指定侍君协理六宫，不得直接选择内务府代理。" };
@@ -356,7 +356,7 @@ export function planImperialCommand(
       },
     ];
 
-    // 凤后禁足解除：附加「复掌六宫」编年史
+    // 皇后禁足解除：附加「复掌六宫」编年史
     if (isEmpress) {
       chronicle.push({
         type: "punished",
@@ -376,9 +376,9 @@ export function planImperialCommand(
     };
   }
 
-  // execute — 赐死凤后在本次范围外明确禁止。
+  // execute — 赐死皇后在本次范围外明确禁止。
   if (isEmpress) {
-    return { ok: false, reason: "凤后不受赐死之令。" };
+    return { ok: false, reason: "皇后不受赐死之令。" };
   }
 
   // 若目标是当前协理者，须处理接任问题。

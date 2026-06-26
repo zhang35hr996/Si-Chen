@@ -1,4 +1,4 @@
-/** 宗正寺·传嗣：在世侍君中择承嗣君（高亮候选）。凤后无嗣时提示优先凤后承嗣。 */
+/** 宗正寺·传嗣：在世侍君中择承嗣君（高亮候选）。皇后无嗣时提示优先皇后承嗣。 */
 import { useState } from "react";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import { byRankDesc } from "../../engine/characters/presence";
@@ -39,7 +39,7 @@ export function SuccessorModal({
         <h2>宗正寺上书</h2>
         <p className="pregnancy-modal__hint">
           宗正寺奏请陛下尽早择侍君承嗣，以固宗祧。
-          {fenghouChildless ? "凤后尚无所出，可优先择凤后承嗣以生嫡子。" : ""}
+          {fenghouChildless ? "皇后尚无所出，可优先择皇后承嗣以生嫡子。" : ""}
         </p>
         <ul className="pregnancy-modal__list">
           {living.map((id) => (

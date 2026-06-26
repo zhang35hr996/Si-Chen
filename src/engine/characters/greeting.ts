@@ -46,7 +46,7 @@ export function wanders(
  * 卯时实际在请安地点的侍君（排除主持请安的受礼者）。
  *
  * 动态地点规则：
- *   - mode === "empress"        → 凤后寝殿（通常坤宁宫）
+ *   - mode === "empress"        → 皇后寝殿（通常坤宁宫）
  *   - mode === "acting_consort" → 协理者寝殿
  *   - mode === "neiwu_proxy"    → null（无正式请安，返回空）
  *
@@ -59,13 +59,13 @@ export function greetingAttendees(db: ContentDB, state: GameState): CharacterCon
   if (!loc) return []; // neiwu_proxy：暂停正式请安
 
   const admin = state.haremAdministration;
-  // 受礼者 charId：empress 模式下找凤后，acting_consort 模式下为协理者。
+  // 受礼者 charId：empress 模式下找皇后，acting_consort 模式下为协理者。
   let excludeId: string | null = null;
   if (admin.mode === "acting_consort") {
     excludeId = admin.charId;
   } else if (admin.mode === "empress") {
     for (const [id, st] of Object.entries(state.standing)) {
-      if (st.rank === "fenghou" && st.lifecycle !== "deceased") {
+      if (st.rank === "huanghou" && st.lifecycle !== "deceased") {
         excludeId = id;
         break;
       }

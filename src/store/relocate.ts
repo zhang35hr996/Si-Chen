@@ -1,5 +1,5 @@
 /**
- * 搬迁侍君：把侍君（除凤后外）迁到另一座设宫室居所的空宫室。住处记在
+ * 搬迁侍君：把侍君（除皇后外）迁到另一座设宫室居所的空宫室。住处记在
  * standing.residence（覆盖 content 的 defaultLocation）+ standing.chamber，
  * 经 relocate effect 走效果漏斗落地。此处只组装效果与给 UI 提供宫室占用视图。
  */
@@ -58,7 +58,7 @@ export function buildRelocate(
   chamber: ChamberId,
 ): EventEffect[] | null {
   const st = state.standing[charId];
-  if (!st || st.rank === "fenghou") return null;
+  if (!st || st.rank === "huanghou") return null;
   if (!hasChambers(location)) return null;
   const here = getCharacterLocation(db, state, charId) === location && chamberOf(st) === chamber;
   if (here) return null;

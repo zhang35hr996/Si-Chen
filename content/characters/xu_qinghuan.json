@@ -61,7 +61,7 @@
     ]
   },
   "initialStanding": {
-    "rank": "jun",
+    "rank": "fu",
     "favor": 45
   },
   "initialMemories": [
@@ -90,7 +90,7 @@
     {
       "charId": "shen_zhibai",
       "stance": "competitive",
-      "attitude": "畏凤后掌印之威，面上恭谨，心里却不服管束"
+      "attitude": "畏皇后掌印之威，面上恭谨，心里却不服管束"
     },
     {
       "charId": "lu_huaijin",

@@ -56,7 +56,7 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
   it("(d) forbidden text without claims → GATE_REJECTED, state.mentionLog unchanged", async () => {
     // Fresh state → CLOSED mode. Text gate fires on the forbidden term "皇上".
     const before = structuredClone(state.mentionLog);
-    const { req, provider } = ctx("皇上圣明。", []);
+    const { req, provider } = ctx("娘娘圣明。", []);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("GATE_REJECTED");
     expect(state.mentionLog).toEqual(before);

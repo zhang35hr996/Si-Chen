@@ -14,9 +14,9 @@ describe("resolveDisplayName", () => {
   it("composes 封号 + 位分 when titled", () => {
     expect(resolveDisplayName(consort({}), { rank: "chenghui", favor: 30, title: "婉" }, chenghui)).toBe("婉承徽");
   });
-  it("falls back to profile.name when there is no surname (凤后)", () => {
-    const fenghou = { kind: "consort", profile: { name: "凤后" } } as unknown as CharacterContent;
-    expect(resolveDisplayName(fenghou, { rank: "fenghou", favor: 25 }, { ...chenghui, name: "凤后" })).toBe("凤后");
+  it("falls back to profile.name when there is no surname (皇后)", () => {
+    const fenghou = { kind: "consort", profile: { name: "皇后" } } as unknown as CharacterContent;
+    expect(resolveDisplayName(fenghou, { rank: "huanghou", favor: 25 }, { ...chenghui, name: "皇后" })).toBe("皇后");
   });
 });
 
@@ -30,8 +30,8 @@ describe("resolveIdentityLabel", () => {
     expect(resolveIdentityLabel(c, { rank: "chenghui", favor: 30, title: "婉" }, chenghui)).toBe("徐清欢·婉承徽");
   });
   it("无位分时退化为本名", () => {
-    const fenghou = { kind: "consort", profile: { name: "凤后" } } as unknown as CharacterContent;
-    expect(resolveIdentityLabel(fenghou, { rank: "fenghou", favor: 25 }, undefined)).toBe("凤后");
+    const fenghou = { kind: "consort", profile: { name: "皇后" } } as unknown as CharacterContent;
+    expect(resolveIdentityLabel(fenghou, { rank: "huanghou", favor: 25 }, undefined)).toBe("皇后");
   });
 });
 

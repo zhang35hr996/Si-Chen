@@ -1,4 +1,4 @@
-/** 奉先殿：择一皇嗣 → 择一养父（在宫侍君+凤后），告于宗庙。1 AP。 */
+/** 奉先殿：择一皇嗣 → 择一养父（在宫侍君+皇后），告于宗庙。1 AP。 */
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";

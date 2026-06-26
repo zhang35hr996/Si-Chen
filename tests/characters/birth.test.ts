@@ -7,20 +7,20 @@ import type { BedchamberRecord } from "../../src/engine/state/types";
 
 const NO_TWINS_NO_OMEN: GestationConfig = {
   ...DEFAULT_GESTATION,
-  twins: { dragonPhoenixChance: 0, twoDaughtersChance: 0, twoSonsChance: 0 },
+  twins: { mixedSexTwinsChance: 0, twoDaughtersChance: 0, twoSonsChance: 0 },
   birthOmen: { auspiciousChance: 0, inauspiciousChance: 0, auspiciousFavorDelta: 10, inauspiciousFavorDelta: -10 },
 };
 const ALL_DRAGON_PHOENIX: GestationConfig = {
   ...NO_TWINS_NO_OMEN,
-  twins: { dragonPhoenixChance: 100, twoDaughtersChance: 0, twoSonsChance: 0 },
+  twins: { mixedSexTwinsChance: 100, twoDaughtersChance: 0, twoSonsChance: 0 },
 };
 const ALL_TWIN_DAUGHTERS: GestationConfig = {
   ...NO_TWINS_NO_OMEN,
-  twins: { dragonPhoenixChance: 0, twoDaughtersChance: 100, twoSonsChance: 0 },
+  twins: { mixedSexTwinsChance: 0, twoDaughtersChance: 100, twoSonsChance: 0 },
 };
 const ALL_TWIN_SONS: GestationConfig = {
   ...NO_TWINS_NO_OMEN,
-  twins: { dragonPhoenixChance: 0, twoDaughtersChance: 0, twoSonsChance: 100 },
+  twins: { mixedSexTwinsChance: 0, twoDaughtersChance: 0, twoSonsChance: 100 },
 };
 const ALL_AUSPICIOUS: GestationConfig = {
   ...NO_TWINS_NO_OMEN,
@@ -42,7 +42,7 @@ describe("resolveBirth — self pregnancy", () => {
       carrier: "sovereign",
       fatherId: null,
       transferredAtMonth: undefined,
-      bearerIsFenghou: false,
+      bearerIsEmpress: false,
       carrierRecord: emptyRecord,
       thresholds: DEFAULT_TIERS,
       cfg: DEFAULT_GESTATION,
@@ -63,7 +63,7 @@ describe("resolveBirth — consort carrier", () => {
       carrier: "lu_huaijin",
       fatherId: "lu_huaijin",
       transferredAtMonth: 3,
-      bearerIsFenghou: false,
+      bearerIsEmpress: false,
       carrierRecord: emptyRecord, // no encounters → tier none → 15
       thresholds: DEFAULT_TIERS,
       cfg: DEFAULT_GESTATION,
@@ -81,8 +81,8 @@ describe("resolveBirth — consort carrier", () => {
       carrier: "shen_zhibai",
       fatherId: "shen_zhibai",
       transferredAtMonth: 3,
-      bearerIsFenghou: true,
-      carrierRecord: emptyRecord, // tier none=15 → +fenghouBonus(15) = 30
+      bearerIsEmpress: true,
+      carrierRecord: emptyRecord, // tier none=15 → +empressBonus(15) = 30
       thresholds: DEFAULT_TIERS,
       cfg: DEFAULT_GESTATION,
     });
@@ -99,7 +99,7 @@ describe("resolveBirth — consort carrier", () => {
       carrier: "lu_huaijin",
       fatherId: "lu_huaijin",
       transferredAtMonth: 3,
-      bearerIsFenghou: false,
+      bearerIsEmpress: false,
       carrierRecord: emptyRecord,
       thresholds: DEFAULT_TIERS,
       cfg,
@@ -114,7 +114,7 @@ describe("resolveBirth — consort carrier", () => {
       carrier: "lu_huaijin",
       fatherId: "lu_huaijin",
       transferredAtMonth: 6,
-      bearerIsFenghou: false,
+      bearerIsEmpress: false,
       carrierRecord: emptyRecord,
       thresholds: DEFAULT_TIERS,
       cfg: DEFAULT_GESTATION,
@@ -126,7 +126,7 @@ describe("resolveBirth — consort carrier", () => {
 describe("resolveBirth — favor defaults", () => {
   const base = {
     rngSeed: 1, now,
-    fatherId: "lu_huaijin", transferredAtMonth: 3, bearerIsFenghou: false,
+    fatherId: "lu_huaijin", transferredAtMonth: 3, bearerIsEmpress: false,
     carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
   };
 
@@ -141,8 +141,8 @@ describe("resolveBirth — favor defaults", () => {
     expect(v.favor).toBe(15);
   });
 
-  it("fenghouBonus=15 stacks on tier none: 15+15=30", () => {
-    const v = resolveBirth({ ...base, carrier: "shen_zhibai", bearerIsFenghou: true, cfg: NO_TWINS_NO_OMEN });
+  it("empressBonus=15 stacks on tier none: 15+15=30", () => {
+    const v = resolveBirth({ ...base, carrier: "shen_zhibai", bearerIsEmpress: true, cfg: NO_TWINS_NO_OMEN });
     expect(v.favor).toBe(30);
   });
 
@@ -162,7 +162,7 @@ describe("resolveBirth — favor defaults", () => {
 describe("resolveBirth — twins", () => {
   const base = {
     rngSeed: 1, now, carrier: "lu_huaijin", fatherId: "lu_huaijin",
-    transferredAtMonth: 3, bearerIsFenghou: false,
+    transferredAtMonth: 3, bearerIsEmpress: false,
     carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
   } as const;
 
@@ -212,7 +212,7 @@ describe("resolveBirth — twins", () => {
 describe("resolveBirth — birth omens", () => {
   const base = {
     rngSeed: 1, now, carrier: "sovereign", fatherId: null,
-    transferredAtMonth: undefined, bearerIsFenghou: false,
+    transferredAtMonth: undefined, bearerIsEmpress: false,
     carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
   } as const;
 
@@ -241,7 +241,7 @@ describe("resolveBirth — birth omens", () => {
   it("auspicious omen on tier-none consort → favor 15+10=25", () => {
     const v = resolveBirth({
       rngSeed: 1, now, carrier: "lu_huaijin", fatherId: "lu_huaijin",
-      transferredAtMonth: 3, bearerIsFenghou: false,
+      transferredAtMonth: 3, bearerIsEmpress: false,
       carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
       cfg: ALL_AUSPICIOUS,
     });
@@ -253,7 +253,7 @@ describe("resolveBirth — birth omens", () => {
   it("inauspicious omen on tier-none consort → favor 15-10=5", () => {
     const v = resolveBirth({
       rngSeed: 1, now, carrier: "lu_huaijin", fatherId: "lu_huaijin",
-      transferredAtMonth: 3, bearerIsFenghou: false,
+      transferredAtMonth: 3, bearerIsEmpress: false,
       carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
       cfg: ALL_INAUSPICIOUS,
     });
@@ -269,7 +269,7 @@ describe("resolveBirth — birth omens", () => {
     };
     const luBase = {
       now, carrier: "lu_huaijin" as const, fatherId: "lu_huaijin",
-      transferredAtMonth: 3, bearerIsFenghou: false,
+      transferredAtMonth: 3, bearerIsEmpress: false,
       carrierRecord: emptyRecord, thresholds: DEFAULT_TIERS,
     };
     let found = false;

@@ -15,7 +15,7 @@ export function buildSpeakerProfiles(db: ContentDB): Record<string, SpeakerProfi
     const selfRefs = sr ? [...sr.toPlayer, ...sr.formal, ...(sr.informal ?? [])] : [];
     out[id] = {
       selfRefs,
-      addressTerm: "陛下", // 世界规则：对皇帝一律称「陛下」
+      addressTerm: "陛下", // 默认正式称呼；宫廷日常亦可称「皇上」
       quirkLexemes: extractQuirkLexemes(char.voice.quirks),
       tabooTopics: char.voice.tabooTopics,
       register: char.voice.register,

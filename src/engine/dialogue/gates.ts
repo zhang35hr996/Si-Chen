@@ -41,18 +41,18 @@ export interface TextGateContext {
    */
   foreignSelfRefs: string[];
   /**
-   * Wrong honorifics for the 皇帝. The world's one rule (lexicon.styleRules) is
-   * 「对皇帝一律称『陛下』」; styleRules are unstructured prose the engine can't
-   * parse, so this is a small v0 watch-list of common WRONG forms. Terms also in
-   * forbiddenTerms are dropped here so they fire under forbidden_lexicon only.
+   * Wrong honorifics for the 皇帝. Formal contexts require 陛下; daily speech also
+   * permits 皇上/圣上/万岁/圣驾. The gate can't distinguish context, so this
+   * watch-list only holds terms that are globally wrong regardless of context.
+   * Terms also in forbiddenTerms are dropped so they fire under forbidden_lexicon.
    */
   wrongPlayerHonorifics: string[];
 }
 
 const MIN_SELF_REF_LEN = 2;
 
-/** v0 heuristic watch-list — see TextGateContext.wrongPlayerHonorifics. */
-const WRONG_PLAYER_HONORIFICS = ["皇上", "圣上", "万岁爷", "万岁", "圣驾"];
+/** v0 heuristic watch-list — globally wrong forms only; context-restricted terms (皇上/圣上/万岁/圣驾) excluded since the gate can't check context. */
+const WRONG_PLAYER_HONORIFICS: string[] = [];
 
 /** Raw prompt-template tokens that must never survive into player-facing text. */
 const TEMPLATE_PATTERNS: RegExp[] = [
@@ -142,7 +142,7 @@ export function scanDialogueText(
         findings.push({
           gate: "rank_title",
           severity: "reject",
-          message: `the 皇帝 is addressed as 「陛下」, never 「${term}」`,
+          message: `globally forbidden honorific 「${term}」 for the 皇帝`,
           matched: term,
         });
       }

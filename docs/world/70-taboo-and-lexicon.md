@@ -6,8 +6,9 @@ when in doubt, the JSON wins.
 
 ## Approved terms (setting vocabulary)
 
-胎息, 承养, 承养人, 承嗣君, 育嗣君, 养君, 自孕, 经血祭祀 / 经血祭仪, 凤后, 承徽, 君,
-侍君, 位分, 凤印, 宫规, 皇嗣, 皇子, 皇郎, 公主, 贵主.
+胎息, 承养, 承养人, 承嗣君, 育嗣君, 养君, 自孕, 经血祭祀 / 经血祭仪, 承徽, 承仪, 承德,
+昭仪, 昭徽, 昭德, 倢伃, 侍宸, 驸, 贵驸, 侍君, 位分, 凤印, 宫规, 皇嗣, 皇子, 皇郎, 公主, 贵主,
+子郎, 夫人, 命夫, 侧夫, 妇主, 夫身.
 
 Use these exact words for in-world concepts. Don't invent new offices, ranks, or
 lineage terms — if an institution is 未定, describe it plainly instead of coining
@@ -15,16 +16,24 @@ a word (a hard style rule below).
 
 ## Forbidden terms
 
-**父皇, 血父, 王爷, 太监, 娘娘, 嫔妃, 皇上.**
+**父皇, 血父, 王爷, 太监, 娘娘, 嫔妃, 万岁爷, 凤后.**
 
 Why they're wrong here:
 - **父皇 / 血父** — impose a paternal frame; lineage is matrilineal, men 承养 not father.
 - **王爷 / 太监 / 娘娘 / 嫔妃** — import the wrong (male-default or eunuch-harem) court.
-- **皇上** — the sovereign is addressed **陛下**, never 皇上.
+- **万岁爷** — overly familiar diminutive for the sovereign, globally forbidden.
+- **凤后** — the empress is now styled 皇后, not 凤后.
+
+## Context-restricted terms
+
+**皇上, 圣上, 万岁, 圣驾** — valid informal or colloquial addresses for the sovereign,
+permitted in private / daily speech, but **not** in formal 奏折, 朝对, or 典礼.
+In those contexts, use **陛下** exclusively.
 
 ## Wrong-title pitfalls
 
 - Calling a 后宫 man by an imperial-kin title (贵主) — kin titles ≠ consort ranks.
+- Using 君-family ranks (皇贵君/贵君/君) — these are abolished; use 驸-family.
 - Giving a man an 外朝 office or military command — men do not govern.
 - A consort self-referencing above their tier (see
   [`50-harem-ranks.md`](50-harem-ranks.md) self-reference rules).
@@ -33,7 +42,7 @@ Why they're wrong here:
 
 1. 不得创造新的官职、位分、宗嗣术语；制度未定时用普通描述，不要造词。
 2. 男子角色遵循礼法语体，不用现代恋爱腔。
-3. 对皇帝一律称「陛下」，不得称「皇上」；女尊之世官员、皇帝皆默认女性，行文不出现「女官」「女帝」。
+3. 正式朝对、典礼、奏折中对皇帝称「陛下」；宫廷日常可称「皇上」。女尊之世官员、皇帝皆默认女性，行文不出现「女官」「女帝」。
 
 See also [`../narrative/50-dialogue-style-guide.md`](../narrative/50-dialogue-style-guide.md)
 for tone and good/bad line examples.

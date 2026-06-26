@@ -40,7 +40,7 @@
     ],
     "goals": [
       "整肃宫规，维持后宫秩序",
-      "守住凤后体面与母家颜面"
+      "守住皇后体面与母家颜面"
     ],
     "speechStyle": "措辞雅正，多用敬语，句短而克制；急时仍不失礼数。"
   },
@@ -52,7 +52,7 @@
   "voice": {
     "register": "formal",
     "quirks": [
-      "对陛下自称『臣后』，仪式场合用『本宫』",
+      "对陛下自称『臣侍』，仪式场合用『本宫』",
       "称玩家『陛下』，绝不直呼"
     ],
     "tabooTopics": [
@@ -60,7 +60,7 @@
     ]
   },
   "initialStanding": {
-    "rank": "fenghou",
+    "rank": "huanghou",
     "favor": 25
   },
   "initialMemories": [

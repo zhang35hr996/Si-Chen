@@ -22,7 +22,7 @@ const SAMPLE_CLAIM: ProposedClaim = {
     id: "c1",
     predicate: "holds_rank",
     subjectId: SPEAKER_ID,
-    object: "fenghou",
+    object: "huanghou",
     modality: "assert",
   },
   sourceRefs: [{ kind: "memory" as const, id: "mem_001" }],

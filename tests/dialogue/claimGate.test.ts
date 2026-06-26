@@ -123,16 +123,16 @@ describe("isContradictedByBelief", () => {
     expect(isContradictedByBelief(aliveClaim("deny"), false)).toBe(false);
   });
   it("holds_rank affirm: contradicted when believed rank differs", () => {
-    expect(isContradictedByBelief(rankClaim("fenghou", "assert"), "zhaoyi")).toBe(true);
+    expect(isContradictedByBelief(rankClaim("huanghou", "assert"), "zhaoyi")).toBe(true);
   });
   it("holds_rank affirm: not contradicted when believed rank matches", () => {
-    expect(isContradictedByBelief(rankClaim("fenghou", "assert"), "fenghou")).toBe(false);
+    expect(isContradictedByBelief(rankClaim("huanghou", "assert"), "huanghou")).toBe(false);
   });
   it("holds_rank deny object='X': contradicted when believed='X'", () => {
     expect(isContradictedByBelief(rankClaim("zhaoyi", "deny"), "zhaoyi")).toBe(true);
   });
   it("holds_rank deny object='X': not contradicted when believed≠'X'", () => {
-    expect(isContradictedByBelief(rankClaim("zhaoyi", "deny"), "fenghou")).toBe(false);
+    expect(isContradictedByBelief(rankClaim("zhaoyi", "deny"), "huanghou")).toBe(false);
   });
 });
 
@@ -215,7 +215,7 @@ describe("claim gate — belief gate + event auth", () => {
       certainty: 90,
     };
     const r = validateDialogueClaims(base({
-      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "fenghou", certainty: 100 } }),
+      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "huanghou", certainty: 100 } }),
       offeredRefKeys: new Set(["event:evt_002"]),
       proposedClaims: [proposed],
       allowedClaims: [auth],
@@ -230,7 +230,7 @@ describe("claim gate — belief gate + event auth", () => {
 describe("claim gate — new violation codes", () => {
   it("source_not_authorized: empty sourceRefs", () => {
     const proposed: ProposedClaim = {
-      claim: { id: "c_empty", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_empty", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [],
       modality: "assert",
       certainty: 80,
@@ -268,11 +268,11 @@ describe("claim gate — new violation codes", () => {
   it("claim_not_allowed: CLOSED [] rejects all fact claims", () => {
     // allowedClaims=[] means no claim can be authorized → claim_not_allowed
     const proposed = pc({
-      claim: { id: "c_notallowed", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_notallowed", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [memRef("mem_1")],
     });
     const r = validateDialogueClaims(base({
-      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "fenghou", certainty: 100 } }),
+      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "huanghou", certainty: 100 } }),
       offeredRefKeys: new Set(["memory:mem_1"]),
       proposedClaims: [proposed],
       allowedClaims: [], // CLOSED: empty list
@@ -288,13 +288,13 @@ describe("claim gate — new violation codes", () => {
       sourceRefs: [evtRef("evt_001")],
     };
     const proposed: ProposedClaim = {
-      claim: { id: "c_mismatch", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_mismatch", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("evt_001")],
       modality: "assert",
       certainty: 80,
     };
     const r = validateDialogueClaims(base({
-      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "fenghou", certainty: 100 } }),
+      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "huanghou", certainty: 100 } }),
       offeredRefKeys: new Set(["event:evt_001"]),
       proposedClaims: [proposed],
       allowedClaims: [auth],
@@ -305,11 +305,11 @@ describe("claim gate — new violation codes", () => {
 
   it("passes when covered by allowedClaims, source in authorized∩offered", () => {
     const auth: AuthorizedClaim = {
-      claim: { id: "auth_pass", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "auth_pass", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("evt_001")],
     };
     const proposed: ProposedClaim = {
-      claim: { id: "c_pass", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_pass", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("evt_001")],
       modality: "assert",
       certainty: 80,
@@ -326,13 +326,13 @@ describe("claim gate — new violation codes", () => {
   it("allowedClaims=undefined → skip check (backward compat)", () => {
     // No allowedClaims defined → open mode, use old source check
     const proposed: ProposedClaim = {
-      claim: { id: "c_compat", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_compat", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [memRef("mem_1")],
       modality: "assert",
       certainty: 80,
     };
     const r = validateDialogueClaims(base({
-      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "fenghou", certainty: 100 } }),
+      beliefs: beliefsFrom({ "holds_rank:shen_zhibai": { value: "huanghou", certainty: 100 } }),
       offeredRefKeys: new Set(["memory:mem_1"]),
       proposedClaims: [proposed],
       // allowedClaims NOT set → backward compat open mode
@@ -344,11 +344,11 @@ describe("claim gate — new violation codes", () => {
   it("source_not_authorized: sourceRef not in authorized.sourceRefs or not in offeredRefs", () => {
     // allowedClaims exists, claim matches by fact+polarity, but source intersection fails
     const auth: AuthorizedClaim = {
-      claim: { id: "auth_ok", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "auth_ok", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("evt_001")], // authorized by evt_001
     };
     const proposed: ProposedClaim = {
-      claim: { id: "c_badsrc", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_badsrc", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("evt_999")], // not in authorized.sourceRefs → source intersection fails
       modality: "assert",
       certainty: 80,
@@ -379,11 +379,11 @@ describe("claim gate — new violation codes", () => {
 
 describe("isCoveredByAllowedClaim", () => {
   const auth: AuthorizedClaim = {
-    claim: { id: "a1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+    claim: { id: "a1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
     sourceRefs: [evtRef("evt_001")],
   };
   const proposed: ProposedClaim = {
-    claim: { id: "p1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+    claim: { id: "p1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
     sourceRefs: [evtRef("evt_001")],
     modality: "assert",
     certainty: 80,
@@ -422,11 +422,11 @@ describe("isCoveredByAllowedClaim", () => {
 
   it("returns false when proposed assert > authorized rumor (modality strength exceeded)", () => {
     const authRumor: AuthorizedClaim = {
-      claim: { id: "a_rumor", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "rumor" },
+      claim: { id: "a_rumor", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "rumor" },
       sourceRefs: [evtRef("evt_001")],
     };
     const propAssert: ProposedClaim = {
-      claim: { id: "p_assert", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "p_assert", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("evt_001")],
       modality: "assert",
       certainty: 70,
@@ -436,11 +436,11 @@ describe("isCoveredByAllowedClaim", () => {
 
   it("returns true when proposed suspect ≤ authorized suspect (same strength ok)", () => {
     const authSuspect: AuthorizedClaim = {
-      claim: { id: "a_sus", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "suspect" },
+      claim: { id: "a_sus", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "suspect" },
       sourceRefs: [evtRef("evt_001")],
     };
     const propSuspect: ProposedClaim = {
-      claim: { id: "p_sus", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "suspect" },
+      claim: { id: "p_sus", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "suspect" },
       sourceRefs: [evtRef("evt_001")],
       modality: "suspect",
       certainty: 50,
@@ -450,11 +450,11 @@ describe("isCoveredByAllowedClaim", () => {
 
   it("returns true when proposed rumor < authorized assert (below authorized strength ok)", () => {
     const authAssert: AuthorizedClaim = {
-      claim: { id: "a_assert", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "a_assert", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("evt_001")],
     };
     const propRumor: ProposedClaim = {
-      claim: { id: "p_rumor", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "rumor" },
+      claim: { id: "p_rumor", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "rumor" },
       sourceRefs: [evtRef("evt_001")],
       modality: "rumor",
       certainty: 30,
@@ -466,7 +466,7 @@ describe("isCoveredByAllowedClaim", () => {
 
   it("returns false when proposed certainty (90) exceeds certaintyCeiling (60)", () => {
     const authCeiling: AuthorizedClaim = {
-      claim: { id: "a_ceil", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert", certaintyCeiling: 60 },
+      claim: { id: "a_ceil", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert", certaintyCeiling: 60 },
       sourceRefs: [evtRef("evt_001")],
     };
     const propHigh: ProposedClaim = { ...proposed, certainty: 90 };
@@ -475,7 +475,7 @@ describe("isCoveredByAllowedClaim", () => {
 
   it("returns true when proposed certainty (50) is within certaintyCeiling (60)", () => {
     const authCeiling: AuthorizedClaim = {
-      claim: { id: "a_ceil2", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert", certaintyCeiling: 60 },
+      claim: { id: "a_ceil2", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert", certaintyCeiling: 60 },
       sourceRefs: [evtRef("evt_001")],
     };
     const propLow: ProposedClaim = { ...proposed, certainty: 50 };
@@ -497,11 +497,11 @@ describe("isCoveredByAllowedClaim", () => {
   it("does not confuse memory ref with event ref sharing same bare id", () => {
     // auth has event:shared_id in sourceRefs; proposed has memory:shared_id
     const authEvent: AuthorizedClaim = {
-      claim: { id: "a_evt", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "a_evt", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [evtRef("shared_id")],
     };
     const propMem: ProposedClaim = {
-      claim: { id: "p_mem", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "p_mem", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [memRef("shared_id")],
       modality: "assert",
       certainty: 80,
@@ -550,11 +550,11 @@ describe("isCoveredByForbiddenClaim", () => {
 
 describe("matchesFactAndPolarity", () => {
   const auth: AuthorizedClaim = {
-    claim: { id: "a1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+    claim: { id: "a1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
     sourceRefs: [evtRef("evt_001")],
   };
   const matchingProposed: ProposedClaim = {
-    claim: { id: "p1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+    claim: { id: "p1", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
     sourceRefs: [evtRef("evt_999")], // different source — doesn't matter for this check
     modality: "assert",
     certainty: 80,
@@ -588,15 +588,15 @@ describe("validateDialogueClaims — multiple allowed entries for same fact+pola
     // and rejected the claim. filter()+some() correctly accepts because authB covers memB.
     const offered = new Set(["memory:mem_a", "memory:mem_b"]);
     const authA: AuthorizedClaim = {
-      claim: { id: "auth_a", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "auth_a", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: "mem_a" }],
     };
     const authB: AuthorizedClaim = {
-      claim: { id: "auth_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "auth_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: "mem_b" }],
     };
     const proposed: ProposedClaim = {
-      claim: { id: "c_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: "mem_b" }],
       modality: "assert",
       certainty: 80,
@@ -609,15 +609,15 @@ describe("validateDialogueClaims — multiple allowed entries for same fact+pola
     // Both authorized entries require mem_a or mem_c, but model cites mem_b.
     const offered = new Set(["memory:mem_a", "memory:mem_b", "memory:mem_c"]);
     const authA: AuthorizedClaim = {
-      claim: { id: "auth_a", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "auth_a", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: "mem_a" }],
     };
     const authC: AuthorizedClaim = {
-      claim: { id: "auth_c", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "auth_c", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: "mem_c" }],
     };
     const proposed: ProposedClaim = {
-      claim: { id: "c_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "fenghou", modality: "assert" },
+      claim: { id: "c_b", predicate: "holds_rank", subjectId: "shen_zhibai", object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: "mem_b" }],
       modality: "assert",
       certainty: 80,

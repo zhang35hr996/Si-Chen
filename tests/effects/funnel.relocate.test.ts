@@ -23,7 +23,7 @@ describe("funnel: relocate", () => {
     expect(chamberOf(r.value.standing.lu_huaijin)).toBe("east_side");
   });
 
-  it("rejects relocating the 凤后 (empress)", () => {
+  it("rejects relocating the 皇后 (empress)", () => {
     const s0 = createNewGameState(db);
     const r = applyEffects(db, s0, [
       { type: "relocate", char: "shen_zhibai", location: "chengqian_gong", chamber: "main" },

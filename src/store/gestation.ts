@@ -87,7 +87,7 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
   if (!gest) return null;
   const cfg = gestationConfig(db);
   const now = toGameTime(state.calendar);
-  const bearerIsFenghou = gest.carrier === "shen_zhibai";
+  const bearerIsEmpress = gest.carrier === "shen_zhibai";
 
   const verdict = resolveBirth({
     rngSeed: state.rngSeed,
@@ -95,7 +95,7 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
     carrier: gest.carrier,
     fatherId: gest.fatherId ?? null,
     transferredAtMonth: gest.transferredAtMonth,
-    bearerIsFenghou,
+    bearerIsEmpress,
     carrierRecord: gest.carrier === "sovereign" ? undefined : state.bedchamber[gest.carrier],
     thresholds: bedchamberConfig(db).tiers,
     cfg,
@@ -148,7 +148,7 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
 export function birthPhrase(sex: BirthVerdict["sex"], twinSex?: BirthVerdict["twinSex"]): string {
   if (twinSex === undefined) return sex === "daughter" ? "一位皇子" : "一位皇郎";
   if ((sex === "son" && twinSex === "daughter") || (sex === "daughter" && twinSex === "son")) {
-    return "一对龙凤胎";
+    return "子郎双生";
   }
   if (sex === "daughter") return "两位双生皇子";
   return "两位双生皇郎";

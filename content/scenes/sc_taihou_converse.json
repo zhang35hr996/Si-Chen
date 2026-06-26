@@ -1,7 +1,9 @@
 {
   "id": "sc_taihou_converse",
   "locationId": "cining_gong",
-  "participants": ["taihou"],
+  "participants": [
+    "taihou"
+  ],
   "startNodeId": "n_open",
   "nodes": [
     {
@@ -16,8 +18,18 @@
       "type": "choice",
       "id": "n_choice",
       "choices": [
-        { "id": "c_filial", "text": "儿臣特来给母后请安。", "tone": "friendly", "next": "n_fx_filial" },
-        { "id": "c_heir", "text": "想请母后为皇嗣教养指点一二。", "tone": "neutral", "next": "n_fx_heir" }
+        {
+          "id": "c_filial",
+          "text": "儿臣特来给父后请安。",
+          "tone": "friendly",
+          "next": "n_fx_filial"
+        },
+        {
+          "id": "c_heir",
+          "text": "想请父后为皇嗣教养指点一二。",
+          "tone": "neutral",
+          "next": "n_fx_heir"
+        }
       ]
     },
     {
@@ -48,11 +60,18 @@
             "summary": "皇帝来慈宁宫问安叙话，哀家心里宽慰。",
             "strength": 45,
             "retention": "fast",
-            "subjectIds": ["player", "taihou"],
+            "subjectIds": [
+              "player",
+              "taihou"
+            ],
             "perspective": "witness",
-            "triggerTags": ["taihou"],
+            "triggerTags": [
+              "taihou"
+            ],
             "unresolved": false,
-            "emotions": { "relief": 30 }
+            "emotions": {
+              "relief": 30
+            }
           }
         }
       ]

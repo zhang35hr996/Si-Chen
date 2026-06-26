@@ -524,7 +524,7 @@ describe("assembleClaims", () => {
       id: "forbid_test",
       predicate: "holds_rank",
       subjectId: "x",
-      object: "fenghou",
+      object: "huanghou",
       modality: "assert",
     };
     const out = assembleClaims({ ...makeBaseArgs(state), forbiddenClaims: [forbiddenClaim] });

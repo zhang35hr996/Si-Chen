@@ -5,7 +5,7 @@
  *   惩罚：禁足（可用）/ 下狱（禁用·尚未开放）/ 赐死（可用·二次确认）/ 株连九族（禁用·尚未开放）
  *
  * 已禁足者打开菜单时直接显示禁足详情与「解除禁足」，而非重复下旨。
- * 凤后禁足流程增加「六宫主理者选择」步骤。
+ * 皇后禁足流程增加「六宫主理者选择」步骤。
  */
 import { useState, useRef, type ReactNode } from "react";
 import {
@@ -61,7 +61,7 @@ export function PunishmentModal({
   const name = resolveDisplayName(character, standing, rank);
   const eraName = state.calendar.eraName;
   const confinement = activeConfinement(state, character.id);
-  const isEmpress = standing?.rank === "fenghou";
+  const isEmpress = standing?.rank === "huanghou";
   const coldPalaceEligibility = canSendToColdPalace(state, character.id);
 
   const haremAdmin = state.haremAdministration;
@@ -106,7 +106,7 @@ export function PunishmentModal({
     );
   }
 
-  // ── 凤后禁足：选择六宫主理者 ────────────────────────────────────────────
+  // ── 皇后禁足：选择六宫主理者 ────────────────────────────────────────────
   if (step.kind === "confine_admin_select") {
     const candidates = eligibleHaremAdministrators(db, state);
     if (candidates.length === 0) {
@@ -117,7 +117,7 @@ export function PunishmentModal({
           <p className="punish-modal__confirm">
             宫中目前无驸级以上侍君可协理六宫。
             <br />
-            凤后禁足期间，将由内务府总管暂代宫务。
+            皇后禁足期间，将由内务府总管暂代宫务。
           </p>
           <div className="punish-modal__actions">
             <button
@@ -148,7 +148,7 @@ export function PunishmentModal({
     return (
       <Backdrop onClose={onClose}>
         <h2>选择协理六宫者</h2>
-        <p className="punish-modal__subtitle">凤后禁足期间，须指定一位侍君协理六宫：</p>
+        <p className="punish-modal__subtitle">皇后禁足期间，须指定一位侍君协理六宫：</p>
         <div className="punish-modal__admin-list">
           {candidates.map((c) => {
             const cSt = state.standing[c.id];
@@ -449,7 +449,7 @@ export function PunishmentModal({
     const haremAdmin2 = state.haremAdministration;
     const haremWillTransfer =
       (haremAdmin2.mode === "acting_consort" && haremAdmin2.charId === character.id) ||
-      (haremAdmin2.mode === "empress" && standing?.rank === "fenghou");
+      (haremAdmin2.mode === "empress" && standing?.rank === "huanghou");
     const handleConfirm = () => {
       if (coldPalaceSubmitting.current) return;
       coldPalaceSubmitting.current = true;

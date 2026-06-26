@@ -126,9 +126,9 @@ export function buildMonthlyHealthTick(db: ContentDB, state: GameState): Monthly
     const health = st?.health ?? 100;
     const status = st?.healthStatus ?? "healthy";
     const carrying = state.resources.bloodline.gestations.some((g) => g.carrier === consortId);
-    // 凤后重病仍亲理六宫（mode=empress）时，额外消耗 -2 健康/月。
+    // 皇后重病仍亲理六宫（mode=empress）时，额外消耗 -2 健康/月。
     const isEmpressManaging =
-      st?.rank === "fenghou" &&
+      st?.rank === "huanghou" &&
       status === "critical" &&
       state.haremAdministration.mode === "empress";
     const workloadLoss = isEmpressManaging ? 2 : undefined;

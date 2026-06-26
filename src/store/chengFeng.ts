@@ -118,7 +118,7 @@ function gossipGardenConflict(db: ContentDB, state: GameState, seed: string): Go
   };
 }
 
-/** 凤后斥责侍君：皇后以礼仪有失为由申斥一名侍君。 */
+/** 皇后斥责侍君：皇后以礼仪有失为由申斥一名侍君。 */
 function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): GossipPlan | null {
   const targets = activeConsorts(db, state).filter((c) => {
     const st = state.standing[c.id] ?? c.initialStanding;
@@ -133,7 +133,7 @@ function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): Goss
   const nameB = displayName(db, state, charB.id);
   const rankB = rankName(db, state, charB.id);
 
-  const line = `陛下，听闻皇后娘娘斥责${nameB}在宫中言行失仪，冒犯尊上，训诫了一番。${nameB}领训之后回宫，臣瞧着神色有些难看。`;
+  const line = `陛下，听闻皇后殿下斥责${nameB}在宫中言行失仪，冒犯尊上，训诫了一番。${nameB}领训之后回宫，臣瞧着神色有些难看。`;
 
   return {
     effects: [
@@ -142,7 +142,7 @@ function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): Goss
         char: charB.id,
         entry: {
           kind: "grievance",
-          summary: `凤后因言行失仪之由斥责${rankB}，当众受训，颜面有损。`,
+          summary: `皇后因言行失仪之由斥责${rankB}，当众受训，颜面有损。`,
           strength: 60,
           retention: "slow",
           subjectIds: ["shen_zhibai", charB.id],
