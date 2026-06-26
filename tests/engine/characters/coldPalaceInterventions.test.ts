@@ -503,3 +503,37 @@ describe("validateColdPalaceInterventionLinks", () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 });
+
+// ── Strict trace mode ─────────────────────────────────────────────────────────
+
+describe("interveneInColdPalace strict trace mode", () => {
+  it("personal_visit: no untracked mutations, intervention append in trace", () => {
+    // Build the cold-palace state in a non-strict store, then loadState into strict store.
+    const prepState = stateWithColdPalaceResident();
+    const store = createGameStore({ traceMode: "strict" });
+    store.loadState(prepState); // loadState bypasses trace
+
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "personal_visit");
+    expect(result.ok).toBe(true);
+
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+    expect(
+      tx.mutations.some((m) => m.path.startsWith("coldPalaceInterventions")),
+    ).toBe(true);
+  });
+
+  it("physician: no untracked mutations", () => {
+    const prepState = stateWithColdPalaceResident(REAL_TARGET_ID, 50);
+    const store = createGameStore({ traceMode: "strict" });
+    store.loadState(prepState);
+
+    const result = store.interveneInColdPalace(db, REAL_TARGET_ID, "physician");
+    expect(result.ok).toBe(true);
+
+    const tx = store.getTraceHistory().getAll().at(-1)!;
+    expect(tx.outcome).toBe("committed");
+    expect(tx.untrackedCount).toBe(0);
+  });
+});

@@ -1500,8 +1500,10 @@ export class GameStore {
       return err(advance.error);
     }
     const { rolledOver, monthChanged, healthOutcome } = advance.value;
-    const nextState = postAdvance(advance.value.nextState);
+    const settledState = advance.value.nextState;
+    const nextState = postAdvance(settledState);
     if (collector) {
+      collector.capturePhaseScheduled("post_advance", diffGameState(settledState, nextState));
       captureEligibilityTransitions(db, beforeState, nextState, collector);
       const tx = this.buildTrace(beforeState, nextState, source, collector, "committed");
       this.state = nextState;
