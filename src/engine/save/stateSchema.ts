@@ -14,6 +14,7 @@ import {
 import type { GameState } from "../state/types";
 import { validateJusticeState } from "../justice/validation";
 import { validateJusticeLinks } from "../justice/crossLink";
+import { validateColdPalaceIncidentLinks } from "../characters/coldPalaceValidator";
 
 const nonEmpty = z.string().min(1);
 
@@ -636,7 +637,10 @@ export const gameStateSchema = z.strictObject({
   justice: justiceStateSchema,
   rngSeed: z.number(),
 }).superRefine((data, ctx) => {
-  const errs = validateJusticeLinks(data as Parameters<typeof validateJusticeLinks>[0]);
+  const errs = [
+    ...validateJusticeLinks(data as Parameters<typeof validateJusticeLinks>[0]),
+    ...validateColdPalaceIncidentLinks(data as Parameters<typeof validateColdPalaceIncidentLinks>[0]),
+  ];
   for (const e of errs) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });
   }

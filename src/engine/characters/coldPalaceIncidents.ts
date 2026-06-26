@@ -4,12 +4,13 @@
  * Design principles:
  *  - Pure functions; no side-effects; no Date.now() / Math.random().
  *  - IDs are deterministic compound keys → replay-stable, naturally idempotent.
- *  - One incident per resident per month (at most).
+ *  - At most ONE incident per checkpoint (sorted by charId → first hit wins).
+ *  - Health delta is non-lethal: cannot reduce health to 0.
  *  - Generated consorts supported via state.standing (no db.characters lookup needed).
  */
-import type { ColdPalaceIncident, ColdPalaceIncidentKind, GameState } from "../state/types";
+import type { ColdPalaceIncident, ColdPalaceIncidentKind, ColdPalaceEffect, GameState } from "../state/types";
 import type { GameTime } from "../calendar/time";
-import { activeColdPalaceEffectFor } from "./coldPalace";
+import { activeColdPalaceEffectFor, isColdPalaceEffectActiveAt } from "./coldPalace";
 import { gestationRoll } from "./gestation";
 
 // ── ID helpers ──────────────────────────────────────────────────────────────
@@ -54,15 +55,52 @@ export function oldestPendingIncident(
   });
 }
 
+/**
+ * Resolve the specific ColdPalaceEffect linked to an incident (by effectId).
+ * Returns the effect even if it has since been lifted — presentable regardless.
+ * Returns undefined only if the effect is not found or mismatched.
+ */
+export function resolveLinkedEffect(
+  state: GameState,
+  incident: ColdPalaceIncident,
+): ColdPalaceEffect | undefined {
+  return state.statusEffects.find(
+    (e): e is ColdPalaceEffect =>
+      e.kind === "cold_palace" &&
+      e.id === incident.effectId &&
+      e.characterId === incident.residentId,
+  );
+}
+
+/** True iff the linked effect is still active (resident currently in cold palace under that effect). */
+export function isLinkedEffectStillActive(
+  state: GameState,
+  incident: ColdPalaceIncident,
+): boolean {
+  const effect = resolveLinkedEffect(state, incident);
+  if (!effect) return false;
+  return isColdPalaceEffectActiveAt(effect, state.calendar.dayIndex);
+}
+
 // ── Scheduling constants ────────────────────────────────────────────────────
 
 /** % chance an eligible resident generates an incident in a given month. */
 const INCIDENT_CHANCE = 65;
 
-/** Health delta for health_deterioration incidents: -(5..10). */
-function incidentHealthDelta(rngSeed: number, charId: string, year: number, month: number): number {
+/** Raw health delta: -(5..10). */
+function rawIncidentHealthDelta(rngSeed: number, charId: string, year: number, month: number): number {
   const roll = gestationRoll(`cpi:delta:${rngSeed}:${charId}:${year}:${month}`);
   return -(5 + (roll % 6));
+}
+
+/**
+ * Non-lethal health delta: clamps so current health cannot reach 0.
+ * Returns undefined (no health change) if resident is already at 1 HP.
+ */
+function nonLethalDelta(rawDelta: number, currentHealth: number): number | undefined {
+  if (currentHealth <= 1) return undefined;
+  const clamped = Math.max(rawDelta, -(currentHealth - 1));
+  return clamped < 0 ? clamped : undefined;
 }
 
 function incidentKind(
@@ -80,41 +118,56 @@ function incidentKind(
 // ── Planner ─────────────────────────────────────────────────────────────────
 
 /**
- * Pure planner: returns new ColdPalaceIncidents to append this month-tick.
- * Caller is responsible for applying health deltas via applyEffects before committing.
- * Must be called only when monthChanged = true (caller's responsibility).
+ * Pure planner: returns at most ONE new ColdPalaceIncident per call.
+ *
+ * Candidates are sorted by charId for deterministic selection.
+ * The first candidate that passes the chance roll wins; others wait for next month.
+ * Health deltas are non-lethal (cannot reduce health to 0).
+ * Caller applies health delta via planHealthChange before committing.
+ * Must be called only when monthChanged = true.
  */
 export function planColdPalaceIncidents(state: GameState): ColdPalaceIncident[] {
   const { year, month, period, dayIndex } = state.calendar;
   const now: GameTime = { year, month, period, dayIndex };
   const rngSeed = state.rngSeed;
-  const newIncidents: ColdPalaceIncident[] = [];
 
-  for (const [charId, standing] of Object.entries(state.standing)) {
-    if (standing.lifecycle === "deceased" || standing.lifecycle === "candidate") continue;
-    if (!activeColdPalaceEffectFor(state, charId, dayIndex)) continue;
-    if (hasColdPalaceIncidentThisMonth(state.coldPalaceIncidents, charId, year, month)) continue;
+  // Collect and sort candidates deterministically (no Object.entries order reliance).
+  const candidates = Object.entries(state.standing)
+    .filter(([charId, standing]) => {
+      if (standing.lifecycle === "deceased" || standing.lifecycle === "candidate") return false;
+      if (hasColdPalaceIncidentThisMonth(state.coldPalaceIncidents, charId, year, month)) return false;
+      return activeColdPalaceEffectFor(state, charId, dayIndex) !== undefined;
+    })
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
+  for (const [charId, standing] of candidates) {
     const roll = gestationRoll(`cpi:${rngSeed}:${charId}:${year}:${month}`);
     if (roll >= INCIDENT_CHANCE) continue;
 
     const effect = activeColdPalaceEffectFor(state, charId, dayIndex)!;
     const health = standing.health ?? 100;
     const kind = incidentKind(rngSeed, charId, year, month, health);
-    const healthDelta = kind === "health_deterioration"
-      ? incidentHealthDelta(rngSeed, charId, year, month)
-      : undefined;
 
-    newIncidents.push({
+    let healthDelta: number | undefined;
+    if (kind === "health_deterioration") {
+      const raw = rawIncidentHealthDelta(rngSeed, charId, year, month);
+      healthDelta = nonLethalDelta(raw, health);
+      // If clamping yields 0 change (health already 1), downgrade to petition
+      if (healthDelta === undefined) {
+        // narrative-only: switch to petition rather than generating a no-op health incident
+      }
+    }
+
+    return [{
       id: coldPalaceIncidentId(charId, year, month),
       residentId: charId,
       effectId: effect.id,
-      kind,
+      kind: healthDelta !== undefined ? kind : "petition",
       occurredAt: now,
       acknowledged: false,
       ...(healthDelta !== undefined ? { healthDelta } : {}),
-    });
+    }];
   }
 
-  return newIncidents;
+  return [];
 }

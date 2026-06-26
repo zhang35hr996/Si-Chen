@@ -2540,7 +2540,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             db={db}
             state={liveState}
             incident={incident}
-            onAcknowledge={() => { store.acknowledgeIncident(incident.id); doAutosave(); }}
+            onAcknowledge={() => { if (store.acknowledgeIncident(incident.id)) doAutosave(); }}
             onNavigate={() => { setFreeViewId("changmengong"); setView("freeview"); }}
             onRestore={(charId) => setRestoreCharId(charId)}
           />

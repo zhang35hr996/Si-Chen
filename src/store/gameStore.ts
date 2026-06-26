@@ -30,6 +30,7 @@ import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
 import type { GameState, PendingDaxuan } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
+import { planHealthChange } from "./health";
 import { assignOfficialPost } from "../engine/officials/assign";
 import { dismissOfficial, restoreOfficialToActive, retireOfficial } from "../engine/officials/lifecycle";
 import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
@@ -1569,22 +1570,30 @@ export class GameStore {
       collector?.capturePhaseScheduled("annual_review", diffGameState(beforeReview, candidate));
     }
 
-    // 5) Cold-palace incident generation (月度，replay-stable；每居民每月至多一条).
+    // 5) Cold-palace incident generation (月度，每次至多一条；replay-stable；非致死健康扣减走统一 planHealthChange).
     if (monthChanged) {
       const beforeIncidents = candidate;
       const newIncidents = planColdPalaceIncidents(candidate);
       if (newIncidents.length > 0) {
-        const healthEffects = newIncidents
-          .filter((i) => i.kind === "health_deterioration" && i.healthDelta !== undefined)
-          .map((i) => ({ type: "set_consort_health" as const, char: i.residentId, healthDelta: i.healthDelta! }));
-        if (healthEffects.length > 0) {
-          const h = collector
-            ? collector.withPhase("cold_palace_incidents_health", () =>
-                applyEffects(db, candidate, healthEffects),
-              )
-            : applyEffects(db, candidate, healthEffects);
-          if (!h.ok) return err(h.error);
-          candidate = h.value;
+        // At most one incident per checkpoint (planner already guarantees this).
+        const incident = newIncidents[0]!;
+        if (incident.kind === "health_deterioration" && incident.healthDelta !== undefined) {
+          const now = toGameTime(candidate.calendar);
+          const { effects: hx } = planHealthChange(candidate, {
+            subject: { kind: "consort", id: incident.residentId },
+            healthDelta: incident.healthDelta,
+            cause: "illness",
+            at: now,
+          });
+          if (hx.length > 0) {
+            const h = collector
+              ? collector.withPhase("cold_palace_incidents_health", () =>
+                  applyEffects(db, candidate, hx),
+                )
+              : applyEffects(db, candidate, hx);
+            if (!h.ok) return err(h.error);
+            candidate = h.value;
+          }
         }
         candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, ...newIncidents] };
         collector?.capturePhaseScheduled("cold_palace_incidents", diffGameState(beforeIncidents, candidate));
@@ -2111,14 +2120,21 @@ export class GameStore {
     return result;
   }
 
-  /** 标记冷宫事件通报为已确认（PUNISH-4C）。幂等：未找到则静默。 */
-  acknowledgeIncident(incidentId: string): void {
-    const idx = this.state.coldPalaceIncidents.findIndex((i) => i.id === incidentId);
-    if (idx === -1) return;
+  /**
+   * 标记冷宫事件通报为已确认（PUNISH-4C）。
+   * 返回 true 仅当首次确认（previously unacknowledged）；已确认或未找到返回 false 且不 emit。
+   * App 只在返回 true 时 doAutosave，避免重复写盘。
+   */
+  acknowledgeIncident(incidentId: string): boolean {
+    const idx = this.state.coldPalaceIncidents.findIndex(
+      (i) => i.id === incidentId && !i.acknowledged,
+    );
+    if (idx === -1) return false;
     const updated = [...this.state.coldPalaceIncidents];
     updated[idx] = { ...updated[idx]!, acknowledged: true };
     this.state = { ...this.state, coldPalaceIncidents: updated };
     this.emit();
+    return true;
   }
 
   private emit(): void {
