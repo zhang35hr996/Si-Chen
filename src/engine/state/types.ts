@@ -391,6 +391,26 @@ export interface PersonnelDecision {
   resolution?: PersonnelDecisionResolution;
 }
 
+// ── 国库台账（Phase 4B） ──────────────────────────────────────────────────
+/**
+ * 国库流水台账条目。每次奏折批阅产生一条（delta 非零），原子写入，append-only。
+ * 绝不手动修改；验证见 treasuryLedger.ts。
+ */
+export interface TreasuryLedgerEntry {
+  /** "tre_000001" 格式，全局唯一。 */
+  id: string;
+  at: GameTime;
+  /** 非零安全整数；负数=支出，正数=收入。 */
+  delta: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  source:
+    | { kind: "memorial"; memorialId: string; optionId: string }
+    | { kind: "shop_purchase"; itemId: string }
+    | { kind: "system"; reasonCode: string };
+  reason: string;
+}
+
 // ── 奏折框架（Phase 4A 第一刀） ─────────────────────────────────────────
 /**
  * 紫宸殿奏折类别。第一刀只实地实现 `disaster`（地方灾情）；其余为框架占位（不生成），人事奏折仍由
@@ -406,17 +426,33 @@ export interface MemorialResourceEffect {
   delta: number;
 }
 
-/** 一个灾情处置选项：选定后经 effect funnel 施加国家/皇帝属性变化（绝不直接改 state）。 */
-export interface DisasterOption {
+/**
+ * 奏折处置选项（通用）：选定后经 effect funnel 施加国家/皇帝属性变化（绝不直接改 state）。
+ * treasuryDelta 若存在，表示国库变动（负=支出，正=收入）；为 undefined 则无国库变化。
+ */
+export interface MemorialOption {
   /** 选项 id（同一奏折内唯一）；resolved 时写入 Memorial.resolution。 */
   id: string;
   label: string;
   effects: MemorialResourceEffect[];
+  /** 非零安全整数；负=支出；undefined=无国库变化。 */
+  treasuryDelta?: number;
+}
+/** 向后兼容别名（第一刀的 DisasterOption 直接映射到 MemorialOption）。 */
+export type DisasterOption = MemorialOption;
+
+/** 财政奏折（户部年度岁入计划）载荷。 */
+export interface TreasuryMemorialPayload {
+  category: "treasury";
+  matter: "annual_revenue_plan";
+  urgency: "routine" | "urgent";
+  options: MemorialOption[];
 }
 
-/** 各类别的结构化载荷（判别联合）。第一刀只实现 disaster。 */
+/** 各类别的结构化载荷（判别联合）。 */
 export type MemorialPayload =
-  | { category: "disaster"; regionId: string; severity: "minor" | "major"; options: DisasterOption[] };
+  | { category: "disaster"; regionId: string; severity: "minor" | "major"; options: MemorialOption[] }
+  | TreasuryMemorialPayload;
 
 /**
  * 待皇帝批阅/已批阅的奏折（pending 可存档；resolved 不可再次执行）。`sourceId` 为去重键；`id`（"mem_000001"）
@@ -976,6 +1012,8 @@ export interface GameState {
   personnelDecisions: Record<string, PersonnelDecision>;
   /** 待批阅/已批阅的紫宸殿奏折（Phase 4A：地方灾情等前朝事务）。 */
   memorials: Record<string, Memorial>;
+  /** 国库流水台账（Phase 4B）：奏折批阅产生的原子借贷记录，append-only。 */
+  treasuryLedger: TreasuryLedgerEntry[];
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

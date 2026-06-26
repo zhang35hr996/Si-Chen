@@ -1,14 +1,16 @@
-/** 奏折框架引擎（Phase 4A）：地方灾情生成/批阅/校验。 */
+/** 奏折框架引擎（Phase 4A/4B）：地方灾情生成/批阅/校验 + 财政奏折载荷校验（Group G）。 */
 import { describe, expect, it } from "vitest";
 import {
   DISASTER_REGIONS,
   generateDisasterMemorial,
+  generateTreasuryMemorial,
   getPendingMemorials,
   resolveMemorial,
   validateMemorials,
+  TREASURY_OPTION_IDS,
 } from "../../src/engine/court/memorials";
 import { createNewGameState } from "../../src/engine/state/newGame";
-import type { GameState, Memorial } from "../../src/engine/state/types";
+import type { GameState, Memorial, MemorialOption } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -148,5 +150,111 @@ describe("validateMemorials — corruption", () => {
     expect(codes(withMemorial(s, { ...m, status: "resolved" }))).toContain("MEMORIAL_RESOLVED_MISSING_FIELDS");
     expect(codes(withMemorial(s, { ...m, status: "resolved", resolvedAt: at(2), resolution: "nope" }))).toContain("MEMORIAL_BAD_RESOLUTION");
     expect(codes(withMemorial(s, { ...m, status: "resolved", resolvedAt: at(1), resolution: "relief" }))).toContain("MEMORIAL_RESOLVED_BEFORE_CREATED");
+  });
+});
+
+// ── Group G: validator extensions — treasury payload + treasuryDelta ─────────
+
+describe("validateMemorials — Group G: treasury payload", () => {
+  const AT4 = { year: 2, month: 4, period: "early" as const, dayIndex: 300 };
+
+  function baseTreasuryMemorial(s: GameState): Memorial {
+    return generateTreasuryMemorial(s, AT4)!.memorial;
+  }
+
+  function withTreasuryMemorial(s: GameState, m: Memorial): GameState {
+    return { ...s, memorials: { [m.id]: m } };
+  }
+
+  it("valid treasury memorial passes validator", () => {
+    const s = createNewGameState(db, 1);
+    const r = generateTreasuryMemorial(s, AT4)!;
+    expect(codes(r.state)).toEqual([]);
+  });
+
+  it("empty options list → MEMORIAL_NO_OPTIONS", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: [] } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_NO_OPTIONS");
+  });
+
+  it("duplicate option ID → MEMORIAL_DUP_OPTION", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const dupeOpt = m.payload.options[0]!;
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: [dupeOpt, dupeOpt, m.payload.options[2]!] } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_DUP_OPTION");
+  });
+
+  it("bad urgency → MEMORIAL_BAD_URGENCY", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const bad: Memorial = { ...m, payload: { ...m.payload, urgency: "unknown" as never } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_BAD_URGENCY");
+  });
+
+  it("bad matter → MEMORIAL_BAD_MATTER", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const bad: Memorial = { ...m, payload: { ...m.payload, matter: "unknown" as never } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_BAD_MATTER");
+  });
+
+  it("missing required option 'defer' → MEMORIAL_MISSING_OPTION", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const withoutDefer: MemorialOption[] = m.payload.options.filter((o) => o.id !== "defer");
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: withoutDefer } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_MISSING_OPTION");
+  });
+
+  it("missing required option 'audit' → MEMORIAL_MISSING_OPTION", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const withoutAudit: MemorialOption[] = m.payload.options.filter((o) => o.id !== "audit");
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: withoutAudit } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_MISSING_OPTION");
+  });
+
+  it("treasuryDelta = 0 → MEMORIAL_BAD_TREASURY_DELTA", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const badOptions: MemorialOption[] = m.payload.options.map((o) =>
+      o.id === "audit" ? { ...o, treasuryDelta: 0 } : o,
+    );
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: badOptions } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_BAD_TREASURY_DELTA");
+  });
+
+  it("treasuryDelta = 1.5 (non-integer) → MEMORIAL_BAD_TREASURY_DELTA", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const badOptions: MemorialOption[] = m.payload.options.map((o) =>
+      o.id === "surtax" ? { ...o, treasuryDelta: 1.5 } : o,
+    );
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: badOptions } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_BAD_TREASURY_DELTA");
+  });
+
+  it("TREASURY_OPTION_IDS contains exactly audit/surtax/defer", () => {
+    expect([...TREASURY_OPTION_IDS]).toEqual(["audit", "surtax", "defer"]);
+  });
+
+  it("treasury payload with extra option → MEMORIAL_EXTRA_OPTION", () => {
+    const s = createNewGameState(db, 1);
+    const m = baseTreasuryMemorial(s);
+    if (m.payload.category !== "treasury") return;
+    const extraOpt: MemorialOption = { id: "unknown_opt", label: "多余选项", effects: [] };
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: [...m.payload.options, extraOpt] } };
+    expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_EXTRA_OPTION");
   });
 });

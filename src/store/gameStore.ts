@@ -39,10 +39,11 @@ import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/offi
 import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmentCommand } from "../engine/officials/officialPunishment";
 import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionResolve";
 import { generateAnnualPersonnelEvents, generateFamilyImplication } from "../engine/officials/personnelDecisions";
-import { maybeGenerateAnnualDisaster, resolveMemorial as resolveMemorialEngine } from "../engine/court/memorials";
+import { maybeGenerateAnnualDisaster, maybeGenerateAnnualTreasuryMemorial, resolveMemorial as resolveMemorialEngine } from "../engine/court/memorials";
+import { applyTreasuryTransaction } from "../engine/court/treasuryLedger";
 import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
-import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
+import { bestow, grantItem, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
   addGeneratedConsort, daxuanAnnounceBeats, daxuanAnnounceFlagKey, daxuanDianxuanDueForYear,
@@ -450,11 +451,17 @@ export class GameStore {
       { kind: "action", sourceId: "applyGrantItem", label: `grantItem: ${itemId}` });
   }
 
-  /** 扣钱后入库；钱不足返回 false，state 不变。 */
+  /** 扣钱后入库；钱不足返回 false，state 不变。购买记入国库台账（shop_purchase 条目）。 */
   buyItem(itemId: string, price: number): boolean {
-    const paid = spendCoins(this.state, price);
-    if (!paid.ok) return false;
-    this.tracedSet(grantItem(paid.state, itemId, 1),
+    if (!Number.isSafeInteger(price) || price <= 0) return false;
+    const txResult = applyTreasuryTransaction(this.state, {
+      delta: -price,
+      at: toGameTime(this.state.calendar),
+      source: { kind: "shop_purchase", itemId },
+      reason: `购入${itemId}`,
+    });
+    if (!txResult.ok) return false;
+    this.tracedSet(grantItem(txResult.value.state, itemId, 1),
       { kind: "action", sourceId: "buyItem", label: `buyItem: ${itemId}` });
     return true;
   }
@@ -1628,6 +1635,11 @@ export class GameStore {
       candidate = buildOfficialYearlyTick(candidate, db, toGameTime(candidate.calendar));
       candidate = maybeGenerateAnnualDisaster(candidate, toGameTime(candidate.calendar)); // 确定性、有界、同源去重
       collector?.capturePhaseScheduled("official_yearly_tick", diffGameState(beforeOfficialTick, candidate));
+    }
+
+    // 跨入四月 → 年度财政奏折（户部岁入计划；Phase 4B）。同源去重保证幂等。
+    if (monthChanged && candidate.calendar.month === 4) {
+      candidate = maybeGenerateAnnualTreasuryMemorial(candidate, toGameTime(candidate.calendar));
     }
 
     // 二月（或其后首次推进，含本月内首次推进的 catch-up）→ 候补池增龄/退出 + 生成本年科举。

@@ -52,7 +52,7 @@ describe("MemorialsScreen", () => {
 describe("memorialCard view model", () => {
   it("derives region/severity labels and per-option effect summaries", () => {
     const g = generateDisasterMemorial(createNewGameState(db, 1), "hebei", "minor", NOW)!;
-    const card = memorialCard(g.memorial);
+    const card = memorialCard(g.memorial, 5000);
     expect(card.categoryLabel).toBe("灾情");
     expect(card.regionName).toBe("河北");
     expect(card.severityLabel).toBe("灾情");

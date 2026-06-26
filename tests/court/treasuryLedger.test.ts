@@ -1,0 +1,670 @@
+/**
+ * 国库台账领域层（Phase 4B Task 1）：applyTreasuryTransaction + validateTreasuryLedger。
+ */
+import { describe, expect, it } from "vitest";
+import {
+  applyTreasuryTransaction,
+  ledgerEntryId,
+  nextLedgerEntryId,
+  validateTreasuryLedger,
+  type TreasuryTransactionCommand,
+} from "../../src/engine/court/treasuryLedger";
+import { generateDisasterMemorial, generateTreasuryMemorial, resolveMemorial } from "../../src/engine/court/memorials";
+import { createNewGameState } from "../../src/engine/state/newGame";
+import type { GameState, TreasuryLedgerEntry } from "../../src/engine/state/types";
+import { loadRealContent } from "../helpers/contentFixture";
+
+const db = loadRealContent();
+const AT = { year: 2, month: 3, period: "mid" as const, dayIndex: 200 };
+
+/** 从新游戏 state 启动，带自定义国库余额。 */
+function stateWithTreasury(treasury: number): GameState {
+  const base = createNewGameState(db, 1);
+  return {
+    ...base,
+    resources: {
+      ...base.resources,
+      nation: { ...base.resources.nation, treasury },
+    },
+  };
+}
+
+/** 构造最小合法命令。 */
+function cmd(delta: number, extra?: Partial<TreasuryTransactionCommand>): TreasuryTransactionCommand {
+  return {
+    delta,
+    at: AT,
+    source: { kind: "memorial", memorialId: "mem_000001", optionId: "relief" },
+    reason: "test",
+    ...extra,
+  };
+}
+
+// ── 辅助：构造一个已 resolved 的灾情奏折 state ──────────────────────────────
+
+/**
+ * "ignore" 选项无 treasuryDelta，因此 resolve 后无台账条目。
+ * 用于需要已 resolved 奏折（但无台账条目）的校验测试。
+ */
+function resolvedMemorialState(): { state: GameState; memId: string; optionId: string } {
+  const base = createNewGameState(db, 1);
+  const gen = generateDisasterMemorial(base, "jiangnan", "major", AT)!;
+  const resolved = resolveMemorial(gen.state, db, gen.memorial.id, "ignore", AT);
+  if (!resolved.ok) throw new Error("setup: resolveMemorial failed");
+  return { state: resolved.value.state, memId: gen.memorial.id, optionId: "ignore" };
+}
+
+/**
+ * 使用有成本选项（relief，-900）resolve 一条奏折，台账中自动产生一条条目。
+ */
+function resolvedMemorialStateWithCost(treasury = 5000): { state: GameState; memId: string } {
+  const base = { ...createNewGameState(db, 1), resources: { ...createNewGameState(db, 1).resources, nation: { ...createNewGameState(db, 1).resources.nation, treasury } } };
+  const gen = generateDisasterMemorial(base, "jiangnan", "major", AT)!;
+  const resolved = resolveMemorial(gen.state, db, gen.memorial.id, "relief", AT);
+  if (!resolved.ok) throw new Error("setup: resolveMemorial(relief) failed");
+  return { state: resolved.value.state, memId: gen.memorial.id };
+}
+
+// ── 辅助：注入一条手工台账条目（绕过 applyTreasuryTransaction） ──────────────
+
+function injectLedgerEntry(
+  state: GameState,
+  entry: TreasuryLedgerEntry,
+  treasury?: number,
+): GameState {
+  return {
+    ...state,
+    resources: {
+      ...state.resources,
+      nation: {
+        ...state.resources.nation,
+        treasury: treasury ?? state.resources.nation.treasury,
+      },
+    },
+    treasuryLedger: [...state.treasuryLedger, entry],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group A: applyTreasuryTransaction — 正常路径
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("applyTreasuryTransaction — happy path", () => {
+  it("positive delta (income) updates treasury and appends one ledger entry", () => {
+    const s0 = stateWithTreasury(1000);
+    const r = applyTreasuryTransaction(s0, cmd(500));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.state.resources.nation.treasury).toBe(1500);
+    expect(r.value.state.treasuryLedger).toHaveLength(1);
+    const e = r.value.entry;
+    expect(e.delta).toBe(500);
+    expect(e.balanceBefore).toBe(1000);
+    expect(e.balanceAfter).toBe(1500);
+    expect(e.id).toMatch(/^tre_\d{6}$/);
+  });
+
+  it("negative delta (spend) decrements treasury", () => {
+    const s0 = stateWithTreasury(800);
+    const r = applyTreasuryTransaction(s0, cmd(-300));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.state.resources.nation.treasury).toBe(500);
+    expect(r.value.entry.delta).toBe(-300);
+    expect(r.value.entry.balanceBefore).toBe(800);
+    expect(r.value.entry.balanceAfter).toBe(500);
+  });
+
+  it("spending entire balance (result 0) succeeds", () => {
+    const s0 = stateWithTreasury(500);
+    const r = applyTreasuryTransaction(s0, cmd(-500));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.state.resources.nation.treasury).toBe(0);
+  });
+
+  it("ledger ID uses max-seq+1 when ledger is sparse", () => {
+    // Inject an entry with id tre_000005 → next should be tre_000006
+    const base = stateWithTreasury(2000);
+    const fakeEntry: TreasuryLedgerEntry = {
+      id: "tre_000005",
+      at: AT,
+      delta: 100,
+      balanceBefore: 1900,
+      balanceAfter: 2000,
+      source: { kind: "memorial", memorialId: "mem_000001", optionId: "relief" },
+      reason: "seed",
+    };
+    const s0 = injectLedgerEntry(base, fakeEntry, 2000);
+    const r = applyTreasuryTransaction(s0, cmd(1, { source: { kind: "memorial", memorialId: "mem_000002", optionId: "relief" } }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.entry.id).toBe("tre_000006");
+  });
+
+  it("sparse IDs: first entry on empty ledger gets tre_000001", () => {
+    const s0 = stateWithTreasury(100);
+    const r = applyTreasuryTransaction(s0, cmd(1));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.entry.id).toBe("tre_000001");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group A: applyTreasuryTransaction — 失败路径
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("applyTreasuryTransaction — failure paths", () => {
+  it("delta=0 → TREASURY_BAD_DELTA", () => {
+    const r = applyTreasuryTransaction(stateWithTreasury(1000), cmd(0));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("TREASURY_BAD_DELTA");
+  });
+
+  it("delta=1.5 (non-integer) → TREASURY_BAD_DELTA", () => {
+    const r = applyTreasuryTransaction(stateWithTreasury(1000), cmd(1.5));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("TREASURY_BAD_DELTA");
+  });
+
+  it("delta=Infinity → TREASURY_BAD_DELTA", () => {
+    const r = applyTreasuryTransaction(stateWithTreasury(1000), cmd(Infinity));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("TREASURY_BAD_DELTA");
+  });
+
+  it("insufficient balance → TREASURY_INSUFFICIENT", () => {
+    const s0 = stateWithTreasury(100);
+    const snap = JSON.stringify(s0);
+    const r = applyTreasuryTransaction(s0, cmd(-200));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("TREASURY_INSUFFICIENT");
+    // input state is byte-identical — no mutation
+    expect(JSON.stringify(s0)).toBe(snap);
+  });
+
+  it("overflow (very large delta) → TREASURY_OVERFLOW", () => {
+    // Number.MAX_SAFE_INTEGER + 1 as balanceBefore → balanceAfter overflows
+    const s0 = stateWithTreasury(Number.MAX_SAFE_INTEGER);
+    const r = applyTreasuryTransaction(s0, cmd(1));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.code).toBe("TREASURY_OVERFLOW");
+  });
+
+  it("failure leaves input state byte-identical (no mutation)", () => {
+    const s0 = stateWithTreasury(50);
+    const snap = JSON.stringify(s0);
+    applyTreasuryTransaction(s0, cmd(-100)); // insufficient
+    expect(JSON.stringify(s0)).toBe(snap);
+  });
+
+  it("no store emit — function returns new state, never touches store directly", () => {
+    // This is a structural test: applyTreasuryTransaction is a pure function.
+    // If it were to emit to a store we'd see side-effects; we just verify
+    // the return value contains the new state.
+    const s0 = stateWithTreasury(1000);
+    const r = applyTreasuryTransaction(s0, cmd(100));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Original state treasury unchanged
+    expect(s0.resources.nation.treasury).toBe(1000);
+    // New state has updated treasury
+    expect(r.value.state.resources.nation.treasury).toBe(1100);
+    // They are different objects
+    expect(r.value.state).not.toBe(s0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group G: validateTreasuryLedger — 正常路径
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateTreasuryLedger — clean state", () => {
+  it("empty ledger is valid", () => {
+    expect(validateTreasuryLedger(stateWithTreasury(10000))).toEqual([]);
+  });
+
+  it("resolveMemorial with cost option produces valid ledger (no errors)", () => {
+    // Use a real resolved memorial with a cost option (relief, -900)
+    // resolveMemorial internally calls applyTreasuryTransaction, so the ledger is correct.
+    const { state: rs } = resolvedMemorialStateWithCost(5000);
+    expect(validateTreasuryLedger(rs)).toEqual([]);
+    expect(rs.treasuryLedger).toHaveLength(1);
+    expect(rs.treasuryLedger[0]!.delta).toBe(-900);
+  });
+
+  it("shop_purchase ledger entry produces valid ledger (no memorial cross-checks)", () => {
+    // A shop_purchase entry is valid as long as the chain is consistent.
+    const s0 = stateWithTreasury(1000);
+    const r = applyTreasuryTransaction(s0, {
+      delta: -100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test shop purchase",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // No memorial cross-checks → only chain/balance checks → all pass
+    expect(validateTreasuryLedger(r.value.state)).toEqual([]);
+    expect(r.value.state.resources.nation.treasury).toBe(900);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group G: validateTreasuryLedger — corruption tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateTreasuryLedger — corruption detection", () => {
+  /** Build a minimal state with one valid (or intentionally corrupt) ledger entry. */
+  function stateWithEntry(
+    overrides: Partial<TreasuryLedgerEntry>,
+    treasury = 1500,
+  ): GameState {
+    const base = stateWithTreasury(treasury);
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001",
+      at: AT,
+      delta: 500,
+      balanceBefore: 1000,
+      balanceAfter: 1500,
+      source: { kind: "memorial", memorialId: "mem_000001", optionId: "relief" },
+      reason: "test",
+      ...overrides,
+    };
+    return { ...base, treasuryLedger: [entry] };
+  }
+
+  function codes(s: GameState): string[] {
+    return validateTreasuryLedger(s).map((e) => e.code);
+  }
+
+  it("duplicate ID → TREASURY_LEDGER_DUP_ID", () => {
+    const base = stateWithTreasury(2000);
+    const e1: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 1000, balanceBefore: 1000, balanceAfter: 2000,
+      source: { kind: "memorial", memorialId: "mem_000001", optionId: "relief" }, reason: "a",
+    };
+    const e2: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 500, balanceBefore: 2000, balanceAfter: 2500,
+      source: { kind: "memorial", memorialId: "mem_000002", optionId: "relief" }, reason: "b",
+    };
+    const s = { ...base, treasuryLedger: [e1, e2] };
+    expect(codes(s)).toContain("TREASURY_LEDGER_DUP_ID");
+  });
+
+  it("zero delta in ledger entry → TREASURY_LEDGER_BAD_AMOUNT", () => {
+    const s = stateWithEntry({ delta: 0, balanceAfter: 1000 }, 1000);
+    expect(codes(s)).toContain("TREASURY_LEDGER_BAD_AMOUNT");
+  });
+
+  it("non-integer delta in ledger entry → TREASURY_LEDGER_BAD_AMOUNT", () => {
+    const s = stateWithEntry({ delta: 1.5, balanceAfter: 1001 }, 1001);
+    expect(codes(s)).toContain("TREASURY_LEDGER_BAD_AMOUNT");
+  });
+
+  it("bad before/after equation → TREASURY_LEDGER_BAD_BALANCE", () => {
+    // balanceBefore=1000, delta=500, balanceAfter should be 1500 but we set 1600
+    const s = stateWithEntry({ balanceAfter: 1600 }, 1600);
+    expect(codes(s)).toContain("TREASURY_LEDGER_BAD_BALANCE");
+  });
+
+  it("broken chain (prev.balanceAfter ≠ cur.balanceBefore) → TREASURY_LEDGER_CHAIN_BROKEN", () => {
+    const base = stateWithTreasury(1500);
+    const e1: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 500, balanceBefore: 1000, balanceAfter: 1500,
+      source: { kind: "memorial", memorialId: "mem_000001", optionId: "relief" }, reason: "a",
+    };
+    // e2.balanceBefore should be 1500 but we set 2000 (chain break)
+    const e2: TreasuryLedgerEntry = {
+      id: "tre_000002", at: AT, delta: -500, balanceBefore: 2000, balanceAfter: 1500,
+      source: { kind: "memorial", memorialId: "mem_000002", optionId: "relief" }, reason: "b",
+    };
+    const s = { ...base, treasuryLedger: [e1, e2] };
+    expect(codes(s)).toContain("TREASURY_LEDGER_CHAIN_BROKEN");
+  });
+
+  it("missing memorial → TREASURY_LEDGER_BAD_SOURCE", () => {
+    const s = stateWithEntry({ source: { kind: "memorial", memorialId: "mem_999999", optionId: "relief" } });
+    expect(codes(s)).toContain("TREASURY_LEDGER_BAD_SOURCE");
+  });
+
+  it("memorial pending → TREASURY_LEDGER_SOURCE_PENDING", () => {
+    // Generate a pending memorial and inject a ledger entry pointing to it
+    const base = stateWithTreasury(1500);
+    const gen = generateDisasterMemorial(base, "jiangnan", "major", AT)!;
+    // Memorial is pending; inject a ledger entry (force linking)
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 500, balanceBefore: 1000, balanceAfter: 1500,
+      source: { kind: "memorial", memorialId: gen.memorial.id, optionId: "relief" }, reason: "test",
+    };
+    const s = injectLedgerEntry(gen.state, entry, 1500);
+    expect(codes(s)).toContain("TREASURY_LEDGER_SOURCE_PENDING");
+  });
+
+  it("wrong option (memorial.resolution ≠ ledger.optionId) → TREASURY_LEDGER_OPTION_MISMATCH", () => {
+    const { state: rs, memId } = resolvedMemorialState();
+    // memorial is resolved with "relief"; inject ledger pointing to "tax_remit"
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 500, balanceBefore: rs.resources.nation.treasury - 500, balanceAfter: rs.resources.nation.treasury,
+      source: { kind: "memorial", memorialId: memId, optionId: "tax_remit" }, reason: "wrong",
+    };
+    const s: GameState = { ...rs, treasuryLedger: [entry] };
+    expect(codes(s)).toContain("TREASURY_LEDGER_OPTION_MISMATCH");
+  });
+
+  it("duplicate source memorial → TREASURY_LEDGER_DUP_SOURCE", () => {
+    const { state: rs, memId, optionId } = resolvedMemorialState();
+    const bal = rs.resources.nation.treasury;
+    const e1: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 100, balanceBefore: bal - 100, balanceAfter: bal,
+      source: { kind: "memorial", memorialId: memId, optionId }, reason: "first",
+    };
+    const e2: TreasuryLedgerEntry = {
+      id: "tre_000002", at: AT, delta: 50, balanceBefore: bal, balanceAfter: bal + 50,
+      source: { kind: "memorial", memorialId: memId, optionId }, reason: "second (dup)",
+    };
+    const s: GameState = { ...rs, resources: { ...rs.resources, nation: { ...rs.resources.nation, treasury: bal + 50 } }, treasuryLedger: [e1, e2] };
+    expect(codes(s)).toContain("TREASURY_LEDGER_DUP_SOURCE");
+  });
+
+  it("current treasury mismatch → TREASURY_LEDGER_CURRENT_MISMATCH", () => {
+    const { state: rs, memId, optionId } = resolvedMemorialState();
+    const bal = rs.resources.nation.treasury;
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 500, balanceBefore: bal - 500, balanceAfter: bal,
+      source: { kind: "memorial", memorialId: memId, optionId }, reason: "test",
+    };
+    // Inject entry but set treasury to a different value (mismatch)
+    const s: GameState = {
+      ...rs,
+      resources: { ...rs.resources, nation: { ...rs.resources.nation, treasury: bal + 999 } },
+      treasuryLedger: [entry],
+    };
+    expect(codes(s)).toContain("TREASURY_LEDGER_CURRENT_MISMATCH");
+  });
+
+  it("invalid ledger entry ID format → TREASURY_LEDGER_DUP_ID", () => {
+    const s = createNewGameState(db, 1);
+    const state: GameState = { ...s, treasuryLedger: [{
+      id: "bad_id",  // not "tre_000001" format
+      at: { year: 1, month: 1, period: "early" as const, dayIndex: 100 },
+      delta: -100,
+      balanceBefore: 10000,
+      balanceAfter: 9900,
+      source: { kind: "memorial" as const, memorialId: "mem_000001", optionId: "relief" },
+      reason: "test",
+    }] };
+    expect(codes(state)).toContain("TREASURY_LEDGER_DUP_ID");
+  });
+
+  it("negative balanceBefore → TREASURY_LEDGER_BAD_BALANCE", () => {
+    const s = createNewGameState(db, 1);
+    const state: GameState = { ...s, treasuryLedger: [{
+      id: "tre_000001",
+      at: { year: 1, month: 1, period: "early" as const, dayIndex: 100 },
+      delta: 100,
+      balanceBefore: -1,
+      balanceAfter: 99,
+      source: { kind: "memorial" as const, memorialId: "mem_000001", optionId: "relief" },
+      reason: "test",
+    }] };
+    expect(codes(state)).toContain("TREASURY_LEDGER_BAD_BALANCE");
+  });
+
+  it("source option not in memorial options → TREASURY_LEDGER_BAD_SOURCE", () => {
+    const base = createNewGameState(db, 1);
+    const gen = generateDisasterMemorial(base, "jiangnan", "minor", { year: 2, month: 1, period: "early" as const, dayIndex: 200 })!;
+    const resolvedMemorial = {
+      ...gen.memorial,
+      status: "resolved" as const,
+      resolution: "relief",
+      resolvedAt: { year: 2, month: 1, period: "early" as const, dayIndex: 200 },
+    };
+    const state: GameState = {
+      ...gen.state,
+      resources: { ...gen.state.resources, nation: { ...gen.state.resources.nation, treasury: 9900 } },
+      memorials: { [gen.memorial.id]: resolvedMemorial },
+      treasuryLedger: [{
+        id: "tre_000001",
+        at: { year: 2, month: 1, period: "early" as const, dayIndex: 200 },
+        delta: -100,
+        balanceBefore: 10000,
+        balanceAfter: 9900,
+        source: { kind: "memorial" as const, memorialId: gen.memorial.id, optionId: "nonexistent_option" },
+        reason: "test",
+      }],
+    };
+    expect(codes(state)).toContain("TREASURY_LEDGER_BAD_SOURCE");
+  });
+
+  it("at non-decreasing violated → TREASURY_LEDGER_CHAIN_BROKEN", () => {
+    const base = stateWithTreasury(2000);
+    const e1: TreasuryLedgerEntry = {
+      id: "tre_000001",
+      at: { year: 2, month: 3, period: "mid" as const, dayIndex: 300 },
+      delta: 1000,
+      balanceBefore: 1000,
+      balanceAfter: 2000,
+      source: { kind: "memorial", memorialId: "mem_000001", optionId: "relief" },
+      reason: "a",
+    };
+    // e2.at is earlier than e1.at — violates non-decreasing
+    const e2: TreasuryLedgerEntry = {
+      id: "tre_000002",
+      at: { year: 1, month: 1, period: "early" as const, dayIndex: 50 },
+      delta: -500,
+      balanceBefore: 2000,
+      balanceAfter: 1500,
+      source: { kind: "memorial", memorialId: "mem_000002", optionId: "relief" },
+      reason: "b",
+    };
+    const s: GameState = { ...base, resources: { ...base.resources, nation: { ...base.resources.nation, treasury: 1500 } }, treasuryLedger: [e1, e2] };
+    expect(codes(s)).toContain("TREASURY_LEDGER_CHAIN_BROKEN");
+  });
+
+  it("ledger entry pointing to no-cost option → TREASURY_LEDGER_OPTION_MISMATCH (P1-B)", () => {
+    // resolvedMemorialState() resolves "ignore" (no treasuryDelta).
+    // Injecting a ledger entry against that resolution should be flagged.
+    const { state: rs, memId, optionId } = resolvedMemorialState();
+    const bal = rs.resources.nation.treasury;
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 100, balanceBefore: bal, balanceAfter: bal + 100,
+      source: { kind: "memorial", memorialId: memId, optionId }, reason: "bogus no-cost entry",
+    };
+    // Inject entry AND update treasury so check 15 doesn't also fire
+    const s: GameState = { ...rs, resources: { ...rs.resources, nation: { ...rs.resources.nation, treasury: bal + 100 } }, treasuryLedger: [entry] };
+    const errs = validateTreasuryLedger(s);
+    expect(errs.map((e) => e.code)).toContain("TREASURY_LEDGER_OPTION_MISMATCH");
+  });
+
+  it("resolved memorial with cost option but empty ledger → TREASURY_LEDGER_MISSING_ENTRY", () => {
+    // Set up a state with a resolved treasury memorial (audit option, treasuryDelta=600)
+    // but NO ledger entries — validates that checks 16/17 run even when ledger is empty
+    const base = createNewGameState(db, 1);
+    const at = { year: 2, month: 4, period: "early" as const, dayIndex: 300 };
+    const g = generateTreasuryMemorial(base, at)!;
+    // Manually mark as resolved with "audit" option (which has treasuryDelta)
+    const resolved = {
+      ...g.memorial,
+      status: "resolved" as const,
+      resolution: "audit",
+      resolvedAt: at,
+    };
+    const state: GameState = {
+      ...g.state,
+      resources: { ...g.state.resources, nation: { ...g.state.resources.nation, treasury: 600 } },
+      memorials: { [g.memorial.id]: resolved },
+      treasuryLedger: [],  // empty — but should have a ledger entry for audit
+    };
+    const errors = validateTreasuryLedger(state);
+    expect(errors.map((e) => e.code)).toContain("TREASURY_LEDGER_MISSING_ENTRY");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ledgerEntryId and nextLedgerEntryId helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2-B: applyTreasuryTransaction — shop_purchase delta 必须为负
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("applyTreasuryTransaction — shop_purchase invariant (P2-B)", () => {
+  it("shop_purchase with positive delta → TREASURY_BAD_DELTA", () => {
+    const s0 = stateWithTreasury(1000);
+    const result = applyTreasuryTransaction(s0, {
+      delta: 100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("TREASURY_BAD_DELTA");
+  });
+
+  it("shop_purchase with delta=0 is already rejected by basic check → TREASURY_BAD_DELTA", () => {
+    const s0 = stateWithTreasury(1000);
+    const result = applyTreasuryTransaction(s0, {
+      delta: 0,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("TREASURY_BAD_DELTA");
+  });
+
+  it("shop_purchase with negative delta succeeds", () => {
+    const s0 = stateWithTreasury(1000);
+    const result = applyTreasuryTransaction(s0, {
+      delta: -100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.state.resources.nation.treasury).toBe(900);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2-C: validateTreasuryLedger — shop_purchase 台账条目 delta 不变量
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateTreasuryLedger — shop_purchase delta invariant (P2-C)", () => {
+  it("shop_purchase ledger entry with positive delta → TREASURY_LEDGER_BAD_AMOUNT", () => {
+    const base = stateWithTreasury(1100);
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001",
+      at: AT,
+      delta: 100,  // positive — invalid for shop_purchase
+      balanceBefore: 1000,
+      balanceAfter: 1100,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "tampered",
+    };
+    const s: GameState = { ...base, treasuryLedger: [entry] };
+    const codes = validateTreasuryLedger(s).map((e) => e.code);
+    expect(codes).toContain("TREASURY_LEDGER_BAD_AMOUNT");
+  });
+
+  it("shop_purchase ledger entry with negative delta passes shop invariant", () => {
+    // Other chain checks may fire on a naked injected entry, but the shop invariant should not fire
+    const s0 = stateWithTreasury(1000);
+    const r = applyTreasuryTransaction(s0, {
+      delta: -100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "valid purchase",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const errs = validateTreasuryLedger(r.value.state);
+    const shopAmountErrs = errs.filter((e) => e.code === "TREASURY_LEDGER_BAD_AMOUNT");
+    expect(shopAmountErrs).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P3: command.at / command.source aliasing — 防别名
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("applyTreasuryTransaction — command aliasing防护 (P3)", () => {
+  it("mutating command.at after call does not affect ledger entry", () => {
+    const s0 = stateWithTreasury(1000);
+    const at = { year: 1, month: 1, period: "early" as const, dayIndex: 100 };
+    const source = { kind: "system" as const, reasonCode: "test_seed" };
+    const command: TreasuryTransactionCommand = { delta: 500, at, source, reason: "test" };
+    const result = applyTreasuryTransaction(s0, command);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Mutate the original command objects after the call
+    at.year = 999;
+    at.dayIndex = 888;
+    source.reasonCode = "mutated";
+    // Ledger entry should still have original values
+    const entry = result.value.entry;
+    expect(entry.at.year).toBe(1);
+    expect(entry.at.dayIndex).toBe(100);
+    expect(entry.source.kind === "system" && entry.source.reasonCode).toBe("test_seed");
+  });
+
+  it("mutating command.source after call does not affect ledger entry (shop_purchase)", () => {
+    const s0 = stateWithTreasury(1000);
+    const source = { kind: "shop_purchase" as const, itemId: "original_item" };
+    const command: TreasuryTransactionCommand = { delta: -50, at: AT, source, reason: "test" };
+    const result = applyTreasuryTransaction(s0, command);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    source.itemId = "mutated_item";
+    const entry = result.value.entry;
+    expect(entry.source.kind === "shop_purchase" && entry.source.itemId).toBe("original_item");
+  });
+});
+
+describe("ledgerEntryId", () => {
+  it("pads to 6 digits", () => {
+    expect(ledgerEntryId(1)).toBe("tre_000001");
+    expect(ledgerEntryId(999999)).toBe("tre_999999");
+  });
+});
+
+describe("nextLedgerEntryId", () => {
+  it("returns tre_000001 on empty ledger", () => {
+    expect(nextLedgerEntryId(stateWithTreasury(0))).toBe("tre_000001");
+  });
+
+  it("returns max+1 when ledger has entries", () => {
+    const base = stateWithTreasury(1000);
+    const e: TreasuryLedgerEntry = {
+      id: "tre_000003", at: AT, delta: 1, balanceBefore: 999, balanceAfter: 1000,
+      source: { kind: "memorial", memorialId: "x", optionId: "y" }, reason: "z",
+    };
+    const s = { ...base, treasuryLedger: [e] };
+    expect(nextLedgerEntryId(s)).toBe("tre_000004");
+  });
+
+  it("ignores malformed ids when computing max", () => {
+    const base = stateWithTreasury(1000);
+    const e1: TreasuryLedgerEntry = {
+      id: "tre_000002", at: AT, delta: 1, balanceBefore: 999, balanceAfter: 1000,
+      source: { kind: "memorial", memorialId: "x", optionId: "y" }, reason: "z",
+    };
+    const e2: TreasuryLedgerEntry = {
+      id: "bad_id", at: AT, delta: 1, balanceBefore: 1000, balanceAfter: 1001,
+      source: { kind: "memorial", memorialId: "x2", optionId: "y" }, reason: "z",
+    };
+    const s = { ...base, treasuryLedger: [e1, e2] };
+    // max valid = 2, bad_id ignored → next = 3
+    expect(nextLedgerEntryId(s)).toBe("tre_000003");
+  });
+});

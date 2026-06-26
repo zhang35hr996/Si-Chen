@@ -12,16 +12,17 @@
 import type { ContentDB } from "../content/loader";
 import { validateOfficialWorld } from "../officials/validation";
 import { validateMemorials } from "../court/memorials";
+import { validateTreasuryLedger } from "../court/treasuryLedger";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
-import type { GameState, Official, OfficialAptitude } from "../state/types";
+import type { GameState, Official, OfficialAptitude, TreasuryLedgerEntry } from "../state/types";
 import { deriveOfficialAptitude, initialReviewState } from "../officials/careerMetrics";
 import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 22;
+export const SAVE_FORMAT_VERSION = 23;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -338,6 +339,41 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     const env = old as SaveEnvelope;
     return { ...env, formatVersion: 22, checksum: checksumOf(env.state) };
   },
+  // v22 → v23: 财政奏折框架（Phase 4B）。旧档回填 treasuryLedger；pending disaster 奏折补 treasuryDelta；
+  // resolved 不补（不伪造历史账目）。已有 treasuryDelta 不覆盖。
+  22: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+
+    // 回填 treasuryLedger（Zod schema .default([]) 已兜底，但迁移显式保证）
+    if (!Array.isArray((state as unknown as { treasuryLedger?: unknown }).treasuryLedger)) {
+      (state as unknown as { treasuryLedger: TreasuryLedgerEntry[] }).treasuryLedger = [];
+    }
+
+    // PENDING disaster 奏折选项补 treasuryDelta；resolved 及 treasury 类别奏折不处理
+    const memorials = (
+      state as unknown as { memorials?: Record<string, Record<string, unknown>> }
+    ).memorials ?? {};
+    for (const m of Object.values(memorials)) {
+      if (m.status !== "pending") continue;
+      const payload = m.payload as Record<string, unknown> | undefined;
+      if (!payload || payload.category !== "disaster") continue;
+      const severity = payload.severity as string | undefined;
+      const options = (payload.options as Record<string, unknown>[] | undefined) ?? [];
+      for (const opt of options) {
+        if (opt.treasuryDelta !== undefined) continue; // 不覆盖已有值
+        if (opt.id === "relief") {
+          opt.treasuryDelta = severity === "major" ? -900 : -400;
+        } else if (opt.id === "tax_remit") {
+          opt.treasuryDelta = severity === "major" ? -600 : -250;
+        }
+        // ignore: 不补
+      }
+    }
+
+    const gs = state as unknown as GameState;
+    return { ...env, formatVersion: 23, state: gs, checksum: checksumOf(gs) };
+  },
 };
 
 export interface SaveSystemOptions {
@@ -553,6 +589,18 @@ function validateSave(
     return err({
       error: saveError("MEMORIAL_INTEGRITY", `存档奏折数据完整性校验失败（${first.code}）：${first.message}`, {
         context: { diagnostics: memorialErrors.map((e) => ({ code: e.code, message: e.message })) },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // 国库台账不变量（Phase 4B）：链接一致性/来源合法/余额链路。任一 error → 拒绝并 quarantine。
+  const ledgerErrors = validateTreasuryLedger(state);
+  if (ledgerErrors.length > 0) {
+    const first = ledgerErrors[0]!;
+    return err({
+      error: saveError("TREASURY_LEDGER_INTEGRITY", `存档国库台账完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: ledgerErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });
