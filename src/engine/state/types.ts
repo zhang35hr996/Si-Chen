@@ -702,26 +702,55 @@ export interface PendingAftermath {
   resolved: boolean;
 }
 
-// ── 冷宫事件通报（PUNISH-4C）────────────────────────────────────────────────
-export type ColdPalaceIncidentKind = "petition" | "health_deterioration";
+// ── 冷宫事件通报（PUNISH-4C / PUNISH-4D）──────────────────────────────────
+export type ColdPalaceIncidentKind = "petition" | "health_deterioration" | "critical_illness";
 
-/**
- * 一次月度冷宫事件：由月度 tick 确定性生成，player 在全局中断界面确认后标 acknowledged。
- * id = "cpi_{residentId}_{year}_{MM}"——每居民每月至多一条，天然去重。
- */
-export interface ColdPalaceIncident {
+/** Player choice when resolving a critical_illness incident. */
+export type ColdPalaceIncidentResolution = "physician" | "ignore" | "restored";
+
+// Shared base for all cold-palace incident variants.
+interface ColdPalaceIncidentBase {
   /** "cpi_{residentId}_{year}_{MM}" — deterministic, idempotent dedup key. */
   id: string;
   residentId: string;
   /** id of the ColdPalaceEffect active when this incident was generated. */
   effectId: string;
-  kind: ColdPalaceIncidentKind;
   occurredAt: GameTime;
   /** false = awaiting player acknowledgement; true = already presented. */
   acknowledged: boolean;
-  /** Health delta applied (always negative); only present for health_deterioration. */
+}
+
+/** Pure narrative report — no health change. */
+export interface ColdPalacePetitionIncident extends ColdPalaceIncidentBase {
+  kind: "petition";
+}
+
+/** Monthly health tick applied a negative delta (non-lethal) at generation time. */
+export interface ColdPalaceHealthDeteriorationIncident extends ColdPalaceIncidentBase {
+  kind: "health_deterioration";
+  /** Always negative. Applied at tick time via planHealthChange (non-lethal). */
+  healthDelta: number;
+}
+
+/**
+ * Serious illness requiring player decision (PUNISH-4D two-phase model).
+ * Generated when health ≤ CRITICAL_HEALTH_THRESHOLD; NO health effect at tick time.
+ * Player resolves via resolveColdPalaceCriticalIncident(); health effect applied then.
+ */
+export interface ColdPalaceCriticalIllnessIncident extends ColdPalaceIncidentBase {
+  kind: "critical_illness";
+  /** "pending_response" = awaiting player decision; "resolved" = player chose. */
+  status: "pending_response" | "resolved";
+  resolution?: ColdPalaceIncidentResolution;
+  resolvedAt?: GameTime;
+  /** Set at resolution time: positive (physician recovery) or negative (ignore penalty). */
   healthDelta?: number;
 }
+
+export type ColdPalaceIncident =
+  | ColdPalacePetitionIncident
+  | ColdPalaceHealthDeteriorationIncident
+  | ColdPalaceCriticalIllnessIncident;
 
 // ── 角色持续状态（可复用：禁足 / 后续冷宫·下狱·守丧·卧病）─────────────────
 // 单一权威的「持续效果」时间线：append-mostly，解除时就地标记 lifted 而非物理删除，

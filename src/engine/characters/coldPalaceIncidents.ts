@@ -1,14 +1,21 @@
 /**
- * PUNISH-4C: Cold-palace consequence incidents — scheduling and selectors.
+ * PUNISH-4C/4D: Cold-palace consequence incidents — scheduling and selectors.
  *
  * Design principles:
  *  - Pure functions; no side-effects; no Date.now() / Math.random().
  *  - IDs are deterministic compound keys → replay-stable, naturally idempotent.
- *  - At most ONE incident per checkpoint (sorted by charId → first hit wins).
- *  - Health delta is non-lethal: cannot reduce health to 0.
+ *  - At most ONE incident per planner per checkpoint (sorted by charId → first hit wins).
+ *  - Regular health delta is non-lethal: cannot reduce health to 0.
+ *  - Critical illness uses two-phase model: no health effect at tick time; effect at resolution.
  *  - Generated consorts supported via state.standing (no db.characters lookup needed).
  */
-import type { ColdPalaceIncident, ColdPalaceIncidentKind, ColdPalaceEffect, GameState } from "../state/types";
+import type {
+  ColdPalaceIncident,
+  ColdPalaceCriticalIllnessIncident,
+  ColdPalaceIncidentKind,
+  ColdPalaceEffect,
+  GameState,
+} from "../state/types";
 import type { GameTime } from "../calendar/time";
 import { activeColdPalaceEffectFor, isColdPalaceEffectActiveAt } from "./coldPalace";
 import { gestationRoll } from "./gestation";
@@ -127,8 +134,8 @@ export function isIncidentPresentable(
 }
 
 /**
- * Returns the oldest unacknowledged incident that is still presentable
- * (resident exists and is not deceased). Stale reports are excluded.
+ * Returns the oldest unacknowledged incident that is still presentable.
+ * critical_illness (pending_response) is always prioritised over other kinds.
  */
 export function oldestPresentableIncident(
   state: GameState,
@@ -138,6 +145,10 @@ export function oldestPresentableIncident(
   );
   if (!candidates.length) return undefined;
   return candidates.reduce((a, b) => {
+    const aUrgent = a.kind === "critical_illness" && a.status === "pending_response";
+    const bUrgent = b.kind === "critical_illness" && b.status === "pending_response";
+    if (aUrgent && !bUrgent) return a;
+    if (!aUrgent && bUrgent) return b;
     const ordA = a.occurredAt.year * 12 + a.occurredAt.month;
     const ordB = b.occurredAt.year * 12 + b.occurredAt.month;
     return ordA <= ordB ? a : b;
@@ -160,8 +171,20 @@ export function staleIncidentIds(state: GameState): string[] {
 
 // ── Scheduling constants ────────────────────────────────────────────────────
 
-/** % chance an eligible resident generates an incident in a given month. */
+/** % chance an eligible resident generates a regular incident in a given month. */
 const INCIDENT_CHANCE = 65;
+
+/**
+ * Health at or below this threshold: regular planner skips the resident;
+ * critical-illness planner takes over instead.
+ */
+export const CRITICAL_HEALTH_THRESHOLD = 20;
+
+/** % chance a critical-health resident generates a serious illness incident. */
+const CRITICAL_ILLNESS_CHANCE = 60;
+
+/** Health recovery applied by physician choice (via planHealthChange). */
+export const PHYSICIAN_RECOVERY_DELTA = 15;
 
 /** Raw health delta: -(5..10). */
 function rawIncidentHealthDelta(rngSeed: number, charId: string, year: number, month: number): number {
@@ -186,18 +209,29 @@ function incidentKind(
   month: number,
   health: number,
 ): ColdPalaceIncidentKind {
+  // health > CRITICAL_HEALTH_THRESHOLD guaranteed by caller filter
   if (health < 50) return "health_deterioration";
   const roll = gestationRoll(`cpi:kind:${rngSeed}:${charId}:${year}:${month}`);
   return roll < 35 ? "health_deterioration" : "petition";
 }
 
-// ── Planner ─────────────────────────────────────────────────────────────────
+/**
+ * Deterministic ignore-penalty delta at resolution time: -(10..25).
+ * Can be lethal for residents at very low health.
+ */
+export function criticalIgnoreDelta(rngSeed: number, charId: string, year: number, month: number): number {
+  const roll = gestationRoll(`cpci:ignore:${rngSeed}:${charId}:${year}:${month}`);
+  return -(10 + (roll % 16));
+}
+
+// ── Planners ─────────────────────────────────────────────────────────────────
 
 /**
- * Pure planner: returns at most ONE new ColdPalaceIncident per call.
+ * Regular cold-palace incident planner (petition / health_deterioration).
+ * Returns at most ONE new incident per call.
  *
- * Candidates are sorted by charId for deterministic selection.
- * The first candidate that passes the chance roll wins; others wait for next month.
+ * Skips residents at health ≤ CRITICAL_HEALTH_THRESHOLD — they are handled
+ * by planColdPalaceCriticalIncident instead.
  * Health deltas are non-lethal (cannot reduce health to 0).
  * Caller applies health delta via planHealthChange before committing.
  * Must be called only when monthChanged = true.
@@ -207,10 +241,11 @@ export function planColdPalaceIncidents(state: GameState): ColdPalaceIncident[] 
   const now: GameTime = { year, month, period, dayIndex };
   const rngSeed = state.rngSeed;
 
-  // Collect and sort candidates deterministically (no Object.entries order reliance).
   const candidates = Object.entries(state.standing)
     .filter(([charId, standing]) => {
       if (standing.lifecycle === "deceased" || standing.lifecycle === "candidate") return false;
+      const health = standing.health ?? 100;
+      if (health <= CRITICAL_HEALTH_THRESHOLD) return false; // critical planner's domain
       if (hasColdPalaceIncidentThisMonth(state.coldPalaceIncidents, charId, year, month)) return false;
       return activeColdPalaceEffectFor(state, charId, dayIndex) !== undefined;
     })
@@ -228,22 +263,78 @@ export function planColdPalaceIncidents(state: GameState): ColdPalaceIncident[] 
     if (kind === "health_deterioration") {
       const raw = rawIncidentHealthDelta(rngSeed, charId, year, month);
       healthDelta = nonLethalDelta(raw, health);
-      // If clamping yields 0 change (health already 1), downgrade to petition
-      if (healthDelta === undefined) {
-        // narrative-only: switch to petition rather than generating a no-op health incident
-      }
     }
 
+    const finalKind = healthDelta !== undefined ? kind : "petition";
+    if (finalKind === "health_deterioration" && healthDelta !== undefined) {
+      return [{
+        id: coldPalaceIncidentId(charId, year, month),
+        residentId: charId,
+        effectId: effect.id,
+        kind: "health_deterioration",
+        occurredAt: now,
+        acknowledged: false,
+        healthDelta,
+      }];
+    }
     return [{
       id: coldPalaceIncidentId(charId, year, month),
       residentId: charId,
       effectId: effect.id,
-      kind: healthDelta !== undefined ? kind : "petition",
+      kind: "petition",
       occurredAt: now,
       acknowledged: false,
-      ...(healthDelta !== undefined ? { healthDelta } : {}),
     }];
   }
 
   return [];
+}
+
+/**
+ * Critical-illness planner (PUNISH-4D).
+ * Returns at most ONE new critical_illness incident per call.
+ *
+ * Only targets residents at health ≤ CRITICAL_HEALTH_THRESHOLD.
+ * Two-phase model: no health effect at tick time; player resolves later.
+ * Must be called only when monthChanged = true, after planColdPalaceIncidents.
+ */
+export function planColdPalaceCriticalIncident(
+  state: GameState,
+): ColdPalaceCriticalIllnessIncident | null {
+  const { year, month, period, dayIndex } = state.calendar;
+  const now: GameTime = { year, month, period, dayIndex };
+  const rngSeed = state.rngSeed;
+
+  const candidates = Object.entries(state.standing)
+    .filter(([charId, standing]) => {
+      if (standing.lifecycle === "deceased" || standing.lifecycle === "candidate") return false;
+      const health = standing.health ?? 100;
+      if (health > CRITICAL_HEALTH_THRESHOLD) return false;
+      if (hasColdPalaceIncidentThisMonth(state.coldPalaceIncidents, charId, year, month)) return false;
+      // Skip if there is already an unresolved critical_illness (don't stack)
+      const hasUnresolved = state.coldPalaceIncidents.some(
+        (i) => i.residentId === charId && i.kind === "critical_illness" && !i.acknowledged,
+      );
+      if (hasUnresolved) return false;
+      return activeColdPalaceEffectFor(state, charId, dayIndex) !== undefined;
+    })
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+
+  for (const [charId] of candidates) {
+    const roll = gestationRoll(`cpci:${rngSeed}:${charId}:${year}:${month}`);
+    if (roll >= CRITICAL_ILLNESS_CHANCE) continue;
+
+    const effect = activeColdPalaceEffectFor(state, charId, dayIndex)!;
+    return {
+      id: coldPalaceIncidentId(charId, year, month),
+      residentId: charId,
+      effectId: effect.id,
+      kind: "critical_illness",
+      occurredAt: now,
+      acknowledged: false,
+      status: "pending_response",
+    };
+  }
+
+  return null;
 }

@@ -60,8 +60,14 @@ import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
 import type { QueueTraceEvent } from "../engine/trace/domainEvents";
 import { applyJusticePlan, type JusticePlan } from "../engine/justice/mutations";
 import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../engine/characters/chambers";
-import type { ChamberId } from "../engine/state/types";
-import { planColdPalaceIncidents, staleIncidentIds } from "../engine/characters/coldPalaceIncidents";
+import type { ChamberId, ColdPalaceCriticalIllnessIncident } from "../engine/state/types";
+import {
+  planColdPalaceIncidents,
+  planColdPalaceCriticalIncident,
+  staleIncidentIds,
+  criticalIgnoreDelta,
+  PHYSICIAN_RECOVERY_DELTA,
+} from "../engine/characters/coldPalaceIncidents";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -1583,14 +1589,15 @@ export class GameStore {
       collector?.capturePhaseScheduled("annual_review", diffGameState(beforeReview, candidate));
     }
 
-    // 5) Cold-palace incident generation (月度，每次至多一条；replay-stable；非致死健康扣减走统一 planHealthChange).
+    // 5) Cold-palace incident generation (月度；replay-stable).
     if (monthChanged) {
+      // 5a) Regular incidents (petition / health_deterioration) — health > CRITICAL_HEALTH_THRESHOLD.
+      //     Health delta applied immediately (non-lethal).
       const beforeIncidents = candidate;
       const newIncidents = planColdPalaceIncidents(candidate);
       if (newIncidents.length > 0) {
-        // At most one incident per checkpoint (planner already guarantees this).
         const incident = newIncidents[0]!;
-        if (incident.kind === "health_deterioration" && incident.healthDelta !== undefined) {
+        if (incident.kind === "health_deterioration") {
           const now = toGameTime(candidate.calendar);
           const { effects: hx } = planHealthChange(candidate, {
             subject: { kind: "consort", id: incident.residentId },
@@ -1611,17 +1618,29 @@ export class GameStore {
         candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, ...newIncidents] };
         collector?.capturePhaseScheduled("cold_palace_incidents", diffGameState(beforeIncidents, candidate));
       }
+
+      // 5b) Critical-illness incidents — health ≤ CRITICAL_HEALTH_THRESHOLD (PUNISH-4D).
+      //     Two-phase: no health effect at tick time; player resolves via resolveColdPalaceCriticalIncident().
+      const beforeCritical = candidate;
+      const criticalIncident = planColdPalaceCriticalIncident(candidate);
+      if (criticalIncident) {
+        candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, criticalIncident] };
+        collector?.capturePhaseScheduled("cold_palace_critical_incidents", diffGameState(beforeCritical, candidate));
+      }
     }
 
     // Auto-acknowledge stale incidents (deceased / missing residents) so they never
     // permanently block the global interrupt queue. Idempotent: runs every tick.
+    // critical_illness incidents are NOT acknowledged here: validator requires pending to
+    // have acknowledged=false, and stale critical incidents are already excluded by
+    // oldestPresentableIncident() so they cannot block the queue.
     const staleIds = staleIncidentIds(candidate);
     if (staleIds.length > 0) {
       const staleSet = new Set(staleIds);
       candidate = {
         ...candidate,
         coldPalaceIncidents: candidate.coldPalaceIncidents.map((i) =>
-          staleSet.has(i.id) ? { ...i, acknowledged: true } : i,
+          staleSet.has(i.id) && i.kind !== "critical_illness" ? { ...i, acknowledged: true } : i,
         ),
       };
     }
@@ -2128,6 +2147,30 @@ export class GameStore {
       [],
       { kind: "imperial_command", sourceId: "restore_from_cold_palace", label: `restore from cold palace: ${targetId}` },
       justicePlan,
+      undefined,
+      (s) => {
+        // Auto-resolve any pending critical_illness incident for this resident
+        // (restore makes medical intervention moot).
+        const hasPending = s.coldPalaceIncidents.some(
+          (i) => i.residentId === targetId && i.kind === "critical_illness" && !i.acknowledged,
+        );
+        if (!hasPending) return s;
+        const resolvedAt = toGameTime(s.calendar);
+        return {
+          ...s,
+          coldPalaceIncidents: s.coldPalaceIncidents.map((i) =>
+            i.residentId === targetId && i.kind === "critical_illness" && !i.acknowledged
+              ? ({
+                  ...(i as ColdPalaceCriticalIllnessIncident),
+                  status: "resolved" as const,
+                  resolution: "restored" as const,
+                  resolvedAt,
+                  acknowledged: true,
+                } satisfies ColdPalaceCriticalIllnessIncident)
+              : i,
+          ),
+        };
+      },
     );
     if (!txResult.ok) return txResult;
     return ok({ punishmentId: activeEffect.sourcePunishmentId ?? "" });
@@ -2144,6 +2187,87 @@ export class GameStore {
       this.logger?.logGameError(result.error);
     }
     return result;
+  }
+
+  /**
+   * 严重病情决策（PUNISH-4D）。
+   *
+   * physician: 通过 planHealthChange 施加 +PHYSICIAN_RECOVERY_DELTA 健康回复。
+   * ignore:    通过 planHealthChange 施加确定性负值 delta（可致死）。
+   * 两者均原子提交：失败不修改 state，成功仅 emit 一次。
+   * 已 resolved 的 incident 重复调用返回错误（幂等失败）。
+   */
+  resolveColdPalaceCriticalIncident(
+    db: ContentDB,
+    incidentId: string,
+    choice: "physician" | "ignore",
+  ): Result<void, GameError[]> {
+    const incidentIdx = this.state.coldPalaceIncidents.findIndex((i) => i.id === incidentId);
+    if (incidentIdx === -1) {
+      return err([stateError("COLD_PALACE_INVALID", `cold palace incident "${incidentId}" not found`)]);
+    }
+    const incident = this.state.coldPalaceIncidents[incidentIdx]!;
+    if (incident.kind !== "critical_illness") {
+      return err([stateError("COLD_PALACE_INVALID", `incident "${incidentId}" is not critical_illness (got ${incident.kind})`)]);
+    }
+    if (incident.status === "resolved") {
+      return err([stateError("COLD_PALACE_INVALID", `incident "${incidentId}" is already resolved`)]);
+    }
+
+    const now = toGameTime(this.state.calendar);
+
+    // Deceased or missing resident: cannot apply health effect — reject rather than
+    // creating a resolved incident without the required healthDelta (which would violate
+    // the validator). Stale critical incidents are excluded by oldestPresentableIncident()
+    // so they cannot block the queue; no state mutation, no emit.
+    const standing = this.state.standing[incident.residentId];
+    if (!standing || standing.lifecycle === "deceased") {
+      return err([stateError("COLD_PALACE_INVALID", `incident "${incidentId}": resident "${incident.residentId}" is deceased or missing — cannot apply health effect`)]);
+    }
+
+    const healthDelta =
+      choice === "physician"
+        ? PHYSICIAN_RECOVERY_DELTA
+        : criticalIgnoreDelta(
+            this.state.rngSeed,
+            incident.residentId,
+            incident.occurredAt.year,
+            incident.occurredAt.month,
+          );
+
+    const { effects } = planHealthChange(this.state, {
+      subject: { kind: "consort", id: incident.residentId },
+      healthDelta,
+      cause: "illness",
+      at: now,
+    });
+
+    const resolvedIncident: ColdPalaceCriticalIllnessIncident = {
+      ...incident,
+      status: "resolved",
+      resolution: choice,
+      resolvedAt: now,
+      acknowledged: true,
+      healthDelta,
+    };
+
+    const txResult = this.commitPlannedTransaction(
+      db,
+      effects,
+      [],
+      [],
+      { kind: "imperial_command", sourceId: "resolve_cold_palace_critical_illness", label: `critical illness ${incidentId}: ${choice}` },
+      undefined,
+      undefined,
+      (s) => ({
+        ...s,
+        coldPalaceIncidents: s.coldPalaceIncidents.map((i, idx) =>
+          idx === incidentIdx ? resolvedIncident : i,
+        ),
+      }),
+    );
+    if (!txResult.ok) return err(txResult.error);
+    return ok(undefined);
   }
 
   /**

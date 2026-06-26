@@ -95,12 +95,11 @@ describe("health_deterioration incidents apply health changes atomically", () =>
       const det = state.coldPalaceIncidents.find(
         (i) => !i.acknowledged && i.kind === "health_deterioration" && i.residentId === TARGET_ID,
       );
-      if (det) {
+      if (det && det.kind === "health_deterioration") {
         const currentHealth = state.standing[TARGET_ID]?.health ?? 100;
         // Health must have already been reduced (health change is in same commit as incident)
         expect(currentHealth).toBeLessThan(initialHealth);
-        expect(det.healthDelta).toBeDefined();
-        expect(det.healthDelta!).toBeLessThan(0);
+        expect(det.healthDelta).toBeLessThan(0);
         // Confirm exact delta was applied
         // (Other health changes may have occurred, so just confirm it went down)
         found = true;
