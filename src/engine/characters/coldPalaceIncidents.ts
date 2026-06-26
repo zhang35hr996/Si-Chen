@@ -82,6 +82,82 @@ export function isLinkedEffectStillActive(
   return isColdPalaceEffectActiveAt(effect, state.calendar.dayIndex);
 }
 
+/**
+ * Presentation state for a single incident.
+ * Used by App / settlement to determine whether to show a report or silently dismiss it.
+ *
+ * - "active"          resident still in cold palace under the linked effect
+ * - "historical"      effect lifted but resident exists — report still displayable
+ * - "stale_deceased"  resident has died — report should be silently acknowledged
+ * - "stale_missing"   resident not found in standing at all — report should be silently acknowledged
+ * - "invalid"         linked effect not found (data corruption)
+ */
+export type ColdPalaceIncidentPresentation =
+  | "active"
+  | "historical"
+  | "stale_deceased"
+  | "stale_missing"
+  | "invalid";
+
+export function resolveColdPalaceIncidentPresentation(
+  state: GameState,
+  incident: ColdPalaceIncident,
+): ColdPalaceIncidentPresentation {
+  const effect = resolveLinkedEffect(state, incident);
+  if (!effect) return "invalid";
+
+  const standing = state.standing[incident.residentId];
+  if (!standing) return "stale_missing";
+  if (standing.lifecycle === "deceased") return "stale_deceased";
+
+  if (isLinkedEffectStillActive(state, incident)) return "active";
+  return "historical";
+}
+
+/**
+ * True if the incident should be shown as a global interrupt.
+ * Stale (deceased/missing/invalid) reports must not block the queue.
+ */
+export function isIncidentPresentable(
+  state: GameState,
+  incident: ColdPalaceIncident,
+): boolean {
+  const presentation = resolveColdPalaceIncidentPresentation(state, incident);
+  return presentation === "active" || presentation === "historical";
+}
+
+/**
+ * Returns the oldest unacknowledged incident that is still presentable
+ * (resident exists and is not deceased). Stale reports are excluded.
+ */
+export function oldestPresentableIncident(
+  state: GameState,
+): ColdPalaceIncident | undefined {
+  const candidates = state.coldPalaceIncidents.filter(
+    (i) => !i.acknowledged && isIncidentPresentable(state, i),
+  );
+  if (!candidates.length) return undefined;
+  return candidates.reduce((a, b) => {
+    const ordA = a.occurredAt.year * 12 + a.occurredAt.month;
+    const ordB = b.occurredAt.year * 12 + b.occurredAt.month;
+    return ordA <= ordB ? a : b;
+  });
+}
+
+/**
+ * Returns IDs of unacknowledged incidents that are stale and should be
+ * silently auto-acknowledged. Called by settlePostAdvance to drain the queue.
+ */
+export function staleIncidentIds(state: GameState): string[] {
+  return state.coldPalaceIncidents
+    .filter((i) => {
+      if (i.acknowledged) return false;
+      const p = resolveColdPalaceIncidentPresentation(state, i);
+      return p === "stale_deceased" || p === "stale_missing" || p === "invalid";
+    })
+    .map((i) => i.id);
+}
+
 // ── Scheduling constants ────────────────────────────────────────────────────
 
 /** % chance an eligible resident generates an incident in a given month. */

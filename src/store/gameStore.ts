@@ -60,7 +60,7 @@ import type { QueueTraceEvent } from "../engine/trace/domainEvents";
 import { applyJusticePlan, type JusticePlan } from "../engine/justice/mutations";
 import { CHAMBERED_PALACE_ORDER, CHAMBERS } from "../engine/characters/chambers";
 import type { ChamberId } from "../engine/state/types";
-import { planColdPalaceIncidents } from "../engine/characters/coldPalaceIncidents";
+import { planColdPalaceIncidents, staleIncidentIds } from "../engine/characters/coldPalaceIncidents";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -1598,6 +1598,19 @@ export class GameStore {
         candidate = { ...candidate, coldPalaceIncidents: [...candidate.coldPalaceIncidents, ...newIncidents] };
         collector?.capturePhaseScheduled("cold_palace_incidents", diffGameState(beforeIncidents, candidate));
       }
+    }
+
+    // Auto-acknowledge stale incidents (deceased / missing residents) so they never
+    // permanently block the global interrupt queue. Idempotent: runs every tick.
+    const staleIds = staleIncidentIds(candidate);
+    if (staleIds.length > 0) {
+      const staleSet = new Set(staleIds);
+      candidate = {
+        ...candidate,
+        coldPalaceIncidents: candidate.coldPalaceIncidents.map((i) =>
+          staleSet.has(i.id) ? { ...i, acknowledged: true } : i,
+        ),
+      };
     }
 
     // 7) Daxuan calendar event detection.

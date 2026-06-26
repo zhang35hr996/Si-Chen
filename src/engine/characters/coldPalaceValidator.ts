@@ -4,6 +4,7 @@
  */
 import { gameError, type GameError } from "../infra/errors";
 import type { ColdPalaceEffect, GameState } from "../state/types";
+import { isColdPalaceEffectActiveAt } from "./coldPalace";
 import { coldPalaceIncidentId } from "./coldPalaceIncidents";
 
 function incidentErr(msg: string): GameError {
@@ -53,6 +54,12 @@ export function validateColdPalaceIncidentLinks(state: GameState): GameError[] {
       if (parsed.residentId !== residentId) {
         errors.push(incidentErr(`ColdPalaceIncident "${id}": id residentId "${parsed.residentId}" ≠ incident.residentId "${residentId}"`));
       }
+      // 2b. ID year/month must align with occurredAt.year/month.
+      if (parsed.year !== occurredAt.year || parsed.month !== occurredAt.month) {
+        errors.push(incidentErr(
+          `ColdPalaceIncident "${id}": canonical id slot ${parsed.year}-${padMonth(parsed.month)} ≠ occurredAt ${occurredAt.year}-${padMonth(occurredAt.month)}`,
+        ));
+      }
       // 3. At most one per resident per month (by canonical ID uniqueness).
       const slotKey = `${residentId}:${parsed.year}:${padMonth(parsed.month)}`;
       if (seenResidentMonth.has(slotKey)) {
@@ -74,11 +81,11 @@ export function validateColdPalaceIncidentLinks(state: GameState): GameError[] {
           `ColdPalaceIncident "${id}": effectId "${effectId}" belongs to "${linkedEffect.characterId}", not "${residentId}"`,
         ));
       }
-      // 6. Effect was active at occurredAt.dayIndex (can be historical/lifted by now).
-      // We only check startTurn — if effect started after the incident, something is wrong.
-      if (linkedEffect.startTurn > occurredAt.dayIndex) {
+      // 6. Effect was active at occurredAt.dayIndex. Uses isColdPalaceEffectActiveAt so
+      //    liftedTurn is checked — a pre-lifted effect cannot be linked to a later incident.
+      if (!isColdPalaceEffectActiveAt(linkedEffect, occurredAt.dayIndex)) {
         errors.push(incidentErr(
-          `ColdPalaceIncident "${id}": effect "${effectId}" started at turn ${linkedEffect.startTurn} but incident occurredAt dayIndex ${occurredAt.dayIndex}`,
+          `ColdPalaceIncident "${id}": effect "${effectId}" was not active at dayIndex ${occurredAt.dayIndex} (startTurn=${linkedEffect.startTurn}, liftedTurn=${linkedEffect.liftedTurn ?? "none"})`,
         ));
       }
     }

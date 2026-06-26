@@ -126,7 +126,7 @@ import { PunishmentModal } from "./components/PunishmentModal";
 import { ColdPalaceRestoreModal } from "./components/ColdPalaceModal";
 import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
 import { ColdPalaceIncidentModal } from "./components/ColdPalaceIncidentModal";
-import { oldestPendingIncident } from "../engine/characters/coldPalaceIncidents";
+import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
@@ -1245,7 +1245,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         pregnancyDisclosureDue: jingshifangDue,
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
-        coldPalaceReportDue: liveState.coldPalaceIncidents.some((i) => !i.acknowledged),
+        coldPalaceReportDue: oldestPresentableIncident(liveState) !== undefined,
         grandSelectionDue: liveState.pendingDaxuan !== undefined,
       });
 
@@ -2534,7 +2534,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         />
       )}
       {activeGlobalInterrupt === "cold_palace_report" && (() => {
-        const incident = oldestPendingIncident(liveState.coldPalaceIncidents);
+        const incident = oldestPresentableIncident(liveState);
         return incident ? (
           <ColdPalaceIncidentModal
             db={db}
