@@ -234,7 +234,7 @@ describe("MemorialsScreen — success flow", () => {
 });
 
 describe("MemorialsScreen — failure flow", () => {
-  it("shows error notice and card stays when resolve fails (bad state)", () => {
+  it("shows error notice and card stays when resolve fails (bad state)", async () => {
     // Force a state with a memorial but broken store (pass bad optionId via manual resolve)
     const base = withTreasury(createNewGameState(db, 1), 5000);
     const g = generateDisasterMemorial(base, "jiangnan", "major", NOW)!;
@@ -256,6 +256,8 @@ describe("MemorialsScreen — failure flow", () => {
 
     // Card should still be visible (because onCommitted was NOT called)
     expect(onCommitted).not.toHaveBeenCalled();
+    // Error notice should be rendered
+    expect(await screen.findByRole("status")).toBeInTheDocument();
     // Restore
     store.resolveMemorial = original;
   });
