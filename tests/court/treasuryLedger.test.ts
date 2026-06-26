@@ -370,6 +370,85 @@ describe("validateTreasuryLedger — corruption detection", () => {
     };
     expect(codes(s)).toContain("TREASURY_LEDGER_CURRENT_MISMATCH");
   });
+
+  it("invalid ledger entry ID format → TREASURY_LEDGER_DUP_ID", () => {
+    const s = createNewGameState(db, 1);
+    const state: GameState = { ...s, treasuryLedger: [{
+      id: "bad_id",  // not "tre_000001" format
+      at: { year: 1, month: 1, period: "early" as const, dayIndex: 100 },
+      delta: -100,
+      balanceBefore: 10000,
+      balanceAfter: 9900,
+      source: { kind: "memorial" as const, memorialId: "mem_000001", optionId: "relief" },
+      reason: "test",
+    }] };
+    expect(codes(state)).toContain("TREASURY_LEDGER_DUP_ID");
+  });
+
+  it("negative balanceBefore → TREASURY_LEDGER_BAD_BALANCE", () => {
+    const s = createNewGameState(db, 1);
+    const state: GameState = { ...s, treasuryLedger: [{
+      id: "tre_000001",
+      at: { year: 1, month: 1, period: "early" as const, dayIndex: 100 },
+      delta: 100,
+      balanceBefore: -1,
+      balanceAfter: 99,
+      source: { kind: "memorial" as const, memorialId: "mem_000001", optionId: "relief" },
+      reason: "test",
+    }] };
+    expect(codes(state)).toContain("TREASURY_LEDGER_BAD_BALANCE");
+  });
+
+  it("source option not in memorial options → TREASURY_LEDGER_BAD_SOURCE", () => {
+    const base = createNewGameState(db, 1);
+    const gen = generateDisasterMemorial(base, "jiangnan", "minor", { year: 2, month: 1, period: "early" as const, dayIndex: 200 })!;
+    const resolvedMemorial = {
+      ...gen.memorial,
+      status: "resolved" as const,
+      resolution: "relief",
+      resolvedAt: { year: 2, month: 1, period: "early" as const, dayIndex: 200 },
+    };
+    const state: GameState = {
+      ...gen.state,
+      resources: { ...gen.state.resources, nation: { ...gen.state.resources.nation, treasury: 9900 } },
+      memorials: { [gen.memorial.id]: resolvedMemorial },
+      treasuryLedger: [{
+        id: "tre_000001",
+        at: { year: 2, month: 1, period: "early" as const, dayIndex: 200 },
+        delta: -100,
+        balanceBefore: 10000,
+        balanceAfter: 9900,
+        source: { kind: "memorial" as const, memorialId: gen.memorial.id, optionId: "nonexistent_option" },
+        reason: "test",
+      }],
+    };
+    expect(codes(state)).toContain("TREASURY_LEDGER_BAD_SOURCE");
+  });
+
+  it("at non-decreasing violated → TREASURY_LEDGER_CHAIN_BROKEN", () => {
+    const base = stateWithTreasury(2000);
+    const e1: TreasuryLedgerEntry = {
+      id: "tre_000001",
+      at: { year: 2, month: 3, period: "mid" as const, dayIndex: 300 },
+      delta: 1000,
+      balanceBefore: 1000,
+      balanceAfter: 2000,
+      source: { kind: "memorial", memorialId: "mem_000001", optionId: "relief" },
+      reason: "a",
+    };
+    // e2.at is earlier than e1.at — violates non-decreasing
+    const e2: TreasuryLedgerEntry = {
+      id: "tre_000002",
+      at: { year: 1, month: 1, period: "early" as const, dayIndex: 50 },
+      delta: -500,
+      balanceBefore: 2000,
+      balanceAfter: 1500,
+      source: { kind: "memorial", memorialId: "mem_000002", optionId: "relief" },
+      reason: "b",
+    };
+    const s: GameState = { ...base, resources: { ...base.resources, nation: { ...base.resources.nation, treasury: 1500 } }, treasuryLedger: [e1, e2] };
+    expect(codes(s)).toContain("TREASURY_LEDGER_CHAIN_BROKEN");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

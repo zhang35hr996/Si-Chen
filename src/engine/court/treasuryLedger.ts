@@ -4,7 +4,7 @@
  * 提供原子借贷事务 `applyTreasuryTransaction` 和完整性校验 `validateTreasuryLedger`。
  * 纯函数——不触碰 store、不发事件、不操作 React。输入 state 永不变更（spread 构造新对象）。
  */
-import type { GameTime } from "../calendar/time";
+import { compareGameTime, type GameTime } from "../calendar/time";
 import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState, TreasuryLedgerEntry } from "../state/types";
@@ -131,7 +131,7 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
 
     // 1. ID 格式
     if (!/^tre_\d{6}$/.test(entry.id)) {
-      e("TREASURY_LEDGER_BAD_ID", `台账条目 id 格式非法：「${entry.id}」`, { id: entry.id, index: i });
+      e("TREASURY_LEDGER_DUP_ID", `台账条目 ID 格式无效或重复「${entry.id}」`, { id: entry.id, index: i });
     }
 
     // 2. ID 唯一性
@@ -170,7 +170,13 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
       }
     }
 
-    // NOTE: check 7 (at non-decreasing) skipped per task brief — not listed in brief's invariant list
+    // 7. at non-decreasing
+    if (i > 0) {
+      const prev = ledger[i - 1]!;
+      if (compareGameTime(entry.at, prev.at) < 0) {
+        e("TREASURY_LEDGER_CHAIN_BROKEN", `台账第 ${i} 条 at 早于第 ${i - 1} 条`, { id: entry.id });
+      }
+    }
 
     // 8. source memorial 存在
     const memorial = state.memorials[entry.source.memorialId];
