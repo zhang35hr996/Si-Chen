@@ -42,12 +42,16 @@ function cmd(delta: number, extra?: Partial<TreasuryTransactionCommand>): Treasu
 
 // ── 辅助：构造一个已 resolved 的灾情奏折 state ──────────────────────────────
 
+/**
+ * "ignore" 选项无 treasuryDelta，因此 resolve 后无台账条目。
+ * 测试可随后安全地向该 memorial 注入任意台账条目（不会触发 check 12/13）。
+ */
 function resolvedMemorialState(): { state: GameState; memId: string; optionId: string } {
   const base = createNewGameState(db, 1);
   const gen = generateDisasterMemorial(base, "jiangnan", "major", AT)!;
-  const resolved = resolveMemorial(gen.state, db, gen.memorial.id, "relief", AT);
+  const resolved = resolveMemorial(gen.state, db, gen.memorial.id, "ignore", AT);
   if (!resolved.ok) throw new Error("setup: resolveMemorial failed");
-  return { state: resolved.value.state, memId: gen.memorial.id, optionId: "relief" };
+  return { state: resolved.value.state, memId: gen.memorial.id, optionId: "ignore" };
 }
 
 // ── 辅助：注入一条手工台账条目（绕过 applyTreasuryTransaction） ──────────────

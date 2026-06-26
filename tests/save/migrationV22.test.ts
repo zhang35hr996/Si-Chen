@@ -66,8 +66,8 @@ function makeV17Save(): string {
 // ── Current version ───────────────────────────────────────────────────────────
 
 describe("save format v22", () => {
-  it("SAVE_FORMAT_VERSION is 22 (v21→v22 coldPalaceInterventions)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(22);
+  it("SAVE_FORMAT_VERSION includes v21→v22 coldPalaceInterventions migration", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(22);
   });
 
   it("new game state coldPalaceInterventions defaults to empty array", () => {

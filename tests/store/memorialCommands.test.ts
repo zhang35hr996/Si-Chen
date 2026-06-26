@@ -1,8 +1,12 @@
-/** store 奏折批阅命令 + 年度灾情生产 seam + v19→v20 迁移（Phase 4A）。 */
+/** store 奏折批阅命令 + 年度灾情生产 seam + v19→v20 迁移（Phase 4A）+ 财政奏折 store 命令（Group F, Phase 4B）。 */
 import { describe, expect, it } from "vitest";
 import { GameStore } from "../../src/store/gameStore";
-import { generateDisasterMemorial, getPendingMemorials } from "../../src/engine/court/memorials";
-import { validateMemorials } from "../../src/engine/court/memorials";
+import {
+  generateDisasterMemorial,
+  generateTreasuryMemorial,
+  getPendingMemorials,
+  validateMemorials,
+} from "../../src/engine/court/memorials";
 import { checksumOf } from "../../src/engine/save/canonical";
 import { createSaveData, readSlot, SAVE_FORMAT_VERSION, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
 import { createMemoryStorage } from "../../src/engine/save/storage";
@@ -95,5 +99,72 @@ describe("save migration v19 → v20 (memorials backfill)", () => {
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     expect(loaded.value.state.memorials).toEqual({});
+  });
+});
+
+// ── Group F: store 财政奏折命令（Phase 4B）────────────────────────────────────
+
+describe("Group F: store.resolveMemorial — treasury memorial", () => {
+  const AT_APRIL = { year: 2, month: 4, period: "early" as const, dayIndex: dayIndexOf(2, 4, "early") };
+
+  function storeWithTreasuryMemorial(treasury = 10000): { store: GameStore; memId: string } {
+    const store = new GameStore();
+    const base = createNewGameState(db, 1);
+    const stateWithBalance: GameState = {
+      ...base,
+      resources: { ...base.resources, nation: { ...base.resources.nation, treasury } },
+    };
+    const gen = generateTreasuryMemorial(stateWithBalance, AT_APRIL)!;
+    store.loadState(gen.state);
+    return { store, memId: gen.memorial.id };
+  }
+
+  it("treasury resolve audit: emits 1, treasury increases, ledger written", () => {
+    const { store, memId } = storeWithTreasuryMemorial();
+    let emits = 0;
+    store.subscribe(() => { emits += 1; });
+    const before = store.getState().resources.nation.treasury;
+
+    const r = store.resolveMemorial(db, memId, "audit");
+    expect(r.ok).toBe(true);
+    expect(emits).toBe(1);
+    expect(store.getState().resources.nation.treasury).toBeGreaterThan(before);
+    expect(store.getState().treasuryLedger).toHaveLength(1);
+    expect(store.getState().memorials[memId]!.status).toBe("resolved");
+  });
+
+  it("treasury resolve surtax: emits 1, treasury increases", () => {
+    const { store, memId } = storeWithTreasuryMemorial();
+    let emits = 0;
+    store.subscribe(() => { emits += 1; });
+    const before = store.getState().resources.nation.treasury;
+
+    const r = store.resolveMemorial(db, memId, "surtax");
+    expect(r.ok).toBe(true);
+    expect(emits).toBe(1);
+    expect(store.getState().resources.nation.treasury).toBeGreaterThan(before);
+  });
+
+  it("treasury resolve defer: emits 1, no ledger entry (no treasury change)", () => {
+    const { store, memId } = storeWithTreasuryMemorial();
+    let emits = 0;
+    store.subscribe(() => { emits += 1; });
+
+    const r = store.resolveMemorial(db, memId, "defer");
+    expect(r.ok).toBe(true);
+    expect(emits).toBe(1);
+    expect(store.getState().treasuryLedger).toHaveLength(0);
+  });
+
+  it("failure on bad option: emits 0, state unchanged", () => {
+    const { store, memId } = storeWithTreasuryMemorial();
+    let emits = 0;
+    store.subscribe(() => { emits += 1; });
+    const snap = JSON.stringify(store.getState());
+
+    const r = store.resolveMemorial(db, memId, "nonexistent");
+    expect(r.ok).toBe(false);
+    expect(emits).toBe(0);
+    expect(JSON.stringify(store.getState())).toBe(snap);
   });
 });
