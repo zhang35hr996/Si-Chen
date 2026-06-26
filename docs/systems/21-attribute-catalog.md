@@ -23,11 +23,29 @@
 | 主体 | 字段位置 |
 |---|---|
 | 皇帝 | `resources.sovereign.{health,diligence,prestige,martial,statecraft,cruelty,fatigue,regimeSecurity}`；年龄/生日在 `calendar` |
-| 国家 | `resources.nation.{military,treasury,publicSupport,productivity,governance,consortClanPower,ministerLoyalty,corruption,clanDiscontent,rumor}` |
+| 国家 | `resources.nation.{military,treasury,publicSupport,productivity,governance,consortClanPower,ministerLoyalty,corruption,clanDiscontent,rumor,borderPressure}` |
 | 侍君 | 明面 `character.attributes.{appearance,family,health,nurture,specialty,likes}`；暗 `character.hidden.{affection,fear,ambition,clanLoyalty,clanPower}`；位分/恩宠 `standing` |
 | 皇嗣 | `Heir.{favor,legitimate,adoptiveFatherId,health,talent,diligence,ambition,closeness,support,faction}`；`HeirEducation.{scholarship,martial,virtue}`（政治=scholarship）|
 
 开发期暗属性全显示（国情抽屉 + 侍君详情）；正式版改 `???` 由血滴子解锁。
+
+---
+
+## 四、国家 (Nation)
+
+### 隐属性
+
+| 属性 | 作用 / 流向 |
+|---|---|
+| 边患压力 | → 军事奏折生成 / 前线战事风险 / 国防投入决策(见 [100-military-memorials.md](100-military-memorials.md)) |
+
+**显示文案**
+
+| 属性 | 0–19 | 20–39 | 40–59 | 60–79 | 80–100 |
+|---|---|---|---|---|---|
+| 边患压力 | 边境安宁 | 偶有骚动 | 边患渐起 | 边情紧迫 | 烽烟四起 |
+
+> 边患压力初始值 35（偶有骚动），每年七月通过年度边情评估（FrontierAssessment）更新。
 
 ---
 

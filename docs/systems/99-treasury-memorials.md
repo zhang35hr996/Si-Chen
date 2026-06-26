@@ -154,9 +154,9 @@ interface TreasuryTransactionCommand {
 
 ---
 
-## 八、存档迁移（v20 → v21）
+## 八、存档迁移（v20 → v21，财政奏折专属）
 
-`MIGRATIONS[20]` 在加载旧档时执行以下回填：
+`MIGRATIONS[20]` 在加载旧档时执行以下回填（仅财政模块，不含军事奏折）：
 
 1. **回填 `treasuryLedger: []`** — 若 `state.treasuryLedger` 不存在则补空数组（Zod schema `.default([])` 也会兜底，此处显式保证）。
 2. **补全 pending 灾情奏折的 `treasuryDelta`** — 对所有 `status === "pending"` 且 `category === "disaster"` 的奏折，按严重度为 `relief` / `tax_remit` 选项写入 `treasuryDelta`（若字段已存在则不覆盖）。
