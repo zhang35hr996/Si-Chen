@@ -43,9 +43,10 @@ export interface TreasuryTransactionCommand {
 /**
  * 原子国库借贷事务。验证顺序：
  * 1. delta 非零安全整数 → TREASURY_BAD_DELTA
- * 2. balanceBefore 非负安全整数 → TREASURY_INVALID_BALANCE
- * 3. balanceAfter >= 0 → TREASURY_INSUFFICIENT
- * 4. balanceAfter 为安全整数 → TREASURY_OVERFLOW
+ * 2. shop_purchase delta 必须为负值 → TREASURY_BAD_DELTA
+ * 3. balanceBefore 非负安全整数 → TREASURY_INVALID_BALANCE
+ * 4. balanceAfter >= 0 → TREASURY_INSUFFICIENT
+ * 5. balanceAfter 为安全整数 → TREASURY_OVERFLOW
  *
  * 成功后返回新 state（含更新的 treasury 和追加的台账条目）；失败时输入 state 不变。
  */
@@ -60,7 +61,14 @@ export function applyTreasuryTransaction(
     }));
   }
 
-  // 2. balanceBefore 校验
+  // 2. shop_purchase 专属：扣款 delta 必须为负
+  if (command.source.kind === "shop_purchase" && command.delta >= 0) {
+    return err(stateError("TREASURY_BAD_DELTA", "商店扣款 delta 必须为负值", {
+      context: { delta: command.delta },
+    }));
+  }
+
+  // 3. balanceBefore 校验
   const balanceBefore = state.resources.nation.treasury;
   if (!Number.isSafeInteger(balanceBefore) || balanceBefore < 0) {
     return err(stateError("TREASURY_INVALID_BALANCE", `国库余额不合法：${balanceBefore}`, {
@@ -83,14 +91,14 @@ export function applyTreasuryTransaction(
     }));
   }
 
-  // 构造台账条目
+  // 构造台账条目（spread at/source 防止调用方事后变更引用污染台账）
   const entry: TreasuryLedgerEntry = {
     id: nextLedgerEntryId(state),
-    at: command.at,
+    at: { ...command.at },
     delta: command.delta,
     balanceBefore,
     balanceAfter,
-    source: command.source,
+    source: { ...command.source },
     reason: command.reason,
   };
 
@@ -145,6 +153,11 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
     // 3. delta 非零安全整数
     if (!Number.isSafeInteger(entry.delta) || entry.delta === 0) {
       e("TREASURY_LEDGER_BAD_AMOUNT", `台账条目「${entry.id}」delta 非法：${entry.delta}`, { id: entry.id, delta: entry.delta });
+    }
+
+    // 3a. shop_purchase 台账条目 delta 必须为负（购买只能扣款）
+    if (entry.source.kind === "shop_purchase" && entry.delta >= 0) {
+      e("TREASURY_LEDGER_BAD_AMOUNT", `台账第 ${i} 条 shop_purchase delta 必须为负值「${entry.id}」`, { id: entry.id });
     }
 
     // 4. balanceBefore / balanceAfter 非负安全整数

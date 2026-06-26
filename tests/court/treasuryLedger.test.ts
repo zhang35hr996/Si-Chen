@@ -511,6 +511,126 @@ describe("validateTreasuryLedger — corruption detection", () => {
 // ledgerEntryId and nextLedgerEntryId helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P2-B: applyTreasuryTransaction — shop_purchase delta 必须为负
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("applyTreasuryTransaction — shop_purchase invariant (P2-B)", () => {
+  it("shop_purchase with positive delta → TREASURY_BAD_DELTA", () => {
+    const s0 = stateWithTreasury(1000);
+    const result = applyTreasuryTransaction(s0, {
+      delta: 100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("TREASURY_BAD_DELTA");
+  });
+
+  it("shop_purchase with delta=0 is already rejected by basic check → TREASURY_BAD_DELTA", () => {
+    const s0 = stateWithTreasury(1000);
+    const result = applyTreasuryTransaction(s0, {
+      delta: 0,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("TREASURY_BAD_DELTA");
+  });
+
+  it("shop_purchase with negative delta succeeds", () => {
+    const s0 = stateWithTreasury(1000);
+    const result = applyTreasuryTransaction(s0, {
+      delta: -100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.state.resources.nation.treasury).toBe(900);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2-C: validateTreasuryLedger — shop_purchase 台账条目 delta 不变量
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateTreasuryLedger — shop_purchase delta invariant (P2-C)", () => {
+  it("shop_purchase ledger entry with positive delta → TREASURY_LEDGER_BAD_AMOUNT", () => {
+    const base = stateWithTreasury(1100);
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001",
+      at: AT,
+      delta: 100,  // positive — invalid for shop_purchase
+      balanceBefore: 1000,
+      balanceAfter: 1100,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "tampered",
+    };
+    const s: GameState = { ...base, treasuryLedger: [entry] };
+    const codes = validateTreasuryLedger(s).map((e) => e.code);
+    expect(codes).toContain("TREASURY_LEDGER_BAD_AMOUNT");
+  });
+
+  it("shop_purchase ledger entry with negative delta passes shop invariant", () => {
+    // Other chain checks may fire on a naked injected entry, but the shop invariant should not fire
+    const s0 = stateWithTreasury(1000);
+    const r = applyTreasuryTransaction(s0, {
+      delta: -100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "valid purchase",
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const errs = validateTreasuryLedger(r.value.state);
+    const shopAmountErrs = errs.filter((e) => e.code === "TREASURY_LEDGER_BAD_AMOUNT");
+    expect(shopAmountErrs).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P3: command.at / command.source aliasing — 防别名
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("applyTreasuryTransaction — command aliasing防护 (P3)", () => {
+  it("mutating command.at after call does not affect ledger entry", () => {
+    const s0 = stateWithTreasury(1000);
+    const at = { year: 1, month: 1, period: "early" as const, dayIndex: 100 };
+    const source = { kind: "system" as const, reasonCode: "test_seed" };
+    const command: TreasuryTransactionCommand = { delta: 500, at, source, reason: "test" };
+    const result = applyTreasuryTransaction(s0, command);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Mutate the original command objects after the call
+    at.year = 999;
+    at.dayIndex = 888;
+    source.reasonCode = "mutated";
+    // Ledger entry should still have original values
+    const entry = result.value.entry;
+    expect(entry.at.year).toBe(1);
+    expect(entry.at.dayIndex).toBe(100);
+    expect(entry.source.kind === "system" && entry.source.reasonCode).toBe("test_seed");
+  });
+
+  it("mutating command.source after call does not affect ledger entry (shop_purchase)", () => {
+    const s0 = stateWithTreasury(1000);
+    const source = { kind: "shop_purchase" as const, itemId: "original_item" };
+    const command: TreasuryTransactionCommand = { delta: -50, at: AT, source, reason: "test" };
+    const result = applyTreasuryTransaction(s0, command);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    source.itemId = "mutated_item";
+    const entry = result.value.entry;
+    expect(entry.source.kind === "shop_purchase" && entry.source.itemId).toBe("original_item");
+  });
+});
+
 describe("ledgerEntryId", () => {
   it("pads to 6 digits", () => {
     expect(ledgerEntryId(1)).toBe("tre_000001");

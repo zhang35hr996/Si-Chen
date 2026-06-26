@@ -453,6 +453,7 @@ export class GameStore {
 
   /** 扣钱后入库；钱不足返回 false，state 不变。购买记入国库台账（shop_purchase 条目）。 */
   buyItem(itemId: string, price: number): boolean {
+    if (!Number.isSafeInteger(price) || price <= 0) return false;
     const txResult = applyTreasuryTransaction(this.state, {
       delta: -price,
       at: toGameTime(this.state.calendar),
