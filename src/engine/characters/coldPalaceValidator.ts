@@ -34,7 +34,7 @@ export function validateColdPalaceIncidentLinks(state: GameState): GameError[] {
   const seenResidentMonth = new Map<string, string>(); // "charId:year:MM" → incidentId
 
   for (const incident of coldPalaceIncidents) {
-    const { id, residentId, effectId, kind, occurredAt, healthDelta } = incident;
+    const { id, residentId, effectId, kind, occurredAt } = incident;
 
     // 1. Globally unique IDs.
     if (seenIds.has(id)) {
@@ -90,17 +90,86 @@ export function validateColdPalaceIncidentLinks(state: GameState): GameError[] {
       }
     }
 
-    // 7. petition must not carry healthDelta.
-    if (kind === "petition" && healthDelta !== undefined) {
-      errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=petition must not have healthDelta (got ${healthDelta})`));
-    }
-
-    // 8. health_deterioration must carry a valid negative delta.
-    if (kind === "health_deterioration") {
-      if (healthDelta === undefined) {
+    // Kind-specific field rules — validate at runtime so the validator catches corrupt state
+    // even when bypassing TypeScript (e.g. raw JSON from storage or test fixtures).
+    const anyDelta = (incident as unknown as { healthDelta?: unknown }).healthDelta;
+    if (kind === "petition") {
+      // 7. petition must not carry healthDelta.
+      if (anyDelta !== undefined) {
+        errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=petition must not have healthDelta (got ${anyDelta})`));
+      }
+    } else if (kind === "health_deterioration") {
+      // 8. health_deterioration: healthDelta required and must be negative.
+      if (anyDelta === undefined || anyDelta === null) {
         errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=health_deterioration must have healthDelta`));
-      } else if (healthDelta >= 0) {
-        errors.push(incidentErr(`ColdPalaceIncident "${id}": healthDelta must be negative (got ${healthDelta})`));
+      } else if (typeof anyDelta === "number" && anyDelta >= 0) {
+        errors.push(incidentErr(`ColdPalaceIncident "${id}": healthDelta must be negative (got ${anyDelta})`));
+      }
+    } else if (kind === "critical_illness") {
+      const isPending = incident.status === "pending_response";
+      const isResolved = incident.status === "resolved";
+      const res = incident.resolution as string | undefined;
+
+      // pending_response invariants:
+      if (isPending) {
+        // must not be acknowledged
+        if (incident.acknowledged) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness status=pending_response must not be acknowledged`));
+        }
+        // must not have resolution
+        if (res !== undefined) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness status=pending_response must not have resolution`));
+        }
+        // must not have resolvedAt
+        if (incident.resolvedAt !== undefined) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness status=pending_response must not have resolvedAt`));
+        }
+        // must not have healthDelta
+        if (incident.healthDelta !== undefined) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness status=pending_response must not have healthDelta`));
+        }
+      }
+
+      // resolved invariants:
+      if (isResolved) {
+        // must be acknowledged
+        if (!incident.acknowledged) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness status=resolved must be acknowledged`));
+        }
+        // must have resolution
+        if (!res) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness status=resolved must have resolution`));
+        }
+        // must have resolvedAt
+        if (incident.resolvedAt === undefined) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness status=resolved must have resolvedAt`));
+        }
+        // physician: healthDelta required and must be positive
+        if (res === "physician") {
+          if (incident.healthDelta === undefined) {
+            errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness resolution=physician must have healthDelta`));
+          } else if (incident.healthDelta <= 0) {
+            errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness resolution=physician healthDelta must be positive (got ${incident.healthDelta})`));
+          }
+        }
+        // ignore: healthDelta required and must be negative
+        if (res === "ignore") {
+          if (incident.healthDelta === undefined) {
+            errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness resolution=ignore must have healthDelta`));
+          } else if (incident.healthDelta >= 0) {
+            errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness resolution=ignore healthDelta must be negative (got ${incident.healthDelta})`));
+          }
+        }
+        // restored: must NOT have healthDelta
+        if (res === "restored" && incident.healthDelta !== undefined) {
+          errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness resolution=restored must not have healthDelta`));
+        }
+        // resolvedAt must not precede occurredAt — compare by dayIndex (absolute 旬 ordinal).
+        if (incident.resolvedAt !== undefined) {
+          if (incident.resolvedAt.dayIndex < incident.occurredAt.dayIndex) {
+            errors.push(incidentErr(`ColdPalaceIncident "${id}": kind=critical_illness resolvedAt (dayIndex ${incident.resolvedAt.dayIndex}) must not precede occurredAt (dayIndex ${incident.occurredAt.dayIndex})`));
+          }
+        }
       }
     }
   }

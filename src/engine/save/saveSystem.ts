@@ -21,7 +21,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 20;
+export const SAVE_FORMAT_VERSION = 21;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -324,6 +324,13 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       (state as unknown as { memorials: Record<string, never> }).memorials = {};
     }
     return { ...env, formatVersion: 20, state, checksum: checksumOf(state) };
+  },
+  // v20 → v21: 冷宫严重病情（PUNISH-4D）。ColdPalaceIncident 扩展为 discriminated union；
+  // 旧档中 petition / health_deterioration 记录无新字段，schema 直接通过（严格对象）。
+  // critical_illness 类型为新增，旧档无此 kind，无需数据变换；仅升版本号。
+  20: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    return { ...env, formatVersion: 21, checksum: checksumOf(env.state) };
   },
 };
 

@@ -44,7 +44,8 @@ export function ColdPalaceIncidentModal({
   onRestore?: (charId: string) => void;
 }) {
   const submitted = useRef(false);
-  const { residentId, kind, occurredAt, healthDelta } = incident;
+  const { residentId, kind, occurredAt } = incident;
+  const healthDelta = incident.kind === "health_deterioration" ? incident.healthDelta : undefined;
 
   const char = db.characters[residentId] ?? state.generatedConsorts[residentId];
   const standing = state.standing[residentId];

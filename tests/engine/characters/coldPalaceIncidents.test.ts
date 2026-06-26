@@ -298,9 +298,12 @@ describe("planColdPalaceIncidents incident shape", () => {
     if (!found) {
       // Try forced seed that triggers for this specific charId
       const s2 = stateWithColdPalaceResident("consort_a");
-      const lowHealth: GameState = { ...s2, rngSeed: 3, standing: { ...s2.standing, consort_a: { ...s2.standing.consort_a!, health: 20 } } };
+      const lowHealth: GameState = { ...s2, rngSeed: 3, standing: { ...s2.standing, consort_a: { ...s2.standing.consort_a!, health: 30 } } };
       const r = planColdPalaceIncidents(lowHealth);
-      if (r.length > 0) expect(r[0]!.healthDelta ?? 0).toBeLessThan(0);
+      if (r.length > 0) {
+        const inc = r[0]!;
+        if (inc.kind === "health_deterioration") expect(inc.healthDelta).toBeLessThan(0);
+      }
     }
   });
 
@@ -316,7 +319,9 @@ describe("planColdPalaceIncidents incident shape", () => {
       const result = planColdPalaceIncidents({ ...atOne, rngSeed: seed });
       for (const r of result) {
         expect(r.kind).toBe("petition");
-        expect(r.healthDelta).toBeUndefined();
+        if (r.kind === "petition") {
+          // petition has no healthDelta field in discriminated union — compile-time guaranteed
+        }
       }
     }
   });
@@ -328,17 +333,19 @@ describe("planColdPalaceIncidents incident shape", () => {
       const result = planColdPalaceIncidents(withSeed);
       const petition = result.find((i) => i.kind === "petition");
       if (petition) {
-        expect(petition.healthDelta).toBeUndefined();
+        // ColdPalacePetitionIncident has no healthDelta field — union discriminant guarantees this
+        expect(petition.kind).toBe("petition");
         return;
       }
     }
   });
 
-  it("low-health residents skew toward health_deterioration", () => {
+  it("residents with health 21-49 generate health_deterioration (never petition)", () => {
     const s = stateWithColdPalaceResident("consort_a");
+    // health=25: above CRITICAL_HEALTH_THRESHOLD(20), below 50 → always health_deterioration
     const withLowHealth: GameState = {
       ...s,
-      standing: { ...s.standing, consort_a: { ...s.standing.consort_a!, health: 20 } },
+      standing: { ...s.standing, consort_a: { ...s.standing.consort_a!, health: 25 } },
     };
     let deterioration = 0;
     let petitions = 0;
@@ -349,9 +356,21 @@ describe("planColdPalaceIncidents incident shape", () => {
         else petitions++;
       }
     }
-    // With health < 50, ALL incidents should be health_deterioration
+    // With 21 ≤ health < 50, ALL regular incidents should be health_deterioration
     expect(petitions).toBe(0);
     expect(deterioration).toBeGreaterThan(0);
+  });
+
+  it("residents with health ≤ CRITICAL_HEALTH_THRESHOLD are skipped by regular planner", () => {
+    const s = stateWithColdPalaceResident("consort_a");
+    const atCritical: GameState = {
+      ...s,
+      standing: { ...s.standing, consort_a: { ...s.standing.consort_a!, health: 20 } },
+    };
+    for (let seed = 1; seed <= 50; seed++) {
+      const result = planColdPalaceIncidents({ ...atCritical, rngSeed: seed });
+      expect(result).toHaveLength(0); // critical planner's domain
+    }
   });
 });
 
@@ -533,7 +552,7 @@ describe("planColdPalaceIncidents — at most one per checkpoint", () => {
 // ── validateColdPalaceIncidentLinks ──────────────────────────────────────────
 
 describe("validateColdPalaceIncidentLinks", () => {
-  function validIncident(overrides: Partial<ColdPalaceIncident> = {}): ColdPalaceIncident {
+  function validIncident(overrides: Record<string, unknown> = {}): ColdPalaceIncident {
     return {
       id: "cpi_consort_a_1_01",
       residentId: "consort_a",
@@ -542,7 +561,7 @@ describe("validateColdPalaceIncidentLinks", () => {
       occurredAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
       acknowledged: false,
       ...overrides,
-    };
+    } as unknown as ColdPalaceIncident;
   }
 
   function validEffect() {

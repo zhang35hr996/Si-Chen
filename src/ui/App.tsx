@@ -126,6 +126,7 @@ import { PunishmentModal } from "./components/PunishmentModal";
 import { ColdPalaceRestoreModal } from "./components/ColdPalaceModal";
 import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
 import { ColdPalaceIncidentModal } from "./components/ColdPalaceIncidentModal";
+import { ColdPalaceCriticalIncidentModal } from "./components/ColdPalaceCriticalIncidentModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
@@ -2551,9 +2552,28 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onDismiss={() => setCentennialDismissedMonth(monthOrdinal(liveState.calendar))}
         />
       )}
-      {activeGlobalInterrupt === "cold_palace_report" && (() => {
+      {activeGlobalInterrupt === "cold_palace_report" && restoreCharId === null && (() => {
         const incident = oldestPresentableIncident(liveState);
-        return incident ? (
+        if (!incident) return null;
+        if (incident.kind === "critical_illness" && incident.status === "pending_response") {
+          return (
+            <ColdPalaceCriticalIncidentModal
+              db={db}
+              state={liveState}
+              incident={incident}
+              onPhysician={() => {
+                const r = store.resolveColdPalaceCriticalIncident(db, incident.id, "physician");
+                if (r.ok) doAutosave();
+              }}
+              onIgnore={() => {
+                const r = store.resolveColdPalaceCriticalIncident(db, incident.id, "ignore");
+                if (r.ok) doAutosave();
+              }}
+              onRestore={(charId) => setRestoreCharId(charId)}
+            />
+          );
+        }
+        return (
           <ColdPalaceIncidentModal
             db={db}
             state={liveState}
@@ -2562,7 +2582,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             onNavigate={() => { setFreeViewId("changmengong"); setView("freeview"); }}
             onRestore={(charId) => setRestoreCharId(charId)}
           />
-        ) : null;
+        );
       })()}
       {childReaction && (
         <CharacterReactionScreen
