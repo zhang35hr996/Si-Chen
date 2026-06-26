@@ -10,21 +10,6 @@
 import type { GameState } from "../engine/state/types";
 import type { ContentDB } from "../engine/content/loader";
 
-export function grantCoins(state: GameState, amount: number): GameState {
-  const treasury = Math.max(0, state.resources.nation.treasury + amount);
-  return {
-    ...state,
-    resources: { ...state.resources, nation: { ...state.resources.nation, treasury } },
-  };
-}
-
-export type SpendResult = { ok: true; state: GameState } | { ok: false };
-
-export function spendCoins(state: GameState, amount: number): SpendResult {
-  if (amount < 0 || state.resources.nation.treasury < amount) return { ok: false };
-  return { ok: true, state: grantCoins(state, -amount) };
-}
-
 export function grantItem(state: GameState, itemId: string, count = 1): GameState {
   const items = { ...state.resources.storehouse.items };
   items[itemId] = (items[itemId] ?? 0) + count;
