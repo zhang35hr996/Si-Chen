@@ -17,7 +17,7 @@ import {
 } from "../../src/engine/save/saveSystem";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { createNewGameState } from "../../src/engine/state/newGame";
-import type { GameState } from "../../src/engine/state/types";
+import type { CharacterStatusEffect, ColdPalaceIncident, GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -49,7 +49,7 @@ describe("save migration v17 → v18 (coldPalaceIncidents)", () => {
       ...current,
       formatVersion: 17,
       state: stateV17,
-      checksum: checksumOf(stateV17 as GameState),
+      checksum: checksumOf(stateV17 as unknown as GameState),
     };
     return JSON.stringify(env);
   }
@@ -114,17 +114,18 @@ describe("save schema rejects corrupt coldPalaceIncidents", () => {
       coldPalaceResidenceId: "changmengong",
       sourcePunishmentId: "pun_000001",
     };
-    const corrupt = {
+    const incident: ColdPalaceIncident = {
+      id: "arbitrary_id",  // non-canonical
+      residentId: "lu_huaijin",
+      effectId: "se_000001",
+      kind: "petition",
+      occurredAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+      acknowledged: false,
+    };
+    const corrupt: GameState = {
       ...s,
-      statusEffects: [...s.statusEffects, effect as typeof s.statusEffects[0]],
-      coldPalaceIncidents: [{
-        id: "arbitrary_id",  // non-canonical
-        residentId: "lu_huaijin",
-        effectId: "se_000001",
-        kind: "petition",
-        occurredAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
-        acknowledged: false,
-      }],
+      statusEffects: [...s.statusEffects, effect as CharacterStatusEffect],
+      coldPalaceIncidents: [incident],
     };
     const current = createSaveData(db, corrupt, "slot1");
     const env = { ...current, state: corrupt, checksum: checksumOf(corrupt) };

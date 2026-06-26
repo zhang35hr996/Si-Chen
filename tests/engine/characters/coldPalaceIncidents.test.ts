@@ -648,7 +648,37 @@ describe("validateColdPalaceIncidentLinks", () => {
       lateEffect,
     );
     const errs = validateColdPalaceIncidentLinks(state);
-    expect(errs.some((e) => e.message.includes("started at turn"))).toBe(true);
+    expect(errs.some((e) => e.message.includes("was not active at"))).toBe(true);
+  });
+
+  it("rejects effect lifted before incident occurredAt (liftedTurn check)", () => {
+    // effect: startTurn=0, liftedTurn=10 → not active at dayIndex=20
+    const liftedEarlyEffect = {
+      ...validEffect(),
+      startTurn: 0,
+      liftedTurn: 10,
+      liftedAt: { year: 1, month: 1, period: "early" as const, dayIndex: 10 },
+      liftReason: "lifted_by_emperor" as const,
+    };
+    const state = stateWithIncidentAndEffect(
+      validIncident({ occurredAt: { year: 1, month: 1, period: "early", dayIndex: 20 } }),
+      liftedEarlyEffect,
+    );
+    const errs = validateColdPalaceIncidentLinks(state);
+    expect(errs.some((e) => e.message.includes("was not active at"))).toBe(true);
+  });
+
+  it("rejects incident where canonical ID year/month does not match occurredAt", () => {
+    // id: cpi_consort_a_1_01 (year=1, month=1) but occurredAt: year=5, month=8
+    const state = stateWithIncidentAndEffect(
+      validIncident({
+        id: "cpi_consort_a_1_01",
+        occurredAt: { year: 5, month: 8, period: "early", dayIndex: 60 },
+      }),
+      { ...validEffect(), startTurn: 0 }, // startTurn=0 ≤ dayIndex=60, so active check alone would pass
+    );
+    const errs = validateColdPalaceIncidentLinks(state);
+    expect(errs.some((e) => e.message.includes("≠ occurredAt"))).toBe(true);
   });
 
   it("empty coldPalaceIncidents array produces no errors", () => {
