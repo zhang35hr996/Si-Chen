@@ -67,8 +67,9 @@ palace→palace/institutional、public→realm/institutional。
 **未触碰任何侍君 standing**、被罚者不被补回原职）；失败原子性；行政升迁（升职、奖励↑、**无 PunishmentRecord**、
 history 无 punishmentId）；store 提交 + save/load round-trip；v15→v16 迁移回填 `targetKind:"consort"`。
 
-## 六、PR3C-3b（后续）
+## 六、PR3C-3b（已实现）
 
 侍君请求提拔亲族（行政升迁入口）、侍君获罪是否牵连家族（玩家亲选降职/免官 → 经本 PR 的 `punishOfficial`）、
-紫宸殿人事奏折、官员/家族反应与记忆、对应 UI。届时复用本 PR 的 `punishOfficial`/`promoteOfficialAdministratively`，
-不另建惩罚路径。
+紫宸殿人事奏折，及对应 UI，均已在 **PR3C-3b** 落地，复用本 PR 的 `punishOfficial`/
+`promoteOfficialAdministratively`，未另建惩罚路径。详见
+[`97-officials-personnel-events.md`](97-officials-personnel-events.md)。

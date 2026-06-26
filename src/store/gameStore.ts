@@ -36,6 +36,9 @@ import { buildOfficialYearlyTick } from "./officialsLifecycleTick";
 import { EXAM_MONTH, acknowledgeExaminationResult, hasGeneratedExaminationForYear, settleAnnualExamination } from "../engine/officials/examination";
 import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/officials/annualReview";
 import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmentCommand } from "../engine/officials/officialPunishment";
+import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionResolve";
+import { generateAnnualPersonnelEvents, generateFamilyImplication } from "../engine/officials/personnelDecisions";
+import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
@@ -378,6 +381,27 @@ export class GameStore {
     this.state = r.value;
     this.emit();
     return ok(undefined);
+  }
+
+  /**
+   * 原子裁断一条人事决策（侍君请提拔亲族 / 获罪牵连 / 紫宸殿人事奏折；PR3C-3b）。升迁经行政 API，
+   * 降职/免官经 PUNISH。失败 state 不变、不 emit；成功一次 emit，返回可选 punishmentId（降/免才有）。
+   */
+  resolvePersonnelDecision(db: ContentDB, decisionId: string, resolution: PersonnelDecisionResolution): Result<{ punishmentId?: string }, GameError> {
+    const r = resolvePersonnelDecision(this.state, db, decisionId, resolution, toGameTime(this.state.calendar));
+    if (!r.ok) return r;
+    this.state = r.value.state;
+    this.emit();
+    return ok(r.value.punishmentId ? { punishmentId: r.value.punishmentId } : {});
+  }
+
+  /**
+   * 侍君获罪后即时生成「获罪牵连家族」待裁决策（PR3C-3b 生产 seam）。生成器内部已门控严重度
+   * （severe/terminal）、母族在任官员、同源去重，故对不合格惩罚为纯 no-op（返回原 state）。作为
+   * commitPlannedTransaction 的 postCommit 变换折进同一次提交与 emit（不额外 emit）。
+   */
+  private withFamilyImplication(db: ContentDB, punishmentId: string): (state: GameState) => GameState {
+    return (state) => generateFamilyImplication(state, db, punishmentId, toGameTime(state.calendar))?.state ?? state;
   }
 
   /** 标记某年度科举榜单为已查看（PR3B）。幂等。 */
@@ -829,6 +853,7 @@ export class GameStore {
     source: TraceSource,
     justicePlan?: JusticePlan,
     postEffectsEntries?: (state: GameState) => Omit<CourtEvent, "id">[],
+    postCommit?: (state: GameState) => GameState,
   ): Result<{ reactionBeats: ReactionBeat[] }, GameError[]> {
     const collector = this.makeCollector();
     const beforeState = this.state;
@@ -883,6 +908,8 @@ export class GameStore {
       candidate = ap.value.state;
     }
     collector?.capturePhaseScheduled("chronicle_append", diffGameState(beforeChronicle, candidate));
+    // 提交前的最终附加变换（纯附加；如侍君获罪即时生成牵连家族待裁决策）。折进同一次提交与 emit。
+    if (postCommit) candidate = postCommit(candidate);
     if (collector) {
       captureEligibilityTransitions(db, beforeState, candidate, collector);
       const tx = this.buildTrace(beforeState, candidate, source, collector, "committed");
@@ -1023,6 +1050,9 @@ export class GameStore {
       conseq.reactionBeats,
       { kind: "imperial_command", sourceId: command.type, label: `punishment: ${command.type} ${command.targetId}` },
       justicePlan,
+      undefined,
+      // 侍君获罪（severe/terminal：indefinite_confinement/execution）→ 即时生成牵连家族待裁决策（折进同一提交）。
+      this.withFamilyImplication(db, punishmentId),
     );
     if (!txResult.ok) return txResult;
     return ok({ punishmentId, reactionBeats: txResult.value.reactionBeats, baseLines: base.lines });
@@ -1533,6 +1563,8 @@ export class GameStore {
     if (candidate.calendar.month >= REVIEW_MONTH && !hasReviewedYear(candidate, candidate.calendar.year)) {
       const beforeReview = candidate;
       candidate = buildAnnualReview(candidate, db, candidate.calendar.year, toGameTime(candidate.calendar));
+      // 考课之后一次性生成本年人事奏折 + 侍君请托（确定性、有界；与 hasReviewedYear 同守卫，年度仅一次）。
+      candidate = generateAnnualPersonnelEvents(candidate, db, toGameTime(candidate.calendar));
       collector?.capturePhaseScheduled("annual_review", diffGameState(beforeReview, candidate));
     }
 
@@ -1909,6 +1941,8 @@ export class GameStore {
           tags: ["harem_administration", "cold_palace"],
         }];
       },
+      // 侍君打入冷宫（severe）→ 即时生成牵连家族待裁决策（折进同一提交）。
+      this.withFamilyImplication(db, punishmentId),
     );
     if (!txResult.ok) return txResult;
     return ok({ baseLines: [], punishmentId });

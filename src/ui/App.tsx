@@ -144,6 +144,8 @@ import { GardenOverviewScreen, type GardenSubAreaView } from "./screens/GardenOv
 import { XuanzhengdianScreen } from "./screens/XuanzhengdianScreen";
 import { OfficialsScreen } from "./officials/OfficialsScreen";
 import { ExaminationScreen } from "./officials/ExaminationScreen";
+import { PersonnelDecisionsScreen } from "./officials/PersonnelDecisionsScreen";
+import { getPendingPersonnelDecisions } from "../engine/officials/personnelDecisions";
 import { getHighVacancyPosts } from "../engine/officials/selectors";
 import { getUnacknowledgedExaminationResults } from "../engine/officials/examination";
 import { pickSubLocationEvent, subLocationEventAffordable } from "../engine/map/subLocations";
@@ -158,7 +160,7 @@ import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian" | "officials" | "examination";
+type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian" | "officials" | "examination" | "personnelDecisions";
 
 /** 上朝会话：进殿即扣 1 行动点，随机抽取的 2–3 件事务逐件处理；可随时退朝。 */
 interface CourtSession {
@@ -1863,6 +1865,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               }}
               onAdmitPendingAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
               onReviewMemorials={reviewMemorials}
+              onReviewPersonnel={() => setView("personnelDecisions")}
+              personnelDecisionCount={getPendingPersonnelDecisions(liveState).length}
               onSummonConsort={summonConsortPicker}
               onRest={restAlone}
               onLeave={leaveZichendian}
@@ -2017,6 +2021,20 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           className="location-shell"
         >
           <ExaminationScreen db={db} store={store} onBack={() => setView("xuanzhengdian")} onCommitted={doAutosave} />
+        </GameShell>
+      )}
+      {view === "personnelDecisions" && (
+        <GameShell
+          calendar={liveState.calendar}
+          crumbs={breadcrumbFor(db, "zichendian")}
+          pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
+          onBack={() => setView("zichendian")}
+          onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          className="location-shell"
+        >
+          <PersonnelDecisionsScreen db={db} store={store} onBack={() => setView("zichendian")} onCommitted={doAutosave} />
         </GameShell>
       )}
       {view === "map" && (

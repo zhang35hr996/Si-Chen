@@ -230,7 +230,11 @@ export function buildAnnualReview(state: GameState, db: ContentDB, year: number,
   const demoted = applyDemotions(merited, db, at);
   // 本轮已降级者不得在同一事务被补缺重新挪动（含被升回原职）。
   const filled = resolveOfficialVacancies(demoted.state, db, at, new Set(demoted.movedOfficialIds));
-  const record: AnnualReviewRecord = { year, at, changes: [...demoted.changes, ...filled.changes] };
+  // movedOfficialIds = 本年触发连年不合格阈值者（降级前 underperformanceYears≥阈值）；持久化供请免奏折判定。
+  const record: AnnualReviewRecord = {
+    year, at, changes: [...demoted.changes, ...filled.changes],
+    ...(demoted.movedOfficialIds.length > 0 ? { dismissalCandidateIds: [...demoted.movedOfficialIds] } : {}),
+  };
   return { ...filled.state, annualReviews: [...filled.state.annualReviews, record] };
 }
 
