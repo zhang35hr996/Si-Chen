@@ -224,7 +224,7 @@ describe("ColdPalaceIncidentModal — health_deterioration", () => {
     expect(screen.getByText("身体每况愈下")).toBeInTheDocument();
   });
 
-  it("shows health delta in the description", () => {
+  it("shows health damage qualitative text in the description", () => {
     render(
       <ColdPalaceIncidentModal
         db={makeDb()}
@@ -233,7 +233,8 @@ describe("ColdPalaceIncidentModal — health_deterioration", () => {
         onAcknowledge={vi.fn()}
       />
     );
-    expect(screen.getByText(/本月健康 -7 点/)).toBeInTheDocument();
+    // Raw health number is not exposed; qualitative phrase appears instead
+    expect(screen.getByText(/身体有所损伤/)).toBeInTheDocument();
   });
 
   it("shows resident rank", () => {
