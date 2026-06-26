@@ -13,6 +13,7 @@ import type { ContentDB } from "../content/loader";
 import { validateOfficialWorld } from "../officials/validation";
 import { validateMemorials } from "../court/memorials";
 import { validateTreasuryLedger } from "../court/treasuryLedger";
+import { validateFrontierAssessments } from "../court/frontierAssessment";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
@@ -626,6 +627,18 @@ function validateSave(
     return err({
       error: saveError("TREASURY_LEDGER_INTEGRITY", `存档国库台账完整性校验失败（${first.code}）：${first.message}`, {
         context: { diagnostics: ledgerErrors.map((e) => ({ code: e.code, message: e.message })) },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // 边情评估不变量（Phase 4C）：ID/唯一性/排序/压力方程/烈度一致/奏折交叉引用。任一 error → 拒绝并 quarantine。
+  const frontierErrors = validateFrontierAssessments(state);
+  if (frontierErrors.length > 0) {
+    const first = frontierErrors[0]!;
+    return err({
+      error: saveError("FRONTIER_INTEGRITY", `存档边情评估完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: frontierErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });
