@@ -31,7 +31,10 @@ export function nextLedgerEntryId(state: GameState): string {
 export interface TreasuryTransactionCommand {
   delta: number;
   at: GameTime;
-  source: { kind: "memorial"; memorialId: string; optionId: string };
+  source:
+    | { kind: "memorial"; memorialId: string; optionId: string }
+    | { kind: "shop_purchase"; itemId: string }
+    | { kind: "system"; reasonCode: string };
   reason: string;
 }
 
@@ -87,7 +90,7 @@ export function applyTreasuryTransaction(
     delta: command.delta,
     balanceBefore,
     balanceAfter,
-    source: { ...command.source },
+    source: command.source,
     reason: command.reason,
   };
 
@@ -177,53 +180,62 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
       }
     }
 
-    // 8. source memorial 存在
-    const memorial = state.memorials[entry.source.memorialId];
-    if (!memorial) {
-      e("TREASURY_LEDGER_BAD_SOURCE", `台账条目「${entry.id}」来源奏折「${entry.source.memorialId}」不存在`, {
-        id: entry.id, memorialId: entry.source.memorialId,
-      });
-      // 后续依赖 memorial 的检查无法继续
-      continue;
-    }
+    // 8–13. 奏折来源专属校验（shop_purchase / system 条目跳过）
+    if (entry.source.kind === "memorial") {
+      // 提取到局部常量，使 TypeScript 在回调中也能保持类型窄化
+      const src = entry.source;
 
-    // 9. source option 存在于该奏折
-    const optionExists = memorial.payload.options.some((o) => o.id === entry.source.optionId);
-    if (!optionExists) {
-      e("TREASURY_LEDGER_BAD_SOURCE", `台账条目「${entry.id}」来源选项「${entry.source.optionId}」不属于奏折「${entry.source.memorialId}」`, {
-        id: entry.id, memorialId: entry.source.memorialId, optionId: entry.source.optionId,
-      });
-    }
+      // 8. source memorial 存在
+      const memorial = state.memorials[src.memorialId];
+      if (!memorial) {
+        e("TREASURY_LEDGER_BAD_SOURCE", `台账条目「${entry.id}」来源奏折「${src.memorialId}」不存在`, {
+          id: entry.id, memorialId: src.memorialId,
+        });
+        // 后续依赖 memorial 的检查无法继续
+        continue;
+      }
 
-    // 10. 奏折已 resolved
-    if (memorial.status !== "resolved") {
-      e("TREASURY_LEDGER_SOURCE_PENDING", `台账条目「${entry.id}」来源奏折「${entry.source.memorialId}」仍为 pending`, {
-        id: entry.id, memorialId: entry.source.memorialId, status: memorial.status,
-      });
-    }
+      // 9. source option 存在于该奏折
+      const optionExists = memorial.payload.options.some((o) => o.id === src.optionId);
+      if (!optionExists) {
+        e("TREASURY_LEDGER_BAD_SOURCE", `台账条目「${entry.id}」来源选项「${src.optionId}」不属于奏折「${src.memorialId}」`, {
+          id: entry.id, memorialId: src.memorialId, optionId: src.optionId,
+        });
+      }
 
-    // 11. memorial.resolution === source.optionId
-    if (memorial.status === "resolved" && memorial.resolution !== entry.source.optionId) {
-      e("TREASURY_LEDGER_OPTION_MISMATCH", `台账条目「${entry.id}」optionId「${entry.source.optionId}」与奏折裁断「${memorial.resolution}」不符`, {
-        id: entry.id, memorialId: entry.source.memorialId, ledgerOptionId: entry.source.optionId, resolution: memorial.resolution,
-      });
-    }
+      // 10. 奏折已 resolved
+      if (memorial.status !== "resolved") {
+        e("TREASURY_LEDGER_SOURCE_PENDING", `台账条目「${entry.id}」来源奏折「${src.memorialId}」仍为 pending`, {
+          id: entry.id, memorialId: src.memorialId, status: memorial.status,
+        });
+      }
 
-    // 12. option.treasuryDelta 与台账 delta 一致
-    const matchedOption = memorial.payload.options.find((o) => o.id === entry.source.optionId);
-    if (matchedOption?.treasuryDelta !== undefined && matchedOption.treasuryDelta !== entry.delta) {
-      e("TREASURY_LEDGER_OPTION_MISMATCH", `台账条目「${entry.id}」delta(${entry.delta})与选项「${entry.source.optionId}」treasuryDelta(${matchedOption.treasuryDelta})不一致`, {
-        id: entry.id, optionId: entry.source.optionId, ledgerDelta: entry.delta, optionDelta: matchedOption.treasuryDelta,
-      });
-    }
+      // 11. memorial.resolution === source.optionId
+      if (memorial.status === "resolved" && memorial.resolution !== src.optionId) {
+        e("TREASURY_LEDGER_OPTION_MISMATCH", `台账条目「${entry.id}」optionId「${src.optionId}」与奏折裁断「${memorial.resolution}」不符`, {
+          id: entry.id, memorialId: src.memorialId, ledgerOptionId: src.optionId, resolution: memorial.resolution,
+        });
+      }
 
-    // 13. 每个奏折至多一条台账
-    if (seenSourceMemorials.has(entry.source.memorialId)) {
-      e("TREASURY_LEDGER_DUP_SOURCE", `奏折「${entry.source.memorialId}」产生了多条台账条目`, {
-        id: entry.id, memorialId: entry.source.memorialId,
-      });
+      // 12. option.treasuryDelta 与台账 delta 一致；无成本选项不应产生台账条目（P1-B）
+      const matchedOption = memorial.payload.options.find((o) => o.id === src.optionId);
+      if (matchedOption !== undefined && matchedOption.treasuryDelta === undefined) {
+        e("TREASURY_LEDGER_OPTION_MISMATCH", `奏折「${src.memorialId}」选项「${src.optionId}」无国库影响，不应有台账条目`, { id: entry.id });
+      }
+      if (matchedOption?.treasuryDelta !== undefined && matchedOption.treasuryDelta !== entry.delta) {
+        e("TREASURY_LEDGER_OPTION_MISMATCH", `台账条目「${entry.id}」delta(${entry.delta})与选项「${src.optionId}」treasuryDelta(${matchedOption.treasuryDelta})不一致`, {
+          id: entry.id, optionId: src.optionId, ledgerDelta: entry.delta, optionDelta: matchedOption.treasuryDelta,
+        });
+      }
+
+      // 13. 每个奏折至多一条台账
+      if (seenSourceMemorials.has(src.memorialId)) {
+        e("TREASURY_LEDGER_DUP_SOURCE", `奏折「${src.memorialId}」产生了多条台账条目`, {
+          id: entry.id, memorialId: src.memorialId,
+        });
+      }
+      seenSourceMemorials.add(src.memorialId);
     }
-    seenSourceMemorials.add(entry.source.memorialId);
   }
 
   // 15. 台账末条目 balanceAfter 与当前 treasury 一致（仅台账非空时适用）
@@ -242,7 +254,9 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
     const chosenOption = m.payload.options.find((o) => o.id === m.resolution);
     if (!chosenOption) continue;
     if (chosenOption.treasuryDelta !== undefined) {
-      const ledgerForThis = state.treasuryLedger.filter((entry) => entry.source.memorialId === m.id);
+      const ledgerForThis = state.treasuryLedger.filter(
+        (entry) => entry.source.kind === "memorial" && entry.source.memorialId === m.id,
+      );
       if (ledgerForThis.length === 0) {
         e("TREASURY_LEDGER_MISSING_ENTRY", `已批奏折「${m.id}」选项「${chosenOption.id}」有国库变化但无台账条目`, {
           id: m.id, optionId: chosenOption.id, treasuryDelta: chosenOption.treasuryDelta,

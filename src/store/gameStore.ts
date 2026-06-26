@@ -40,9 +40,10 @@ import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmen
 import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionResolve";
 import { generateAnnualPersonnelEvents, generateFamilyImplication } from "../engine/officials/personnelDecisions";
 import { maybeGenerateAnnualDisaster, maybeGenerateAnnualTreasuryMemorial, resolveMemorial as resolveMemorialEngine } from "../engine/court/memorials";
+import { applyTreasuryTransaction } from "../engine/court/treasuryLedger";
 import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
-import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
+import { bestow, grantItem, type RecipientKind, type BestowResult } from "./treasury";
 import { huntFurs, autumnHuntFlagKey } from "./autumnHunt";
 import {
   addGeneratedConsort, daxuanAnnounceBeats, daxuanAnnounceFlagKey, daxuanDianxuanDueForYear,
@@ -450,11 +451,16 @@ export class GameStore {
       { kind: "action", sourceId: "applyGrantItem", label: `grantItem: ${itemId}` });
   }
 
-  /** 扣钱后入库；钱不足返回 false，state 不变。 */
+  /** 扣钱后入库；钱不足返回 false，state 不变。购买记入国库台账（shop_purchase 条目）。 */
   buyItem(itemId: string, price: number): boolean {
-    const paid = spendCoins(this.state, price);
-    if (!paid.ok) return false;
-    this.tracedSet(grantItem(paid.state, itemId, 1),
+    const txResult = applyTreasuryTransaction(this.state, {
+      delta: -price,
+      at: toGameTime(this.state.calendar),
+      source: { kind: "shop_purchase", itemId },
+      reason: `购入${itemId}`,
+    });
+    if (!txResult.ok) return false;
+    this.tracedSet(grantItem(txResult.value.state, itemId, 1),
       { kind: "action", sourceId: "buyItem", label: `buyItem: ${itemId}` });
     return true;
   }

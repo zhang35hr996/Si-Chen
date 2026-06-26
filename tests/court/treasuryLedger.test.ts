@@ -44,7 +44,7 @@ function cmd(delta: number, extra?: Partial<TreasuryTransactionCommand>): Treasu
 
 /**
  * "ignore" 选项无 treasuryDelta，因此 resolve 后无台账条目。
- * 测试可随后安全地向该 memorial 注入任意台账条目（不会触发 check 12/13）。
+ * 用于需要已 resolved 奏折（但无台账条目）的校验测试。
  */
 function resolvedMemorialState(): { state: GameState; memId: string; optionId: string } {
   const base = createNewGameState(db, 1);
@@ -52,6 +52,17 @@ function resolvedMemorialState(): { state: GameState; memId: string; optionId: s
   const resolved = resolveMemorial(gen.state, db, gen.memorial.id, "ignore", AT);
   if (!resolved.ok) throw new Error("setup: resolveMemorial failed");
   return { state: resolved.value.state, memId: gen.memorial.id, optionId: "ignore" };
+}
+
+/**
+ * 使用有成本选项（relief，-900）resolve 一条奏折，台账中自动产生一条条目。
+ */
+function resolvedMemorialStateWithCost(treasury = 5000): { state: GameState; memId: string } {
+  const base = { ...createNewGameState(db, 1), resources: { ...createNewGameState(db, 1).resources, nation: { ...createNewGameState(db, 1).resources.nation, treasury } } };
+  const gen = generateDisasterMemorial(base, "jiangnan", "major", AT)!;
+  const resolved = resolveMemorial(gen.state, db, gen.memorial.id, "relief", AT);
+  if (!resolved.ok) throw new Error("setup: resolveMemorial(relief) failed");
+  return { state: resolved.value.state, memId: gen.memorial.id };
 }
 
 // ── 辅助：注入一条手工台账条目（绕过 applyTreasuryTransaction） ──────────────
@@ -219,26 +230,29 @@ describe("validateTreasuryLedger — clean state", () => {
     expect(validateTreasuryLedger(stateWithTreasury(10000))).toEqual([]);
   });
 
-  it("single transaction via applyTreasuryTransaction produces valid ledger", () => {
+  it("resolveMemorial with cost option produces valid ledger (no errors)", () => {
+    // Use a real resolved memorial with a cost option (relief, -900)
+    // resolveMemorial internally calls applyTreasuryTransaction, so the ledger is correct.
+    const { state: rs } = resolvedMemorialStateWithCost(5000);
+    expect(validateTreasuryLedger(rs)).toEqual([]);
+    expect(rs.treasuryLedger).toHaveLength(1);
+    expect(rs.treasuryLedger[0]!.delta).toBe(-900);
+  });
+
+  it("shop_purchase ledger entry produces valid ledger (no memorial cross-checks)", () => {
+    // A shop_purchase entry is valid as long as the chain is consistent.
     const s0 = stateWithTreasury(1000);
-    const r = applyTreasuryTransaction(s0, cmd(200));
+    const r = applyTreasuryTransaction(s0, {
+      delta: -100,
+      at: AT,
+      source: { kind: "shop_purchase", itemId: "luozidai" },
+      reason: "test shop purchase",
+    });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    // The validator checks that source memorial exists and is resolved —
-    // since our fake memorial doesn't exist, we can't pass the full validator.
-    // So use a real resolved memorial state for a full-pass test.
-    const { state: rs, memId, optionId } = resolvedMemorialState();
-    const baseTreasury = rs.resources.nation.treasury;
-    const r2 = applyTreasuryTransaction(rs, {
-      delta: 500,
-      at: AT,
-      source: { kind: "memorial", memorialId: memId, optionId },
-      reason: "test income",
-    });
-    expect(r2.ok).toBe(true);
-    if (!r2.ok) return;
-    expect(validateTreasuryLedger(r2.value.state)).toEqual([]);
-    expect(r2.value.state.resources.nation.treasury).toBe(baseTreasury + 500);
+    // No memorial cross-checks → only chain/balance checks → all pass
+    expect(validateTreasuryLedger(r.value.state)).toEqual([]);
+    expect(r.value.state.resources.nation.treasury).toBe(900);
   });
 });
 
@@ -452,6 +466,21 @@ describe("validateTreasuryLedger — corruption detection", () => {
     };
     const s: GameState = { ...base, resources: { ...base.resources, nation: { ...base.resources.nation, treasury: 1500 } }, treasuryLedger: [e1, e2] };
     expect(codes(s)).toContain("TREASURY_LEDGER_CHAIN_BROKEN");
+  });
+
+  it("ledger entry pointing to no-cost option → TREASURY_LEDGER_OPTION_MISMATCH (P1-B)", () => {
+    // resolvedMemorialState() resolves "ignore" (no treasuryDelta).
+    // Injecting a ledger entry against that resolution should be flagged.
+    const { state: rs, memId, optionId } = resolvedMemorialState();
+    const bal = rs.resources.nation.treasury;
+    const entry: TreasuryLedgerEntry = {
+      id: "tre_000001", at: AT, delta: 100, balanceBefore: bal, balanceAfter: bal + 100,
+      source: { kind: "memorial", memorialId: memId, optionId }, reason: "bogus no-cost entry",
+    };
+    // Inject entry AND update treasury so check 15 doesn't also fire
+    const s: GameState = { ...rs, resources: { ...rs.resources, nation: { ...rs.resources.nation, treasury: bal + 100 } }, treasuryLedger: [entry] };
+    const errs = validateTreasuryLedger(s);
+    expect(errs.map((e) => e.code)).toContain("TREASURY_LEDGER_OPTION_MISMATCH");
   });
 
   it("resolved memorial with cost option but empty ledger → TREASURY_LEDGER_MISSING_ENTRY", () => {

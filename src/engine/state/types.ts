@@ -404,11 +404,10 @@ export interface TreasuryLedgerEntry {
   delta: number;
   balanceBefore: number;
   balanceAfter: number;
-  source: {
-    kind: "memorial";
-    memorialId: string;
-    optionId: string;
-  };
+  source:
+    | { kind: "memorial"; memorialId: string; optionId: string }
+    | { kind: "shop_purchase"; itemId: string }
+    | { kind: "system"; reasonCode: string };
   reason: string;
 }
 

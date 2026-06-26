@@ -250,11 +250,11 @@ const memorialPayloadSchema = z.discriminatedUnion("category", [
   }),
 ]);
 // ── 国库台账（Phase 4B） ─────────────────────────────────────────────────────
-const treasuryLedgerSourceSchema = z.strictObject({
-  kind: z.literal("memorial"),
-  memorialId: z.string().min(1),
-  optionId: z.string().min(1),
-});
+const treasuryLedgerSourceSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("memorial"), memorialId: z.string().min(1), optionId: z.string().min(1) }),
+  z.strictObject({ kind: z.literal("shop_purchase"), itemId: z.string().min(1) }),
+  z.strictObject({ kind: z.literal("system"), reasonCode: z.string().min(1) }),
+]);
 const treasuryLedgerEntrySchema = z.strictObject({
   id: z.string().regex(/^tre_\d{6}$/),
   at: gameTimeSchema,

@@ -39,6 +39,8 @@ describe("Group B: disaster costs — minor relief", () => {
     expect(entry.delta).toBe(-400);
     expect(entry.balanceBefore).toBe(before);
     expect(entry.balanceAfter).toBe(before - 400);
+    expect(entry.source.kind).toBe("memorial");
+    if (entry.source.kind !== "memorial") return;
     expect(entry.source.memorialId).toBe(memId);
     expect(entry.source.optionId).toBe("relief");
   });
