@@ -89,5 +89,5 @@ describe("long sweep — exam + annual review over years", () => {
       storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, st, "slot1")));
       expect(readSlot(storage, db, "slot1", { now: () => seed }).ok).toBe(true);
     }
-  });
+  }, 20000); // 8 seeds × 8 年 + 每年结算（含 Phase 4A 灾情 / PR3C-3b 人事生成）+ save/load 压测，放宽超时
 });

@@ -221,6 +221,39 @@ const personnelDecisionSchema = z.strictObject({
   resolution: z.enum(["approve", "reject", "spare", "demote", "dismiss"]).optional(),
 });
 
+// ── 奏折框架（Phase 4A） ──
+const memorialResourceEffectSchema = z.strictObject({
+  type: z.literal("resource"),
+  pillar: z.enum(["sovereign", "nation"]),
+  field: z.string().min(1),
+  delta: z.number().int(),
+});
+const disasterOptionSchema = z.strictObject({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  effects: z.array(memorialResourceEffectSchema),
+});
+const memorialPayloadSchema = z.discriminatedUnion("category", [
+  z.strictObject({
+    category: z.literal("disaster"),
+    regionId: z.string().min(1),
+    severity: z.enum(["minor", "major"]),
+    options: z.array(disasterOptionSchema).min(1),
+  }),
+]);
+const memorialSchema = z.strictObject({
+  id: z.string().regex(/^mem_\d{6}$/),
+  category: z.enum(["personnel", "treasury", "disaster", "military", "justice"]),
+  status: z.enum(["pending", "resolved"]),
+  createdAt: gameTimeSchema,
+  sourceId: z.string().min(1),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  payload: memorialPayloadSchema,
+  resolvedAt: gameTimeSchema.optional(),
+  resolution: z.string().min(1).optional(),
+});
+
 const flagValueSchema = z.union([z.boolean(), z.number(), z.string()]);
 
 /** 禁足效果 schema。活跃判定见 characters/confinement.ts，不存「剩余月份」。 */
@@ -515,6 +548,7 @@ export const gameStateSchema = z.strictObject({
   examinationResults: z.array(examinationResultSchema),
   annualReviews: z.array(annualReviewRecordSchema),
   personnelDecisions: z.record(z.string(), personnelDecisionSchema),
+  memorials: z.record(z.string(), memorialSchema),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),

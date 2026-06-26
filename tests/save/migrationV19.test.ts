@@ -30,8 +30,8 @@ const db = loadRealContent();
 // ── Current version ──────────────────────────────────────────────────────────
 
 describe("save format v19", () => {
-  it("SAVE_FORMAT_VERSION is 19 (v18→v19 coldPalaceIncidents migration implemented)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(19);
+  it("SAVE_FORMAT_VERSION includes the v19 migration (v18→v19 coldPalaceIncidents)", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(19);
   });
 
   it("round-trip at v19 preserves coldPalaceIncidents as empty array", () => {

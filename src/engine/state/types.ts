@@ -391,6 +391,51 @@ export interface PersonnelDecision {
   resolution?: PersonnelDecisionResolution;
 }
 
+// ── 奏折框架（Phase 4A 第一刀） ─────────────────────────────────────────
+/**
+ * 紫宸殿奏折类别。第一刀只实地实现 `disaster`（地方灾情）；其余为框架占位（不生成），人事奏折仍由
+ * PR3C-3b 的 personnelDecisions 承载，待统一列表后再并入。
+ */
+export type MemorialCategory = "personnel" | "treasury" | "disaster" | "military" | "justice";
+
+/** 奏折后果效果（仅 resource：funnel 可寻址的 nation/sovereign 字段）。批阅时按 EventEffect 经漏斗施加。 */
+export interface MemorialResourceEffect {
+  type: "resource";
+  pillar: "sovereign" | "nation";
+  field: string;
+  delta: number;
+}
+
+/** 一个灾情处置选项：选定后经 effect funnel 施加国家/皇帝属性变化（绝不直接改 state）。 */
+export interface DisasterOption {
+  /** 选项 id（同一奏折内唯一）；resolved 时写入 Memorial.resolution。 */
+  id: string;
+  label: string;
+  effects: MemorialResourceEffect[];
+}
+
+/** 各类别的结构化载荷（判别联合）。第一刀只实现 disaster。 */
+export type MemorialPayload =
+  | { category: "disaster"; regionId: string; severity: "minor" | "major"; options: DisasterOption[] };
+
+/**
+ * 待皇帝批阅/已批阅的奏折（pending 可存档；resolved 不可再次执行）。`sourceId` 为去重键；`id`（"mem_000001"）
+ * 为存储键，与 record key 一致。后果一律经正式 effect funnel，事件/UI 绝不直接改 state。
+ */
+export interface Memorial {
+  id: string;
+  category: MemorialCategory;
+  status: "pending" | "resolved";
+  createdAt: GameTime;
+  sourceId: string;
+  title: string;
+  summary: string;
+  payload: MemorialPayload;
+  resolvedAt?: GameTime;
+  /** 选定的 optionId（须属 payload 合法选项集）。 */
+  resolution?: string;
+}
+
 /** 候补能力（0–100）。任命时按官职类型匹配（匹配评分留 PR3B），PR3A 只生成保存。 */
 export interface CandidateAptitude {
   governance: number; // 政略/治理
@@ -871,6 +916,8 @@ export interface GameState {
   annualReviews: AnnualReviewRecord[];
   /** 待皇帝亲裁/已裁的人事决策（侍君请提拔亲族 / 获罪牵连 / 紫宸殿人事奏折；PR3C-3b）。 */
   personnelDecisions: Record<string, PersonnelDecision>;
+  /** 待批阅/已批阅的紫宸殿奏折（Phase 4A：地方灾情等前朝事务）。 */
+  memorials: Record<string, Memorial>;
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;
