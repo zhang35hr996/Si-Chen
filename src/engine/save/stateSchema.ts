@@ -14,7 +14,7 @@ import {
 import type { GameState } from "../state/types";
 import { validateJusticeState } from "../justice/validation";
 import { validateJusticeLinks } from "../justice/crossLink";
-import { validateColdPalaceIncidentLinks } from "../characters/coldPalaceValidator";
+import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks } from "../characters/coldPalaceValidator";
 
 const nonEmpty = z.string().min(1);
 
@@ -629,6 +629,26 @@ export const gameStateSchema = z.strictObject({
       resolved: z.boolean(),
     }),
   ),
+  coldPalaceInterventions: z.array(
+    z.discriminatedUnion("kind", [
+      z.strictObject({
+        id: nonEmpty,
+        residentId: idSchema,
+        effectId: nonEmpty,
+        kind: z.literal("personal_visit"),
+        occurredAt: gameTimeSchema,
+        favorDelta: z.number().int().positive(),
+      }),
+      z.strictObject({
+        id: nonEmpty,
+        residentId: idSchema,
+        effectId: nonEmpty,
+        kind: z.literal("physician"),
+        occurredAt: gameTimeSchema,
+        healthDelta: z.number().int().positive(),
+      }),
+    ]),
+  ).default([]),
   coldPalaceIncidents: z.array(
     z.discriminatedUnion("kind", [
       z.strictObject({
@@ -696,6 +716,7 @@ export const gameStateSchema = z.strictObject({
   const errs = [
     ...validateJusticeLinks(data as Parameters<typeof validateJusticeLinks>[0]),
     ...validateColdPalaceIncidentLinks(data as Parameters<typeof validateColdPalaceIncidentLinks>[0]),
+    ...validateColdPalaceInterventionLinks(data as Parameters<typeof validateColdPalaceInterventionLinks>[0]),
   ];
   for (const e of errs) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });

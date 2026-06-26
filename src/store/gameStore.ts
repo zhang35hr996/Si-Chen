@@ -67,6 +67,9 @@ import {
   staleIncidentIds,
   criticalIgnoreDelta,
   PHYSICIAN_RECOVERY_DELTA,
+  canInterveneInColdPalace,
+  planColdPalaceIntervention,
+  COLD_PALACE_INTERVENTION_AP_COST,
 } from "../engine/characters/coldPalaceIncidents";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
@@ -2267,6 +2270,74 @@ export class GameStore {
       }),
     );
     if (!txResult.ok) return err(txResult.error);
+    return ok(undefined);
+  }
+
+  /**
+   * 玩家干预长门宫（PUNISH-4E）。
+   *
+   * personal_visit: 向居民施加 +COLD_PALACE_VISIT_FAVOR_DELTA 好感。
+   * physician:      向居民施加 +COLD_PALACE_PHYSICIAN_HEALTH_DELTA 健康回复（非致死封顶）。
+   * 两者均扣 1 AP（via resolveTimedAction，保留跨月结算语义）并 append 干预记录。
+   * 本月已干预过则返回错误（幂等失败）。
+   */
+  interveneInColdPalace(
+    db: ContentDB,
+    charId: string,
+    kind: "personal_visit" | "physician",
+  ): Result<void, GameError[]> {
+    if (!canInterveneInColdPalace(this.state, charId, kind)) {
+      const { year, month } = this.state.calendar;
+      const standing = this.state.standing[charId];
+      if (!standing || standing.lifecycle === "deceased" || standing.lifecycle === "candidate") {
+        return err([stateError("COLD_PALACE_INVALID", `"${charId}" is not an active resident`)]);
+      }
+      if (this.state.calendar.ap < COLD_PALACE_INTERVENTION_AP_COST) {
+        return err([stateError("COLD_PALACE_INVALID", `insufficient AP for cold palace intervention (need ${COLD_PALACE_INTERVENTION_AP_COST}, have ${this.state.calendar.ap})`)]);
+      }
+      if (this.state.coldPalaceInterventions.some(
+        (i) => i.residentId === charId && i.occurredAt.year === year && i.occurredAt.month === month,
+      )) {
+        return err([stateError("COLD_PALACE_INVALID", `"${charId}" already received an intervention this month (${year}-${String(month).padStart(2, "0")})`)]);
+      }
+      return err([stateError("COLD_PALACE_INVALID", `"${charId}" is not currently in the cold palace`)]);
+    }
+
+    // Plan record before AP spend (effectId may change after potential month-rollover).
+    const intervention = planColdPalaceIntervention(this.state, charId, kind);
+
+    const now = toGameTime(this.state.calendar);
+    let actionEffects: readonly EventEffect[];
+
+    if (kind === "personal_visit") {
+      const visitIntervention = intervention as Extract<typeof intervention, { kind: "personal_visit" }>;
+      actionEffects = [{ type: "favor", char: charId, delta: visitIntervention.favorDelta } as EventEffect];
+    } else {
+      const physicianIntervention = intervention as Extract<typeof intervention, { kind: "physician" }>;
+      const { effects: healthEffects } = planHealthChange(this.state, {
+        subject: { kind: "consort", id: charId },
+        healthDelta: physicianIntervention.healthDelta,
+        cause: "illness",
+        at: now,
+      });
+      actionEffects = healthEffects;
+    }
+
+    // SPEND_AP via the time-advance path (preserves month-boundary settlement).
+    const txResult = this.resolveTimedAction(
+      db,
+      actionEffects,
+      { type: "SPEND_AP", amount: COLD_PALACE_INTERVENTION_AP_COST },
+    );
+    if (!txResult.ok) return err(txResult.error);
+
+    // Append intervention record in a second atomic write (resolveTimedAction already emitted).
+    this.state = {
+      ...this.state,
+      coldPalaceInterventions: [...this.state.coldPalaceInterventions, intervention],
+    };
+    this.emit();
+
     return ok(undefined);
   }
 

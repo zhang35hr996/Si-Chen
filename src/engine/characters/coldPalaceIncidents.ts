@@ -1,5 +1,5 @@
 /**
- * PUNISH-4C/4D: Cold-palace consequence incidents — scheduling and selectors.
+ * PUNISH-4C/4D/4E: Cold-palace consequence incidents and player interventions.
  *
  * Design principles:
  *  - Pure functions; no side-effects; no Date.now() / Math.random().
@@ -8,12 +8,15 @@
  *  - Regular health delta is non-lethal: cannot reduce health to 0.
  *  - Critical illness uses two-phase model: no health effect at tick time; effect at resolution.
  *  - Generated consorts supported via state.standing (no db.characters lookup needed).
+ *  - Interventions: at most one per resident per month; guarded by canInterveneInColdPalace.
  */
 import type {
   ColdPalaceIncident,
   ColdPalaceCriticalIllnessIncident,
   ColdPalaceIncidentKind,
   ColdPalaceEffect,
+  ColdPalaceIntervention,
+  ColdPalaceInterventionKind,
   GameState,
 } from "../state/types";
 import type { GameTime } from "../calendar/time";
@@ -337,4 +340,87 @@ export function planColdPalaceCriticalIncident(
   }
 
   return null;
+}
+
+// ── PUNISH-4E: Player intervention ──────────────────────────────────────────
+
+/** AP cost deducted for any cold-palace intervention. */
+export const COLD_PALACE_INTERVENTION_AP_COST = 1;
+/** Favor awarded to resident by personal_visit. */
+export const COLD_PALACE_VISIT_FAVOR_DELTA = 5;
+/** Health restored to resident by physician intervention. */
+export const COLD_PALACE_PHYSICIAN_HEALTH_DELTA = 10;
+
+/** Deterministic ID: "cpa_{residentId}_{year}_{MM}" — at most one per resident/month. */
+export function coldPalaceInterventionId(charId: string, year: number, month: number): string {
+  return `cpa_${charId}_${year}_${padMonth(month)}`;
+}
+
+/** True iff the resident has already been visited/treated this calendar month. */
+export function hasIntervenedThisMonth(
+  interventions: readonly ColdPalaceIntervention[],
+  charId: string,
+  year: number,
+  month: number,
+): boolean {
+  const id = coldPalaceInterventionId(charId, year, month);
+  return interventions.some((i) => i.id === id);
+}
+
+/**
+ * Eligibility check for a player intervention.
+ *
+ * Conditions:
+ *  - Resident exists, not deceased/candidate.
+ *  - Resident currently has an active cold-palace effect.
+ *  - No intervention already recorded for this resident this month.
+ *  - Player has ≥ 1 AP remaining.
+ */
+export function canInterveneInColdPalace(
+  state: GameState,
+  charId: string,
+  _kind: ColdPalaceInterventionKind,
+): boolean {
+  const standing = state.standing[charId];
+  if (!standing) return false;
+  if (standing.lifecycle === "deceased" || standing.lifecycle === "candidate") return false;
+  const { year, month, dayIndex } = state.calendar;
+  if (activeColdPalaceEffectFor(state, charId, dayIndex) === undefined) return false;
+  if (hasIntervenedThisMonth(state.coldPalaceInterventions, charId, year, month)) return false;
+  if (state.calendar.ap < COLD_PALACE_INTERVENTION_AP_COST) return false;
+  return true;
+}
+
+/**
+ * Pure planner — returns an unattached ColdPalaceIntervention record.
+ * The caller must validate eligibility via canInterveneInColdPalace before calling this.
+ */
+export function planColdPalaceIntervention(
+  state: GameState,
+  charId: string,
+  kind: ColdPalaceInterventionKind,
+): ColdPalaceIntervention {
+  const { year, month, period, dayIndex } = state.calendar;
+  const effect = activeColdPalaceEffectFor(state, charId, dayIndex)!;
+  const occurredAt = { year, month, period, dayIndex };
+  const id = coldPalaceInterventionId(charId, year, month);
+
+  if (kind === "personal_visit") {
+    return {
+      id,
+      residentId: charId,
+      effectId: effect.id,
+      kind: "personal_visit",
+      occurredAt,
+      favorDelta: COLD_PALACE_VISIT_FAVOR_DELTA,
+    };
+  }
+  return {
+    id,
+    residentId: charId,
+    effectId: effect.id,
+    kind: "physician",
+    occurredAt,
+    healthDelta: COLD_PALACE_PHYSICIAN_HEALTH_DELTA,
+  };
 }

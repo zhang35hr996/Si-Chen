@@ -2148,6 +2148,10 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onDrawFortune={() => templeAction("fortune")}
           onViewProfile={(id) => setProfileCharId(id)}
           onRestoreFromColdPalace={(id) => setRestoreCharId(id)}
+          onInterveneColdPalace={(charId, kind) => {
+            store.interveneInColdPalace(db, charId, kind);
+            doAutosave();
+          }}
         />
       )}
       {view === "event" && activeEventId && (
