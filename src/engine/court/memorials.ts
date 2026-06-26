@@ -12,7 +12,19 @@ import { err, ok, type Result } from "../infra/result";
 import { gestationRoll } from "../characters/gestation";
 import { applyEffects } from "../effects/funnel";
 import { applyTreasuryTransaction } from "./treasuryLedger";
-import type { GameState, Memorial, MemorialOption, MemorialResourceEffect } from "../state/types";
+import type {
+  FrontierAssessment,
+  FrontierTheaterId,
+  FrontierSeverity,
+  GameState,
+  Memorial,
+  MemorialOption,
+  MemorialResourceEffect,
+  MilitaryMemorialMatter,
+  MilitaryMemorialUrgency,
+} from "../state/types";
+import type { FrontierAssessmentPlan } from "./frontierAssessment";
+import { hasFrontierAssessmentForYear, planFrontierAssessment } from "./frontierAssessment";
 
 /** 已知地域（id → 显示名）。灾情奏折只在此集合内生成；validator 据此判定 regionId 合法。 */
 export const DISASTER_REGIONS: Record<string, string> = {
@@ -243,6 +255,384 @@ export function maybeGenerateAnnualTreasuryMemorial(state: GameState, at: GameTi
   return generateTreasuryMemorial(state, at)?.state ?? state;
 }
 
+// ── 军务奏折（Phase 4C）────────────────────────────────────────────────────────
+
+/** 军务奏折各选项国库消耗常量（负值=支出；undefined=无变化）。 */
+const MILITARY_COSTS = {
+  annual_readiness: {
+    drill:           { treasuryDelta: -600 as const },
+    repair_armories: { treasuryDelta: -800 as const },
+    defer_readiness: { treasuryDelta: undefined },
+  },
+  border_fortification: {
+    fortify_passes:  { treasuryDelta: -1200 as const },
+    rotate_garrison: { treasuryDelta: -700 as const },
+    local_levy:      { treasuryDelta: undefined },
+  },
+  frontier_incursion: {
+    urgent: {
+      mobilize:  { treasuryDelta: -1800 as const },
+      hold_line: { treasuryDelta: -1200 as const },
+      negotiate: { treasuryDelta: -600 as const },
+    },
+    critical: {
+      mobilize:  { treasuryDelta: -2800 as const },
+      hold_line: { treasuryDelta: -1800 as const },
+      negotiate: { treasuryDelta: -1000 as const },
+    },
+  },
+} as const;
+
+/** 兵备整饬（annual_readiness, routine）三选项。 */
+function buildAnnualReadinessOptions(): MemorialOption[] {
+  return [
+    {
+      id: "drill",
+      label: "操练兵丁",
+      effects: [
+        res("nation", "military", 5),
+        res("nation", "borderPressure", -2),
+        res("nation", "productivity", -1),
+      ],
+      treasuryDelta: MILITARY_COSTS.annual_readiness.drill.treasuryDelta,
+    },
+    {
+      id: "repair_armories",
+      label: "修葺武库",
+      effects: [
+        res("nation", "military", 3),
+        res("nation", "governance", 2),
+        res("nation", "corruption", -1),
+      ],
+      treasuryDelta: MILITARY_COSTS.annual_readiness.repair_armories.treasuryDelta,
+    },
+    {
+      id: "defer_readiness",
+      label: "暂缓整备",
+      effects: [
+        res("nation", "military", -2),
+        res("nation", "borderPressure", 3),
+        res("nation", "rumor", 1),
+      ],
+    },
+  ];
+}
+
+/** 边防加固（border_fortification, routine）三选项。 */
+function buildBorderFortificationOptions(): MemorialOption[] {
+  return [
+    {
+      id: "fortify_passes",
+      label: "增修关隘",
+      effects: [
+        res("nation", "borderPressure", -7),
+        res("nation", "military", 2),
+        res("nation", "productivity", -2),
+      ],
+      treasuryDelta: MILITARY_COSTS.border_fortification.fortify_passes.treasuryDelta,
+    },
+    {
+      id: "rotate_garrison",
+      label: "轮戍边军",
+      effects: [
+        res("nation", "military", 5),
+        res("nation", "borderPressure", -4),
+        res("nation", "ministerLoyalty", -1),
+      ],
+      treasuryDelta: MILITARY_COSTS.border_fortification.rotate_garrison.treasuryDelta,
+    },
+    {
+      id: "local_levy",
+      label: "就地募兵",
+      effects: [
+        res("nation", "military", 4),
+        res("nation", "borderPressure", -2),
+        res("nation", "publicSupport", -5),
+        res("nation", "productivity", -3),
+      ],
+    },
+  ];
+}
+
+/** 边境入侵（frontier_incursion）三选项，按紧急度分档。 */
+function buildFrontierIncursionOptions(urgency: "urgent" | "critical"): MemorialOption[] {
+  const costs = MILITARY_COSTS.frontier_incursion[urgency];
+  if (urgency === "urgent") {
+    return [
+      {
+        id: "mobilize",
+        label: "调兵出征",
+        effects: [
+          res("nation", "military", 6),
+          res("nation", "borderPressure", -8),
+          res("nation", "publicSupport", -2),
+          res("sovereign", "fatigue", 2),
+        ],
+        treasuryDelta: costs.mobilize.treasuryDelta,
+      },
+      {
+        id: "hold_line",
+        label: "坚守待援",
+        effects: [
+          res("nation", "military", 3),
+          res("nation", "borderPressure", -5),
+          res("nation", "productivity", -3),
+          res("nation", "governance", 1),
+        ],
+        treasuryDelta: costs.hold_line.treasuryDelta,
+      },
+      {
+        id: "negotiate",
+        label: "遣使议和",
+        effects: [
+          res("nation", "borderPressure", -4),
+          res("sovereign", "prestige", -3),
+          res("nation", "rumor", 2),
+        ],
+        treasuryDelta: costs.negotiate.treasuryDelta,
+      },
+    ];
+  }
+  // critical
+  return [
+    {
+      id: "mobilize",
+      label: "调兵出征",
+      effects: [
+        res("nation", "military", 8),
+        res("nation", "borderPressure", -10),
+        res("nation", "publicSupport", -3),
+        res("sovereign", "fatigue", 3),
+      ],
+      treasuryDelta: costs.mobilize.treasuryDelta,
+    },
+    {
+      id: "hold_line",
+      label: "坚守待援",
+      effects: [
+        res("nation", "military", 4),
+        res("nation", "borderPressure", -7),
+        res("nation", "productivity", -4),
+        res("nation", "governance", 1),
+      ],
+      treasuryDelta: costs.hold_line.treasuryDelta,
+    },
+    {
+      id: "negotiate",
+      label: "遣使议和",
+      effects: [
+        res("nation", "borderPressure", -6),
+        res("sovereign", "prestige", -5),
+        res("sovereign", "regimeSecurity", -2),
+        res("nation", "rumor", 3),
+      ],
+      treasuryDelta: costs.negotiate.treasuryDelta,
+    },
+  ];
+}
+
+function matterFromSeverity(severity: FrontierSeverity): MilitaryMemorialMatter {
+  if (severity === "stable") return "annual_readiness";
+  if (severity === "watch") return "border_fortification";
+  return "frontier_incursion";
+}
+
+function urgencyFromSeverity(severity: FrontierSeverity): MilitaryMemorialUrgency {
+  if (severity === "stable" || severity === "watch") return "routine";
+  if (severity === "urgent") return "urgent";
+  return "critical";
+}
+
+const THEATER_DISPLAY: Record<FrontierTheaterId, string> = {
+  northern_frontier: "北境",
+  western_frontier:  "西陲",
+  southern_frontier: "南疆",
+};
+
+function militaryTitle(
+  matter: MilitaryMemorialMatter,
+  urgency: MilitaryMemorialUrgency,
+  theaterId: FrontierTheaterId,
+): string {
+  const name = THEATER_DISPLAY[theaterId];
+  if (matter === "annual_readiness") return `兵部奏请整饬${name}边备`;
+  if (matter === "border_fortification") return `${name}边镇奏请增修关防`;
+  if (urgency === "urgent") return `${name}边军急奏敌骑犯境`;
+  return `${name}八百里军报边关告急`;
+}
+
+function militarySummary(
+  matter: MilitaryMemorialMatter,
+  urgency: MilitaryMemorialUrgency,
+  theaterId: FrontierTheaterId,
+): string {
+  const name = THEATER_DISPLAY[theaterId];
+  if (matter === "annual_readiness") return `${name}边备入档，兵部请旨核定年度整饬方略。`;
+  if (matter === "border_fortification") return `${name}边镇告警，敌情活跃，请陛下裁示增修关防。`;
+  if (urgency === "urgent") return `${name}急报：敌骑犯境，请陛下即刻裁示应对之策。`;
+  return `${name}八百里加急：边关告急，形势危殆，请陛下紧急裁示。`;
+}
+
+/** 按 matter + urgency 返回对应选项集。 */
+function buildMilitaryOptions(
+  matter: MilitaryMemorialMatter,
+  urgency: MilitaryMemorialUrgency,
+): MemorialOption[] {
+  if (matter === "annual_readiness") return buildAnnualReadinessOptions();
+  if (matter === "border_fortification") return buildBorderFortificationOptions();
+  // frontier_incursion: urgency is "urgent" | "critical"（never "routine" for this matter）
+  return buildFrontierIncursionOptions(urgency as "urgent" | "critical");
+}
+
+/** 军务奏折各 matter 所要求的选项 id 集（供校验 exact match）。 */
+export const MILITARY_OPTION_IDS: Record<MilitaryMemorialMatter, string[]> = {
+  annual_readiness:    ["drill", "repair_armories", "defer_readiness"],
+  border_fortification:["fortify_passes", "rotate_garrison", "local_levy"],
+  frontier_incursion:  ["mobilize", "hold_line", "negotiate"],
+};
+
+/**
+ * 生成一条军务奏折。检查：年份一致、同源去重、无 pending 军务奏折、快照有效。
+ * 任一条件不满足返回 null（不抛）。
+ */
+export function generateMilitaryMemorial(
+  state: GameState,
+  assessment: FrontierAssessmentPlan,
+  at: GameTime,
+): { state: GameState; memorial: Memorial } | null {
+  // 1. 年份一致
+  if (at.year !== assessment.year) return null;
+
+  const matter = matterFromSeverity(assessment.severity);
+  const urgency = urgencyFromSeverity(assessment.severity);
+  const sourceId = `military:${matter}:${assessment.theaterId}:${assessment.year}`;
+
+  // 2. 同源去重（pending 或 resolved 均算已存在）
+  if (hasMemorialForSource(state, sourceId)) return null;
+
+  // 3. 不得存在其他 pending 军务奏折
+  const hasPendingMilitary = Object.values(state.memorials).some(
+    (m) => m.status === "pending" && m.payload.category === "military",
+  );
+  if (hasPendingMilitary) return null;
+
+  // 4. 快照值合法（0–100）
+  if (
+    assessment.pressureAfter < 0 || assessment.pressureAfter > 100 ||
+    assessment.militaryAtAssessment < 0 || assessment.militaryAtAssessment > 100
+  ) return null;
+
+  const id = nextMemorialId(state);
+  const options = buildMilitaryOptions(matter, urgency);
+  const memorial: Memorial = {
+    id,
+    category: "military",
+    status: "pending",
+    createdAt: at,
+    sourceId,
+    title: militaryTitle(matter, urgency, assessment.theaterId),
+    summary: militarySummary(matter, urgency, assessment.theaterId),
+    payload: {
+      category: "military",
+      matter,
+      urgency,
+      theaterId: assessment.theaterId,
+      pressureAtCreation: assessment.pressureAfter,
+      militaryAtCreation: assessment.militaryAtAssessment,
+      options,
+    },
+  };
+  return {
+    state: { ...state, memorials: { ...state.memorials, [id]: memorial } },
+    memorial,
+  };
+}
+
+/**
+ * 年度边情评估 seam（生产可达）：经 funnel 应用 borderPressure 漂移 → 生成军务奏折 → 追加评估记录。
+ * 幂等：本年已有评估则直接返回原 state。
+ */
+export function applyAnnualFrontierAssessment(
+  state: GameState,
+  db: ContentDB,
+  at: GameTime,
+): GameState {
+  // 1. 幂等检查
+  if (hasFrontierAssessmentForYear(state, at.year)) return state;
+
+  // 2. 规划（纯函数，null = 已有本年记录，理论上不应再次进入）
+  const plan = planFrontierAssessment(state, at);
+  if (!plan) return state;
+
+  // 3. 应用 borderPressure 漂移（经 funnel，尊重 AXIS_CAP；失败则沿用原 state，不硬失败）
+  let pressureUpdated = state;
+  const pressureEffect: EventEffect = {
+    type: "resource",
+    pillar: "nation",
+    field: "borderPressure",
+    delta: plan.pressureDelta,
+  };
+  const effectResult = applyEffects(db, state, [pressureEffect], { sceneId: "frontier_assessment" });
+  if (effectResult.ok) {
+    pressureUpdated = effectResult.value;
+  } else {
+    console.warn("[applyAnnualFrontierAssessment] borderPressure effect failed:", effectResult.error);
+  }
+
+  // 4. 生成军务奏折
+  const memorialResult = generateMilitaryMemorial(pressureUpdated, plan, at);
+
+  // 5. 构造 generation 字段
+  let generation: FrontierAssessment["generation"];
+  if (memorialResult) {
+    generation = { status: "generated", memorialId: memorialResult.memorial.id };
+    pressureUpdated = memorialResult.state;
+  } else {
+    // 被已有 pending 军务奏折阻拦
+    const pendingMilitary = Object.values(pressureUpdated.memorials).find(
+      (m) => m.status === "pending" && m.payload.category === "military",
+    );
+    if (!pendingMilitary) {
+      // 不应出现（同源重复或快照异常）：跳过追加评估记录，仅返回 pressureUpdated
+      return pressureUpdated;
+    }
+    generation = { status: "blocked_by_pending", blockingMemorialId: pendingMilitary.id };
+  }
+
+  // 6. 追加 FrontierAssessment 记录
+  const assessment: FrontierAssessment = {
+    id: plan.id,
+    year: plan.year,
+    assessedAt: plan.assessedAt,
+    theaterId: plan.theaterId,
+    pressureBefore: plan.pressureBefore,
+    pressureDelta: plan.pressureDelta,
+    pressureAfter: plan.pressureAfter,
+    militaryAtAssessment: plan.militaryAtAssessment,
+    governanceAtAssessment: plan.governanceAtAssessment,
+    publicSupportAtAssessment: plan.publicSupportAtAssessment,
+    severity: plan.severity,
+    generation,
+  };
+
+  return {
+    ...pressureUpdated,
+    frontierAssessments: [...pressureUpdated.frontierAssessments, assessment],
+  };
+}
+
+/**
+ * 年度军务奏折生成便捷入口（与 maybeGenerateAnnualTreasuryMemorial 命名一致）。
+ * 同 applyAnnualFrontierAssessment。
+ */
+export function maybeGenerateAnnualMilitaryAssessment(
+  state: GameState,
+  db: ContentDB,
+  at: GameTime,
+): GameState {
+  return applyAnnualFrontierAssessment(state, db, at);
+}
+
 // ── 奏折批阅 ─────────────────────────────────────────────────────────────────
 
 export interface ResolveMemorialResult {
@@ -366,6 +756,77 @@ export function validateMemorials(state: GameState): GameError[] {
       for (const opt of m.payload.options) {
         if (!TREASURY_REQUIRED.has(opt.id as typeof TREASURY_OPTION_IDS[number])) {
           e("MEMORIAL_EXTRA_OPTION", `财政奏折「${m.id}」包含多余选项「${opt.id}」`, { id: m.id, extraOption: opt.id });
+        }
+      }
+    }
+
+    // military 专属：matter / urgency / theaterId / 快照 / 选项集精确匹配。
+    if (m.payload.category === "military") {
+      const p = m.payload;
+
+      const VALID_MATTERS: ReadonlySet<string> = new Set<MilitaryMemorialMatter>([
+        "annual_readiness", "border_fortification", "frontier_incursion",
+      ]);
+      if (!VALID_MATTERS.has(p.matter))
+        e("MEMORIAL_BAD_MATTER", `军务奏折「${m.id}」matter「${p.matter}」非法`, { id: m.id });
+
+      const VALID_URGENCIES: ReadonlySet<string> = new Set<MilitaryMemorialUrgency>([
+        "routine", "urgent", "critical",
+      ]);
+      if (!VALID_URGENCIES.has(p.urgency))
+        e("MEMORIAL_BAD_URGENCY", `军务奏折「${m.id}」urgency「${p.urgency}」非法`, { id: m.id });
+
+      const VALID_THEATERS: ReadonlySet<string> = new Set<FrontierTheaterId>([
+        "northern_frontier", "western_frontier", "southern_frontier",
+      ]);
+      if (!VALID_THEATERS.has(p.theaterId))
+        e("MEMORIAL_BAD_THEATER", `军务奏折「${m.id}」theaterId「${p.theaterId}」非法`, { id: m.id });
+
+      if (!Number.isInteger(p.pressureAtCreation) || p.pressureAtCreation < 0 || p.pressureAtCreation > 100)
+        e("MEMORIAL_BAD_SNAPSHOT", `军务奏折「${m.id}」pressureAtCreation「${p.pressureAtCreation}」不在 0–100`, { id: m.id });
+
+      if (!Number.isInteger(p.militaryAtCreation) || p.militaryAtCreation < 0 || p.militaryAtCreation > 100)
+        e("MEMORIAL_BAD_SNAPSHOT", `军务奏折「${m.id}」militaryAtCreation「${p.militaryAtCreation}」不在 0–100`, { id: m.id });
+
+      // matter↔urgency 约束
+      if (p.matter === "annual_readiness" && p.urgency !== "routine")
+        e("MEMORIAL_MATTER_URGENCY_MISMATCH", `军务奏折「${m.id}」annual_readiness 要求 urgency=routine，实为「${p.urgency}」`, { id: m.id });
+      if (p.matter === "border_fortification" && p.urgency !== "routine")
+        e("MEMORIAL_MATTER_URGENCY_MISMATCH", `军务奏折「${m.id}」border_fortification 要求 urgency=routine，实为「${p.urgency}」`, { id: m.id });
+      if (p.matter === "frontier_incursion" && p.urgency !== "urgent" && p.urgency !== "critical")
+        e("MEMORIAL_MATTER_URGENCY_MISMATCH", `军务奏折「${m.id}」frontier_incursion 要求 urgency=urgent/critical，实为「${p.urgency}」`, { id: m.id });
+
+      // 选项集精确匹配
+      if (VALID_MATTERS.has(p.matter)) {
+        const expected = new Set(MILITARY_OPTION_IDS[p.matter as MilitaryMemorialMatter]);
+        const present = new Set(p.options.map((o) => o.id));
+        for (const req of expected) {
+          if (!present.has(req))
+            e("MEMORIAL_MISSING_OPTION", `军务奏折「${m.id}」缺少必需选项「${req}」`, { id: m.id, missing: req });
+        }
+        for (const opt of p.options) {
+          if (!expected.has(opt.id))
+            e("MEMORIAL_EXTRA_OPTION", `军务奏折「${m.id}」包含多余选项「${opt.id}」`, { id: m.id, extraOption: opt.id });
+        }
+      }
+
+      // effects fields：nation/sovereign 字段合法性
+      const NATION_FIELDS = new Set([
+        "military", "treasury", "publicSupport", "productivity", "governance",
+        "consortClanPower", "ministerLoyalty", "corruption", "clanDiscontent",
+        "rumor", "borderPressure",
+      ]);
+      const SOVEREIGN_FIELDS = new Set([
+        "health", "diligence", "prestige", "martial", "statecraft",
+        "cruelty", "fatigue", "regimeSecurity",
+      ]);
+      for (const opt of p.options) {
+        for (const eff of opt.effects) {
+          const validSet = eff.pillar === "nation" ? NATION_FIELDS : SOVEREIGN_FIELDS;
+          if (!validSet.has(eff.field))
+            e("MEMORIAL_BAD_EFFECT_FIELD", `军务奏折「${m.id}」选项「${opt.id}」effect field「${eff.field}」(pillar=${eff.pillar})不合法`, {
+              id: m.id, optionId: opt.id, pillar: eff.pillar, field: eff.field,
+            });
         }
       }
     }
