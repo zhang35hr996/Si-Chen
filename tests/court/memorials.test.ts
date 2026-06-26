@@ -124,6 +124,23 @@ describe("validateMemorials — corruption", () => {
     expect(codes(withMemorial(s, bad))).toContain("MEMORIAL_BAD_REGION");
   });
 
+  it("empty options list", () => {
+    const s = createNewGameState(db, 1);
+    const m = base(s);
+    if (m.payload.category !== "disaster") return;
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: [] } };
+    expect(codes(withMemorial(s, bad))).toContain("MEMORIAL_NO_OPTIONS");
+  });
+
+  it("duplicate option id", () => {
+    const s = createNewGameState(db, 1);
+    const m = base(s);
+    if (m.payload.category !== "disaster") return;
+    const dupeOption = m.payload.options[0]!;
+    const bad: Memorial = { ...m, payload: { ...m.payload, options: [dupeOption, dupeOption] } };
+    expect(codes(withMemorial(s, bad))).toContain("MEMORIAL_DUP_OPTION");
+  });
+
   it("pending carrying a resolution / resolved missing fields / bad resolution / resolvedAt<createdAt", () => {
     const s = createNewGameState(db, 1);
     const m = base(s);

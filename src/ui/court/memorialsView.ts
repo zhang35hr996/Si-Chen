@@ -20,7 +20,6 @@ const FIELD_LABEL: Record<string, string> = {
   productivity: "生产力",
   rumor: "谣言",
   regimeSecurity: "皇权安全",
-  governance: "朝政",
 };
 
 export interface MemorialOptionView {

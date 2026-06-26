@@ -39,7 +39,7 @@ import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/offi
 import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmentCommand } from "../engine/officials/officialPunishment";
 import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionResolve";
 import { generateAnnualPersonnelEvents, generateFamilyImplication } from "../engine/officials/personnelDecisions";
-import { maybeGenerateAnnualDisaster, resolveMemorial } from "../engine/court/memorials";
+import { maybeGenerateAnnualDisaster, resolveMemorial as resolveMemorialEngine } from "../engine/court/memorials";
 import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
@@ -402,7 +402,7 @@ export class GameStore {
    * 原子批阅一条奏折（Phase 4A）：经正式 effect funnel 施加选项后果。失败 state 不变、不 emit；成功一次 emit。
    */
   resolveMemorial(db: ContentDB, memorialId: string, optionId: string): Result<void, GameError> {
-    const r = resolveMemorial(this.state, db, memorialId, optionId, toGameTime(this.state.calendar));
+    const r = resolveMemorialEngine(this.state, db, memorialId, optionId, toGameTime(this.state.calendar));
     if (!r.ok) return r;
     this.state = r.value.state;
     this.emit();
