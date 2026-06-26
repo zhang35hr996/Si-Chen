@@ -1,0 +1,99 @@
+/** store 奏折批阅命令 + 年度灾情生产 seam + v18→v19 迁移（Phase 4A）。 */
+import { describe, expect, it } from "vitest";
+import { GameStore } from "../../src/store/gameStore";
+import { generateDisasterMemorial, getPendingMemorials } from "../../src/engine/court/memorials";
+import { validateMemorials } from "../../src/engine/court/memorials";
+import { checksumOf } from "../../src/engine/save/canonical";
+import { createSaveData, readSlot, SAVE_FORMAT_VERSION, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
+import { createMemoryStorage } from "../../src/engine/save/storage";
+import { createNewGameState } from "../../src/engine/state/newGame";
+import { dayIndexOf, toGameTime } from "../../src/engine/calendar/time";
+import type { GameState } from "../../src/engine/state/types";
+import { loadRealContent } from "../helpers/contentFixture";
+
+const db = loadRealContent();
+
+describe("store.resolveMemorial", () => {
+  it("emits once on success and applies the option effect through the funnel", () => {
+    const store = new GameStore();
+    const g = generateDisasterMemorial(createNewGameState(db, 1), "jiangnan", "major", toGameTime(createNewGameState(db, 1).calendar))!;
+    store.loadState(g.state);
+    let emits = 0;
+    store.subscribe(() => { emits += 1; });
+    const before = store.getState().resources.nation.publicSupport;
+    const r = store.resolveMemorial(db, g.memorial.id, "relief");
+    expect(r.ok).toBe(true);
+    expect(emits).toBe(1);
+    expect(store.getState().resources.nation.publicSupport).toBeGreaterThan(before);
+    expect(store.getState().memorials[g.memorial.id]!.status).toBe("resolved");
+  });
+
+  it("does not emit and leaves state unchanged on a bad option", () => {
+    const store = new GameStore();
+    const g = generateDisasterMemorial(createNewGameState(db, 1), "jiangnan", "minor", toGameTime(createNewGameState(db, 1).calendar))!;
+    store.loadState(g.state);
+    let emits = 0;
+    store.subscribe(() => { emits += 1; });
+    const snap = JSON.stringify(store.getState());
+    const r = store.resolveMemorial(db, g.memorial.id, "nope");
+    expect(r.ok).toBe(false);
+    expect(emits).toBe(0);
+    expect(JSON.stringify(store.getState())).toBe(snap);
+  });
+});
+
+describe("annual disaster seam (production-reachable)", () => {
+  it("crossing into a new year generates a disaster memorial; idempotent within the year", () => {
+    const store = new GameStore();
+    const s = createNewGameState(db, 1);
+    store.loadState({ ...s, calendar: { ...s.calendar, year: 1, month: 12, period: "late", dayIndex: dayIndexOf(1, 12, "late"), ap: 1 } });
+    expect(getPendingMemorials(store.getState())).toHaveLength(0);
+
+    const r = store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    expect(r.ok).toBe(true);
+    expect(store.getState().calendar.year).toBe(2);
+    expect(store.getState().calendar.month).toBe(1);
+    const pending = getPendingMemorials(store.getState());
+    expect(pending.length).toBe(1); // seam 真实可达
+    expect(pending[0]!.category).toBe("disaster");
+    expect(validateMemorials(store.getState())).toEqual([]);
+
+    const countAfter = Object.keys(store.getState().memorials).length;
+    store.advanceTime(db, { type: "SKIP_REMAINDER" }); // 同年再推进
+    expect(Object.keys(store.getState().memorials).length).toBe(countAfter); // 不重复
+  });
+
+  it("the generated disaster memorial is resolvable through the store", () => {
+    const store = new GameStore();
+    const s = createNewGameState(db, 1);
+    store.loadState({ ...s, calendar: { ...s.calendar, year: 1, month: 12, period: "late", dayIndex: dayIndexOf(1, 12, "late"), ap: 1 } });
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    const m = getPendingMemorials(store.getState())[0]!;
+    const r = store.resolveMemorial(db, m.id, "relief");
+    expect(r.ok).toBe(true);
+    expect(store.getState().memorials[m.id]!.status).toBe("resolved");
+  });
+});
+
+describe("save migration v18 → v19 (memorials backfill)", () => {
+  it("SAVE_FORMAT_VERSION ≥ 19", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(19);
+  });
+
+  function makeV18Save(): string {
+    const s = createNewGameState(db);
+    const stateV18 = { ...s } as Record<string, unknown>;
+    delete stateV18.memorials;
+    const env = { ...createSaveData(db, s, "slot1"), formatVersion: 18, state: stateV18, checksum: checksumOf(stateV18 as unknown as GameState) };
+    return JSON.stringify(env);
+  }
+
+  it("v18 save without memorials migrates to v19 with an empty record", () => {
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV18Save());
+    const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(loaded.value.state.memorials).toEqual({});
+  });
+});

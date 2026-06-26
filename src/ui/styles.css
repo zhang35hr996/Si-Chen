@@ -4379,3 +4379,30 @@ button:active:enabled {
 @media (max-width: 430px) {
   .personnel-card__facts { grid-template-columns: 1fr; }
 }
+
+/* ── 前朝奏折批阅（Phase 4A） ───────────────────────────────────────── */
+.memorials-screen {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px 28px; overflow-y: auto; max-height: 100%; color: #f3ece0;
+}
+.memorials-screen__header { display: flex; align-items: center; gap: 12px; }
+.memorials-screen__back { background: none; border: none; color: inherit; opacity: 0.85; cursor: pointer; padding: 6px 0; font-size: 14px; }
+.memorials-screen__title { margin: 0; font-size: 17px; }
+.memorials-screen__empty { opacity: 0.7; font-size: 14px; padding: 12px 4px; }
+.memorials-screen__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.memorials-screen__notice { margin-top: 4px; font-size: 13px; padding: 6px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); }
+.memorial-card {
+  border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px; padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04); display: flex; flex-direction: column; gap: 6px;
+}
+.memorial-card__kind { margin: 0; font-size: 13px; color: #d4af37; letter-spacing: 0.04em; }
+.memorial-card__title { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.memorial-card__summary { margin: 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.memorial-card__options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.memorial-option__btn {
+  min-height: 44px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08); color: inherit; cursor: pointer; padding: 8px 12px;
+  width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px;
+}
+.memorial-option__label { font-size: 14px; }
+.memorial-option__effects { font-size: 12px; opacity: 0.75; overflow-wrap: anywhere; }

@@ -1,11 +1,15 @@
 # 奏折与前朝事件框架（Phase 4A · 第一刀）— 规格与测试计划
 
-**状态：Spec only（设计，未实现）。** 本文是 Phase 4A 第一刀的实现规格与测试计划，落到 docs 供后续按
-TDD 实现。本刀**不**做完整 Phase 4：不加入大量剧情模板，只搭通用奏折框架 + 一个非人事范例（地方灾情）。
+**状态：Implemented（disaster 切片）。** 通用 Memorial 模型 + **地方灾情**奏折已落地（引擎 `engine/court/memorials.ts`、
+store 命令、年度生产 seam、schema/迁移 v18→v19、validator、紫宸殿 UI、测试）。其余类别（treasury/military/justice）
+为框架占位（枚举存在，无 payload 变体、不生成）。本刀**不**做完整 Phase 4，不加入大量剧情模板。
 
-> 本刀基于 **PR3C-3b**（人事决策 `personnelDecisions`）。人事奏折已在 PR3C-3b 落地并经正式职位 API
-> （`punishOfficial` / `promoteOfficialAdministratively`）执行；本框架**复用**而非取代它——personnel 类奏折
-> 委托既有 `resolvePersonnelDecision`，绝不另开人事职位变更路径。
+> **与人事奏折的边界（本切片）**：人事奏折仍由 **PR3C-3b** 的 `personnelDecisions` 在其自有紫宸殿界面承载，
+> **未**并入本框架（避免改动已上线的 PR3C-3b UI）。`MemorialPayload` 本切片只含 `disaster` 变体；personnel 委托
+> （memorial 包壳 → `resolvePersonnelDecision`）与统一列表留作后续。所有职位变更仍只经 PR3C-3b 的正式 API。
+>
+> **treasury 成本**：`resources.nation.treasury` 不在 effect funnel 可寻址字段内，故本切片灾情后果只用 funnel 可寻址的
+> nation/sovereign 字段表达取舍，未实现 treasury 成本前置（留作后续，需经专门 treasury 通道）。
 
 ## 一、目标与边界
 

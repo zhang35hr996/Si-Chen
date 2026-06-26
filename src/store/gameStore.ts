@@ -39,6 +39,7 @@ import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/offi
 import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmentCommand } from "../engine/officials/officialPunishment";
 import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionResolve";
 import { generateAnnualPersonnelEvents, generateFamilyImplication } from "../engine/officials/personnelDecisions";
+import { maybeGenerateAnnualDisaster, resolveMemorial } from "../engine/court/memorials";
 import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
 import { bestow, grantItem, spendCoins, type RecipientKind, type BestowResult } from "./treasury";
@@ -395,6 +396,17 @@ export class GameStore {
     this.state = r.value.state;
     this.emit();
     return ok(r.value.punishmentId ? { punishmentId: r.value.punishmentId } : {});
+  }
+
+  /**
+   * 原子批阅一条奏折（Phase 4A）：经正式 effect funnel 施加选项后果。失败 state 不变、不 emit；成功一次 emit。
+   */
+  resolveMemorial(db: ContentDB, memorialId: string, optionId: string): Result<void, GameError> {
+    const r = resolveMemorial(this.state, db, memorialId, optionId, toGameTime(this.state.calendar));
+    if (!r.ok) return r;
+    this.state = r.value.state;
+    this.emit();
+    return ok(undefined);
   }
 
   /**
@@ -1544,10 +1556,11 @@ export class GameStore {
       }
     }
 
-    // 跨入正月（新年第一月）→ 官员年度 tick（增龄/死亡/告老请求）。
+    // 跨入正月（新年第一月）→ 官员年度 tick（增龄/死亡/告老请求）+ 年度地方灾情奏报（Phase 4A）。
     if (monthChanged && candidate.calendar.month === 1) {
       const beforeOfficialTick = candidate;
       candidate = buildOfficialYearlyTick(candidate, db, toGameTime(candidate.calendar));
+      candidate = maybeGenerateAnnualDisaster(candidate, toGameTime(candidate.calendar)); // 确定性、有界、同源去重
       collector?.capturePhaseScheduled("official_yearly_tick", diffGameState(beforeOfficialTick, candidate));
     }
 

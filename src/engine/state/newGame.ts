@@ -126,6 +126,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     examinationResults: [],
     annualReviews: [],
     personnelDecisions: {},
+    memorials: {},
     memories,
     bedchamber,
     eventLog: [],

@@ -11,6 +11,7 @@
  */
 import type { ContentDB } from "../content/loader";
 import { validateOfficialWorld } from "../officials/validation";
+import { validateMemorials } from "../court/memorials";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
@@ -315,6 +316,15 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     }
     return { ...env, formatVersion: 18, state, checksum: checksumOf(state) };
   },
+  // v18 → v19: 奏折框架（Phase 4A）。旧档无任何奏折，补空记录。
+  18: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    if ((state as unknown as { memorials?: unknown }).memorials === undefined) {
+      (state as unknown as { memorials: Record<string, never> }).memorials = {};
+    }
+    return { ...env, formatVersion: 19, state, checksum: checksumOf(state) };
+  },
 };
 
 export interface SaveSystemOptions {
@@ -518,6 +528,18 @@ function validateSave(
     return err({
       error: saveError("OFFICIAL_INTEGRITY", `存档官员数据完整性校验失败（${first.code}）：${first.message}`, {
         context: { diagnostics: worldErrors.map((e) => ({ code: e.code, message: e.message })) },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // 奏折集合不变量（Phase 4A）：key/去重/类别一致/状态-裁断一致/disaster 载荷。任一 error → 拒绝并 quarantine。
+  const memorialErrors = validateMemorials(state);
+  if (memorialErrors.length > 0) {
+    const first = memorialErrors[0]!;
+    return err({
+      error: saveError("MEMORIAL_INTEGRITY", `存档奏折数据完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: memorialErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });
