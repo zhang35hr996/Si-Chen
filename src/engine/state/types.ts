@@ -427,17 +427,33 @@ export interface MemorialResourceEffect {
   delta: number;
 }
 
-/** 一个灾情处置选项：选定后经 effect funnel 施加国家/皇帝属性变化（绝不直接改 state）。 */
-export interface DisasterOption {
+/**
+ * 奏折处置选项（通用）：选定后经 effect funnel 施加国家/皇帝属性变化（绝不直接改 state）。
+ * treasuryDelta 若存在，表示国库变动（负=支出，正=收入）；为 undefined 则无国库变化。
+ */
+export interface MemorialOption {
   /** 选项 id（同一奏折内唯一）；resolved 时写入 Memorial.resolution。 */
   id: string;
   label: string;
   effects: MemorialResourceEffect[];
+  /** 非零安全整数；负=支出；undefined=无国库变化。 */
+  treasuryDelta?: number;
+}
+/** 向后兼容别名（第一刀的 DisasterOption 直接映射到 MemorialOption）。 */
+export type DisasterOption = MemorialOption;
+
+/** 财政奏折（户部年度岁入计划）载荷。 */
+export interface TreasuryMemorialPayload {
+  category: "treasury";
+  matter: "annual_revenue_plan";
+  urgency: "routine" | "urgent";
+  options: MemorialOption[];
 }
 
-/** 各类别的结构化载荷（判别联合）。第一刀只实现 disaster。 */
+/** 各类别的结构化载荷（判别联合）。 */
 export type MemorialPayload =
-  | { category: "disaster"; regionId: string; severity: "minor" | "major"; options: DisasterOption[] };
+  | { category: "disaster"; regionId: string; severity: "minor" | "major"; options: MemorialOption[] }
+  | TreasuryMemorialPayload;
 
 /**
  * 待皇帝批阅/已批阅的奏折（pending 可存档；resolved 不可再次执行）。`sourceId` 为去重键；`id`（"mem_000001"）

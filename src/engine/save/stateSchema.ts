@@ -221,24 +221,32 @@ const personnelDecisionSchema = z.strictObject({
   resolution: z.enum(["approve", "reject", "spare", "demote", "dismiss"]).optional(),
 });
 
-// ── 奏折框架（Phase 4A） ──
+// ── 奏折框架（Phase 4A/4B） ──
 const memorialResourceEffectSchema = z.strictObject({
   type: z.literal("resource"),
   pillar: z.enum(["sovereign", "nation"]),
   field: z.string().min(1),
   delta: z.number().int(),
 });
-const disasterOptionSchema = z.strictObject({
+/** 通用奏折选项（Phase 4B：增加可选 treasuryDelta）。 */
+const memorialOptionSchema = z.strictObject({
   id: z.string().min(1),
   label: z.string().min(1),
   effects: z.array(memorialResourceEffectSchema),
+  treasuryDelta: z.number().int().refine((n) => n !== 0, "treasuryDelta must be nonzero").optional(),
 });
 const memorialPayloadSchema = z.discriminatedUnion("category", [
   z.strictObject({
     category: z.literal("disaster"),
     regionId: z.string().min(1),
     severity: z.enum(["minor", "major"]),
-    options: z.array(disasterOptionSchema).min(1),
+    options: z.array(memorialOptionSchema).min(1),
+  }),
+  z.strictObject({
+    category: z.literal("treasury"),
+    matter: z.literal("annual_revenue_plan"),
+    urgency: z.enum(["routine", "urgent"]),
+    options: z.array(memorialOptionSchema).min(1),
   }),
 ]);
 // ── 国库台账（Phase 4B） ─────────────────────────────────────────────────────
