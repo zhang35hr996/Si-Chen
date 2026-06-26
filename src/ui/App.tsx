@@ -125,6 +125,8 @@ import { HaremAdminRankModal } from "./components/HaremAdminRankModal";
 import { PunishmentModal } from "./components/PunishmentModal";
 import { ColdPalaceRestoreModal } from "./components/ColdPalaceModal";
 import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
+import { ColdPalaceIncidentModal } from "./components/ColdPalaceIncidentModal";
+import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
@@ -1243,6 +1245,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         pregnancyDisclosureDue: jingshifangDue,
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
+        coldPalaceReportDue: oldestPresentableIncident(liveState) !== undefined,
         grandSelectionDue: liveState.pendingDaxuan !== undefined,
       });
 
@@ -2530,6 +2533,19 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onDismiss={() => setCentennialDismissedMonth(monthOrdinal(liveState.calendar))}
         />
       )}
+      {activeGlobalInterrupt === "cold_palace_report" && (() => {
+        const incident = oldestPresentableIncident(liveState);
+        return incident ? (
+          <ColdPalaceIncidentModal
+            db={db}
+            state={liveState}
+            incident={incident}
+            onAcknowledge={() => { if (store.acknowledgeIncident(incident.id)) doAutosave(); }}
+            onNavigate={() => { setFreeViewId("changmengong"); setView("freeview"); }}
+            onRestore={(charId) => setRestoreCharId(charId)}
+          />
+        ) : null;
+      })()}
       {childReaction && (
         <CharacterReactionScreen
           db={db}

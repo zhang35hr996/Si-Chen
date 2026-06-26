@@ -20,7 +20,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 18;
+export const SAVE_FORMAT_VERSION = 19;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -282,6 +282,16 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       };
     }
     return { ...env, formatVersion: 16, state, checksum: checksumOf(state) };
+  },
+  // v18 → v19: 冷宫事件通报队列（PUNISH-4C）。旧档无此字段，补空数组。
+  18: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (!Array.isArray(state.coldPalaceIncidents)) {
+      state.coldPalaceIncidents = [];
+    }
+    const gs = state as unknown as GameState;
+    return { ...env, formatVersion: 19, state: gs, checksum: checksumOf(gs) };
   },
   // v16 → v17: PunishmentRecord domain-neutral 化（PR3C-3a）。旧档记录全部为侍君目标，补 targetKind="consort"。
   16: (old): SaveEnvelope => {

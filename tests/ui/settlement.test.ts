@@ -16,6 +16,7 @@ const none: GlobalInterruptInputs = {
   pregnancyDisclosureDue: false,
   successorDue: false,
   centennialDue: false,
+  coldPalaceReportDue: false,
   grandSelectionDue: false,
 };
 

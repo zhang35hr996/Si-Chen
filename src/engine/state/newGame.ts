@@ -138,6 +138,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     eventReactionLog: [],
     sceneHistory: [],
     pendingAftermath: [],
+    coldPalaceIncidents: [],
     rngSeed,
   };
 
