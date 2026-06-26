@@ -5,17 +5,16 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import {
-  applyAnnualFrontierAssessment,
-} from "../../src/engine/court/frontierAssessment";
-import {
   generateMilitaryMemorial,
   resolveMemorial,
 } from "../../src/engine/court/memorials";
+import {
+  theaterForYear,
+} from "../../src/engine/court/frontierAssessment";
+import type { FrontierAssessmentPlan } from "../../src/engine/court/frontierAssessment";
 import { applyTreasuryTransaction } from "../../src/engine/court/treasuryLedger";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { dayIndexOf } from "../../src/engine/calendar/time";
-import type { FrontierAssessmentPlan } from "../../src/engine/court/frontierAssessment";
-import { theaterForYear } from "../../src/engine/court/frontierAssessment";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -41,12 +40,6 @@ function walkTs(dir: string): string[] {
   return paths;
 }
 
-/**
- * Pattern that would indicate a direct write to resources.nation.treasury.
- * We look for assignments like `nation.treasury =` or `resources.nation.treasury =`.
- * The allowlisted files may write treasury directly (initial state, migrations, applyTreasuryTransaction).
- */
-const DIRECT_WRITE_PATTERN = /\btreasuryDelta\s*[^=!<>]|\.treasury\s*=[^=]/;
 const ALLOWLISTED_FILES = [
   "newGame.ts",
   "saveSystem.ts",

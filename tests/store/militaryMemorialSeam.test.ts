@@ -6,13 +6,10 @@ import { GameStore } from "../../src/store/gameStore";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { dayIndexOf } from "../../src/engine/calendar/time";
 import {
-  generateMilitaryMemorial,
   getPendingMemorials,
-  resolveMemorial,
   validateMemorials,
 } from "../../src/engine/court/memorials";
 import { validateFrontierAssessments, theaterForYear } from "../../src/engine/court/frontierAssessment";
-import type { FrontierAssessmentPlan } from "../../src/engine/court/frontierAssessment";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -50,7 +47,6 @@ describe("Group H: military memorial seam — advancing to month 7", () => {
 
   it("borderPressure updated after advancement to month 7", () => {
     const store = storeAtMonth6Late(1);
-    const before = store.getState().resources.nation.borderPressure;
     store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
 
     const after = store.getState().resources.nation.borderPressure;

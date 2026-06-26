@@ -7,9 +7,7 @@ import {
   MILITARY_OPTION_IDS,
 } from "../../src/engine/court/memorials";
 import {
-  planFrontierAssessment,
   theaterForYear,
-  classifyFrontierSeverity,
 } from "../../src/engine/court/frontierAssessment";
 import type { FrontierAssessmentPlan } from "../../src/engine/court/frontierAssessment";
 import type { FrontierSeverity } from "../../src/engine/state/types";

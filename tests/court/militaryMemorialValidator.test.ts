@@ -2,7 +2,7 @@
  * Group J: validateMemorials — military-specific validation.
  */
 import { describe, expect, it } from "vitest";
-import { validateMemorials, MILITARY_OPTION_IDS } from "../../src/engine/court/memorials";
+import { validateMemorials } from "../../src/engine/court/memorials";
 import type { Memorial } from "../../src/engine/state/types";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { dayIndexOf } from "../../src/engine/calendar/time";

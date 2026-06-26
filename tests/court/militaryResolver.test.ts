@@ -7,9 +7,6 @@ import {
   generateMilitaryMemorial,
   applyAnnualFrontierAssessment,
 } from "../../src/engine/court/memorials";
-import {
-  planFrontierAssessment,
-} from "../../src/engine/court/frontierAssessment";
 import type { FrontierAssessmentPlan } from "../../src/engine/court/frontierAssessment";
 import type { FrontierSeverity, GameState } from "../../src/engine/state/types";
 import { createNewGameState } from "../../src/engine/state/newGame";
