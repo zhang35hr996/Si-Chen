@@ -49,26 +49,26 @@ export interface Memorial {
 }
 ```
 
-`MemorialPayload` 判别联合（第一刀只实地实现 `personnel` 委托与 `disaster`，其余 category 仅占位 schema）：
+`MemorialPayload` 判别联合（Phase 4A 实现 `disaster`；Phase 4B 实现 `treasury`；`personnel` / `military` / `justice` 未实现，目前无 payload 变体）：
 
 ```ts
 type MemorialPayload =
-  | { category: "personnel"; decisionId: string }                 // 委托 personnelDecisions
   | { category: "disaster"; regionId: string; severity: "minor" | "major";
-      options: DisasterOption[] }                                  // 见 §五
-  | { category: "treasury" | "military" | "justice"; options: [] }; // 占位（第一刀不生成）
+      options: MemorialOption[] }                                  // 见 §五
+  | { category: "treasury"; matter: "annual_revenue_plan";
+      urgency: "routine" | "urgent"; options: MemorialOption[] }; // Phase 4B，见 99-treasury-memorials.md
 ```
 
 不变量（validator）：
 - record key = id；id 唯一；sourceId 全局唯一。
 - pending：无 `resolvedAt` / `resolution`；resolved：二者皆有，且 `resolution ∈ payload 合法 optionId`，
   `resolvedAt ≥ createdAt`。
-- `personnel` payload 的 `decisionId` 必指向真实 `personnelDecisions` 条目；该条目 resolved 时本 memorial 亦须 resolved（一致性）。
 - `disaster` payload 的 `regionId` 必为已知地域；`options` 非空且 optionId 唯一。
+- `treasury` payload 的 `matter` 必为 `"annual_revenue_plan"`，`urgency` 必为 `"routine"` 或 `"urgent"`，选项精确为 `["audit","surtax","defer"]`。
 
 ## 三、ID 与去重
 
-- `memorialId(seq)` → `mem_` + 6 位；`seq = Object.keys(memorials).length + 1`（永不删除，无冲突）。
+- `memorialId(seq)` → `mem_` + 6 位；`seq` = 扫描现有合法 id 最大序号 +1（忽略格式非法 key，杜绝稀疏键覆盖；永不删除，单调递增）。
 - `sourceId` 约定：`disaster:{regionId}:{year}`、`personnel:{decisionId}`、`{category}:{key}:{year}`。
 - 生成器创建前查 `sourceId` 去重（pending 或 resolved 均算已存在）。
 
@@ -130,8 +130,8 @@ personnel 委托失败（如席位被占）整体回滚，memorial 保持 pendin
 ## 八、schema / migration / validator
 
 - Zod `memorialSchema` + `gameStateSchema.memorials`。
-- `SAVE_FORMAT_VERSION` 读取当前值后 **+1**（届时以仓库实际为准，勿假定具体数字）；新增 `MIGRATIONS[n]`
-  回填空 `memorials`（不破坏旧档）。
+- Phase 4A：`SAVE_FORMAT_VERSION` v19 → v20，`MIGRATIONS[19]` 回填空 `memorials`（不破坏旧档）。
+- Phase 4B：v20 → v21，`MIGRATIONS[20]` 回填 `treasuryLedger: []`，并对 pending 灾情奏折选项补 `treasuryDelta`；详见 [99-treasury-memorials.md](./99-treasury-memorials.md)。
 - `validateMemorials(state, db)`：§二不变量全集；并入 world/load 校验入口（任一 error → quarantine）。
 
 ## 九、测试计划（TDD）
@@ -162,3 +162,7 @@ personnel 委托失败（如席位被占）整体回滚，memorial 保持 pendin
   再按 §九 测试计划落实现。
 - 与 PR3C-3b **不**混在同一 PR。完整验证（typecheck/lint/test/validate-content/validate-manifest/
   knowledge:validate/build/test:e2e）全绿后转 ready。
+
+---
+
+财政奏折扩展详见 [99-treasury-memorials.md](./99-treasury-memorials.md)
