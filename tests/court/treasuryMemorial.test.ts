@@ -15,7 +15,7 @@ import { validateTreasuryLedger } from "../../src/engine/court/treasuryLedger";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { GameStore } from "../../src/store/gameStore";
 import type { GameState } from "../../src/engine/state/types";
-import { dayIndexOf, toGameTime } from "../../src/engine/calendar/time";
+import { dayIndexOf } from "../../src/engine/calendar/time";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();

@@ -10,7 +10,7 @@ import {
   TREASURY_OPTION_IDS,
 } from "../../src/engine/court/memorials";
 import { createNewGameState } from "../../src/engine/state/newGame";
-import type { GameState, Memorial, MemorialOption, TreasuryMemorialPayload } from "../../src/engine/state/types";
+import type { GameState, Memorial, MemorialOption } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();

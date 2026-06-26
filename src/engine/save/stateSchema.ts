@@ -258,7 +258,7 @@ const treasuryLedgerSourceSchema = z.strictObject({
 const treasuryLedgerEntrySchema = z.strictObject({
   id: z.string().regex(/^tre_\d{6}$/),
   at: gameTimeSchema,
-  delta: z.number().int(),
+  delta: z.number().int().refine((n) => n !== 0, "delta must be nonzero"),
   balanceBefore: z.number().int().min(0),
   balanceAfter: z.number().int().min(0),
   source: treasuryLedgerSourceSchema,

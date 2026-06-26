@@ -121,7 +121,6 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
     errors.push(stateError(code, message, context ? { context } : undefined));
 
   const ledger = state.treasuryLedger;
-  if (ledger.length === 0) return errors;
 
   const seenIds = new Set<string>();
   const seenSourceMemorials = new Set<string>();
@@ -227,12 +226,14 @@ export function validateTreasuryLedger(state: GameState): GameError[] {
     seenSourceMemorials.add(entry.source.memorialId);
   }
 
-  // 15. 台账末条目 balanceAfter 与当前 treasury 一致
-  const last = ledger[ledger.length - 1]!;
-  if (state.resources.nation.treasury !== last.balanceAfter) {
-    e("TREASURY_LEDGER_CURRENT_MISMATCH", `国库当前余额（${state.resources.nation.treasury}）与台账末条目「${last.id}」balanceAfter（${last.balanceAfter}）不一致`, {
-      currentTreasury: state.resources.nation.treasury, lastBalanceAfter: last.balanceAfter, lastId: last.id,
-    });
+  // 15. 台账末条目 balanceAfter 与当前 treasury 一致（仅台账非空时适用）
+  if (ledger.length > 0) {
+    const last = ledger[ledger.length - 1]!;
+    if (state.resources.nation.treasury !== last.balanceAfter) {
+      e("TREASURY_LEDGER_CURRENT_MISMATCH", `国库当前余额（${state.resources.nation.treasury}）与台账末条目「${last.id}」balanceAfter（${last.balanceAfter}）不一致`, {
+        currentTreasury: state.resources.nation.treasury, lastBalanceAfter: last.balanceAfter, lastId: last.id,
+      });
+    }
   }
 
   // 16/17. 已批奏折中，选定选项有 treasuryDelta 者必须恰好有一条台账（多条由 check 13 覆盖，此处查缺失）。

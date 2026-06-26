@@ -270,7 +270,7 @@ export function resolveMemorial(
   if (!option)
     return err(stateError("MEMORIAL_BAD_OPTION", `选项「${optionId}」不属于奏折「${memId}」`, { context: { memId, optionId } }));
 
-  // Step 3: 若选项有国库变动，先执行 treasury 事务（失败则整体失败，输入 state 不变）
+  // Step 4: 若选项有国库变动，先执行 treasury 事务（失败则整体失败，输入 state 不变）
   let workingState = state;
   if (option.treasuryDelta !== undefined) {
     const txResult = applyTreasuryTransaction(workingState, {
@@ -293,7 +293,7 @@ export function resolveMemorial(
   if (!applied.ok) return err(applied.error[0]!);
   workingState = applied.value;
 
-  // Step 6-7: 标记 resolved，返回最终 state
+  // Step 6: 标记 resolved，返回最终 state
   const resolved: Memorial = { ...m, status: "resolved", resolvedAt: at, resolution: optionId };
   return ok({ state: { ...workingState, memorials: { ...workingState.memorials, [m.id]: resolved } } });
 }

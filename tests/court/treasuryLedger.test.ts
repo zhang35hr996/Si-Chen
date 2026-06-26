@@ -9,7 +9,7 @@ import {
   validateTreasuryLedger,
   type TreasuryTransactionCommand,
 } from "../../src/engine/court/treasuryLedger";
-import { generateDisasterMemorial, resolveMemorial } from "../../src/engine/court/memorials";
+import { generateDisasterMemorial, generateTreasuryMemorial, resolveMemorial } from "../../src/engine/court/memorials";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState, TreasuryLedgerEntry } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
@@ -452,6 +452,29 @@ describe("validateTreasuryLedger — corruption detection", () => {
     };
     const s: GameState = { ...base, resources: { ...base.resources, nation: { ...base.resources.nation, treasury: 1500 } }, treasuryLedger: [e1, e2] };
     expect(codes(s)).toContain("TREASURY_LEDGER_CHAIN_BROKEN");
+  });
+
+  it("resolved memorial with cost option but empty ledger → TREASURY_LEDGER_MISSING_ENTRY", () => {
+    // Set up a state with a resolved treasury memorial (audit option, treasuryDelta=600)
+    // but NO ledger entries — validates that checks 16/17 run even when ledger is empty
+    const base = createNewGameState(db, 1);
+    const at = { year: 2, month: 4, period: "early" as const, dayIndex: 300 };
+    const g = generateTreasuryMemorial(base, at)!;
+    // Manually mark as resolved with "audit" option (which has treasuryDelta)
+    const resolved = {
+      ...g.memorial,
+      status: "resolved" as const,
+      resolution: "audit",
+      resolvedAt: at,
+    };
+    const state: GameState = {
+      ...g.state,
+      resources: { ...g.state.resources, nation: { ...g.state.resources.nation, treasury: 600 } },
+      memorials: { [g.memorial.id]: resolved },
+      treasuryLedger: [],  // empty — but should have a ledger entry for audit
+    };
+    const errors = validateTreasuryLedger(state);
+    expect(errors.map((e) => e.code)).toContain("TREASURY_LEDGER_MISSING_ENTRY");
   });
 });
 
