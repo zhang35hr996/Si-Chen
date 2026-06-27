@@ -1,6 +1,6 @@
 /**
  * 统一行动许可层（任务 §5）。所有「某角色此刻能否参加某玩法」的判断都从这里取，
- * 避免各模块各自散落 isConfined 特判。限制来源：禁足、冷宫；后续下狱/守丧/卧病
+ * 避免各模块各自散落 isConfined 特判。限制来源：禁足、冷宫、卧病；后续下狱/守丧
  * 可在此追加 reason，而调用方无需改动。
  *
  * 注意：本层只负责「持续状态导致的资格限制」。已故（lifecycle==="deceased"）由各候选
@@ -37,15 +37,18 @@ export interface ActionAvailability {
 const ALLOWED: ActionAvailability = { allowed: true };
 
 const CONFINED_MESSAGE = "此宫正在禁足，宫门闭锁，未经诏令不得出入。";
+const SICK_GREETING_MESSAGE = "此人正在病中，今日免往请安，留在寝殿静养。";
 
 /**
  * 某角色在给定旬能否参与某受限玩法。返回结构化结果（含原因），供 UI 直接展示。
- * `_activity` 目前不分玩法——禁足一律封禁；保留参数以便后续按状态细分。
+ *
+ * 禁足、冷宫封禁全部日常受限玩法；病情仅自动免除请安，不扩大为对召见、看诊等玩法的
+ * 一刀切封禁。这样「病中留寝殿休息」与既有传太医/皇帝探视流程可同时成立。
  */
 export function getActionAvailability(
   state: GameState,
   charId: string,
-  _activity: RestrictedActivity,
+  activity: RestrictedActivity,
   turn: number = state.calendar.dayIndex,
 ): ActionAvailability {
   const confinement = activeConfinement(state, charId, turn);
@@ -59,6 +62,12 @@ export function getActionAvailability(
       reasonCode: "cold_palace",
       message: "此宫已打入冷宫，不得参与宫廷日常事务。",
     };
+  }
+  if (activity === "greeting") {
+    const healthStatus = state.standing[charId]?.healthStatus ?? "healthy";
+    if (healthStatus === "sick" || healthStatus === "critical") {
+      return { allowed: false, reasonCode: "ill", message: SICK_GREETING_MESSAGE };
+    }
   }
   return ALLOWED;
 }
