@@ -401,18 +401,21 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return { ...env, formatVersion: 25, state: gs, checksum: checksumOf(gs) };
   },
   // v25 → v26: 社交模拟层（Phase 4B-social）。
-  // personality / household 新增至 CharacterStanding。侍君 standing 以
-  // affection / fear / ambition 字段识别（官员无此字段），补写 defaults。
+  // personality / household 新增至 CharacterStanding。
+  // 侍君识别依据 GameState.bedchamber（含义：每名侍君恰有一条 bedchamber 记录，非侍君无）。
+  // 不用 affection/fear/ambition 识别，因为 hidden 为 optional，旧版 consortStandingExtras
+  // 在 hidden 缺失时不写入这些字段，导致合法侍君被漏掉。
   // defaults 内联以保证迁移值不随以后常量修改而变动。
   25: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as GameState & Record<string, unknown>;
-    const standing = state.standing as unknown as Record<string, Record<string, unknown>> | undefined;
+    const standing = (state as unknown as { standing?: Record<string, Record<string, unknown>> }).standing;
+    const bedchamber = (state as unknown as { bedchamber?: Record<string, unknown> }).bedchamber;
+    const consortIds = new Set(Object.keys(bedchamber ?? {}));
     if (standing) {
-      for (const entry of Object.values(standing)) {
+      for (const [charId, entry] of Object.entries(standing)) {
+        if (!consortIds.has(charId)) continue;
         if (!entry || typeof entry !== "object") continue;
-        // Consort standing carries affection / fear / ambition; official standing does not.
-        if (!("affection" in entry) && !("fear" in entry) && !("ambition" in entry)) continue;
         if (!entry.personality) {
           entry.personality = {
             intelligence: 50, scheming: 25, sociability: 50, compassion: 50,

@@ -347,52 +347,98 @@ describe("consortHouseholdSchema", () => {
   });
 });
 
-// ── 19–21. Trait / personality consistency ────────────────────────────────────
+// ── 19–22. Trait / personality consistency ───────────────────────────────────
+
+// Incompatible trait pairs (mirror of the production constant for test assertions)
+const INCOMPATIBLE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["calculating", "blunt"],
+  ["compassionate", "cold"],
+  ["impulsive", "discreet"],
+];
+
+// Per-trait numeric constraints that must hold on the generated personality.
+// Use Map to avoid noUncheckedIndexedAccess making values number | undefined.
+const TRAIT_FLOORS_FOR_TEST = new Map<string, Map<string, number>>([
+  ["calculating",      new Map([["scheming", 50], ["intelligence", 55]])],
+  ["compassionate",    new Map([["compassion", 65]])],
+  ["proud",            new Map([["pride", 60], ["emotionalStability", 50]])],
+  ["status_conscious", new Map([["pride", 55], ["jealousy", 50]])],
+  ["discreet",         new Map([["emotionalStability", 55]])],
+  ["blunt",            new Map([["courage", 50]])],
+  ["impulsive",        new Map([["courage", 45]])],
+]);
+const TRAIT_CEILINGS_FOR_TEST = new Map<string, Map<string, number>>([
+  ["cold",      new Map([["compassion", 35], ["sociability", 35]])],
+  ["impulsive", new Map([["emotionalStability", 45]])],
+  ["blunt",     new Map([["scheming", 40]])],
+]);
 
 describe("generateCandidates — trait / personality consistency", () => {
   const state = createNewGameState(db);
-  // Generate a larger batch across multiple years to cover trait variety
+  // 5 years × ~5 candidates ≈ 25 candidates; enough to guarantee all 10 TRAIT_POOL entries appear
   const allCandidates = [
     ...generateCandidates(db, state, 1),
     ...generateCandidates(db, state, 4),
     ...generateCandidates(db, state, 7),
+    ...generateCandidates(db, state, 10),
+    ...generateCandidates(db, state, 13),
   ];
 
-  it("'calculating' candidates have scheming >= 50 and intelligence >= 55", () => {
+  it("test batch includes candidates with 'calculating' trait", () => {
     const calculating = allCandidates.filter((c) =>
       c.content.profile.reactionTraits.includes("calculating"),
     );
-    if (calculating.length === 0) return; // no such candidate in test batch
-    for (const c of calculating) {
-      const p = c.content.hidden?.personality;
-      expect(p).toBeDefined();
-      expect(p!.scheming).toBeGreaterThanOrEqual(50);
-      expect(p!.intelligence).toBeGreaterThanOrEqual(55);
-    }
+    expect(calculating.length).toBeGreaterThan(0);
   });
 
-  it("'cold' candidates have compassion <= 35 and sociability <= 35", () => {
+  it("test batch includes candidates with 'cold' trait", () => {
     const cold = allCandidates.filter((c) =>
       c.content.profile.reactionTraits.includes("cold"),
     );
-    if (cold.length === 0) return;
-    for (const c of cold) {
-      const p = c.content.hidden?.personality;
-      expect(p).toBeDefined();
-      expect(p!.compassion).toBeLessThanOrEqual(35);
-      expect(p!.sociability).toBeLessThanOrEqual(35);
-    }
+    expect(cold.length).toBeGreaterThan(0);
   });
 
-  it("'compassionate' candidates have compassion >= 65", () => {
+  it("test batch includes candidates with 'compassionate' trait", () => {
     const compassionate = allCandidates.filter((c) =>
       c.content.profile.reactionTraits.includes("compassionate"),
     );
-    if (compassionate.length === 0) return;
-    for (const c of compassionate) {
-      const p = c.content.hidden?.personality;
+    expect(compassionate.length).toBeGreaterThan(0);
+  });
+
+  it("no candidate has incompatible trait combinations", () => {
+    for (const c of allCandidates) {
+      const traits = c.content.profile.reactionTraits;
+      for (const [a, b] of INCOMPATIBLE_PAIRS) {
+        const hasA = traits.includes(a as typeof traits[number]);
+        const hasB = traits.includes(b as typeof traits[number]);
+        expect(hasA && hasB).toBe(false);
+      }
+    }
+  });
+
+  it("every candidate satisfies all floor constraints from their active traits", () => {
+    for (const c of allCandidates) {
+      const p = c.content.hidden?.personality as Record<string, number> | undefined;
       expect(p).toBeDefined();
-      expect(p!.compassion).toBeGreaterThanOrEqual(65);
+      if (!p) continue;
+      for (const trait of c.content.profile.reactionTraits) {
+        for (const [key, floor] of (TRAIT_FLOORS_FOR_TEST.get(trait) ?? new Map())) {
+          expect(p[key]!).toBeGreaterThanOrEqual(floor);
+        }
+      }
+    }
+  });
+
+  it("every candidate satisfies all ceiling constraints from their active traits", () => {
+    for (const c of allCandidates) {
+      const p = c.content.hidden?.personality as Record<string, number> | undefined;
+      expect(p).toBeDefined();
+      if (!p) continue;
+      for (const trait of c.content.profile.reactionTraits) {
+        for (const [key, ceiling] of (TRAIT_CEILINGS_FOR_TEST.get(trait) ?? new Map())) {
+          expect(p[key]!).toBeLessThanOrEqual(ceiling);
+        }
+      }
     }
   });
 

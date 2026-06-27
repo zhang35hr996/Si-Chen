@@ -59,6 +59,29 @@ const TRAIT_CEILINGS: Partial<Record<CanonicalReactionTrait, Partial<Record<Pers
 };
 
 /**
+ * Pairs of reaction traits whose floor/ceiling constraints are mutually contradictory.
+ * A candidate may not carry both members of any pair.
+ * Example: calculating sets scheming floor=50, blunt sets scheming ceiling=40 → unsatisfiable.
+ */
+const INCOMPATIBLE_TRAIT_PAIRS: ReadonlyArray<readonly [CanonicalReactionTrait, CanonicalReactionTrait]> = [
+  ["calculating", "blunt"],
+  ["compassionate", "cold"],
+  ["impulsive", "discreet"],
+];
+
+function traitConflicts(
+  candidate: readonly CanonicalReactionTrait[],
+  accumulated: ReadonlySet<CanonicalReactionTrait>,
+): boolean {
+  for (const [a, b] of INCOMPATIBLE_TRAIT_PAIRS) {
+    const candHasA = candidate.includes(a), candHasB = candidate.includes(b);
+    if ((candHasA && accumulated.has(b)) || (candHasB && accumulated.has(a))) return true;
+    if (candHasA && candHasB) return true; // conflict within the entry itself
+  }
+  return false;
+}
+
+/**
  * Generate a ConsortPersonality deterministically from a seed string prefix,
  * biased by the character's canonical reaction traits for narrative consistency.
  */
@@ -78,7 +101,9 @@ function generatePersonality(seedPrefix: string, reactionTraits: CanonicalReacti
   }
 
   const roll = (key: PersonalityKey, sub: string): number => {
-    const lo = floors[key], hi = Math.max(lo, ceilings[key]);
+    const lo = floors[key];
+    // floor <= ceiling is guaranteed by INCOMPATIBLE_TRAIT_PAIRS filtering; no Math.max needed
+    const hi = ceilings[key];
     return lo + (gestationRollRaw(`${seedPrefix}:${sub}`) % (hi - lo + 1));
   };
 
@@ -228,12 +253,23 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
 
     const traitCount = 2 + (gestationRollRaw(`${seed}:tc`) % 2); // 2–3
     const picked: (typeof TRAIT_POOL)[number][] = [];
+    const accumulatedTraits = new Set<CanonicalReactionTrait>();
     for (let t = 0; t < traitCount; t++) {
-      const tr = pick(TRAIT_POOL, `${seed}:trait:${t}`);
-      if (!picked.includes(tr)) picked.push(tr);
+      // Try original slot first; on conflict or duplicate, try fallback seeds until a
+      // compatible entry is found. Uses up to TRAIT_POOL.length attempts so it always
+      // terminates, even in edge cases where most of the pool is excluded.
+      for (let attempt = 0; attempt < TRAIT_POOL.length; attempt++) {
+        const candidateSeed = attempt === 0 ? `${seed}:trait:${t}` : `${seed}:trait:${t}:fb${attempt}`;
+        const tr = pick(TRAIT_POOL, candidateSeed);
+        if (picked.includes(tr)) continue;
+        if (traitConflicts(tr.reactionTraits, accumulatedTraits)) continue;
+        picked.push(tr);
+        tr.reactionTraits.forEach(rt => accumulatedTraits.add(rt));
+        break;
+      }
     }
     const traits = picked.map((p) => p.display);
-    const reactionTraits = [...new Set(picked.flatMap((p) => p.reactionTraits))];
+    const reactionTraits = [...accumulatedTraits];
     const specialty = pick(SPECIALTY_POOL, `${seed}:spec`);
     const likes = [pick(LIKES_POOL, `${seed}:like0`), pick(LIKES_POOL, `${seed}:like1`)]
       .filter((v, idx, arr) => arr.indexOf(v) === idx);

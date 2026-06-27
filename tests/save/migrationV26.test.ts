@@ -11,8 +11,10 @@
  *  3. Migrated state round-trips cleanly.
  *  4. After round-trip, personality + household remain in standing.
  *  5. Official standing does NOT get personality or household in migration.
- *  6. New-game at v26 has personality + household materialised in consort standing.
- *  7. New-game save round-trips at v26.
+ *  6. Consort with no affection/fear/ambition in standing (hidden absent) still gets
+ *     personality + household via bedchamber-based identification.
+ *  7. New-game at v26 has personality + household materialised in consort standing.
+ *  8. New-game save round-trips at v26.
  */
 import { describe, expect, it } from "vitest";
 import { checksumOf } from "../../src/engine/save/canonical";
@@ -117,9 +119,54 @@ describe("save migration v25 → v26 (personality + household)", () => {
     expect((officialStanding as unknown as Record<string, unknown>).personality).toBeUndefined();
     expect((officialStanding as unknown as Record<string, unknown>).household).toBeUndefined();
   });
+
+  it("consort with no affection/fear/ambition in standing still gets fields (bedchamber-based ID)", () => {
+    // Verifies the P1 fix: migration identifies consorts via bedchamber keys, not affection/fear/ambition.
+    // Edge case: a consort authored without `hidden` (or whose hidden was absent) would have no
+    // affection/fear/ambition in standing after the old consortStandingExtras. Migration must still
+    // backfill personality + household because the id appears in `bedchamber`.
+    const s = createNewGameState(db);
+    const stateV25 = structuredClone(s) as unknown as Record<string, unknown>;
+
+    // Strip personality + household (simulate v25 save), then additionally remove
+    // affection / fear / ambition from lu_huaijin's standing to simulate a hidden-absent consort.
+    const standing = stateV25.standing as Record<string, Record<string, unknown>>;
+    for (const entry of Object.values(standing)) {
+      delete entry.personality;
+      delete entry.household;
+    }
+    // Strip hidden-derived fields from lu_huaijin to simulate absent hidden block
+    const huaijin = standing["lu_huaijin"];
+    if (huaijin) {
+      delete huaijin.affection;
+      delete huaijin.fear;
+      delete huaijin.ambition;
+      delete huaijin.loyalty;
+    }
+
+    const current = createSaveData(db, s, "slot1");
+    const raw = JSON.stringify({
+      ...current,
+      formatVersion: 25,
+      state: stateV25,
+      checksum: checksumOf(stateV25 as unknown as GameState),
+    });
+
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, raw);
+    const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
+    if (!loaded.ok) console.error("seedless-consort error:", JSON.stringify(loaded.error));
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+
+    // lu_huaijin is in bedchamber → migration must backfill even without affection/fear/ambition
+    const migratedStanding = loaded.value.state.standing["lu_huaijin"];
+    expect((migratedStanding as unknown as Record<string, unknown>).personality).toEqual(PERSONALITY_DEFAULTS);
+    expect((migratedStanding as unknown as Record<string, unknown>).household).toEqual(HOUSEHOLD_DEFAULTS);
+  });
 });
 
-// ── 6–7. New game at v26 ─────────────────────────────────────────────────────
+// ── 7–8. New game at v26 ─────────────────────────────────────────────────────
 
 describe("new game at v26 — personality + household in consort standing", () => {
   const state = createNewGameState(db);
