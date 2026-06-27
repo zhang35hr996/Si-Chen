@@ -430,7 +430,7 @@ describe("advanceTime 集成", () => {
 
 // ─── AR-25: save version ─────────────────────────────────────────────────────
 
-it("AR-25: SAVE_FORMAT_VERSION = 29", () => {
+it("AR-25: SAVE_FORMAT_VERSION >= 29", () => {
   expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(29);
 });
 

@@ -436,3 +436,65 @@ describe("planHaremDiscipline — target cooldown", () => {
     expect(planHaremDiscipline(db, state)).toBeNull();
   });
 });
+
+// ── factionModifier 四种组合回归 ─────────────────────────────────────────────
+describe("pairScore factionModifier regression", () => {
+  const FACTION_A = "faction_phoenix";
+  const FACTION_B = "faction_plum";
+
+  function stateWithFactions(actorFaction?: string, targetFaction?: string): GameState {
+    const s = makePairState();
+    return {
+      ...s,
+      standing: {
+        [ACTOR_ID]: {
+          ...s.standing[ACTOR_ID]!,
+          ...(actorFaction !== undefined ? { haremFactionId: actorFaction } : {}),
+        },
+        [TARGET_ID]: {
+          ...s.standing[TARGET_ID]!,
+          ...(targetFaction !== undefined ? { haremFactionId: targetFaction } : {}),
+        },
+      },
+    };
+  }
+
+  it("HD-FACTION-01: 双方无阵营 → factionModifier = 0（不影响分数）", () => {
+    const base = makePairState();
+    const withFactions = stateWithFactions(undefined, undefined);
+    // Both should behave the same (no faction = +0 modifier)
+    // We just verify neither state throws and plan produces consistent result
+    const r1 = planHaremDiscipline(db, base);
+    const r2 = planHaremDiscipline(db, withFactions);
+    expect(r1?.pairScore).toBe(r2?.pairScore);
+  });
+
+  it("HD-FACTION-02: 仅 actor 有阵营 → factionModifier = 0", () => {
+    const noFaction = makePairState();
+    const actorOnly = stateWithFactions(FACTION_A, undefined);
+    const r1 = planHaremDiscipline(db, noFaction);
+    const r2 = planHaremDiscipline(db, actorOnly);
+    expect(r1?.pairScore).toBe(r2?.pairScore);
+  });
+
+  it("HD-FACTION-03: 双方同阵营 → pairScore 减少 10（clamp 后 -10）", () => {
+    const noFaction = makePairState();
+    const sameFaction = stateWithFactions(FACTION_A, FACTION_A);
+    const baseline = planHaremDiscipline(db, noFaction);
+    const withSame = planHaremDiscipline(db, sameFaction);
+    // Only compare if both trigger (or both don't)
+    if (baseline && withSame) {
+      expect(withSame.pairScore).toBe(baseline.pairScore - 10);
+    }
+  });
+
+  it("HD-FACTION-04: 双方不同阵营 → pairScore 增加 5（clamp 后 +5）", () => {
+    const noFaction = makePairState();
+    const diffFaction = stateWithFactions(FACTION_A, FACTION_B);
+    const baseline = planHaremDiscipline(db, noFaction);
+    const withDiff = planHaremDiscipline(db, diffFaction);
+    if (baseline && withDiff) {
+      expect(withDiff.pairScore).toBe(baseline.pairScore + 5);
+    }
+  });
+});

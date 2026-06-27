@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 30;
+export const SAVE_FORMAT_VERSION = 31;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -517,11 +517,57 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     const env = old as SaveEnvelope;
     return { ...env, formatVersion: 29, checksum: checksumOf(env.state) };
   },
-  // v29 → v30: 后宫内部惩戒（PUNISH-4G-B）。新增 haremDisciplineIncidents 字段；
-  // 旧档无此字段，schema.default([]) 负责填充，此处仅升版本号。
+
+  // v29 → v30: 季度财政结算快照字段扩充（PR #80）。
+  // PR #79 格式的 quarterly_settlement_report 只有 { season, options }，
+  // 缺少 periodKey / openingTreasury / expenseAllocation 等新必需字段。
+  // 迁移策略：
+  //   1. 把旧版简录的 sourceId 写入 settledQuarterlyPeriods（保留幂等记录）。
+  //   2. 删除旧版简录奏折（台账交易已入库；奏折本身仅为信息展示）。
+  //   3. 初始化 settledQuarterlyPeriods（若字段不存在）。
   29: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
-    return { ...env, formatVersion: 30, checksum: checksumOf(env.state) };
+    const state = structuredClone(env.state) as Record<string, unknown>;
+
+    // 初始化 settledQuarterlyPeriods（新字段；旧存档无此字段）
+    if (!Array.isArray(state.settledQuarterlyPeriods)) {
+      state.settledQuarterlyPeriods = [];
+    }
+    const settled = state.settledQuarterlyPeriods as string[];
+
+    // 找出并处理 PR #79 格式的季度简录（缺少 periodKey 字段）
+    const memorials = state.memorials as Record<string, Record<string, unknown>> | undefined;
+    if (memorials && typeof memorials === "object") {
+      const toDelete: string[] = [];
+      for (const [memId, mem] of Object.entries(memorials)) {
+        const payload = mem.payload as Record<string, unknown> | undefined;
+        if (
+          payload?.category === "treasury" &&
+          payload.matter === "quarterly_settlement_report" &&
+          typeof payload.periodKey !== "string" // PR #79 format: missing new fields
+        ) {
+          // Preserve idempotency: write sourceId to settledQuarterlyPeriods
+          const sourceId = mem.sourceId as string | undefined;
+          if (typeof sourceId === "string" && !settled.includes(sourceId)) {
+            settled.push(sourceId);
+          }
+          toDelete.push(memId);
+        }
+      }
+      for (const id of toDelete) {
+        delete memorials[id];
+      }
+    }
+
+    const gs = state as unknown as GameState;
+    return { ...env, formatVersion: 30, state: gs, checksum: checksumOf(gs) };
+  },
+
+  // v30 → v31: 后宫内部惩戒（PUNISH-4G-B）。新增 haremDisciplineIncidents 字段；
+  // 旧档无此字段，schema.default([]) 负责填充，此处仅升版本号。
+  30: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    return { ...env, formatVersion: 31, checksum: checksumOf(env.state) };
   },
 };
 

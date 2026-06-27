@@ -17,6 +17,7 @@ import { isConfined } from "./confinement";
 import { isInColdPalace, hasColdPalaceMadness } from "./coldPalace";
 import { resolveConsortRuntimeAttrs } from "./consortAttrs";
 import { imperialProtectionSnapshot, isCurrentCarrier } from "./imperialProtection";
+import { getHaremFactionId } from "./factionSelectors";
 import { haremRankStepDistance } from "./haremRankLadder";
 
 // ── 常量 ──────────────────────────────────────────────────────────────────────
@@ -161,13 +162,9 @@ function relationModifier(db: ContentDB, state: GameState, actorId: string, targ
 }
 
 function factionModifier(state: GameState, actorId: string, targetId: string): number {
-  const getHaremFactionId = (id: string): string | null => {
-    const st = state.standing[id];
-    return (st as { factionId?: string } | undefined)?.factionId ?? null;
-  };
-  const actorFaction = getHaremFactionId(actorId);
-  const targetFaction = getHaremFactionId(targetId);
-  if (!actorFaction || !targetFaction) return 0;
+  const actorFaction = getHaremFactionId(state, actorId);
+  const targetFaction = getHaremFactionId(state, targetId);
+  if (actorFaction === undefined || targetFaction === undefined) return 0;
   return actorFaction === targetFaction ? -10 : 5;
 }
 

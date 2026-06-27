@@ -258,3 +258,95 @@ describe("validateMemorials — Group G: treasury payload", () => {
     expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_EXTRA_OPTION");
   });
 });
+
+// ── Group G2: quarterly_settlement_report 快照不变量校验 ─────────────────────
+
+describe("validateMemorials — Group G2: quarterly_settlement_report snapshot invariants", () => {
+  const AT_Q1 = { year: 2, month: 1, period: "early" as const, dayIndex: 100 };
+
+  /** Minimal valid quarterly memorial for tampered-snapshot tests. */
+  function makeQuarterlyMemorial(overrides?: Partial<Extract<Memorial["payload"], { matter: "quarterly_settlement_report" }>>): Memorial {
+    const basePlanned = { palace: 500, consortAllowance: 300, officialSalary: 350, armyMaintenance: 450, royalChildrenEducation: 0 };
+    const basePaid    = { palace: 500, consortAllowance: 300, officialSalary: 350, armyMaintenance: 450, royalChildrenEducation: 0 };
+    const baseShort   = { palace: 0,   consortAllowance: 0,   officialSalary: 0,   armyMaintenance: 0,   royalChildrenEducation: 0 };
+    const payload: Extract<Memorial["payload"], { matter: "quarterly_settlement_report" }> = {
+      category: "treasury",
+      matter: "quarterly_settlement_report",
+      season: "冬",
+      periodKey: "2:1",
+      openingTreasury: 10000,
+      revenueBase: 8000,
+      revenueActual: 7600,
+      revenueCauses: [],
+      expensePlanned: 1600,
+      expensePaid: 1600,
+      fundingShortfall: 0,
+      expenseAllocation: { planned: basePlanned, paid: basePaid, shortfall: baseShort },
+      closingTreasury: 10000 + 7600 - 1600,
+      options: [{ id: "acknowledge", label: "已阅", effects: [] }],
+      ...overrides,
+    };
+    return {
+      id: "mem_000001",
+      category: "treasury",
+      status: "pending",
+      createdAt: AT_Q1,
+      sourceId: "quarterly_settlement:2:1",
+      title: "冬税入库·季度财政简录",
+      summary: "…",
+      payload,
+    };
+  }
+
+  function stateWithMemorial(m: Memorial): GameState {
+    const s = createNewGameState(db, 1);
+    return { ...s, memorials: { [m.id]: m } };
+  }
+
+  it("valid quarterly snapshot passes validator", () => {
+    const m = makeQuarterlyMemorial();
+    expect(codes(stateWithMemorial(m))).toEqual([]);
+  });
+
+  it("tampered: paid[consortAllowance] shifted to paid[palace] — per-category check catches it", () => {
+    // planned: consortAllowance=300 palace=500
+    // paid:    consortAllowance=0   palace=800  (800+0=800, sum ok but per-key wrong)
+    // shortfall: consortAllowance=0 palace=0
+    // => consortAllowance: paid(0) + shortfall(0) ≠ planned(300)
+    const m = makeQuarterlyMemorial({
+      expenseAllocation: {
+        planned: { palace: 500, consortAllowance: 300, officialSalary: 350, armyMaintenance: 450, royalChildrenEducation: 0 },
+        paid:    { palace: 800, consortAllowance: 0,   officialSalary: 350, armyMaintenance: 450, royalChildrenEducation: 0 },
+        shortfall:{ palace: 0,  consortAllowance: 0,   officialSalary: 0,   armyMaintenance: 0,   royalChildrenEducation: 0 },
+      },
+    });
+    expect(codes(stateWithMemorial(m))).toContain("MEMORIAL_INVALID_SNAPSHOT");
+  });
+
+  it("tampered: shortfall category misattributed — shortfall sum check catches it", () => {
+    // planned: consortAllowance=300, shortfall: consortAllowance=0 but palace=300
+    // sum(shortfall)=300 but fundingShortfall=0 → mismatch
+    const m = makeQuarterlyMemorial({
+      expenseAllocation: {
+        planned: { palace: 500, consortAllowance: 300, officialSalary: 350, armyMaintenance: 450, royalChildrenEducation: 0 },
+        paid:    { palace: 500, consortAllowance: 0,   officialSalary: 350, armyMaintenance: 450, royalChildrenEducation: 0 },
+        shortfall:{ palace: 300, consortAllowance: 0,  officialSalary: 0,   armyMaintenance: 0,   royalChildrenEducation: 0 },
+      },
+      expensePaid: 1300,
+      fundingShortfall: 300,
+      // closingTreasury adjusted to keep financial equation valid
+      closingTreasury: 10000 + 7600 - 1300,
+    });
+    expect(codes(stateWithMemorial(m))).toContain("MEMORIAL_INVALID_SNAPSHOT");
+  });
+
+  it("tampered: closingTreasury wrong → financial equation check catches it", () => {
+    const m = makeQuarterlyMemorial({ closingTreasury: 99999 });
+    expect(codes(stateWithMemorial(m))).toContain("MEMORIAL_INVALID_SNAPSHOT");
+  });
+
+  it("tampered: expensePaid + fundingShortfall ≠ expensePlanned → caught", () => {
+    const m = makeQuarterlyMemorial({ expensePaid: 1000, fundingShortfall: 0 }); // planned=1600
+    expect(codes(stateWithMemorial(m))).toContain("MEMORIAL_INVALID_SNAPSHOT");
+  });
+});

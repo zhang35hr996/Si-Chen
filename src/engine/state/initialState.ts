@@ -76,6 +76,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     haremAdminReviews: [],
     haremDisciplineIncidents: [],
     justice: createEmptyJusticeState(),
+    settledQuarterlyPeriods: [],
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],

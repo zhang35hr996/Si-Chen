@@ -5,6 +5,12 @@
 import type { GameError } from "../infra/errors";
 import { stateError } from "../infra/errors";
 
+interface GameTimeSlice {
+  year: number;
+  month: number;
+  dayIndex: number;
+}
+
 interface IncidentSlice {
   id: string;
   actorId: string;
@@ -31,14 +37,17 @@ interface StateSlice {
   standing: Record<string, unknown>;
 }
 
-/** Canonical id format: hdi_{year}_{month2digits} */
-const HDI_ID_RE = /^hdi_\d+_\d{2}$/;
-
-function gameTimeToOrd(t: unknown): number | null {
+function toGameTimeSlice(t: unknown): GameTimeSlice | null {
   if (typeof t !== "object" || t === null) return null;
-  const { year, month } = t as Record<string, unknown>;
-  if (typeof year !== "number" || typeof month !== "number") return null;
-  return year * 12 + (month - 1);
+  const { year, month, dayIndex } = t as Record<string, unknown>;
+  if (typeof year !== "number" || typeof month !== "number" || typeof dayIndex !== "number") return null;
+  return { year, month, dayIndex };
+}
+
+function expectedId(occurredAt: unknown): string | null {
+  const gt = toGameTimeSlice(occurredAt);
+  if (!gt) return null;
+  return `hdi_${gt.year}_${String(gt.month).padStart(2, "0")}`;
 }
 
 /**
@@ -61,17 +70,21 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
     }
     seenIds.add(inc.id);
 
-    // 2. Canonical ID format.
-    if (!HDI_ID_RE.test(inc.id)) {
-      errors.push(
-        stateError("HDI_BAD_CANONICAL_ID", `haremDisciplineIncidents: id "${inc.id}" does not match hdi_{year}_{mm}`),
-      );
-    }
-
-    // 3. Self-target.
+    // 2. Self-target.
     if (inc.actorId === inc.targetId) {
       errors.push(
         stateError("HDI_SELF_TARGET", `haremDisciplineIncidents[id=${inc.id}]: actorId === targetId "${inc.actorId}"`),
+      );
+    }
+
+    // 3. Canonical ID must match occurredAt.year/month.
+    const exp = expectedId(inc.occurredAt);
+    if (exp === null || inc.id !== exp) {
+      errors.push(
+        stateError(
+          "HDI_BAD_CANONICAL_ID",
+          `haremDisciplineIncidents[id=${inc.id}]: id does not match occurredAt (expected "${exp ?? "??"}")`,
+        ),
       );
     }
 
@@ -98,15 +111,15 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
       }
     }
 
-    // 6. resolved must have resolvedAt after occurredAt.
+    // 6. resolved must have resolvedAt with dayIndex >= occurredAt.dayIndex.
     if (inc.status === "resolved") {
-      const occOrd = gameTimeToOrd(inc.occurredAt);
-      const resOrd = gameTimeToOrd(inc.resolvedAt);
-      if (occOrd !== null && resOrd !== null && resOrd < occOrd) {
+      const occGt = toGameTimeSlice(inc.occurredAt);
+      const resGt = toGameTimeSlice(inc.resolvedAt);
+      if (occGt !== null && resGt !== null && resGt.dayIndex < occGt.dayIndex) {
         errors.push(
           stateError(
             "HDI_RESOLVED_BEFORE_OCCURRENCE",
-            `haremDisciplineIncidents[id=${inc.id}]: resolvedAt is before occurredAt`,
+            `haremDisciplineIncidents[id=${inc.id}]: resolvedAt (dayIndex ${resGt.dayIndex}) is before occurredAt (dayIndex ${occGt.dayIndex})`,
           ),
         );
       }
@@ -122,7 +135,7 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
         ),
       );
     } else {
-      // 8. Event must be type "conflict" with subtype "harem_discipline".
+      // 8. Event must be type "conflict".
       if (evt.type !== "conflict") {
         errors.push(
           stateError(
@@ -131,6 +144,8 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
           ),
         );
       }
+
+      // 9. payload.subtype must be "harem_discipline".
       if (evt.payload?.subtype !== "harem_discipline") {
         errors.push(
           stateError(
@@ -140,40 +155,39 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
         );
       }
 
-      // 9. payload.incidentId must match incident.id.
-      if (evt.payload?.incidentId !== undefined && evt.payload.incidentId !== inc.id) {
+      // 10. payload.incidentId must equal incident.id (missing counts as mismatch).
+      if (evt.payload?.incidentId !== inc.id) {
         errors.push(
           stateError(
             "HDI_EVENT_INCIDENT_MISMATCH",
-            `haremDisciplineIncidents[id=${inc.id}]: courtEvent ${inc.courtEventId} payload.incidentId "${evt.payload.incidentId}" !== incident id`,
+            `haremDisciplineIncidents[id=${inc.id}]: courtEvent ${inc.courtEventId} payload.incidentId "${evt.payload?.incidentId}" !== "${inc.id}"`,
           ),
         );
       }
 
-      // 10. Event participants must include actor as discipliner and target as disciplined.
-      if (evt.participants) {
-        const actorPart = evt.participants.find((p) => p.charId === inc.actorId && p.role === "discipliner");
-        if (!actorPart) {
-          errors.push(
-            stateError(
-              "HDI_EVENT_PARTICIPANT_MISMATCH",
-              `haremDisciplineIncidents[id=${inc.id}]: courtEvent ${inc.courtEventId} missing discipliner participant ${inc.actorId}`,
-            ),
-          );
-        }
-        const targetPart = evt.participants.find((p) => p.charId === inc.targetId && p.role === "disciplined");
-        if (!targetPart) {
-          errors.push(
-            stateError(
-              "HDI_EVENT_PARTICIPANT_MISMATCH",
-              `haremDisciplineIncidents[id=${inc.id}]: courtEvent ${inc.courtEventId} missing disciplined participant ${inc.targetId}`,
-            ),
-          );
-        }
+      // 11. participants must include actor as discipliner and target as disciplined.
+      const parts = evt.participants ?? [];
+      const hasActor = parts.some((p) => p.charId === inc.actorId && p.role === "discipliner");
+      if (!hasActor) {
+        errors.push(
+          stateError(
+            "HDI_EVENT_PARTICIPANT_MISMATCH",
+            `haremDisciplineIncidents[id=${inc.id}]: courtEvent ${inc.courtEventId} missing discipliner participant ${inc.actorId}`,
+          ),
+        );
+      }
+      const hasTarget = parts.some((p) => p.charId === inc.targetId && p.role === "disciplined");
+      if (!hasTarget) {
+        errors.push(
+          stateError(
+            "HDI_EVENT_PARTICIPANT_MISMATCH",
+            `haremDisciplineIncidents[id=${inc.id}]: courtEvent ${inc.courtEventId} missing disciplined participant ${inc.targetId}`,
+          ),
+        );
       }
     }
 
-    // 11. actorId must be in standing.
+    // 12. actorId must be in standing.
     if (!(inc.actorId in data.standing)) {
       errors.push(
         stateError(
@@ -183,7 +197,7 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
       );
     }
 
-    // 12. targetId must be in standing.
+    // 13. targetId must be in standing.
     if (!(inc.targetId in data.standing)) {
       errors.push(
         stateError(
@@ -193,7 +207,7 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
       );
     }
 
-    // 13. Snapshot invariant: peakFavor >= favor.
+    // 14. Snapshot invariant: peakFavor >= favor.
     if (inc.actorSnapshot) {
       const { peakFavor, favor } = inc.actorSnapshot;
       if (typeof peakFavor === "number" && typeof favor === "number" && peakFavor < favor) {
