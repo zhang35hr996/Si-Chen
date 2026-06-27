@@ -411,4 +411,55 @@ describe("Group I: validateFrontierAssessments — cross-reference checks", () =
     const errors = validateFrontierAssessments(state);
     expect(errors.some((e) => e.code === "FRONTIER_ORPHAN_MEMORIAL")).toBe(true);
   });
+
+  it("FRONTIER_ORPHAN_MEMORIAL: pending military memorial without generated assessment", () => {
+    const base = createNewGameState(db);
+    // A PENDING military memorial with no assessment pointing to it — can permanently block new generations
+    const orphanPending = {
+      ...makeValidMemorial("mem_000001", makeValidAssessment(1)),
+      status: "pending" as const,
+    };
+    const state = { ...base, frontierAssessments: [], memorials: { "mem_000001": orphanPending } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_ORPHAN_MEMORIAL")).toBe(true);
+  });
+
+  it("FRONTIER_THEATER_ROTATION_MISMATCH: blocked assessment with wrong theatre for year", () => {
+    // year=1 canonical theatre is northern_frontier; use western_frontier to corrupt
+    const a: FrontierAssessment = {
+      ...makeValidAssessment(1),
+      theaterId: "western_frontier" as const, // wrong — year 1 should be northern_frontier
+      generation: {
+        status: "blocked_by_pending",
+        blockingMemorialId: "mem_000001",
+      },
+    };
+    const blockingMem = {
+      ...makeValidMemorial("mem_000001", makeValidAssessment(1)),
+      status: "pending" as const,
+    };
+    const base = createNewGameState(db);
+    // Give blockingMem a sourceId consistent with its own theaterId so only rotation check fires
+    const state = { ...base, frontierAssessments: [a], memorials: { "mem_000001": blockingMem } };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_THEATER_ROTATION_MISMATCH")).toBe(true);
+  });
+
+  it("FRONTIER_DUPLICATE_MEMORIAL_REF: two assessments referencing same memorial id", () => {
+    const a1 = makeValidAssessment(1);
+    const a2 = makeValidAssessment(2);
+    const mem = makeValidMemorial("mem_000001", a1);
+    const base = createNewGameState(db);
+    // Both assessments claim the same memorial — only one should be allowed
+    const state = {
+      ...base,
+      frontierAssessments: [
+        a1, // gen points to mem_000001
+        { ...a2, generation: { status: "generated" as const, memorialId: "mem_000001" } },
+      ],
+      memorials: { "mem_000001": mem },
+    };
+    const errors = validateFrontierAssessments(state);
+    expect(errors.some((e) => e.code === "FRONTIER_DUPLICATE_MEMORIAL_REF")).toBe(true);
+  });
 });

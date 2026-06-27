@@ -436,16 +436,14 @@ export function validateFrontierAssessments(state: GameState): GameError[] {
             });
           }
 
-          // 17g. assessment 的战区必须符合年度轮换规则
-          const expectedTheater = theaterForYear(a.year);
-          if (a.theaterId !== expectedTheater) {
-            e("FRONTIER_THEATER_ROTATION_MISMATCH", `边情评估第 ${i} 条 theaterId「${a.theaterId}」≠ 年度轮换值「${expectedTheater}」(year=${a.year})`, {
-              index: i, theaterId: a.theaterId, expectedTheater, year: a.year,
+          // 17g. 每条 memorial 只能被一条 generated assessment 引用
+          if (generatedMemorialIds.has(gen.memorialId)) {
+            e("FRONTIER_DUPLICATE_MEMORIAL_REF", `军务奏折「${gen.memorialId}」被多条边情评估 generated 引用`, {
+              index: i, memorialId: gen.memorialId,
             });
+          } else {
+            generatedMemorialIds.add(gen.memorialId);
           }
-
-          // 17h. 本 memorial 只能被一条 assessment 引用（稍后通过 generatedMemorialIds 检查）
-          generatedMemorialIds.add(gen.memorialId);
         }
 
         // 17. memorial.createdAt >= assessedAt
@@ -480,19 +478,23 @@ export function validateFrontierAssessments(state: GameState): GameError[] {
         }
       }
     }
+
+    // 战区年度轮换校验对所有 assessment（generated 和 blocked）均适用。
+    const expectedTheater = theaterForYear(a.year);
+    if (a.theaterId !== expectedTheater) {
+      e("FRONTIER_THEATER_ROTATION_MISMATCH", `边情评估第 ${i} 条 theaterId「${a.theaterId}」≠ 年度轮换值「${expectedTheater}」(year=${a.year})`, {
+        index: i, theaterId: a.theaterId, expectedTheater, year: a.year,
+      });
+    }
   }
 
-  // Post-loop: 检查 generatedMemorialIds 是否有重复引用（两条 assessment 指向同一 memorial）。
-  // 注意：上面循环中每次 add 前已检查 memorial 合法性，此处只需检查 Set 的大小。
-  // 实际上 generatedMemorialIds 是 Set，不会有重复条目。但我们还需反向检查：
-  // 每条 military memorial 最多被一条 generated assessment 引用。
+  // Post-loop：每条 military memorial（pending 或 resolved）都必须恰好有一条 generated assessment 引用它。
+  // pending orphan 会永久阻塞后续年份的 assessment 生成。
   for (const [memId, mem] of Object.entries(state.memorials)) {
     if (mem.payload.category !== "military") continue;
-    // orphan check：已 resolved 的 military memorial 应该有一条 generated assessment 引用它
-    // （pending memorial 可能尚未被引用，不强制）
-    if (mem.status === "resolved" && !generatedMemorialIds.has(memId)) {
-      e("FRONTIER_ORPHAN_MEMORIAL", `已批阅军务奏折「${memId}」未被任何边情评估引用`, {
-        memorialId: memId,
+    if (!generatedMemorialIds.has(memId)) {
+      e("FRONTIER_ORPHAN_MEMORIAL", `军务奏折「${memId}」（${mem.status}）未被任何边情评估 generated 引用`, {
+        memorialId: memId, status: mem.status,
       });
     }
   }
