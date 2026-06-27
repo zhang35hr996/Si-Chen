@@ -304,6 +304,14 @@ export const eventEffectSchema = z.union([
     favorDelta: z.number().int().min(0).max(20),
   }),
   z.strictObject({ type: z.literal("heir_adopt"), heirId: nonEmpty, fatherId: idSchema }),
+  z.strictObject({
+    type: z.literal("heir_custody"),
+    heirId: nonEmpty,
+    /** The new legal custodian (抚养人). Must pass eligibility; stored in Heir.adoptiveFatherId. */
+    custodianId: idSchema,
+    /** True only when custodian is the current eligible empress; sets Heir.legitimate = true. */
+    makeLegitimate: z.boolean(),
+  }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
   z.strictObject({ type: z.literal("heir_died"), heirId: nonEmpty }),
   z.strictObject({

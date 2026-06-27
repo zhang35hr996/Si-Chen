@@ -1,35 +1,83 @@
-/** 奉先殿：择一皇嗣 → 择一养父（在宫侍君+皇后），告于宗庙。1 AP。 */
+/** 奉先殿：为皇嗣指定或更改抚养人。1 AP。 */
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
 import { listHeirsBySex } from "../../engine/characters/heirs";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
-import { eligibleAdoptiveFathers } from "../../store/adoption";
+import { eligibleCustodiansForHeir } from "../../store/heirCustody";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
+import type { Heir } from "../../engine/state/types";
 import { useGameState } from "../../store/useGameState";
 import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 export function FengxiandianScreen({
-  db, store, registry, onOpenMap, onOpenSettings, onAdopt,
+  db, store, registry, onOpenMap, onOpenSettings, onTransferCustody,
 }: {
   db: ContentDB; store: GameStore; registry: AssetRegistry;
   onOpenMap: () => void; onOpenSettings: () => void;
-  onAdopt: (heirId: string, fatherId: string) => void;
+  onTransferCustody: (heirId: string, custodianId: string) => void;
 }) {
   const state = useGameState(store);
   const location = db.locations["fengxiandian"]!;
   const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
   const heirs = [...listHeirsBySex(state.resources.bloodline.heirs, "daughter"), ...listHeirsBySex(state.resources.bloodline.heirs, "son")];
-  const fathers = eligibleAdoptiveFathers(db, state);
-  const [picked, setPicked] = useState<string | null>(null);
+  const [pickedHeirId, setPickedHeirId] = useState<string | null>(null);
   const canAct = state.calendar.ap >= 1;
 
-  const fatherName = (charId: string): string => {
+  const custodianLabel = (charId: string): string => {
+    const c = db.characters[charId] ?? state.generatedConsorts[charId];
+    if (!c) return charId;
+    if (c.kind === "elder") return c.profile.name;
     const st = state.standing[charId];
-    return resolveIdentityLabel(db.characters[charId]!, st, st ? db.ranks[st.rank] : undefined);
+    return resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined);
+  };
+
+  const pickedHeir: Heir | undefined = pickedHeirId
+    ? state.resources.bloodline.heirs.find((h) => h.id === pickedHeirId)
+    : undefined;
+
+  const candidates = pickedHeir ? eligibleCustodiansForHeir(db, state, pickedHeir) : [];
+
+  const renderHeirRow = ({ heir, name }: { heir: Heir; name: string }) => {
+    const isLegitimate = heir.legitimate;
+    const custodianId = heir.adoptiveFatherId;
+    const custodianText = custodianId ? `当前抚养人：${custodianLabel(custodianId)}` : "尚无抚养人";
+    const legitimacyText = isLegitimate ? "嫡出" : "非嫡";
+
+    let buttonLabel: string | null = null;
+    let buttonDisabled = false;
+
+    if (isLegitimate) {
+      buttonLabel = "抚养归属已定";
+      buttonDisabled = true;
+    } else if (custodianId) {
+      buttonLabel = "更改抚养权";
+      buttonDisabled = !canAct;
+    } else {
+      buttonLabel = "指定抚养人";
+      buttonDisabled = !canAct;
+    }
+
+    return (
+      <div key={heir.id} className="roster-row">
+        <span>
+          {name}{heir.givenName ? `·${heir.givenName}` : ""}
+          　{legitimacyText}　{custodianText}
+        </span>
+        {buttonLabel && (
+          <button
+            type="button"
+            disabled={buttonDisabled}
+            onClick={() => !buttonDisabled && !isLegitimate && setPickedHeirId(heir.id)}
+          >
+            {buttonLabel}
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -46,32 +94,35 @@ export function FengxiandianScreen({
           <p className="location-screen__desc">{location.description}</p>
         </section>
         <section className="location-screen__roster">
-          <h2>为皇嗣择养父</h2>
+          <h2>皇嗣抚养</h2>
           {heirs.length === 0 ? (
             <p className="location-screen__empty">尚无皇嗣。</p>
           ) : (
-            heirs.map(({ heir, name }) => (
-              <div key={heir.id} className="roster-row">
-                <span>{name}{heir.givenName ? `·${heir.givenName}` : ""}
-                  {heir.adoptiveFatherId ? `（养父：${fatherName(heir.adoptiveFatherId)}）` : ""}
-                </span>
-                <button type="button" disabled={!canAct} onClick={() => setPicked(heir.id)}>择养父</button>
-              </div>
-            ))
+            heirs.map(renderHeirRow)
           )}
         </section>
       </main>
 
-      {picked && (
-        <div className="modal-backdrop" onClick={() => setPicked(null)}>
+      {pickedHeirId && pickedHeir && (
+        <div className="modal-backdrop" onClick={() => setPickedHeirId(null)}>
           <div className="rank-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>择养父</h2>
-            {fathers.map((c) => (
-              <button key={c.id} type="button" onClick={() => { onAdopt(picked, c.id); setPicked(null); }}>
-                {fatherName(c.id)}
-              </button>
-            ))}
-            <button type="button" onClick={() => setPicked(null)}>取消</button>
+            <h2>指定抚养人</h2>
+            {candidates.length === 0 ? (
+              <p>当前无合适的抚养人选。</p>
+            ) : (
+              candidates.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { onTransferCustody(pickedHeirId, c.id); setPickedHeirId(null); }}
+                >
+                  {c.displayName}
+                  {c.kind === "elder" ? "　尊长" : c.rankId ? `　${db.ranks[c.rankId]?.name ?? c.rankId}` : ""}
+                  {c.becomesLegitimate ? "（交由皇后抚养后，该皇嗣将列为嫡出）" : ""}
+                </button>
+              ))
+            )}
+            <button type="button" onClick={() => setPickedHeirId(null)}>取消</button>
           </div>
         </div>
       )}
