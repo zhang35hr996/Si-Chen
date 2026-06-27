@@ -30,6 +30,11 @@ export const TITLE_EPITHETS: readonly TitleEpithet[] = [
   { char: "直", meaning: "肇敏行成、临事无曲曰直。", tags: ["刚正", "德行"] },
   { char: "允", meaning: "诚信中正、言行相孚曰允。", tags: ["诚信", "中正"] },
   { char: "贤", meaning: "尊德行义、可辅王政曰贤。", tags: ["德行", "辅政"] },
+  { char: "淳", meaning: "质厚风淳、敦本尚德曰淳。", tags: ["德行", "宽厚"] },
+  { char: "纯", meaning: "心无杂伪、守一不移曰纯。", tags: ["德行", "清正"] },
+  { char: "敦", meaning: "笃实忠厚、崇礼尚德曰敦。", tags: ["德行", "宽厚"] },
+  { char: "善", meaning: "行义修德、积善流光曰善。", tags: ["德行", "仁惠"] },
+  { char: "清", meaning: "洁己奉公、清德自持曰清。", tags: ["清正", "德行"] },
   // 威仪
   { char: "肃", meaning: "刚德克就、执心决断曰肃。", tags: ["德行", "威仪"] },
   { char: "昭", meaning: "明德有劳、威仪恭明曰昭。", tags: ["明德", "威仪"] },
@@ -45,6 +50,7 @@ export const TITLE_EPITHETS: readonly TitleEpithet[] = [
   { char: "英", meaning: "才德出众、秀发不群曰英。", tags: ["才智", "声望"] },
   { char: "慧", meaning: "柔质受谏、明识通情曰慧。", tags: ["才智", "柔德"] },
   { char: "亮", meaning: "明信不隐、临事洞然曰亮。", tags: ["明察", "诚信"] },
+  { char: "显", meaning: "功德昭著、天下共闻曰显。", tags: ["声望", "功业"] },
   // 治世 · 安民
   { char: "康", meaning: "安乐抚民、渊源流通曰康。", tags: ["安民", "治世"] },
   { char: "定", meaning: "大虑静民、安民法古曰定。", tags: ["安民", "治世"] },
@@ -56,6 +62,9 @@ export const TITLE_EPITHETS: readonly TitleEpithet[] = [
   { char: "戴", meaning: "爱民好治、典礼不塞曰戴。", tags: ["安民", "礼制"] },
   { char: "祐", meaning: "德合天眷、保民受福曰祐。", tags: ["祥瑞", "安民"] },
   { char: "胡", meaning: "保民寿考、弥年有德曰胡。", tags: ["寿考", "安民"] },
+  { char: "泰", meaning: "四海安泰、万民乐业曰泰。", tags: ["治世", "安民"] },
+  { char: "丰", meaning: "德泽丰厚、物阜民安曰丰。", tags: ["治世", "祥瑞"] },
+  { char: "宁", meaning: "息乱安民、邦家无扰曰宁。", tags: ["安民", "治世"] },
   // 功业 · 武功
   { char: "桓", meaning: "辟土服远、克敬勤民曰桓。", tags: ["武功", "功业"] },
   { char: "烈", meaning: "有功安民、秉德遵业曰烈。", tags: ["功业", "节烈"] },
@@ -81,6 +90,8 @@ export const TITLE_EPITHETS: readonly TitleEpithet[] = [
   { char: "誉", meaning: "状古述今、声实相副曰誉。", tags: ["声望", "文治"] },
   { char: "华", meaning: "文采昭美、声容有光曰华。", tags: ["文雅", "尊贵"] },
   { char: "匡", meaning: "贞心大度、扶危正乱曰匡。", tags: ["辅政", "正乱"] },
+  { char: "芳", meaning: "芳德流馨、令闻远播曰芳。", tags: ["文雅", "声望"] },
+  { char: "素", meaning: "质朴自然、澹泊有守曰素。", tags: ["清正", "文雅"] },
   // 柔德 · 后宫
   { char: "懿", meaning: "温柔圣善、柔德克成曰懿。", tags: ["德行", "后宫"] },
   { char: "静", meaning: "柔德考众、恭己鲜言曰静。", tags: ["后宫", "柔德"] },
@@ -88,10 +99,16 @@ export const TITLE_EPITHETS: readonly TitleEpithet[] = [
   { char: "婉", meaning: "言辞柔顺、动容中节曰婉。", tags: ["后宫", "柔德"] },
   { char: "瑜", meaning: "德美如玉、内外无瑕曰瑜。", tags: ["后宫", "玉德"] },
   { char: "瑾", meaning: "怀德自守、温润有章曰瑾。", tags: ["后宫", "玉德"] },
+  { char: "琳", meaning: "美玉成文、才德兼备曰琳。", tags: ["后宫", "玉德"] },
+  { char: "瑶", meaning: "玉质冰心、清华高洁曰瑶。", tags: ["后宫", "玉德"] },
+  { char: "珩", meaning: "玉佩有声、德音远播曰珩。", tags: ["后宫", "玉德"] },
+  { char: "琬", meaning: "温润如玉、仪范可亲曰琬。", tags: ["后宫", "玉德"] },
   { char: "和", meaning: "德性中平、上下无怨曰和。", tags: ["柔德", "安民"] },
   { char: "温", meaning: "宽柔有礼、接下以恩曰温。", tags: ["柔德", "仁惠"] },
   { char: "良", meaning: "温良好乐、处事有常曰良。", tags: ["德行", "温良"] },
-  // 诚信 · 敬慎
+  // 清正 · 诚信 · 敬慎
+  { char: "洁", meaning: "守身无玷、玉洁冰清曰洁。", tags: ["清正", "节操"] },
+  { char: "真", meaning: "守真抱朴、诚心无伪曰真。", tags: ["诚信", "清正"] },
   { char: "悫", meaning: "行见中外、诚信无欺曰悫。", tags: ["诚信", "德行"] },
   { char: "质", meaning: "名实不爽、朴诚无伪曰质。", tags: ["诚信", "朴素"] },
   { char: "恪", meaning: "奉职敬慎、守事不怠曰恪。", tags: ["敬慎", "职守"] },
@@ -102,6 +119,7 @@ export const TITLE_EPITHETS: readonly TitleEpithet[] = [
   { char: "刚", meaning: "强毅果敢、追补前过曰刚。", tags: ["刚正", "决断"] },
   { char: "度", meaning: "心能制义、裁断合宜曰度。", tags: ["裁断", "法度"] },
   // 仁惠 · 宽厚
+  { char: "慈", meaning: "爱育万民、柔惠及众曰慈。", tags: ["仁惠", "柔德"] },
   { char: "仁", meaning: "慈爱及众、惠下不伤曰仁。", tags: ["仁惠", "德行"] },
   { char: "厚", meaning: "思虑不爽、待下有恩曰厚。", tags: ["仁惠", "宽厚"] },
   { char: "怀", meaning: "执义扬善、慈仁念旧曰怀。", tags: ["仁惠", "念旧"] },
@@ -112,4 +130,8 @@ export const TITLE_EPITHETS: readonly TitleEpithet[] = [
   { char: "庆", meaning: "积善流光、福泽及后曰庆。", tags: ["祥瑞", "宗室"] },
   { char: "祺", meaning: "福履绵长、安乐无疆曰祺。", tags: ["祥瑞", "安乐"] },
   { char: "禧", meaning: "嘉庆集身、和乐有终曰禧。", tags: ["祥瑞", "安乐"] },
+  { char: "永", meaning: "德泽长流、福祚绵远曰永。", tags: ["祥瑞", "宗室"] },
+  { char: "熹", meaning: "光明初著、德辉渐盛曰熹。", tags: ["祥瑞", "明德"] },
+  // 法度 · 宽厚
+  { char: "祁", meaning: "治典不杀、宽法得中曰祁。", tags: ["法度", "宽厚"] },
 ];
