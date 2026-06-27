@@ -45,6 +45,7 @@ export function makeDialogueRequest(): DialogueRequest {
       forbiddenTerms: [],
       addressRules: [],
     },
+    register: "private",
     transcript: [],
     topicTags: [],
     promptContext: {

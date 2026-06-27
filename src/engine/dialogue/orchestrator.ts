@@ -16,7 +16,7 @@ import type { CharacterStanding, EventReactionRecord, GameState } from "../state
 import { buildAudienceContext } from "./audience";
 import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
-import { buildTextGateContext, getRankTermExemptions, scanDialogueText, type GateFinding } from "./gates";
+import { buildTextGateContext, getRankPrivateExemptions, scanDialogueText, type GateFinding } from "./gates";
 import {
   buildDialogueKnowledgeQuery,
   extractProvenance,
@@ -193,11 +193,13 @@ export function assembleDialogueRequest(
       stances: character.stances ?? [],
     },
     etiquette: {
-      allowedTerms: [...db.lexicon.approvedTerms, ...getRankTermExemptions(contextStanding.rank)],
+      // Include rank-level private exemptions so the LLM prompt knows 皇后 may use 凤君.
+      allowedTerms: [...db.lexicon.approvedTerms, ...getRankPrivateExemptions(contextStanding.rank)],
       forbiddenTerms: db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
     resolvedAddress: resolveAddress(db, state, speakerId, targetId),
+    register: options.register ?? "private",
     sceneDirective,
     transcript: transcript ?? [],
     topicTags,
@@ -225,7 +227,12 @@ function finalizeLine(
   }
 
   // ── text gates (plan §8) ────────────────────────────────────────────
-  const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  const gateCtx = buildTextGateContext(
+    db,
+    request.speakerContext.standing.rank,
+    request.etiquette.allowedTerms,
+    request.register,
+  );
   gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
     ...scanDialogueText(response.text, gateCtx),
@@ -413,7 +420,12 @@ export function validateDialogueProviderResult(
   }
 
   // ── 3. Text gate + expression normalize + line build ─────────────
-  const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  const gateCtx = buildTextGateContext(
+    db,
+    request.speakerContext.standing.rank,
+    request.etiquette.allowedTerms,
+    request.register,
+  );
   gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
     ...scanDialogueText(response.text, gateCtx),

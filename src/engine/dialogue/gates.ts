@@ -18,6 +18,7 @@
  */
 import type { ContentDB } from "../content/loader";
 import type { CharacterRank } from "../content/schemas";
+import type { SceneRegister } from "./types";
 
 export type GateId = "forbidden_lexicon" | "self_ref" | "rank_title" | "template_leak";
 
@@ -53,6 +54,22 @@ export interface TextGateContext {
    * Populated from resolvedAddress.forbiddenInContext at call time.
    */
   contextForbiddenRefs: string[];
+  /**
+   * Scene register: "court" / "public" block register-restricted terms;
+   * "private" / "intimate" allow them for authorized speakers.
+   */
+  register: SceneRegister;
+  /**
+   * Subset of forbiddenTerms this speaker is authorized to use — but only
+   * in private / intimate registers. In court or public contexts these terms
+   * remain forbidden even for authorized speakers.
+   *
+   * Populated from the intersection of (rank exemptions + character-level
+   * allowedTerms) with lexicon.forbiddenTerms.
+   *
+   * Example: 「凤君」 for 皇后 — allowed in private but never in court.
+   */
+  privateAllowedTerms: string[];
 }
 
 const MIN_SELF_REF_LEN = 2;
@@ -61,12 +78,14 @@ const MIN_SELF_REF_LEN = 2;
 const WRONG_PLAYER_HONORIFICS: string[] = [];
 
 /**
- * Terms in lexicon.forbiddenTerms that are conditionally permitted for specific ranks.
- * 凤君 is globally forbidden (requires authorization) but permitted for 皇后 who
- * may privately address the emperor this way. Future: authorized 侍君 and ministers
- * will be handled via character-level dialoguePolicy.allowedTerms.
+ * Rank-level private-term exemptions: terms in forbiddenTerms that a given rank
+ * may use in private / intimate registers. Character-level permissions are passed
+ * in as speakerAllowedTerms at call time.
+ *
+ * 凤君 — 皇后 may privately address the emperor this way.
+ * Authorized 侍君 / ministers use character-level dialoguePolicy allowedTerms.
  */
-const RANK_TERM_EXEMPTIONS: Record<string, string[]> = {
+const RANK_PRIVATE_EXEMPTIONS: Record<string, string[]> = {
   huanghou: ["凤君"],
 };
 
@@ -83,10 +102,30 @@ function allSelfRefs(refs: CharacterRank["selfRefs"]): string[] {
   return [...refs.toPlayer, ...refs.formal, ...(refs.informal ?? [])];
 }
 
-/** Assemble the gate context for one speaker from the loaded content. */
-export function buildTextGateContext(db: ContentDB, speakerRankId: string): TextGateContext {
+/**
+ * Assemble the gate context for one speaker from the loaded content.
+ *
+ * @param speakerRankId   The speaker's current harem rank ID (or "__elder__").
+ * @param speakerAllowedTerms  Character-level allowedTerms from etiquette
+ *   (includes both global approvedTerms and any rank exemptions already merged
+ *   by the orchestrator). The gate uses this to populate privateAllowedTerms.
+ * @param register  Scene register. Defaults to "private".
+ */
+export function buildTextGateContext(
+  db: ContentDB,
+  speakerRankId: string,
+  speakerAllowedTerms: string[] = [],
+  register: SceneRegister = "private",
+): TextGateContext {
   const forbidden = db.lexicon.forbiddenTerms;
-  const exempted = new Set(RANK_TERM_EXEMPTIONS[speakerRankId] ?? []);
+  const forbiddenSet = new Set(forbidden);
+
+  // Private-allowed = union of rank exemptions + character-level allowedTerms,
+  // intersected with forbiddenTerms (only relevant if they're actually forbidden).
+  const rankExemptions = RANK_PRIVATE_EXEMPTIONS[speakerRankId] ?? [];
+  const privateAllowed = [...new Set([...rankExemptions, ...speakerAllowedTerms])].filter((t) =>
+    forbiddenSet.has(t),
+  );
 
   const own = new Set(db.ranks[speakerRankId] ? allSelfRefs(db.ranks[speakerRankId]!.selfRefs) : []);
   const foreign = new Set<string>();
@@ -98,16 +137,18 @@ export function buildTextGateContext(db: ContentDB, speakerRankId: string): Text
   }
 
   return {
-    forbiddenTerms: forbidden.filter((t) => !exempted.has(t)),
+    forbiddenTerms: forbidden,
     foreignSelfRefs: [...foreign],
-    wrongPlayerHonorifics: WRONG_PLAYER_HONORIFICS.filter((t) => !forbidden.includes(t)),
+    wrongPlayerHonorifics: WRONG_PLAYER_HONORIFICS.filter((t) => !forbiddenSet.has(t)),
     contextForbiddenRefs: [],
+    register,
+    privateAllowedTerms: privateAllowed,
   };
 }
 
-/** Rank-specific terms that are normally forbidden but allowed for a given speaker rank. */
-export function getRankTermExemptions(rankId: string): string[] {
-  return RANK_TERM_EXEMPTIONS[rankId] ?? [];
+/** Terms that a given rank is allowed to use in private / intimate registers. */
+export function getRankPrivateExemptions(rankId: string): string[] {
+  return RANK_PRIVATE_EXEMPTIONS[rankId] ?? [];
 }
 
 export interface ScanOptions {
@@ -127,7 +168,13 @@ export function scanDialogueText(
 ): GateFinding[] {
   const findings: GateFinding[] = [];
 
+  // Register-aware exemption: in private/intimate registers, privateAllowedTerms
+  // are lifted from the forbidden list for this speaker.
+  const isPrivateRegister = ctx.register === "private" || ctx.register === "intimate";
+  const exempted = isPrivateRegister ? new Set(ctx.privateAllowedTerms) : new Set<string>();
+
   for (const term of ctx.forbiddenTerms) {
+    if (exempted.has(term)) continue;
     if (text.includes(term)) {
       findings.push({
         gate: "forbidden_lexicon",

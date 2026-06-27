@@ -20,6 +20,18 @@ import type { PairwiseAddress } from "./addressResolver";
 import type { DialogueClaim, ClaimModality } from "./claims";
 
 /**
+ * Scene register: the formality and privacy level of the conversation.
+ * Used by the conditional-term gate (e.g. 凤君 is only permitted in
+ * private / intimate registers for authorized speakers).
+ *
+ *   court    — formal court audience, ceremony, or official proceeding
+ *   public   — shared / semi-public space with observers
+ *   private  — private chamber / inner-quarters conversation
+ *   intimate — one-on-one in a wholly private setting, maximum trust
+ */
+export type SceneRegister = "court" | "public" | "private" | "intimate";
+
+/**
  * A typed reference to a context item offered to the LLM in this turn.
  * `kind` + `id` uniquely identify the source.
  * "knowledge" refs may appear in mentionedContextRefs but NEVER in claim sourceRefs.
@@ -87,6 +99,11 @@ export interface DialogueRequest {
   targetId: string; // usually "player"
   locationId: string;
   time: GameTime; // never CalendarState — a speaker doesn't know the player's AP
+  /**
+   * Scene register: formality + privacy level. Drives conditional-term gate.
+   * Defaults to "private" in assembleDialogueRequest when not explicitly provided.
+   */
+  register: SceneRegister;
   speakerContext: {
     profile: CharacterContent["profile"];
     voice: CharacterContent["voice"];
@@ -135,6 +152,12 @@ export interface DialogueAssemblyOptions {
   presentCharacterIds?: string[];
   /** Scene privacy — drives audience gating. Defaults to "semi_private". */
   privacy?: "public" | "semi_private" | "private";
+  /**
+   * Scene register: drives conditional-term gate (e.g. 凤君 requires private/intimate).
+   * Defaults to "private" — most harem dialogue is private inner-quarters conversation.
+   * Callers should pass "court" or "public" for formal scenes.
+   */
+  register?: SceneRegister;
 }
 
 export interface DialogueGenerationOptions {

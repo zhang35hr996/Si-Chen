@@ -57,6 +57,7 @@ async function main() {
       forbiddenTerms: [],
       addressRules: [],
     },
+    register: "private",
     transcript: [],
     topicTags: [],
     promptContext: {
