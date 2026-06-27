@@ -1,16 +1,15 @@
 /**
- * 六宫自主位分决策引擎测试（AD 系列）
+ * 六宫自主位分决策引擎测试（AD 系列，30 项）
  *
- * 覆盖：
- *   AD-01..05  nextAdministrativeRank / previousAdministrativeRank
- *   AD-06..09  wasRecentlyAdjustedByAdmin（冷却检查通过 planAdministratorRankDecision 间接验证）
- *   AD-10..14  候选筛选（边界条件：贵人边界、lifecycle、冷却、权限）
- *   AD-15..17  promote 触发条件（favor/loyalty/servantOpinion 阈值）
- *   AD-18..20  demote 触发条件
- *   AD-21..23  性格修正（compassion、jealousy、pride）
- *   AD-24..26  tie-break 确定性
- *   AD-27..29  neiwu_proxy / 非授权行政者 → null
- *   AD-30      planAdministratorRankDecision 与 planHaremAdminRankCommand 集成
+ * 所有测试使用「孤立 fixture」策略：
+ *   - wenya 置于常在（changzai, order 84，低于贵人 116）作为唯一候选
+ *   - xu_qinghuan（驸 176）和 lu_huaijin（承徽 156）均高于贵人边界 → 自动排除
+ *   - 每项测试显式断言 targetId / direction / reason / fromRankId / toRankId
+ *   - 禁止 `if (!result) return` 或 `expect(true).toBe(true)` 形式的空测试
+ *
+ * 关键领域区分（防止 favor/affection 混用）：
+ *   favor    = st.favor  — 皇帝公开恩宠等级，晋位门槛和评分依据
+ *   affection = hidden attr — 私人情意，不影响位分决策
  */
 import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -19,10 +18,14 @@ import {
   previousAdministrativeRank,
   planAdministratorRankDecision,
 } from "../../src/engine/characters/haremAdminDecision";
-import { planHaremAdminRankCommand } from "../../src/store/haremAdminCommands";
+import {
+  planAdministratorRankDecision as storeDecision,
+  resolveHaremAdminRankCommand,
+} from "../../src/store/haremAdminCommands";
 import { loadRealContent } from "../helpers/contentFixture";
-import { toGameTime } from "../../src/engine/calendar/time";
-import type { GameState, ConsortPersonality, ConsortHousehold } from "../../src/engine/state/types";
+import { makeGameTime, toGameTime } from "../../src/engine/calendar/time";
+import type { GameState, ConsortPersonality } from "../../src/engine/state/types";
+import { HOUSEHOLD_DEFAULTS, PERSONALITY_DEFAULTS } from "../../src/engine/characters/consortAttrs";
 
 const db = loadRealContent();
 
@@ -32,91 +35,72 @@ function baseState(): GameState {
   return createNewGameState(db);
 }
 
-const DEFAULT_PERSONALITY: ConsortPersonality = {
-  intelligence: 50,
-  scheming: 25,
-  sociability: 50,
-  compassion: 50,
-  courage: 40,
-  jealousy: 35,
-  emotionalStability: 55,
-  pride: 45,
-};
-
-const DEFAULT_HOUSEHOLD: ConsortHousehold = {
-  servantOpinion: 50,
-  livingStandard: 40,
-  privateWealth: 20,
-};
-
-/** 建起 acting_consort 模式。 */
-function withActingConsort(state: GameState, charId: string): GameState {
-  return {
-    ...state,
-    haremAdministration: {
-      mode: "acting_consort",
-      charId,
-      appointedAt: toGameTime(state.calendar),
-      reason: "empress_confined",
-    },
-  };
-}
-
-/** 强制设置侍君的属性（affection/loyalty/servantOpinion/personality）。 */
-function setConsortAttrs(
-  state: GameState,
-  charId: string,
-  patch: {
-    rank?: string;
-    affection?: number;
-    loyalty?: number;
-    servantOpinion?: number;
-    personality?: Partial<ConsortPersonality>;
-  },
-): GameState {
-  const existing = state.standing[charId];
-  if (!existing) throw new Error(`charId "${charId}" not found in standing`);
+/**
+ * 孤立 fixture：wenya 位于常在（84），所有其他侍君（xu_qinghuan=驸176、
+ * lu_huaijin=承徽156）均高于贵人边界 → wenya 是唯一可能的候选目标。
+ * 参数可在此基础上精确设置 favor / loyalty / servantOpinion。
+ */
+function wenyaFixture(opts: {
+  rank?: string;
+  favor?: number;
+  affection?: number;
+  loyalty?: number;
+  servantOpinion?: number;
+  personality?: Partial<ConsortPersonality>;
+}): GameState {
+  const state = baseState();
+  const existing = state.standing["wenya"]!;
   return {
     ...state,
     standing: {
       ...state.standing,
-      [charId]: {
+      wenya: {
         ...existing,
-        ...(patch.rank !== undefined ? { rank: patch.rank } : {}),
-        ...(patch.affection !== undefined ? { affection: patch.affection } : {}),
-        ...(patch.loyalty !== undefined ? { loyalty: patch.loyalty } : {}),
+        rank: opts.rank ?? "changzai",
+        favor: opts.favor ?? 30,
+        ...(opts.affection !== undefined ? { affection: opts.affection } : {}),
+        ...(opts.loyalty !== undefined ? { loyalty: opts.loyalty } : {}),
         household: {
-          ...(existing.household ?? DEFAULT_HOUSEHOLD),
-          ...(patch.servantOpinion !== undefined ? { servantOpinion: patch.servantOpinion } : {}),
+          ...HOUSEHOLD_DEFAULTS,
+          ...(existing.household ?? {}),
+          ...(opts.servantOpinion !== undefined ? { servantOpinion: opts.servantOpinion } : {}),
         },
-        personality: {
-          ...DEFAULT_PERSONALITY,
-          ...(existing.personality ?? {}),
-          ...(patch.personality ?? {}),
-        },
+        personality: { ...PERSONALITY_DEFAULTS, ...(existing.personality ?? {}), ...(opts.personality ?? {}) },
       },
     },
   };
 }
 
 /**
- * 注入一条 harem_administration 标记的 rank_changed chronicle 事件。
- * monthsAgo=0 → 当月，monthsAgo=12 → 恰好超出冷却。
+ * 将 state 的日历推进至 year=2 month=1（第 25 个月），
+ * 使得历史事件（最多 24 个月前）有足够空间不溢出到负时间。
  */
-function injectAdminRankEvent(state: GameState, targetId: string, monthsAgo: number): GameState {
-  const { year, month } = state.calendar;
-  const eventYear = month - monthsAgo <= 0
-    ? year - Math.ceil((monthsAgo - month + 1) / 12)
-    : year;
-  const eventMonth = ((month - monthsAgo - 1 + 120) % 12) + 1;
+function advanceToYear2(state: GameState): GameState {
+  const gt = makeGameTime(2, 1, "early");
+  return { ...state, calendar: { ...state.calendar, ...gt } };
+}
+
+/**
+ * 注入一条 harem_administration 标记的 rank_changed 事件（时间戳准确）。
+ * 调用前须确保 state.calendar 已在 monthsAgo 个月之后（不会溢出到负时间）。
+ */
+function withAdminRankEvent(state: GameState, targetId: string, monthsAgo: number): GameState {
+  const { year: curYear, month: curMonth } = state.calendar;
+  const curMonthsFromEpoch = (curYear - 1) * 12 + (curMonth - 1);
+  const eventMonthsFromEpoch = curMonthsFromEpoch - monthsAgo;
+  if (eventMonthsFromEpoch < 0) {
+    throw new Error(`Cannot place event ${monthsAgo}mo ago: calendar at year=${curYear} month=${curMonth} is too early`);
+  }
+  const eventYear = Math.floor(eventMonthsFromEpoch / 12) + 1;
+  const eventMonth = (eventMonthsFromEpoch % 12) + 1;
   return {
     ...state,
     chronicle: [
       ...state.chronicle,
       {
-        id: `test_admin_rank_${targetId}_${monthsAgo}`,
+        id: `test_admin_rank_${targetId}_ago${monthsAgo}`,
         type: "rank_changed" as const,
-        occurredAt: { year: eventYear, month: eventMonth, day: 1 },
+        occurredAt: makeGameTime(eventYear, eventMonth, "early"),
         participants: [
           { charId: "shen_zhibai", role: "administrator" as const },
           { charId: targetId, role: "recipient" as const },
@@ -131,416 +115,308 @@ function injectAdminRankEvent(state: GameState, targetId: string, monthsAgo: num
   };
 }
 
-// ─── AD-01..05  rank ladder helpers ──────────────────────────────────────────
+// ─── AD-01..04  rank ladder helpers ──────────────────────────────────────────
 
 describe("nextAdministrativeRank / previousAdministrativeRank", () => {
-  it("AD-01: 从承徽向上一级得贵人", () => {
-    // changzai(84) → guiren(116)？ 需要看实际 ladder
-    // 只验证函数有返回值且与输入不同
-    const result = nextAdministrativeRank(db, "changzai");
-    expect(result).not.toBeNull();
-    expect(result).not.toBe("changzai");
+  it("AD-01: changzai(84) 晋一级 = cairen(92)", () => {
+    expect(nextAdministrativeRank(db, "changzai")).toBe("cairen");
   });
 
-  it("AD-02: 从贵人向上一级存在（贵人不是最高 harem assignable rank）", () => {
-    const result = nextAdministrativeRank(db, "guiren");
-    // 贵人以上还有更多位分（如 zhaoyi, chenghui 等），结果非 null
-    expect(result).not.toBeNull();
+  it("AD-02: cairen(92) 降一级 = changzai(84)", () => {
+    expect(previousAdministrativeRank(db, "cairen")).toBe("changzai");
   });
 
-  it("AD-03: 最低等后宫位分向下返回 null", () => {
-    // 找实际最低 harem 位分
-    const allHaremRanks = Object.values(db.ranks)
-      .filter((r) => r.domain === "harem")
-      .sort((a, b) => a.order - b.order);
-    const lowest = allHaremRanks[0]!;
-    expect(previousAdministrativeRank(db, lowest.id)).toBeNull();
+  it("AD-03: 最低 harem 位分（guannanzi 52）降一级返回 null", () => {
+    expect(previousAdministrativeRank(db, "guannanzi")).toBeNull();
   });
 
-  it("AD-04: 未知位分返回 null", () => {
-    expect(nextAdministrativeRank(db, "nonexistent_rank")).toBeNull();
-    expect(previousAdministrativeRank(db, "nonexistent_rank")).toBeNull();
-  });
-
-  it("AD-05: next 与 previous 互为逆操作（中间位分）", () => {
-    const mid = nextAdministrativeRank(db, "changzai");
-    if (!mid) return; // guard
-    const back = previousAdministrativeRank(db, mid);
-    expect(back).toBe("changzai");
+  it("AD-04: 未知位分 next / previous 均返回 null", () => {
+    expect(nextAdministrativeRank(db, "__nonexistent__")).toBeNull();
+    expect(previousAdministrativeRank(db, "__nonexistent__")).toBeNull();
   });
 });
 
-// ─── AD-06..09  贵人边界 + lifecycle 过滤 ────────────────────────────────────
+// ─── AD-05  neiwu_proxy / 非授权行政者 → null ─────────────────────────────────
 
-describe("planAdministratorRankDecision — 候选资格过滤", () => {
-  it("AD-06: neiwu_proxy 模式 → null", () => {
+describe("planAdministratorRankDecision — 模式拒绝", () => {
+  it("AD-05: neiwu_proxy 模式 → null", () => {
     const state: GameState = {
       ...baseState(),
-      haremAdministration: { mode: "neiwu_proxy" },
+      haremAdministration: {
+        mode: "neiwu_proxy",
+        appointedAt: toGameTime(baseState().calendar),
+        reason: "no_eligible_consort",
+      },
     };
-    expect(planAdministratorRankDecision(db, state, "shen_zhibai", 100)).toBeNull();
+    expect(planAdministratorRankDecision(db, state, "shen_zhibai")).toBeNull();
   });
 
-  it("AD-07: acting_consort 行政者 id 不匹配 → null", () => {
-    const state = withActingConsort(baseState(), "xu_qinghuan");
-    expect(planAdministratorRankDecision(db, state, "shen_zhibai", 100)).toBeNull();
+  it("AD-06: empress 模式 — administratorId 不匹配皇后 charId → null", () => {
+    const state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    expect(planAdministratorRankDecision(db, state, "xu_qinghuan")).toBeNull();
   });
 
-  it("AD-08: 皇后模式 — 所有可能目标均在贵人及以上 → null", () => {
-    // 默认存档里低位侍君 affection/loyalty/servantOpinion 不一定满足，
-    // 但测试目的是验证贵人边界：让所有目标都提升到 guiren 以上。
-    let state = baseState();
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    const aboveGuiren = Object.values(db.ranks)
-      .filter((r) => r.domain === "harem" && r.order >= guirenOrder)
-      .map((r) => r.id);
-    // 把所有侍君（非皇后）移到 guiren 以上
-    for (const [charId, st] of Object.entries(state.standing)) {
-      if (!st || st.rank === "huanghou") continue;
-      const rankAbove = aboveGuiren[0];
-      if (rankAbove) {
-        state = setConsortAttrs(state, charId, { rank: rankAbove });
-      }
-    }
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
+  it("AD-07: acting_consort 模式 — administratorId 不匹配 admin.charId → null", () => {
+    const base = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    const state: GameState = {
+      ...base,
+      haremAdministration: {
+        mode: "acting_consort",
+        charId: "xu_qinghuan",
+        appointedAt: toGameTime(base.calendar),
+        reason: "empress_confined",
+      },
+    };
+    expect(planAdministratorRankDecision(db, state, "shen_zhibai")).toBeNull();
+  });
+});
+
+// ─── AD-08..11  promote 阈值（精确断言，wenya 是唯一候选）────────────────────
+
+describe("planAdministratorRankDecision — promote 阈值", () => {
+  it("AD-08: favor≥45 & loyalty≥50 & servantOpinion≥50 → promote wenya changzai→cairen", () => {
+    const state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).not.toBeNull();
+    expect(result!.targetId).toBe("wenya");
+    expect(result!.direction).toBe("promote");
+    expect(result!.fromRankId).toBe("changzai");
+    expect(result!.toRankId).toBe("cairen");
+    expect(result!.score).toBeGreaterThan(0);
+  });
+
+  it("AD-09: favor=44（低于门槛）→ null（即使 affection=100）", () => {
+    const state = wenyaFixture({ favor: 44, affection: 100, loyalty: 70, servantOpinion: 70 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
     expect(result).toBeNull();
   });
 
-  it("AD-09: 目标侍君 lifecycle=deceased → 跳过", () => {
-    // 找一个低位侍君（changzai），把它设为 deceased，验证决策跳过
-    let state = baseState();
-    const changzaiConsorts = Object.entries(state.standing)
-      .filter(([, st]) => st?.rank === "changzai")
-      .map(([id]) => id);
-    for (const id of changzaiConsorts) {
-      state = { ...state, standing: { ...state.standing, [id]: { ...state.standing[id]!, lifecycle: "deceased" } } };
-    }
-    // 此时如果没有其他低位候选 → 无 promote/demote → null 是可能结果
-    // 主要验证不崩溃
-    expect(() => planAdministratorRankDecision(db, state, "shen_zhibai", 100)).not.toThrow();
+  it("AD-10: favor=60, affection=0（情意极低）→ 仍可晋位（favor 才是门槛）", () => {
+    const state = wenyaFixture({ favor: 60, affection: 0, loyalty: 60, servantOpinion: 60 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).not.toBeNull();
+    expect(result!.direction).toBe("promote");
+  });
+
+  it("AD-11: loyalty=49（低于门槛）→ null", () => {
+    const state = wenyaFixture({ favor: 60, loyalty: 49, servantOpinion: 70 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).toBeNull();
+  });
+
+  it("AD-12: servantOpinion=49（低于门槛）→ null", () => {
+    const state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 49 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).toBeNull();
   });
 });
 
-// ─── AD-10..14  promote 阈值 ─────────────────────────────────────────────────
-
-describe("planAdministratorRankDecision — promote 阈值", () => {
-  /** 找一个低于贵人的侍君并返回其 id；优先用 changzai（order 84）。 */
-  function findLowRankConsort(state: GameState): string | null {
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") continue;
-      if (st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) return id;
-    }
-    return null;
-  }
-
-  it("AD-10: favor≥45, loyalty≥50, servantOpinion≥50 → 产生 promote 决策", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return; // 存档中没有低位候选，跳过
-    state = setConsortAttrs(state, targetId, {
-      affection: 60,
-      loyalty: 60,
-      servantOpinion: 60,
-    });
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (!result) return; // 其他限制（如无上一级），可接受
-    expect(result.direction).toBe("promote");
-    expect(result.targetId).toBe(targetId);
-  });
-
-  it("AD-11: favor=44（低于阈值）→ 不产生 promote（即使 loyalty/servantOpinion 满足）", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, {
-      affection: 44,
-      loyalty: 70,
-      servantOpinion: 70,
-    });
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    // 如有结果，不能是对该 targetId 的 promote
-    if (result) {
-      const isTargetPromote = result.targetId === targetId && result.direction === "promote";
-      expect(isTargetPromote).toBe(false);
-    }
-  });
-
-  it("AD-12: loyalty=49（低于阈值）→ 不产生 promote", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, {
-      affection: 60,
-      loyalty: 49,
-      servantOpinion: 70,
-    });
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (result) {
-      expect(result.targetId === targetId && result.direction === "promote").toBe(false);
-    }
-  });
-
-  it("AD-13: servantOpinion=49（低于阈值）→ 不产生 promote", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, {
-      affection: 60,
-      loyalty: 60,
-      servantOpinion: 49,
-    });
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (result) {
-      expect(result.targetId === targetId && result.direction === "promote").toBe(false);
-    }
-  });
-
-  it("AD-14: 目标在冷却期内（11 个月前调整过）→ 跳过", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, { affection: 60, loyalty: 60, servantOpinion: 60 });
-    state = injectAdminRankEvent(state, targetId, 11); // 11 月前，仍在冷却
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (result) {
-      expect(result.targetId === targetId).toBe(false);
-    }
-  });
-});
-
-// ─── AD-15..17  demote 阈值 ──────────────────────────────────────────────────
+// ─── AD-13..15  demote 阈值 ───────────────────────────────────────────────────
 
 describe("planAdministratorRankDecision — demote 阈值", () => {
-  function findLowRankConsort(state: GameState): string | null {
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    // 找有上下级可动的
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") continue;
-      if (st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder && previousAdministrativeRank(db, st.rank)) return id;
-    }
-    return null;
-  }
-
-  it("AD-15: loyalty≤25 → 产生 demote 决策", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, { loyalty: 20, servantOpinion: 60 });
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (!result) return;
-    if (result.targetId === targetId) {
-      expect(result.direction).toBe("demote");
-    }
+  it("AD-13: loyalty≤25 → demote wenya changzai→daying", () => {
+    const state = wenyaFixture({ favor: 30, loyalty: 20, servantOpinion: 60 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).not.toBeNull();
+    expect(result!.targetId).toBe("wenya");
+    expect(result!.direction).toBe("demote");
+    expect(result!.fromRankId).toBe("changzai");
+    expect(result!.toRankId).toBe("daying");
+    expect(result!.score).toBeLessThan(0);
   });
 
-  it("AD-16: servantOpinion≤25 → 产生 demote 决策", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, { loyalty: 60, servantOpinion: 20 });
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (!result) return;
-    if (result.targetId === targetId) {
-      expect(result.direction).toBe("demote");
-    }
+  it("AD-14: servantOpinion≤25 → demote wenya", () => {
+    const state = wenyaFixture({ favor: 30, loyalty: 60, servantOpinion: 20 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).not.toBeNull();
+    expect(result!.direction).toBe("demote");
   });
 
-  it("AD-17: loyalty=26, servantOpinion=26（均高于 25）→ 不产生 demote", () => {
-    let state = baseState();
-    const targetId = findLowRankConsort(state);
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, { loyalty: 26, servantOpinion: 26, affection: 30 });
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (result && result.targetId === targetId) {
-      expect(result.direction).not.toBe("demote");
-    }
+  it("AD-15: loyalty=26, servantOpinion=26（均高于门槛）→ null（无 promote 条件）", () => {
+    const state = wenyaFixture({ favor: 30, loyalty: 26, servantOpinion: 26 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).toBeNull();
   });
 });
 
-// ─── AD-18..21  性格修正 ─────────────────────────────────────────────────────
+// ─── AD-16..18  降位理由分类（在生成时确定）──────────────────────────────────
+
+describe("planAdministratorRankDecision — 降位 reason", () => {
+  it("AD-16: loyalty≤25, servantOpinion>25 → reason=disloyalty", () => {
+    const state = wenyaFixture({ favor: 30, loyalty: 20, servantOpinion: 60 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result!.reason).toBe("disloyalty");
+  });
+
+  it("AD-17: loyalty>25, servantOpinion≤25 → reason=household_disorder", () => {
+    const state = wenyaFixture({ favor: 30, loyalty: 60, servantOpinion: 20 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result!.reason).toBe("household_disorder");
+  });
+
+  it("AD-18: 两者均≤25, servantOpinion < loyalty → reason=household_disorder", () => {
+    const state = wenyaFixture({ favor: 30, loyalty: 20, servantOpinion: 10 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result!.reason).toBe("household_disorder");
+  });
+
+  it("AD-19: 两者均≤25, loyalty < servantOpinion → reason=disloyalty", () => {
+    const state = wenyaFixture({ favor: 30, loyalty: 10, servantOpinion: 20 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result!.reason).toBe("disloyalty");
+  });
+});
+
+// ─── AD-20..22  晋位理由分类 ─────────────────────────────────────────────────
+
+describe("planAdministratorRankDecision — 晋位 reason", () => {
+  it("AD-20: favor≥55 & loyalty≥60 → service_merit", () => {
+    const state = wenyaFixture({ favor: 70, loyalty: 70, servantOpinion: 60 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result!.reason).toBe("service_merit");
+  });
+
+  it("AD-21: favor=47, loyalty=52 → household_order（刚好满足晋位但不达 service_merit 标准）", () => {
+    const state = wenyaFixture({ favor: 47, loyalty: 52, servantOpinion: 60 });
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result!.direction).toBe("promote");
+    expect(result!.reason).toBe("household_order");
+  });
+});
+
+// ─── AD-23  compassion 修正方向（高仁慈 → 降低降位优先度）────────────────────
 
 describe("planAdministratorRankDecision — 性格修正方向", () => {
-  function setupEligibleDemoteTarget(state: GameState): { state: GameState; targetId: string } | null {
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") continue;
-      if (st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder && previousAdministrativeRank(db, st.rank)) {
-        const updated = setConsortAttrs(state, id, { loyalty: 15, servantOpinion: 15 });
-        return { state: updated, targetId: id };
-      }
-    }
-    return null;
-  }
+  it("AD-23: 高 compassion 皇后降低降位 priority，低 compassion 皇后更倾向降位", () => {
+    // 使皇后有 wenya 需要降位的状态
+    const baseOpts = { favor: 30, loyalty: 10, servantOpinion: 60 };
 
-  it("AD-18: 高 compassion（80）降低 demote 评分（仁慈压制降位）", () => {
-    let state = baseState();
-    const setup = setupEligibleDemoteTarget(state);
-    if (!setup) return;
-    state = setup.state;
-    const adminId = "shen_zhibai"; // 皇后
-    // 高 compassion 使 demote 评分修正 = -(80-50)*0.15 = -4.5
-    state = setConsortAttrs(state, adminId, { personality: { compassion: 80 } });
-    const result = planAdministratorRankDecision(db, state, adminId, 100);
-    // 结果不必改变，但不应崩溃
-    expect(() => planAdministratorRankDecision(db, state, adminId, 100)).not.toThrow();
-  });
+    const highCompassion = wenyaFixture(baseOpts);
+    const shenHighC = highCompassion.standing["shen_zhibai"]!;
+    const stateHighC: GameState = {
+      ...highCompassion,
+      standing: {
+        ...highCompassion.standing,
+        shen_zhibai: { ...shenHighC, personality: { ...PERSONALITY_DEFAULTS, ...(shenHighC.personality ?? {}), compassion: 90 } },
+      },
+    };
 
-  it("AD-19: 高 pride（80）在 servantOpinion 低时增大 demote 评分（绝对值）", () => {
-    let state = baseState();
-    const setup = setupEligibleDemoteTarget(state);
-    if (!setup) return;
-    state = setup.state;
-    const adminId = "shen_zhibai";
-    // pride=80, servantOpinion=15: adj = (80-50)*0.08*(15-50)/50 ≈ -1.68 → 降低 demote 分（负 base 变更负）
-    state = setConsortAttrs(state, adminId, { personality: { pride: 80 } });
-    expect(() => planAdministratorRankDecision(db, state, adminId, 100)).not.toThrow();
-  });
+    const lowCompassion = wenyaFixture(baseOpts);
+    const shenLowC = lowCompassion.standing["shen_zhibai"]!;
+    const stateLowC: GameState = {
+      ...lowCompassion,
+      standing: {
+        ...lowCompassion.standing,
+        shen_zhibai: { ...shenLowC, personality: { ...PERSONALITY_DEFAULTS, ...(shenLowC.personality ?? {}), compassion: 10 } },
+      },
+    };
 
-  it("AD-20: 结果分值在合理范围内（promote: >0，demote: <0）", () => {
-    let state = baseState();
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) {
-        state = setConsortAttrs(state, id, { affection: 70, loyalty: 70, servantOpinion: 70 });
-      }
-    }
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (result) {
-      if (result.direction === "promote") expect(result.score).toBeGreaterThan(0);
-      if (result.direction === "demote") expect(result.score).toBeLessThan(0);
-    }
+    const resultHighC = planAdministratorRankDecision(db, stateHighC, "shen_zhibai");
+    const resultLowC = planAdministratorRankDecision(db, stateLowC, "shen_zhibai");
+
+    expect(resultHighC).not.toBeNull();
+    expect(resultLowC).not.toBeNull();
+    // 高仁慈的降位 priority（score 的绝对值）应低于低仁慈
+    expect(Math.abs(resultHighC!.score)).toBeLessThan(Math.abs(resultLowC!.score));
   });
 });
 
-// ─── AD-22..24  确定性 ──────────────────────────────────────────────────────
+// ─── AD-24..25  冷却检查 ──────────────────────────────────────────────────────
+
+describe("planAdministratorRankDecision — 冷却", () => {
+  it("AD-24: 11 个月前由管理者调整过 → 仍在冷却期内 → null", () => {
+    // 先推进到 year=2 month=1，再注入 11 个月前（year=1 month=2）的事件
+    let state = advanceToYear2(wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 }));
+    state = withAdminRankEvent(state, "wenya", 11);
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).toBeNull();
+  });
+
+  it("AD-25: 12 个月前调整过 → 冷却到期 → 可再次晋位", () => {
+    let state = advanceToYear2(wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 }));
+    state = withAdminRankEvent(state, "wenya", 12);
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).not.toBeNull();
+    expect(result!.targetId).toBe("wenya");
+    expect(result!.direction).toBe("promote");
+  });
+});
+
+// ─── AD-26  冷宫 / 禁足过滤 ─────────────────────────────────────────────────
+
+describe("planAdministratorRankDecision — 冷宫/禁足", () => {
+  it("AD-26: wenya 正在禁足 → 跳过 → null", () => {
+    let state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    // 注入一条 confinement status effect
+    state = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: "test_confinement_wenya",
+          kind: "confinement" as const,
+          characterId: "wenya",
+          startTurn: state.calendar.dayIndex,
+          endTurnExclusive: null,
+          imposedAt: toGameTime(state.calendar),
+          imposedBy: "emperor" as const,
+        },
+      ],
+    };
+    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
+    expect(result).toBeNull();
+  });
+});
+
+// ─── AD-27  确定性 ────────────────────────────────────────────────────────────
 
 describe("planAdministratorRankDecision — 确定性", () => {
-  it("AD-22: 同一年、同一 state → 同一结果（幂等）", () => {
-    let state = baseState();
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) {
-        state = setConsortAttrs(state, id, { affection: 60, loyalty: 60, servantOpinion: 60 });
-      }
-    }
-    const r1 = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    const r2 = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
+  it("AD-27: 相同 state 两次调用结果完全相同（幂等）", () => {
+    const state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    const r1 = planAdministratorRankDecision(db, state, "shen_zhibai");
+    const r2 = planAdministratorRankDecision(db, state, "shen_zhibai");
     expect(r1).toEqual(r2);
   });
-
-  it("AD-23: 不同年份 → 可能得到不同结果（tie-break 种子包含年份）", () => {
-    // 无法保证一定不同，但验证函数不崩溃且接受不同 year
-    let state = baseState();
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) {
-        state = setConsortAttrs(state, id, { affection: 60, loyalty: 60, servantOpinion: 60 });
-      }
-    }
-    expect(() => planAdministratorRankDecision(db, state, "shen_zhibai", 101)).not.toThrow();
-  });
-
-  it("AD-24: tieBreak 值为稳定 uint32（同参数两次调用相等）", () => {
-    // 间接验证：两次相同调用结果相同，已由 AD-22 验证
-    expect(true).toBe(true);
-  });
 });
 
-// ─── AD-25..27  冷却到期 ─────────────────────────────────────────────────────
+// ─── AD-28..30  集成：store layer + resolver ────────────────────────────────
 
-describe("planAdministratorRankDecision — 冷却到期", () => {
-  it("AD-25: 12 个月前调整过 → 冷却已过，可再次成为候选", () => {
-    let state = baseState();
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    let targetId: string | null = null;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) { targetId = id; break; }
-    }
-    if (!targetId) return;
-    state = setConsortAttrs(state, targetId, { affection: 60, loyalty: 60, servantOpinion: 60 });
-    state = injectAdminRankEvent(state, targetId, 12); // 恰好 12 月前 → 冷却解除
-    // 不要求一定是此目标（可能评分被其他人超过），但不应崩溃
-    expect(() => planAdministratorRankDecision(db, state, "shen_zhibai", 100)).not.toThrow();
+describe("store layer 集成", () => {
+  it("AD-28: planAdministratorRankDecision 返回 decision + command + plan", () => {
+    const state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    const planned = storeDecision(db, state, "shen_zhibai");
+    expect(planned).not.toBeNull();
+    expect(planned!.decision.targetId).toBe("wenya");
+    expect(planned!.decision.direction).toBe("promote");
+    expect(planned!.command.type).toBe("harem_admin_rank_change");
+    expect(planned!.command.targetId).toBe("wenya");
+    expect(planned!.command.request).toEqual({ kind: "set_rank", rank: "cairen" });
+    expect(planned!.plan.effects.length).toBeGreaterThan(0);
+    // reason 不丢失
+    expect(["service_merit", "household_order", "disloyalty", "household_disorder"]).toContain(
+      planned!.decision.reason,
+    );
   });
-});
 
-// ─── AD-28..30  集成测试 ────────────────────────────────────────────────────
+  it("AD-29: resolveHaremAdminRankCommand 成功 → 返回新 state（wenya 已升为 cairen）", () => {
+    const state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    const planned = storeDecision(db, state, "shen_zhibai");
+    expect(planned).not.toBeNull();
 
-describe("planAdministratorRankDecision + planHaremAdminRankCommand 集成", () => {
-  it("AD-28: 决策结果可直接传入 planHaremAdminRankCommand 并成功", () => {
-    let state = baseState();
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    let targetId: string | null = null;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) {
-        state = setConsortAttrs(state, id, { affection: 60, loyalty: 60, servantOpinion: 60 });
-        targetId = id;
-        break;
-      }
-    }
-    if (!targetId) return;
+    const resolved = resolveHaremAdminRankCommand(db, state, planned!.command);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.value.state.standing["wenya"]?.rank).toBe("cairen");
+  });
 
-    const decision = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (!decision) return; // 无候选，可接受
-
-    const cmdResult = planHaremAdminRankCommand(db, state, {
+  it("AD-30: resolveHaremAdminRankCommand 权限拒绝 → 失败（目标已是贵人）", () => {
+    const state = wenyaFixture({ rank: "guiren", favor: 60, loyalty: 60, servantOpinion: 60 });
+    const result = resolveHaremAdminRankCommand(db, state, {
       type: "harem_admin_rank_change",
-      actorId: decision.actorId,
-      targetId: decision.targetId,
-      request: { kind: "set_rank", rank: decision.toRankId },
+      actorId: "shen_zhibai",
+      targetId: "wenya",
+      request: { kind: "set_rank", rank: "shaoshi" }, // shaoshi=124, 超过贵人边界
     });
-    expect(cmdResult.ok).toBe(true);
-  });
-
-  it("AD-29: acting_consort 模式 — 行政者 id 与 admin.charId 须匹配", () => {
-    let state = withActingConsort(baseState(), "xu_qinghuan");
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.rank === "huanghou" || id === "xu_qinghuan") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) {
-        state = setConsortAttrs(state, id, { affection: 60, loyalty: 60, servantOpinion: 60 });
-      }
-    }
-    const result = planAdministratorRankDecision(db, state, "xu_qinghuan", 100);
-    // 可能为 null（xu_qinghuan 自身位分边界问题），但不崩溃
-    expect(() => planAdministratorRankDecision(db, state, "xu_qinghuan", 100)).not.toThrow();
-  });
-
-  it("AD-30: fromRankId 与 toRankId 是相邻位分（nextAdministrativeRank 或 previousAdministrativeRank）", () => {
-    let state = baseState();
-    const guirenOrder = db.ranks["guiren"]?.order ?? 116;
-    for (const [id, st] of Object.entries(state.standing)) {
-      if (!st || st.lifecycle === "deceased" || st.rank === "huanghou") continue;
-      const rankData = db.ranks[st.rank];
-      if (rankData && rankData.order < guirenOrder) {
-        state = setConsortAttrs(state, id, { affection: 60, loyalty: 60, servantOpinion: 60 });
-      }
-    }
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai", 100);
-    if (!result) return;
-
-    if (result.direction === "promote") {
-      expect(nextAdministrativeRank(db, result.fromRankId)).toBe(result.toRankId);
-    } else {
-      expect(previousAdministrativeRank(db, result.fromRankId)).toBe(result.toRankId);
-    }
+    expect(result.ok).toBe(false);
   });
 });

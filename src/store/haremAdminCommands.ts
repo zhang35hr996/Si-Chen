@@ -8,7 +8,10 @@
  *   - 效果仍走同一 funnel，权限校验由 funnel.validateEffects 兜底
  */
 import { toGameTime } from "../engine/calendar/time";
-import { planAdministratorRankDecision as planDecision } from "../engine/characters/haremAdminDecision";
+import {
+  planAdministratorRankDecision as planDecision,
+  type HaremAdminDecision,
+} from "../engine/characters/haremAdminDecision";
 import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../engine/characters/haremRankAuthority";
 import { resolveDisplayName } from "../engine/characters/standing";
 import { appendCourtEvent } from "../engine/chronicle/append";
@@ -36,6 +39,17 @@ export interface HaremAdminCommandPlan {
 export type HaremAdminCommandResult =
   | { ok: true; plan: HaremAdminCommandPlan }
   | { ok: false; reason: string };
+
+/**
+ * 自主决策完整结果：decision（含 reason/score）+ command + plan。
+ * #73B 的 settlePostAdvance 用此类型持久化原因并生成乘风禀报台词，
+ * 无需重新运行决策引擎或重新推断原因。
+ */
+export interface PlannedAutonomousRankDecision {
+  decision: HaremAdminDecision;
+  command: HaremAdminRankCommand;
+  plan: HaremAdminCommandPlan;
+}
 
 /**
  * 校验并组装六宫行政位分处分命令。
@@ -113,7 +127,6 @@ export function planHaremAdminRankCommand(
 /**
  * 纯 resolver：校验 → applyEffects → chronicle，返回最终 state 和 plan。
  * 不修改 GameStore，不 emit。供 settlePostAdvance 内的事务使用。
- * GameStore.applyHaremAdminRankCommand 在此之上再做 commit/trace/emit。
  */
 export function resolveHaremAdminRankCommand(
   db: ContentDB,
@@ -140,21 +153,24 @@ export function resolveHaremAdminRankCommand(
 }
 
 /**
- * 自主位分决策：委托决策引擎，将结果包装为 HaremAdminRankCommand 并规划。
- * 返回 null 表示无合格目标或无权限。
+ * 自主位分决策：委托决策引擎，将结果包装为 PlannedAutonomousRankDecision。
+ * 返回 null 表示无合格目标、无权限、或引擎权限复验失败（理应不出现）。
+ * #73B 的 settlePostAdvance 直接消费此函数的返回值。
  */
 export function planAdministratorRankDecision(
   db: ContentDB,
   state: GameState,
   administratorId: string,
-  year: number,
-): HaremAdminCommandResult | null {
-  const decision = planDecision(db, state, administratorId, year);
+): PlannedAutonomousRankDecision | null {
+  const decision = planDecision(db, state, administratorId);
   if (!decision) return null;
-  return planHaremAdminRankCommand(db, state, {
+  const command: HaremAdminRankCommand = {
     type: "harem_admin_rank_change",
     actorId: decision.actorId,
     targetId: decision.targetId,
     request: { kind: "set_rank", rank: decision.toRankId },
-  });
+  };
+  const cmdResult = planHaremAdminRankCommand(db, state, command);
+  if (!cmdResult.ok) return null;
+  return { decision, command, plan: cmdResult.plan };
 }
