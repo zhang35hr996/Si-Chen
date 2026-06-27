@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("promote a consort from the 乘风·调整位分 list and return to her detail with new 称呼", async ({ page }) => {
+test("promote a consort from the 乘风·管理侍君 list and return to her detail with new 称呼", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "新游戏" }).click();
   // 登基改元
@@ -9,14 +9,14 @@ test("promote a consort from the 乘风·调整位分 list and return to her det
   await page.getByRole("button", { name: "开始" }).click();
 
   // map-as-hub: enter 紫宸殿. Its request-audience prompt is non-blocking, so the
-  // scene actions stay live — open the consort list via 乘风 → 调整位分.
+  // scene actions stay live — open the consort list via 乘风 → 管理侍君.
   await page.getByRole("button", { name: "紫宸殿" }).click();
   await page.getByRole("button", { name: "传乘风" }).click();
-  await page.getByRole("button", { name: "调整位分" }).click();
+  await page.getByRole("button", { name: "管理侍君" }).click();
 
-  // 陆怀瑾（承徽）→ 封号管理（直接从列表进；列表会先收起，弹窗不再被遮挡）
+  // 陆怀瑾（承徽）→ 封号/位分管理（直接从列表进；列表会先收起，弹窗不再被遮挡）
   await page.getByRole("button", { name: "陆怀瑾 承徽" }).click();
-  await page.getByRole("button", { name: "封号管理" }).click();
+  await page.getByRole("button", { name: "封号/位分管理" }).click();
 
   // 选 驸（value "fu"，旧 jun → 新 fu 重命名后的从一品位分）→ 确认（修复前此处被列表叠层拦截而点不动）
   await page.locator(".rank-modal select").selectOption("fu");
@@ -28,5 +28,5 @@ test("promote a consort from the 乘风·调整位分 list and return to her det
 
   // 反应结束后自动回到「查看侍君」并定位回陆怀瑾详情，位分已更新为 驸
   await expect(page.getByText("位分：驸")).toBeVisible();
-  await expect(page.getByRole("button", { name: "封号管理" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "封号/位分管理" })).toBeVisible();
 });
