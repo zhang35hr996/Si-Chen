@@ -14,6 +14,7 @@ export type GlobalInterruptKind =
   | "successor" // 宗正寺承嗣上书（自孕三月自动）
   | "centennial_heir" // 皇嗣百日赐名
   | "cold_palace_report" // 冷宫事件通报（PUNISH-4C）
+  | "harem_admin_review" // 六宫年度例核乘风禀报（PR #76）
   | "grand_selection"; // 大选·殿选日历提示
 
 /** 各全局中断当前是否到期（由 App 从最新 Store + 瞬时驳回态派生；保持纯粹便于测试）。 */
@@ -23,12 +24,13 @@ export interface GlobalInterruptInputs {
   successorDue: boolean;
   centennialDue: boolean;
   coldPalaceReportDue: boolean;
+  haremAdminReviewDue: boolean;
   grandSelectionDue: boolean;
 }
 
 /**
  * 确定性优先级（皇帝驾崩/终局在结算之前已 short-circuit，不在此列）：
- * 生产 > 孕事上书 > 承嗣 > 百日赐名 > 冷宫通报 > 大选。一次只返回一个；解决后状态变化、重选得到下一个。
+ * 生产 > 孕事上书 > 承嗣 > 百日赐名 > 冷宫通报 > 例核禀报 > 大选。一次只返回一个；解决后状态变化、重选得到下一个。
  */
 export function pickNextGlobalInterrupt(inputs: GlobalInterruptInputs): GlobalInterruptKind | null {
   if (inputs.birthDue) return "birth";
@@ -36,6 +38,7 @@ export function pickNextGlobalInterrupt(inputs: GlobalInterruptInputs): GlobalIn
   if (inputs.successorDue) return "successor";
   if (inputs.centennialDue) return "centennial_heir";
   if (inputs.coldPalaceReportDue) return "cold_palace_report";
+  if (inputs.haremAdminReviewDue) return "harem_admin_review";
   if (inputs.grandSelectionDue) return "grand_selection";
   return null;
 }

@@ -383,6 +383,7 @@ describe("GlobalInterruptKind cold_palace_report priority", () => {
     successorDue: false,
     centennialDue: false,
     coldPalaceReportDue: false,
+    haremAdminReviewDue: false,
     grandSelectionDue: false,
   };
 

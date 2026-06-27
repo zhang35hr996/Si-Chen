@@ -792,6 +792,16 @@ export const gameStateSchema = z.strictObject({
       ]),
     }),
   ]).default({ mode: "empress" }),
+  haremAdminReviews: z.array(z.strictObject({
+    id: idSchema,
+    year: z.number().int().min(1),
+    outcome: z.enum(["rank_changed", "no_candidate", "no_administrator"]),
+    targetId: idSchema.optional(),
+    fromRankId: idSchema.optional(),
+    toRankId: idSchema.optional(),
+    settledAt: gameTimeSchema,
+    acknowledged: z.boolean(),
+  })).default([]),
   justice: justiceStateSchema,
   rngSeed: z.number(),
 }).superRefine((data, ctx) => {

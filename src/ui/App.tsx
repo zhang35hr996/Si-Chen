@@ -129,6 +129,8 @@ import { ColdPalaceCriticalIncidentModal } from "./components/ColdPalaceCritical
 import { ColdPalaceInterventionModal } from "./components/ColdPalaceInterventionModal";
 import { ColdPalaceMadnessModal } from "./components/ColdPalaceMadnessModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
+import { oldestPendingHaremAdminReport } from "../store/haremAdminAnnualReview";
+import { resolveDisplayName } from "../engine/characters/standing";
 import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
@@ -1227,6 +1229,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
         coldPalaceReportDue: oldestPresentableIncident(liveState) !== undefined,
+        haremAdminReviewDue: oldestPendingHaremAdminReport(liveState) !== null,
         grandSelectionDue: liveState.pendingDaxuan !== undefined,
       });
 
@@ -1251,6 +1254,33 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       setDaxuanPrompt(daxuanDianxuanPromptFor(pd.year)); // 按 pending.year 构造（年份权威，不取当前日历年）
     }
   }, [activeGlobalInterrupt]);
+
+  // 六宫年度例核禀报（PR #76）：最旧未读 → 乘风被动禀报 + 立即标记已阅；无选择，只有「知道了」(onDone)。
+  useEffect(() => {
+    if (!content.ok) return;
+    if (activeGlobalInterrupt !== "harem_admin_review") return;
+    if (reaction !== null) return; // 已有台词在播，等播完后重选
+    const st = store.getState();
+    const review = st.haremAdminReviews.find((r) => !r.acknowledged) ?? null;
+    if (!review) return;
+    const db_ = { ...content.value, characters: { ...content.value.characters, ...st.generatedConsorts } };
+    let line: string;
+    if (review.outcome === "rank_changed" && review.targetId && review.toRankId) {
+      const char = db_.characters[review.targetId];
+      const charSt = st.standing[review.targetId];
+      const rankMeta = db_.ranks[review.toRankId];
+      const displayName = char ? resolveDisplayName(char, charSt, rankMeta) : review.targetId;
+      const dir = (db_.ranks[review.fromRankId ?? ""]?.order ?? 0) < (rankMeta?.order ?? 0) ? "晋位" : "降位";
+      line = `陛下，${displayName}已奉六宫主理之命${dir}，位列${rankMeta?.name ?? review.toRankId}。`;
+    } else if (review.outcome === "no_candidate") {
+      line = "陛下，本年宫中侍君暂无合适人选行赏罚之事，例核押后。";
+    } else {
+      line = "陛下，内务府暂代六宫，本年例核未行。";
+    }
+    store.acknowledgeHaremAdminReview(review.id);
+    doAutosave();
+    setReaction({ speakerId: "cheng_feng", lines: [line] });
+  }, [activeGlobalInterrupt, reaction]);
 
   // 紫宸殿外部 busy 归属（§9）：atomicFlow 之外、本殿仍可触达的浮层/选择器/全局中断一并计入。
   // 复用权威 atomicFlowInProgress，不另立第二套原子流程定义。

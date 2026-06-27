@@ -62,6 +62,11 @@ import {
   type HeirCustodyTransferCommand,
   type HeirCustodyTransferPlan,
 } from "./heirCustody";
+import {
+  hasHaremAdminReviewForYear,
+  isHaremAdminReviewWindow,
+  settleAnnualHaremAdminReview,
+} from "./haremAdminAnnualReview";
 import { deriveQueueTraceEvents } from "../engine/trace/queueDiff";
 import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
 import type { QueueTraceEvent } from "../engine/trace/domainEvents";
@@ -1684,6 +1689,18 @@ export class GameStore {
       collector?.capturePhaseScheduled("annual_review", diffGameState(beforeReview, candidate));
     }
 
+    // 六月下旬后（catch-up 亦安全）→ 六宫年度例核：自主位分决策一次 + 追加禀报记录。
+    // 不依赖 monthChanged；hasHaremAdminReviewForYear 保证本年幂等。
+    if (isHaremAdminReviewWindow(candidate.calendar) && !hasHaremAdminReviewForYear(candidate, candidate.calendar.year)) {
+      const beforeHaremReview = candidate;
+      const reviewResult = settleAnnualHaremAdminReview(db, candidate);
+      if (reviewResult.ok) {
+        candidate = reviewResult.value;
+        collector?.capturePhaseScheduled("annual_harem_administration_review", diffGameState(beforeHaremReview, candidate));
+      }
+      // 失败时静默跳过（不阻断结算；下一旬 catch-up 不会再触发，因幂等守卫已在 rank_changed 执行前检查）。
+    }
+
     // 5) Cold-palace incident generation (月度；replay-stable).
     if (monthChanged) {
       // 5a) Critical-illness incidents — health ≤ CRITICAL_HEALTH_THRESHOLD (PUNISH-4D).
@@ -2516,6 +2533,19 @@ export class GameStore {
     const updated = [...this.state.coldPalaceIncidents];
     updated[idx] = { ...updated[idx]!, acknowledged: true };
     this.state = { ...this.state, coldPalaceIncidents: updated };
+    this.emit();
+    return true;
+  }
+
+  /** 标记六宫年度例核禀报为已阅（玩家按「知道了」后调用）。 */
+  acknowledgeHaremAdminReview(reviewId: string): boolean {
+    const idx = this.state.haremAdminReviews.findIndex(
+      (r) => r.id === reviewId && !r.acknowledged,
+    );
+    if (idx === -1) return false;
+    const updated = [...this.state.haremAdminReviews];
+    updated[idx] = { ...updated[idx]!, acknowledged: true };
+    this.state = { ...this.state, haremAdminReviews: updated };
     this.emit();
     return true;
   }
