@@ -10,7 +10,7 @@
  *  6. 万岁爷, 凤后, 娘娘 in forbiddenTerms.
  *  7. 皇上 NOT in forbiddenTerms (context-restricted, not global ban).
  *  8. WRONG_PLAYER_HONORIFICS is empty (皇上/圣上/万岁/圣驾 now valid).
- *  9. Save migration v22→v23 remaps old rank IDs in standing.
+ *  9. Save migration v26→v27 remaps old 君-family rank IDs.
  */
 import { describe, expect, it } from "vitest";
 import { loadRealContent } from "../helpers/contentFixture";
