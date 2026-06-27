@@ -21,7 +21,10 @@ import { chamberOf, hasChambers } from "../characters/chambers";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
 import { activeColdPalaceEffectFor, isInColdPalace, hasColdPalaceMadness } from "../characters/coldPalace";
 import { eligibleHaremAdministrators } from "../characters/haremAdministration";
-import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../characters/haremRankAuthority";
+import {
+  canAdministratorAdjustRank,
+  canEmpressAdjustRank,
+} from "../characters/haremRankAuthority";
 import { nextHeirId } from "../characters/heirs";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
@@ -186,12 +189,7 @@ export function validateEffects(
         } else if (db.lexicon.forbiddenTerms.some((t) => e.title.includes(t))) {
           bad(index, "BAD_EFFECT", `title "${e.title}" contains a forbidden term`, { title: e.title });
         } else if (e.authority.kind === "harem_administrator") {
-          // 封号操作不改变位分，但仍须目标严格低于协理者（empress 模式只需不是皇后）。
-          const curRankId = state.standing[e.char]!.rank;
-          const check = e.authority.office === "empress"
-            ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, curRankId)
-            : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
-          if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char });
+          bad(index, "BAD_EFFECT", "六宫主理者无权赐予或褫夺封号，须由陛下亲旨。");
         }
         break;
       }
@@ -202,11 +200,7 @@ export function validateEffects(
         } else if (state.standing[e.char]!.rank === "huanghou") {
           bad(index, "BAD_EFFECT_TARGET", `the 正宫 (皇后) is not adjustable: "${e.char}"`, { char: e.char });
         } else if (e.authority.kind === "harem_administrator") {
-          const curRankId = state.standing[e.char]!.rank;
-          const check = e.authority.office === "empress"
-            ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, curRankId)
-            : canAdministratorAdjustRank(db, state, e.authority.actorId, e.char, curRankId);
-          if (!check.ok) bad(index, "BAD_EFFECT", check.reason, { actorId: e.authority.actorId, char: e.char });
+          bad(index, "BAD_EFFECT", "六宫主理者无权赐予或褫夺封号，须由陛下亲旨。");
         }
         break;
       }

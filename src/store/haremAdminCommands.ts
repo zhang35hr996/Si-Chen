@@ -1,7 +1,7 @@
 /**
  * 六宫行政位分处分命令层（皇后主理 / 代理侍君协理均走此层）。
  *
- * 皇后正常掌宫或代理侍君奉旨协理时，对低位侍君进行晋封/降位/赐封号/褫封号，
+ * 皇后正常掌宫或代理侍君奉旨协理时，仅可调整贵人以下侍君的位分（晋封/降位），
  * 与皇帝直接敕封（rankOps + App.applyRankOp）保持来源区分：
  *   - 编年史 actor = 实际执行者（皇后 / 代理侍君），非 player
  *   - 台词与记忆文案按 office 使用对应模板，不归因于皇帝
@@ -46,9 +46,12 @@ export function planHaremAdminRankCommand(
 ): HaremAdminCommandResult {
   const { actorId, targetId, request } = command;
 
-  // 校验访问权（rank 约束仅 set_rank 时需要检查新位分；title 操作只检查目标访问权）。
-  const newRankId =
-    request.kind === "set_rank" ? request.rank : (state.standing[targetId]?.rank ?? "");
+  // 封号操作须陛下亲旨，六宫主理者无权处置。
+  if (request.kind !== "set_rank") {
+    return { ok: false, reason: "皇后及六宫协理者无权处置封号，须由陛下亲旨。" };
+  }
+
+  const newRankId = request.rank;
   const office: "empress" | "acting_consort" = state.haremAdministration.mode === "empress" ? "empress" : "acting_consort";
   const check = office === "empress"
     ? canEmpressAdjustRank(db, state, actorId, targetId, newRankId)
@@ -67,9 +70,9 @@ export function planHaremAdminRankCommand(
   const actorName = actorChar ? resolveDisplayName(actorChar, actorSt, actorRankMeta) : actorId;
 
   const fromRankId = state.standing[targetId]?.rank;
-  const toRankId = request.kind === "set_rank" ? request.rank : fromRankId;
+  const toRankId = request.rank;
   const fromTitle = state.standing[targetId]?.title;
-  const toTitle = request.kind === "set_title" ? request.title : request.kind === "remove_title" ? undefined : fromTitle;
+  const toTitle = fromTitle;
   const operation = request.kind;
 
   const chronicle: Omit<CourtEvent, "id">[] = [

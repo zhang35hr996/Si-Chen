@@ -2,9 +2,12 @@
  * 六宫行政位分处分权（§IV-IX）。
  *
  * 三态权限：
- *   empress mode        → harem_administrator/office:empress（皇后以自身名义处分驸级以上至皇后以下）
- *   acting_consort mode → harem_administrator（受限于自身位分，只能处分严格低于自己的侍君）
+ *   empress mode        → harem_administrator/office:empress（皇后以自身名义处分贵人以下侍君）
+ *   acting_consort mode → harem_administrator（受限于自身位分与贵人边界，只能处分严格低于自己且低于贵人的侍君）
  *   neiwu_proxy mode    → none（内务府无位分处分权）
+ *
+ * 贵人边界：贵人及以上须陛下亲旨，六宫主理权仅覆盖贵人以下（严格，贵人本身不可被调整）。
+ * 目标新位分上限为贵人（含），不可晋至贵人以上。
  *
  * 此模块不依赖 UI 层；可在 funnel.ts 验证中直接调用。
  */
@@ -22,8 +25,8 @@ export type RankAuthority =
 
 /**
  * 当前六宫行政位分处分权。
- *   empress mode        → harem_administrator（皇后以 charId 行使，maxTargetOrder = huanghou.order - 1）
- *   acting_consort mode → harem_administrator（只能处分严格低于自身位分 order 的侍君）
+ *   empress mode        → harem_administrator（皇后以 charId 行使，maxTargetOrder = guiren.order - 1）
+ *   acting_consort mode → harem_administrator（maxTargetOrder = min(actorOrder - 1, guiren.order - 1)）
  *   neiwu_proxy mode    → none（无权）
  */
 export function getHaremRankAuthority(db: ContentDB, state: GameState): RankAuthority {
@@ -33,6 +36,9 @@ export function getHaremRankAuthority(db: ContentDB, state: GameState): RankAuth
     return { kind: "none", reason: "内务府仅暂代宫务，无权议定侍君位分。" };
   }
 
+  // 六宫主理权覆盖上限：贵人及以上须陛下亲旨，主理权只覆盖贵人以下。
+  const guirenOrder = db.ranks["guiren"]?.order ?? 100;
+
   if (admin.mode === "empress") {
     // 皇后以自身名义行使处分权：找当前皇后 charId。
     const fenghouId = Object.keys(state.standing).find(
@@ -41,17 +47,16 @@ export function getHaremRankAuthority(db: ContentDB, state: GameState): RankAuth
     if (!fenghouId) {
       return { kind: "none", reason: "当前宫中无皇后，无法行使处分权。" };
     }
-    const fenghousOrder = db.ranks["huanghou"]?.order ?? 1000;
-    return { kind: "harem_administrator", actorId: fenghouId, maxTargetOrder: fenghousOrder - 1 };
+    return { kind: "harem_administrator", actorId: fenghouId, maxTargetOrder: guirenOrder - 1 };
   }
 
-  // acting_consort：只能处分 order 严格低于自身的侍君。
+  // acting_consort：只能处分 order 严格低于自身且低于贵人的侍君。
   const charId = admin.charId;
   const st = state.standing[charId];
   if (!st) return { kind: "none", reason: "协理者资料异常。" };
   const actorOrder = db.ranks[st.rank]?.order ?? 0;
   if (actorOrder <= 0) return { kind: "none", reason: "协理者位分数据异常。" };
-  return { kind: "harem_administrator", actorId: charId, maxTargetOrder: actorOrder - 1 };
+  return { kind: "harem_administrator", actorId: charId, maxTargetOrder: Math.min(actorOrder - 1, guirenOrder - 1) };
 }
 
 /**
@@ -67,8 +72,10 @@ export function getHaremRankAuthority(db: ContentDB, state: GameState): RankAuth
  *  3. target 非 actor 本人。
  *  4. target 非皇后。
  *  5. target 当前 rank.order < actor rank.order（严格低于）。
- *  6. newRankId 的 order < actor rank.order（晋升后仍低于协理者）。
- *  7. newRankId 不为 fenghou。
+ *  6. target 当前 rank.order < guiren.order（贵人边界：贵人及以上须陛下亲旨）。
+ *  7. newRankId 的 order < actor rank.order（晋升后仍低于协理者）。
+ *  8. newRankId 的 order <= guiren.order（最高只能晋至贵人）。
+ *  9. newRankId 不为 huanghou。
  */
 export function canAdministratorAdjustRank(
   db: ContentDB,
@@ -100,6 +107,8 @@ export function canAdministratorAdjustRank(
     return { ok: false, reason: "协理者位分不足驸级，处分权已失效。" };
   }
 
+  const guirenOrder = db.ranks["guiren"]?.order ?? 100;
+
   // target 合法性。
   const targetSt = state.standing[targetId];
   if (!targetSt || targetSt.lifecycle === "deceased" || targetSt.lifecycle === "candidate") {
@@ -112,6 +121,9 @@ export function canAdministratorAdjustRank(
   if (!targetRank) return { ok: false, reason: "目标位分数据异常。" };
   if (targetRank.order >= actorRank.order) {
     return { ok: false, reason: `不得处分与协理者（${actorRank.name}）同级或更高位的侍君。` };
+  }
+  if (targetRank.order >= guirenOrder) {
+    return { ok: false, reason: "贵人及以上侍君不可由六宫主理者处分，须陛下亲旨。" };
   }
 
   // 目标新位分合法性。
@@ -127,6 +139,9 @@ export function canAdministratorAdjustRank(
       reason: `目标位分不能晋升到协理者（${actorRank.name}，order ${actorRank.order}）同级或以上。`,
     };
   }
+  if (newRank.order > guirenOrder) {
+    return { ok: false, reason: "六宫主理权不可晋至贵人以上，须陛下亲旨。" };
+  }
 
   return { ok: true };
 }
@@ -139,8 +154,9 @@ export function canAdministratorAdjustRank(
  *  2. actorId 必须是当前存活皇后的 charId。
  *  3. actor !== target。
  *  4. target 非皇后、非已故、非候选。
- *  5. newRankId 不为 fenghou。
- *  6. newRank 存在于 db.ranks。
+ *  5. target 当前 rank.order < guiren.order（贵人及以上须陛下亲旨）。
+ *  6. newRankId 不为 huanghou。
+ *  7. newRank 存在于 db.ranks，且 order <= guiren.order（最高只能晋至贵人）。
  */
 export function canEmpressAdjustRank(
   db: ContentDB,
@@ -172,6 +188,12 @@ export function canEmpressAdjustRank(
   if (targetSt.rank === "huanghou") {
     return { ok: false, reason: "不得处分皇后。" };
   }
+  // 贵人边界：贵人及以上须陛下亲旨，六宫主理权仅覆盖贵人以下（严格）。
+  const guirenOrder = db.ranks["guiren"]?.order ?? 100;
+  const targetRankData = db.ranks[targetSt.rank];
+  if (!targetRankData || targetRankData.order >= guirenOrder) {
+    return { ok: false, reason: "贵人及以上侍君不可由六宫主理者处分，须陛下亲旨。" };
+  }
 
   // 目标新位分合法性。
   if (newRankId === "huanghou") {
@@ -180,7 +202,9 @@ export function canEmpressAdjustRank(
   const newRank = db.ranks[newRankId];
   if (!newRank) return { ok: false, reason: "目标位分不存在。" };
   if (!isAssignableRank(newRank)) return { ok: false, reason: "该位分已废弃，不可新设。" };
+  if (newRank.order > guirenOrder) {
+    return { ok: false, reason: "六宫主理权不可晋至贵人以上，须陛下亲旨。" };
+  }
 
   return { ok: true };
 }
-
