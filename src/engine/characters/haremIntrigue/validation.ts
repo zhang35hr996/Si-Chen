@@ -1,5 +1,5 @@
 import type { GameTime } from "../../calendar/time";
-import { compareGameTime } from "../../calendar/time";
+import { compareGameTime, dayIndexOf } from "../../calendar/time";
 import type {
   HaremIntriguePlan,
   HaremIntrigueOutcome,
@@ -38,24 +38,36 @@ function isIntegerInRange(v: unknown, lo: number, hi: number): boolean {
 
 /**
  * Validate a GameTime object for structural correctness.
- * year >= 1, month 1-12, period in {early,mid,late}, dayIndex >= 0.
+ * year >= 1, month 1-12, period in {early,mid,late}, dayIndex >= 0 AND consistent with year/month/period.
  */
 export function validateIntrigueGameTime(
   time: GameTime,
   label: string,
 ): HaremIntrigueValidationFinding[] {
   const results: HaremIntrigueValidationFinding[] = [];
-  if (!Number.isInteger(time.year) || time.year < 1) {
+  const validYear = Number.isInteger(time.year) && time.year >= 1;
+  const validMonth = Number.isInteger(time.month) && time.month >= 1 && time.month <= 12;
+  const validPeriod = VALID_PERIODS.has(time.period);
+  if (!validYear) {
     results.push(finding("INTRIGUE_BAD_TIME", `${label}.year=${time.year} must be integer >= 1`));
   }
-  if (!Number.isInteger(time.month) || time.month < 1 || time.month > 12) {
+  if (!validMonth) {
     results.push(finding("INTRIGUE_BAD_TIME", `${label}.month=${time.month} must be integer 1-12`));
   }
-  if (!VALID_PERIODS.has(time.period)) {
+  if (!validPeriod) {
     results.push(finding("INTRIGUE_BAD_TIME", `${label}.period="${time.period}" must be early|mid|late`));
   }
   if (!Number.isInteger(time.dayIndex) || time.dayIndex < 0) {
     results.push(finding("INTRIGUE_BAD_TIME", `${label}.dayIndex=${time.dayIndex} must be integer >= 0`));
+  } else if (validYear && validMonth && validPeriod) {
+    // Consistency check: dayIndex must match the canonical value derived from year/month/period
+    const expectedDayIndex = dayIndexOf(time.year, time.month, time.period);
+    if (time.dayIndex !== expectedDayIndex) {
+      results.push(finding(
+        "INTRIGUE_BAD_TIME",
+        `${label}.dayIndex ${time.dayIndex} inconsistent with year=${time.year} month=${time.month} period=${time.period} (expected ${expectedDayIndex})`,
+      ));
+    }
   }
   return results;
 }
