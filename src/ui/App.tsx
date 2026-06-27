@@ -516,15 +516,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       reopenConsortListIfReturning(); // 无变化：直接回到列表
       outcome = "no_op";
     } else if (op.kind === "demote" || op.kind === "strip_title") {
-      // 惩罚性降位/褫号 — 触发后果规划器并播放旁观者反应
+      // 惩罚性降位/褫号 — 触发后果规划器；旁观者效果仍落库，但不播放旁观者台词（仅展示当事侍君反应）
       const result = store.applyPunitiveRankChangeWithConsequences(db, charId, req, {});
       if (result.ok) {
         doAutosave();
-        const { baseLines, reactionBeats } = result.value;
-        const beats: DecreeReaction[] = [
-          { speakerId: charId, lines: baseLines },
-          ...reactionBeats,
-        ];
+        const { baseLines } = result.value;
+        const beats: DecreeReaction[] = [{ speakerId: charId, lines: baseLines }];
         // 初夜来源：不覆盖 deferred checkpoint；普通来源：清空旧 pending。
         playReactions(beats, origin === "first_night" ? "preserve" : null);
         outcome = "reaction_created";
@@ -1863,6 +1860,11 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               onConverseSummonedConsort={summonedConsortId ? () => { const id = summonedConsortId; if (id) void converse(id); } : undefined}
               summonedConverseDisabledReason={summonedConsortId && !canConverseSummoned ? "行动力不足" : undefined}
               onDismissSummonedConsort={summonedConsortId ? () => setSummonedConsortId(null) : undefined}
+              onBedchamberSummonedConsort={summonedConsortId && canBedchamber(liveState).ok ? () => {
+                const id = summonedConsortId;
+                setSummonedConsortId(null);
+                if (id) beginBedchamber(id);
+              } : undefined}
               interruptible={!zichendianBusy}
               busy={zichendianBusy}
               onAdmitAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
@@ -1880,7 +1882,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               onRest={restAlone}
               onLeave={leaveZichendian}
               onManageRank={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
-              onRelocate={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
               onBestow={() => setStorehouseOpen(true)}
               onPhysician={() => setPhysicianOpen(true)}
               onTransferHaremAdministration={() => {

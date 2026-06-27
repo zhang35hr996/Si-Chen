@@ -160,7 +160,7 @@ export function ConsortListModal({
             </button>
             {!isEmpress && (
               <button type="button" onClick={() => onManage(c.id)}>
-                封号管理
+                封号/位分管理
               </button>
             )}
             {!isEmpress && (

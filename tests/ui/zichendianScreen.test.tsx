@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ZichendianScreen, type ZichendianScreenProps } from "../../src/ui/screens/ZichendianScreen";
 import type { PendingAudienceViewItem } from "../../src/ui/components/PendingAudienceDrawer";
 
-const SCENE_ACTIONS = ["批阅奏折", "召见侍君", "传乘风", "休息", "离开"] as const;
+const SCENE_ACTIONS = ["批阅奏折", "传乘风", "休息", "离开"] as const;
 
 const audience: ZichendianScreenProps["activeAudience"] = {
   eventId: "ev_a",
@@ -34,7 +34,6 @@ function makeProps(overrides: Partial<ZichendianScreenProps> = {}): ZichendianSc
     onRest: vi.fn(),
     onLeave: vi.fn(),
     onManageRank: vi.fn(),
-    onRelocate: vi.fn(),
     onBestow: vi.fn(),
     onPhysician: vi.fn(),
     ...overrides,
@@ -45,15 +44,16 @@ const dialogs = () => screen.queryAllByRole("dialog");
 const action = (name: string | RegExp) => screen.getByRole("button", { name });
 
 describe("ZichendianScreen — idle / default state", () => {
-  it("1. renders a SceneShell with the six screen actions", () => {
+  it("1. renders a SceneShell with the five screen actions", () => {
     render(<ZichendianScreen {...makeProps()} />);
     expect(screen.getByRole("region", { name: "紫宸殿" })).toBeInTheDocument();
     expect(action("批阅奏折")).toBeInTheDocument();
-    expect(action("召见侍君")).toBeInTheDocument();
     expect(action("传乘风")).toBeInTheDocument();
     expect(action("休息")).toBeInTheDocument();
     expect(action("离开")).toBeInTheDocument();
     expect(action(/^待宣/)).toBeInTheDocument();
+    // 召见侍君 now lives inside 传乘风 menu, not as a standalone action
+    expect(screen.queryByRole("button", { name: "召见侍君" })).toBeNull();
   });
 
   it("2. renders no CharacterCard", () => {
@@ -84,7 +84,7 @@ describe("ZichendianScreen — idle / default state", () => {
     for (const fn of [
       props.onAdmitAudience, props.onDeferAudience, props.onAdmitPendingAudience,
       props.onReviewMemorials, props.onSummonConsort, props.onRest, props.onLeave,
-      props.onManageRank, props.onRelocate, props.onBestow, props.onPhysician,
+      props.onManageRank, props.onBestow, props.onPhysician,
     ]) {
       expect(fn).not.toHaveBeenCalled();
     }
@@ -191,14 +191,13 @@ describe("ZichendianScreen — Chengfeng foreground & handoff", () => {
     const props = makeProps({ activeAudience: audience });
     render(<ZichendianScreen {...props} />);
     await user.click(action("传乘风"));
-    await user.click(screen.getByRole("button", { name: "调整位分" }));
+    await user.click(screen.getByRole("button", { name: "管理侍君" }));
     expect(props.onManageRank).toHaveBeenCalledTimes(1);
-    expect(props.onRelocate).not.toHaveBeenCalled();
     expect(props.onBestow).not.toHaveBeenCalled();
     expect(props.onPhysician).not.toHaveBeenCalled();
     // menu closed → AudiencePrompt visible again (still supplied)
     expect(screen.getByRole("dialog")).toHaveTextContent("卫绥");
-    expect(screen.queryByRole("button", { name: "调整位分" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "管理侍君" })).toBeNull();
   });
 
   it("Chengfeng close calls no business callback", async () => {
@@ -207,7 +206,7 @@ describe("ZichendianScreen — Chengfeng foreground & handoff", () => {
     render(<ZichendianScreen {...props} />);
     await user.click(action("传乘风"));
     await user.click(screen.getByRole("button", { name: "作罢" }));
-    for (const fn of [props.onManageRank, props.onRelocate, props.onBestow, props.onPhysician, props.onSummonConsort]) {
+    for (const fn of [props.onManageRank, props.onBestow, props.onPhysician, props.onSummonConsort]) {
       expect(fn).not.toHaveBeenCalled();
     }
   });
@@ -260,17 +259,16 @@ describe("ZichendianScreen — summoned consort presentation", () => {
 });
 
 describe("ZichendianScreen — busy & per-action routing", () => {
-  it("20. busy disables all six screen actions (including 离开)", () => {
+  it("20. busy disables all five screen actions (including 离开)", () => {
     render(<ZichendianScreen {...makeProps({ busy: true })} />);
     for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
     expect(action(/^待宣/)).toBeDisabled();
   });
 
-  it("22. memorial / summon / rest / leave each call only their own callback", async () => {
+  it("22. memorial / rest / leave each call only their own callback", async () => {
     const user = userEvent.setup();
     for (const [label, key] of [
       ["批阅奏折", "onReviewMemorials"],
-      ["召见侍君", "onSummonConsort"],
       ["休息", "onRest"],
       ["离开", "onLeave"],
     ] as const) {
@@ -278,7 +276,7 @@ describe("ZichendianScreen — busy & per-action routing", () => {
       const { unmount } = render(<ZichendianScreen {...props} />);
       await user.click(action(label));
       expect(props[key]).toHaveBeenCalledTimes(1);
-      for (const other of ["onReviewMemorials", "onSummonConsort", "onRest", "onLeave"] as const) {
+      for (const other of ["onReviewMemorials", "onRest", "onLeave"] as const) {
         if (other !== key) expect(props[other]).not.toHaveBeenCalled();
       }
       unmount();
@@ -287,7 +285,7 @@ describe("ZichendianScreen — busy & per-action routing", () => {
 });
 
 describe("ZichendianScreen — Blocker 1: an open internal surface owns the session", () => {
-  it("pending drawer open disables all six scene actions, none fire, and closing re-enables them", async () => {
+  it("pending drawer open disables all five scene actions, none fire, and closing re-enables them", async () => {
     const user = userEvent.setup();
     const props = makeProps({ deferredAudienceCount: 1, pendingAudienceItems: pendingItems });
     render(<ZichendianScreen {...props} />);
@@ -295,18 +293,16 @@ describe("ZichendianScreen — Blocker 1: an open internal surface owns the sess
     for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
     expect(action(/^待宣/)).toBeDisabled();
     await user.click(action("批阅奏折"));
-    await user.click(action("召见侍君"));
     await user.click(action("休息"));
     await user.click(action("离开"));
     expect(props.onReviewMemorials).not.toHaveBeenCalled();
-    expect(props.onSummonConsort).not.toHaveBeenCalled();
     expect(props.onRest).not.toHaveBeenCalled();
     expect(props.onLeave).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "关闭" }));
     for (const label of SCENE_ACTIONS) expect(action(label)).toBeEnabled();
   });
 
-  it("Chengfeng open disables all six scene actions, none fire, and closing re-enables them", async () => {
+  it("Chengfeng open disables all five scene actions, none fire, and closing re-enables them", async () => {
     const user = userEvent.setup();
     const props = makeProps();
     render(<ZichendianScreen {...props} />);
@@ -314,11 +310,9 @@ describe("ZichendianScreen — Blocker 1: an open internal surface owns the sess
     for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
     expect(action(/^待宣/)).toBeDisabled();
     await user.click(action("批阅奏折"));
-    await user.click(action("召见侍君"));
     await user.click(action("休息"));
     await user.click(action("离开"));
     expect(props.onReviewMemorials).not.toHaveBeenCalled();
-    expect(props.onSummonConsort).not.toHaveBeenCalled();
     expect(props.onRest).not.toHaveBeenCalled();
     expect(props.onLeave).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "作罢" }));
@@ -332,7 +326,7 @@ describe("ZichendianScreen — Blocker 2: busy transfers foreground ownership", 
     expect(dialogs()).toHaveLength(1);
     rerender(<ZichendianScreen {...makeProps({ activeAudience: audience, busy: true })} />);
     expect(dialogs()).toHaveLength(0);
-    for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
+    for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled(); // five scene actions
     expect(action(/^待宣/)).toBeDisabled();
   });
 
@@ -398,13 +392,13 @@ describe("ZichendianScreen — realistic external-modal handoff", () => {
     await user.click(action("传乘风"));
     expect(dialogs()).toHaveLength(1);
     expect(screen.getByRole("dialog")).toHaveAccessibleName("传乘风");
-    // 3-5. choose 调整位分 → Chengfeng unmounts, external 位分管理 is the only dialog
-    await user.click(screen.getByRole("button", { name: "调整位分" }));
+    // 3-5. choose 管理侍君 → Chengfeng unmounts, external 位分管理 is the only dialog
+    await user.click(screen.getByRole("button", { name: "管理侍君" }));
     expect(dialogs()).toHaveLength(1);
     expect(screen.getByRole("dialog")).toHaveAccessibleName("位分管理");
     // 6. AudiencePrompt absent while busy
     expect(screen.queryByText("卫绥")).toBeNull();
-    expect(screen.queryByRole("button", { name: "调整位分" })).toBeNull(); // Chengfeng gone
+    expect(screen.queryByRole("button", { name: "管理侍君" })).toBeNull(); // Chengfeng gone
     // 7-8. close external → busy=false → AudiencePrompt returns
     await user.click(screen.getByRole("button", { name: "关闭位分管理" }));
     expect(dialogs()).toHaveLength(1);
@@ -424,18 +418,16 @@ describe("ZichendianScreen — summoned consort owns the scene session", () => {
     expect(screen.queryByRole("button", { name: "宣进来" })).toBeNull(); // audience prompt suppressed
   });
 
-  it("3 & 4. all six scene actions are disabled and fire no callback during the summoned session", async () => {
+  it("3 & 4. all five scene actions are disabled and fire no callback during the summoned session", async () => {
     const user = userEvent.setup();
     const props = summonedProps({ deferredAudienceCount: 1, pendingAudienceItems: [pendingItems[0]!] });
     render(<ZichendianScreen {...props} />);
     for (const label of SCENE_ACTIONS) expect(action(label)).toBeDisabled();
     expect(action(/^待宣/)).toBeDisabled();
     await user.click(action("批阅奏折"));
-    await user.click(action("召见侍君"));
     await user.click(action("休息"));
     await user.click(action("离开"));
     expect(props.onReviewMemorials).not.toHaveBeenCalled();
-    expect(props.onSummonConsort).not.toHaveBeenCalled();
     expect(props.onRest).not.toHaveBeenCalled();
     expect(props.onLeave).not.toHaveBeenCalled();
   });
