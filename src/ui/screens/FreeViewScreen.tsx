@@ -7,7 +7,7 @@
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
 import { getPresentAt } from "../../engine/characters/presence";
-import { isColdPalaceEffectActiveAt } from "../../engine/characters/coldPalace";
+import { isColdPalaceEffectActiveAt, canRestoreFromColdPalace, hasColdPalaceMadness } from "../../engine/characters/coldPalace";
 import { canInterveneInColdPalace } from "../../engine/characters/coldPalaceIncidents";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { ContentDB } from "../../engine/content/loader";
@@ -104,6 +104,11 @@ export function FreeViewScreen({
               <div key={char.id} className="coldpalace-resident coldpalace-resident--managed">
                 <span className="coldpalace-resident__name">
                   {resolveIdentityLabel(char, st, rk)}
+                  {hasColdPalaceMadness(state, char.id) && (
+                    <span className="coldpalace-resident__badge coldpalace-resident__badge--madness">
+                      神志昏乱
+                    </span>
+                  )}
                 </span>
                 {effect.startedAt && (
                   <span className="coldpalace-resident__since">
@@ -133,15 +138,20 @@ export function FreeViewScreen({
                       亲临探视 / 遣太医
                     </button>
                   )}
-                  {onRestoreFromColdPalace && (
-                    <button
-                      type="button"
-                      className="punish-btn punish-btn--lift"
-                      onClick={() => onRestoreFromColdPalace(char.id)}
-                    >
-                      召回
-                    </button>
-                  )}
+                  {onRestoreFromColdPalace && (() => {
+                    const restoreCheck = canRestoreFromColdPalace(state, char.id);
+                    return (
+                      <button
+                        type="button"
+                        className="punish-btn punish-btn--lift"
+                        disabled={!restoreCheck.ok}
+                        title={restoreCheck.ok ? undefined : restoreCheck.reason}
+                        onClick={restoreCheck.ok ? () => onRestoreFromColdPalace(char.id) : undefined}
+                      >
+                        召回
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             ))

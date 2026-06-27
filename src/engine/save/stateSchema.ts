@@ -14,7 +14,7 @@ import {
 import type { GameState } from "../state/types";
 import { validateJusticeState } from "../justice/validation";
 import { validateJusticeLinks } from "../justice/crossLink";
-import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks } from "../characters/coldPalaceValidator";
+import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks, validateColdPalaceMadnessLinks } from "../characters/coldPalaceValidator";
 
 const nonEmpty = z.string().min(1);
 
@@ -309,13 +309,23 @@ const coldPalaceEffectSchema = z.strictObject({
   sourcePunishmentId: z.string().regex(/^pun_\d{6}$/),
   liftedAt: gameTimeSchema.optional(),
   liftedTurn: z.number().int().min(0).optional(),
-  liftReason: z.enum(["lifted_by_emperor", "pardoned"]).optional(),
+  liftReason: z.enum(["lifted_by_emperor", "pardoned", "death"]).optional(),
+});
+
+const coldPalaceMadnessEffectSchema = z.strictObject({
+  id: z.string().min(1),
+  kind: z.literal("cold_palace_madness"),
+  characterId: idSchema,
+  sourceColdPalaceEffectId: z.string().min(1),
+  startedAt: gameTimeSchema,
+  startTurn: z.number().int().min(0),
 });
 
 /** 角色持续状态（禁足/冷宫等）。 */
 const statusEffectSchema = z.discriminatedUnion("kind", [
   confinementEffectSchema,
   coldPalaceEffectSchema,
+  coldPalaceMadnessEffectSchema,
 ]);
 
 // ── Justice state schemas ─────────────────────────────────────────────────────
@@ -705,6 +715,15 @@ export const gameStateSchema = z.strictObject({
         resolvedAt: gameTimeSchema.optional(),
         healthDelta: z.number().int().optional(),
       }),
+      z.strictObject({
+        id: nonEmpty,
+        residentId: idSchema,
+        effectId: nonEmpty,
+        kind: z.literal("mental_breakdown"),
+        occurredAt: gameTimeSchema,
+        acknowledged: z.boolean(),
+        madnessEffectId: z.string().min(1),
+      }),
     ]),
   ).default([]),
   pendingDaxuan: z.strictObject({ kind: z.enum(["announce", "dianxuan"]), year: z.number() }).optional(),
@@ -742,6 +761,7 @@ export const gameStateSchema = z.strictObject({
     ...validateJusticeLinks(data as Parameters<typeof validateJusticeLinks>[0]),
     ...validateColdPalaceIncidentLinks(data as Parameters<typeof validateColdPalaceIncidentLinks>[0]),
     ...validateColdPalaceInterventionLinks(data as Parameters<typeof validateColdPalaceInterventionLinks>[0]),
+    ...validateColdPalaceMadnessLinks(data as Parameters<typeof validateColdPalaceMadnessLinks>[0]),
   ];
   for (const e of errs) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });

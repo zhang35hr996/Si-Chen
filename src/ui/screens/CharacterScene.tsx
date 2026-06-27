@@ -14,7 +14,7 @@ import { CHAMBERS, chamberOf, hasChambers } from "../../engine/characters/chambe
 import { canSummon } from "../../store/bedchamber";
 import { activeConfinement } from "../../engine/characters/confinement";
 import { describeActiveConfinement } from "../format/confinement";
-import { activeColdPalaceEffectFor } from "../../engine/characters/coldPalace";
+import { activeColdPalaceEffectFor, hasColdPalaceMadness, canRestoreFromColdPalace } from "../../engine/characters/coldPalace";
 import { formatGameTime } from "../../engine/calendar/time";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import { reportingAttendant } from "../../engine/characters/gongli";
@@ -92,6 +92,9 @@ export function CharacterScene({
   const confinement = character ? activeConfinement(state, character.id) : undefined;
   // 冷宫：幽居长门宫，不可召见/侍寝/搬迁，仅留查看详情与召回操作。
   const coldPalace = character ? activeColdPalaceEffectFor(state, character.id) : undefined;
+  // 疯癫：永久不可召回（PUNISH-4F）。
+  const isMad = character ? hasColdPalaceMadness(state, character.id) : false;
+  const restoreCheck = character ? canRestoreFromColdPalace(state, character.id) : { ok: false as const, reason: "" };
   // 协理六宫：若当前场景侍君是协理者，显示标识。
   const admin = state.haremAdministration;
   const isActingAdmin = character && (
@@ -203,11 +206,19 @@ export function CharacterScene({
               // 冷宫幽居：仅显示状态 + 召回操作，禁用对话/侍寝/搬迁。
               <>
                 <p className="char-scene__line char-scene__line--confined">
-                  {character.profile.name}幽居长门宫，未经圣旨不得出。
+                  {isMad
+                    ? `${character.profile.name}幽居长门宫，神志已乱，不得召回。`
+                    : `${character.profile.name}幽居长门宫，未经圣旨不得出。`}
                   {coldPalace.startedAt && (
                     <>
                       <br />
-                      入宫时间：{formatGameTime({ ...coldPalace.startedAt, eraName: state.calendar.eraName })}。
+                      幽居始于：{formatGameTime({ ...coldPalace.startedAt, eraName: state.calendar.eraName })}。
+                    </>
+                  )}
+                  {isMad && (
+                    <>
+                      <br />
+                      <span className="char-scene__line--madness">此人神志已乱，不得再召回宫中。</span>
                     </>
                   )}
                 </p>
@@ -220,7 +231,9 @@ export function CharacterScene({
                       <button
                         type="button"
                         className="action-btn action-btn--key"
-                        onClick={() => onRestoreFromColdPalace(character.id)}
+                        disabled={!restoreCheck.ok}
+                        title={restoreCheck.ok ? undefined : restoreCheck.reason}
+                        onClick={restoreCheck.ok ? () => onRestoreFromColdPalace(character.id) : undefined}
                       >
                         召回
                       </button>

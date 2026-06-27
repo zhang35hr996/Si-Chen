@@ -768,7 +768,7 @@ export type ColdPalaceIntervention =
 
 // ── ColdPalaceIncident (PUNISH-4C/4D) ───────────────────────────────────────
 
-export type ColdPalaceIncidentKind = "petition" | "health_deterioration" | "critical_illness";
+export type ColdPalaceIncidentKind = "petition" | "health_deterioration" | "critical_illness" | "mental_breakdown";
 
 /** Player choice when resolving a critical_illness incident. */
 export type ColdPalaceIncidentResolution = "physician" | "ignore" | "restored";
@@ -812,15 +812,23 @@ export interface ColdPalaceCriticalIllnessIncident extends ColdPalaceIncidentBas
   healthDelta?: number;
 }
 
+/** Permanent mental breakdown — no resolution needed, just acknowledge. */
+export interface ColdPalaceMentalBreakdownIncident extends ColdPalaceIncidentBase {
+  kind: "mental_breakdown";
+  /** Links to the ColdPalaceMadnessEffect created simultaneously. */
+  madnessEffectId: string;
+}
+
 export type ColdPalaceIncident =
   | ColdPalacePetitionIncident
   | ColdPalaceHealthDeteriorationIncident
-  | ColdPalaceCriticalIllnessIncident;
+  | ColdPalaceCriticalIllnessIncident
+  | ColdPalaceMentalBreakdownIncident;
 
 // ── 角色持续状态（可复用：禁足 / 后续冷宫·下狱·守丧·卧病）─────────────────
 // 单一权威的「持续效果」时间线：append-mostly，解除时就地标记 lifted 而非物理删除，
 // 以保留历史。活跃判定只依据 startTurn/endTurnExclusive/liftedTurn，不存「剩余月份」。
-export type StatusEffectKind = "confinement" | "cold_palace";
+export type StatusEffectKind = "confinement" | "cold_palace" | "cold_palace_madness";
 
 /** 禁足解除原因：皇帝下旨 / 期满自动到期。 */
 export type ConfinementLiftReason = "lifted_by_emperor" | "term_expired";
@@ -847,7 +855,7 @@ export interface ConfinementEffect {
   sourcePunishmentId?: string;
 }
 
-export type ColdPalaceLiftReason = "lifted_by_emperor" | "pardoned";
+export type ColdPalaceLiftReason = "lifted_by_emperor" | "pardoned" | "death";
 
 export interface ColdPalaceEffect {
   /** "status_<charId>_NNNNNN" 单调。 */
@@ -865,8 +873,20 @@ export interface ColdPalaceEffect {
   liftReason?: ColdPalaceLiftReason;
 }
 
+export interface ColdPalaceMadnessEffect {
+  /** "status_<charId>_NNNNNN" — uses existing nextStatusEffectId sequence. */
+  id: string;
+  kind: "cold_palace_madness";
+  characterId: string;
+  /** The ColdPalaceEffect that was active when mental breakdown was triggered. */
+  sourceColdPalaceEffectId: string;
+  startedAt: GameTime;
+  startTurn: number;
+  // Permanent and irrevocable: no liftedAt, liftedTurn, or sourcePunishmentId ever set.
+}
+
 /** 角色持续状态的判别联合（禁足 / 冷宫；下狱/守丧待扩展）。 */
-export type CharacterStatusEffect = ConfinementEffect | ColdPalaceEffect;
+export type CharacterStatusEffect = ConfinementEffect | ColdPalaceEffect | ColdPalaceMadnessEffect;
 
 // ── 太后（尊长）状态 ──────────────────────────────────────────────────
 export interface TaihouState {

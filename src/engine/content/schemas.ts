@@ -336,7 +336,7 @@ export const eventEffectSchema = z.union([
   z.strictObject({
     type: z.literal("restore_from_cold_palace"),
     char: idSchema,
-    liftReason: z.enum(["lifted_by_emperor", "pardoned"]),
+    liftReason: z.enum(["lifted_by_emperor", "pardoned", "death"]),
     restoreResidenceId: idSchema.optional(),
     restoreChamber: z.enum(["main", "east_side", "west_side", "east_annex", "west_annex"]).optional(),
     liftedAt: gameTimeShape,

@@ -22,7 +22,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 23;
+export const SAVE_FORMAT_VERSION = 24;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -373,6 +373,13 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
 
     const gs = state as unknown as GameState;
     return { ...env, formatVersion: 23, state: gs, checksum: checksumOf(gs) };
+  },
+  // v23 → v24: PUNISH-4F 冷宫精神失常。旧档无 ColdPalaceMadnessEffect，Zod schema .default([]) 兜底。
+  23: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    // statusEffects already handled by Zod defaults; nothing to migrate structurally.
+    return { ...env, formatVersion: 24, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

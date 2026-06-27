@@ -128,6 +128,7 @@ import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
 import { ColdPalaceIncidentModal } from "./components/ColdPalaceIncidentModal";
 import { ColdPalaceCriticalIncidentModal } from "./components/ColdPalaceCriticalIncidentModal";
 import { ColdPalaceInterventionModal } from "./components/ColdPalaceInterventionModal";
+import { ColdPalaceMadnessModal } from "./components/ColdPalaceMadnessModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
 import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
@@ -2595,6 +2596,17 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                 if (r.ok) doAutosave();
               }}
               onRestore={(charId) => setRestoreCharId(charId)}
+            />
+          );
+        }
+        if (incident.kind === "mental_breakdown") {
+          return (
+            <ColdPalaceMadnessModal
+              db={db}
+              state={liveState}
+              incident={incident}
+              onAcknowledge={() => { if (store.acknowledgeIncident(incident.id)) doAutosave(); }}
+              onNavigate={() => { setFreeViewId("changmengong"); setView("freeview"); }}
             />
           );
         }

@@ -13,6 +13,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { ColdPalaceCriticalIllnessIncident, GameState } from "../../engine/state/types";
 import { resolveDisplayName } from "../../engine/characters/standing";
 import { resolveLinkedEffect, isLinkedEffectStillActive } from "../../engine/characters/coldPalaceIncidents";
+import { hasColdPalaceMadness } from "../../engine/characters/coldPalace";
 import { formatGameTime } from "../../engine/calendar/time";
 
 function healthLabel(health: number): string {
@@ -56,7 +57,10 @@ export function ColdPalaceCriticalIncidentModal({
     : undefined;
   const occurredLabel = formatGameTime({ ...occurredAt, eraName: state.calendar.eraName });
 
-  const canRestore = onRestore !== undefined && isLinkedEffectStillActive(state, incident);
+  // Mad residents cannot be restored — per PUNISH-4F invariant.
+  const canRestore = onRestore !== undefined
+    && isLinkedEffectStillActive(state, incident)
+    && !hasColdPalaceMadness(state, residentId);
 
   function guard(action: () => void): () => void {
     return () => {
@@ -79,7 +83,7 @@ export function ColdPalaceCriticalIncidentModal({
           {healthLabel(health)}，宫人惶惶，急请圣上定夺。
         </p>
         {sentAt && (
-          <p className="punish-modal__meta">入宫时间：{sentAt}</p>
+          <p className="punish-modal__meta">幽居始于：{sentAt}</p>
         )}
         <p className="punish-modal__meta">通报时间：{occurredLabel}</p>
       </div>
