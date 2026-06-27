@@ -59,6 +59,7 @@ export function eventToReactionContext(event: CourtEvent): EventReactionContext 
     case "secret_discovered":
     case "harem_administration_changed":
     case "heir_custody_changed":
+    case "intrigue_discovered":
       return undefined;
 
     default: {
