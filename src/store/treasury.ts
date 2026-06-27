@@ -7,6 +7,7 @@
  *   皇嗣 → favor +base，closeness +round(base/2)。
  * TIER_BASE：{ common:2, fine:4, treasure:7, marvel:12 }
  */
+import { applyFavorDelta } from "../engine/characters/favor";
 import type { GameState } from "../engine/state/types";
 import type { ContentDB } from "../engine/content/loader";
 
@@ -61,7 +62,7 @@ export function bestow(
         ...next.standing,
         [recipient.id]: {
           ...st,
-          favor: clampPct(st.favor + base),
+          ...applyFavorDelta(st, base),
           affection: clampPct(baseAff + affDelta),
         },
       },

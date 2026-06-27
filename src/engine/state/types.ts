@@ -668,6 +668,8 @@ export interface CharacterStanding {
   rank: string;
   /** 0–100 — 恩宠 (consort) / 圣眷 (official). */
   favor: number;
+  /** 历史最高恩宠；初始等于 favor，只升不降。0 <= favor <= peakFavor <= 100 */
+  peakFavor: number;
   /** 封号 (optional). */
   title?: string;
   /** 承嗣生命周期标记（缺省视作 "normal"）。 */

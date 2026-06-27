@@ -12,7 +12,7 @@ describe("storehouse + affection schema", () => {
   it("standing.affection 可选且 0–100", () => {
     const s = createInitialState();
     s.resources.storehouse.items["luozidai"] = 2;
-    s.standing["x"] = { rank: "chenghui", favor: 50, affection: 80 };
+    s.standing["x"] = { rank: "chenghui", favor: 50, peakFavor: 50, affection: 80 };
     expect(gameStateSchema.safeParse(s).success).toBe(true);
     s.standing["x"]!.affection = 200;
     expect(gameStateSchema.safeParse(s).success).toBe(false);

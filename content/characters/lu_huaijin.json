@@ -61,7 +61,8 @@
   },
   "initialStanding": {
     "rank": "chenghui",
-    "favor": 30
+    "favor": 30,
+    "peakFavor": 30
   },
   "initialMemories": [
     {

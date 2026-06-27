@@ -27,7 +27,7 @@ describe("createNewGameState", () => {
 
   it("seeds standing for characters with an initial standing", () => {
     expect(state.standing["shen_zhibai"]).toMatchObject({ rank: "huanghou", favor: 25, affection: 50, palaceEnteredAt: { year: 1, month: 1, period: "early", dayIndex: 0 }, health: 78, healthStatus: "healthy", birthFamilyId: "fam_shen_main" });
-    expect(state.standing["wei_sui"]).toEqual({ rank: "sili_zhang", favor: 40 });
+    expect(state.standing["wei_sui"]).toEqual({ rank: "sili_zhang", favor: 40, peakFavor: 40 });
     expect(state.standing["taihou"]).toBeUndefined();
   });
 

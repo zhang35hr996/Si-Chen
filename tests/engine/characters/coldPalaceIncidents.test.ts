@@ -45,7 +45,7 @@ function stateWithColdPalaceResident(charId = "consort_a"): GameState {
   const s = baseState({ rngSeed: 1 });
   const now: GameTime = { ...BASE_TIME };
   // Inject standing for charId
-  const standing = { rank: "jieyu", favor: 0, loyalty: 60, affection: 50, fear: 10, health: 80 };
+  const standing = { rank: "jieyu", favor: 0, peakFavor: 0, loyalty: 60, affection: 50, fear: 10, health: 80 };
   // Inject cold palace effect
   const effect = {
     id: "se_000001",
@@ -211,7 +211,7 @@ describe("planColdPalaceIncidents determinism", () => {
     const s = baseState({ rngSeed: 1 });
     const stateWithStanding: GameState = {
       ...s,
-      standing: { ...s.standing, consort_a: { rank: "jieyu", favor: 0, loyalty: 60, affection: 50, fear: 10 } },
+      standing: { ...s.standing, consort_a: { rank: "jieyu", favor: 0, peakFavor: 0, loyalty: 60, affection: 50, fear: 10 } },
     };
     expect(planColdPalaceIncidents(stateWithStanding)).toHaveLength(0);
   });
@@ -500,8 +500,8 @@ describe("planColdPalaceIncidents — at most one per checkpoint", () => {
       ...s,
       standing: {
         ...s.standing,
-        consort_a: { rank: "jieyu", favor: 0, loyalty: 60, affection: 50, fear: 10, health: 80 },
-        consort_b: { rank: "cairen", favor: 0, loyalty: 50, affection: 40, fear: 15, health: 70 },
+        consort_a: { rank: "jieyu", favor: 0, peakFavor: 0, loyalty: 60, affection: 50, fear: 10, health: 80 },
+        consort_b: { rank: "cairen", favor: 0, peakFavor: 0, loyalty: 50, affection: 40, fear: 15, health: 70 },
       },
       statusEffects: [effect("se_000001", "consort_a"), effect("se_000002", "consort_b")],
     };
@@ -584,7 +584,7 @@ describe("validateColdPalaceIncidentLinks", () => {
     const s = baseState();
     return {
       ...s,
-      standing: { ...s.standing, consort_a: { rank: "jieyu", favor: 0 } },
+      standing: { ...s.standing, consort_a: { rank: "jieyu", favor: 0, peakFavor: 0 } },
       statusEffects: [effect],
       coldPalaceIncidents: [incident],
     };
@@ -606,7 +606,7 @@ describe("validateColdPalaceIncidentLinks", () => {
     const s = baseState();
     const state: GameState = {
       ...s,
-      standing: { ...s.standing, consort_a: { rank: "jieyu", favor: 0 } },
+      standing: { ...s.standing, consort_a: { rank: "jieyu", favor: 0, peakFavor: 0 } },
       statusEffects: [validEffect()],
       coldPalaceIncidents: [incident, { ...incident }],
     };

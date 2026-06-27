@@ -5,8 +5,8 @@ import { makeGameTime } from "../../src/engine/calendar/time";
 
 function stateWithCourt() {
   const s = createInitialState();
-  s.standing["viewer"] = { rank: "meiren", favor: 50 };
-  s.standing["consort_gu"] = { rank: "meiren", favor: 50, residence: "xianfu_palace" };
+  s.standing["viewer"] = { rank: "meiren", favor: 50, peakFavor: 50 };
+  s.standing["consort_gu"] = { rank: "meiren", favor: 50, peakFavor: 50, residence: "xianfu_palace" };
   return s;
 }
 
@@ -38,8 +38,8 @@ describe("GroundTruthBeliefProjection (v1, 非全知)", () => {
 
   it("尚未入宫的未来 viewer / subject → undefined（非在场不可见）", () => {
     const s = stateWithCourt(); // now = 元年一月
-    s.standing["future_viewer"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(2, 1, "early") };
-    s.standing["future_subject"] = { rank: "meiren", favor: 50, residence: "x", palaceEnteredAt: makeGameTime(2, 1, "early") };
+    s.standing["future_viewer"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(2, 1, "early") };
+    s.standing["future_subject"] = { rank: "meiren", favor: 50, peakFavor: 50, residence: "x", palaceEnteredAt: makeGameTime(2, 1, "early") };
     const bp = new GroundTruthBeliefProjection(s);
     // 未来 viewer 看不到现任
     expect(bp.getFact("future_viewer", { predicate: "holds_rank", subjectId: "consort_gu" })).toBeUndefined();

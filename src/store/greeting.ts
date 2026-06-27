@@ -1,4 +1,5 @@
 /** 免请安/留宿的状态装配（纯函数；GameStore 负责 set+emit）。 */
+import { applyFavorDelta } from "../engine/characters/favor";
 import { getCharacterLocation } from "../engine/characters/presence";
 import type { ContentDB } from "../engine/content/loader";
 import type { GameState } from "../engine/state/types";
@@ -21,7 +22,7 @@ export function excuseFromGreeting(state: GameState, db: ContentDB, charId: stri
     ...state,
     standing: {
       ...state.standing,
-      [charId]: { ...st, favor: clampPct(st.favor + EXCUSE_FAVOR), affection: clampPct(baseAff + EXCUSE_AFFECTION) },
+      [charId]: { ...st, ...applyFavorDelta(st, EXCUSE_FAVOR), affection: clampPct(baseAff + EXCUSE_AFFECTION) },
     },
     excusedFromGreeting: { dayIndex: di, charIds: [...new Set([...prev, charId])] },
     overnightWith: undefined,

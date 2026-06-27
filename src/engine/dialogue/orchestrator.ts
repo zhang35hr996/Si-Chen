@@ -85,6 +85,7 @@ export function assembleDialogueRequest(
     contextStanding = {
       rank: ELDER_STANDING_RANK,
       favor: 0,
+      peakFavor: 0,
       selfRefs: character.selfRefs ?? DEFAULT_ELDER_SELF_REFS,
     };
     rankDisplay = { kind: "unranked", role: character.profile.role, selfRefs: contextStanding.selfRefs };

@@ -15,6 +15,7 @@ import type { GameState } from "../state/types";
 import { validateJusticeState } from "../justice/validation";
 import { validateJusticeLinks } from "../justice/crossLink";
 import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks, validateColdPalaceMadnessLinks } from "../characters/coldPalaceValidator";
+import { validatePeakFavor } from "../characters/peakFavorValidator";
 
 const nonEmpty = z.string().min(1);
 
@@ -793,6 +794,7 @@ export const gameStateSchema = z.strictObject({
     ...validateColdPalaceIncidentLinks(data as Parameters<typeof validateColdPalaceIncidentLinks>[0]),
     ...validateColdPalaceInterventionLinks(data as Parameters<typeof validateColdPalaceInterventionLinks>[0]),
     ...validateColdPalaceMadnessLinks(data as Parameters<typeof validateColdPalaceMadnessLinks>[0]),
+    ...validatePeakFavor(data as Parameters<typeof validatePeakFavor>[0]),
   ];
   for (const e of errs) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });

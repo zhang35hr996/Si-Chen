@@ -44,7 +44,7 @@ function makeState(): GameState {
     ...s,
     standing: {
       ...s.standing,
-      consort_a: { rank: "jieyu", favor: 0, loyalty: 60, affection: 50, fear: 10, health: 80 },
+      consort_a: { rank: "jieyu", favor: 0, peakFavor: 0, loyalty: 60, affection: 50, fear: 10, health: 80 },
     },
     statusEffects: [
       {

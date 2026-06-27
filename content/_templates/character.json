@@ -22,7 +22,7 @@
     "quirks": [],
     "tabooTopics": []
   },
-  "initialStanding": { "rank": "chenghui", "favor": 20 },
+  "initialStanding": { "rank": "chenghui", "favor": 20, "peakFavor": 20 },
   "initialMemories": [],
   "secrets": [],
   "stances": []

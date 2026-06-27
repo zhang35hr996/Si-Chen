@@ -40,7 +40,7 @@ function makeRaw(): RawContent {
     portraitSet: "wei_ling",
     expressions: ["neutral"],
     voice: { register: "formal", quirks: [], tabooTopics: [] },
-    initialStanding: { rank: "rank_o", favor: 10 },
+    initialStanding: { rank: "rank_o", favor: 10, peakFavor: 10 },
     initialMemories: [],
     secrets: [],
   };

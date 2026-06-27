@@ -76,7 +76,7 @@ function stateWithColdPalaceResident(charId = REAL_TARGET_ID, health = 80, favor
     ...state,
     standing: {
       ...state.standing,
-      [charId]: { ...state.standing[charId]!, health, favor },
+      [charId]: { ...state.standing[charId]!, health, favor, peakFavor: Math.max(state.standing[charId]!.peakFavor, favor) },
     },
   };
 }
@@ -337,7 +337,7 @@ describe("coldPalaceMadnessChance", () => {
         ...base,
         standing: {
           ...base.standing,
-          [genId]: { ...base.standing[REAL_TARGET_ID]!, health: 80, favor: 50 },
+          [genId]: { ...base.standing[REAL_TARGET_ID]!, health: 80, favor: 50, peakFavor: Math.max(base.standing[REAL_TARGET_ID]!.peakFavor, 50) },
         },
         statusEffects: [...base.statusEffects, genEffect],
       },

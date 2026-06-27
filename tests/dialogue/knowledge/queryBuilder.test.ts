@@ -37,6 +37,7 @@ function fakeRequest(
       standing: {
         rank: "guifei",
         favor: 50,
+        peakFavor: 50,
         selfRefs: { toPlayer: ["臣妾"], formal: ["臣妾"] },
       },
       relevantMemories: [],

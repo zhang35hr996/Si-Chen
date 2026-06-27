@@ -34,7 +34,7 @@ function evt(over: Partial<CourtEvent>): CourtEvent {
 describe("buildMemoryContext (legacy)", () => {
   it("召回→精排→产出 activatedMemories（高分在前，确定性）", () => {
     const s = createInitialState({ calendar: { month: 2 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     const m = (id: string, strength: number): MemoryEntry => ({
       id, ownerId: "a", kind: "impression", subjectIds: ["x"], perspective: "witness", summary: "x",
       strength, retention: "slow", emotions: {}, triggerTags: ["t"], unresolved: false, createdAt: makeGameTime(1, 1, "early"),
@@ -53,7 +53,7 @@ describe("buildMemoryContext (legacy)", () => {
 describe("buildMemoryContext memory/event quota (P1)", () => {
   it("a relevant memory survives even when more than five events outscore it", () => {
     const s = createInitialState({ calendar: { month: 3 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     s.memories["a"] = {
       nextSeq: 2,
       entries: [mem({ id: "mem_relevant", ownerId: "a", strength: 50, triggerTags: ["t"], subjectIds: ["x"] })],
@@ -77,7 +77,7 @@ describe("buildMemoryContext memory/event quota (P1)", () => {
 describe("recallKnownEvents", () => {
   it("returns all canKnowEvent events for the speaker", () => {
     const s = createInitialState({ calendar: { month: 3 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     // realm event → everyone knows it
     s.chronicle.push(evt({ id: "evt_000001", publicity: { scope: "realm", persistence: "institutional" }, occurredAt: makeGameTime(1, 2, "early") }));
     // palace institutional → a knows it (entered before)
@@ -90,7 +90,7 @@ describe("recallKnownEvents", () => {
 
   it("includes events where speakerId is a participant", () => {
     const s = createInitialState({ calendar: { month: 3 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     // circle event that includes "a"
     s.chronicle.push(evt({
       id: "evt_000001",
@@ -106,7 +106,7 @@ describe("recallKnownEvents", () => {
   it("excludes events the speaker cannot know (contemporaneous, entered after)", () => {
     const s = createInitialState({ calendar: { month: 3 } });
     // newcomer entered in month 2
-    s.standing["newcomer"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 2, "early") };
+    s.standing["newcomer"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 2, "early") };
     // palace contemporaneous event from month 1 — newcomer was not in palace
     s.chronicle.push(evt({
       id: "evt_000001",
@@ -120,7 +120,7 @@ describe("recallKnownEvents", () => {
 
   it("no salience quota — returns all qualifying events without cap", () => {
     const s = createInitialState({ calendar: { month: 6 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     // push 25 realm events (more than any typical limit)
     for (let i = 1; i <= 25; i++) {
       s.chronicle.push(evt({
@@ -190,7 +190,7 @@ describe("selectPromptEvents", () => {
 describe("buildMemoryContext extended", () => {
   it("5th opts optional — 4-arg callers unchanged (knownEventsAll present)", () => {
     const s = createInitialState({ calendar: { month: 2 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     s.memories["a"] = { nextSeq: 2, entries: [mem({ id: "mem_a_1", ownerId: "a" })] };
     const ctx = { now: makeGameTime(1, 2, "early"), topicTags: ["t"], subjectIds: [], presentCharacterIds: [], audienceId: "player", speakerId: "a" };
     // 4-arg call — must still compile and return knownEventsAll
@@ -201,7 +201,7 @@ describe("buildMemoryContext extended", () => {
 
   it("opts.topEvents (default 3) controls how many events in knownEvents", () => {
     const s = createInitialState({ calendar: { month: 6 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     // 5 realm events
     for (let i = 1; i <= 5; i++) {
       s.chronicle.push(evt({
@@ -222,7 +222,7 @@ describe("buildMemoryContext extended", () => {
 
   it("knownEventsAll is unquota'd — returns all known events regardless of topEvents", () => {
     const s = createInitialState({ calendar: { month: 6 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     for (let i = 1; i <= 10; i++) {
       s.chronicle.push(evt({
         id: `evt_${String(i).padStart(6, "0")}`,
