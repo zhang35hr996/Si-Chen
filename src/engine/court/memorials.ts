@@ -223,11 +223,14 @@ export function generateTreasuryMemorial(
   const sourceId = `treasury:annual_revenue_plan:${at.year}`;
   if (hasMemorialForSource(state, sourceId)) return null;
 
-  // Gate: 不得存在另一条 pending 财政奏折（避免积压）
-  const hasPendingTreasury = Object.values(state.memorials).some(
-    (m) => m.status === "pending" && m.category === "treasury",
+  // Gate: 不得存在另一条 pending 年度财政奏折（避免积压；季度简录不计）
+  const hasPendingAnnualTreasury = Object.values(state.memorials).some(
+    (m) =>
+      m.status === "pending" &&
+      m.payload.category === "treasury" &&
+      m.payload.matter === "annual_revenue_plan",
   );
-  if (hasPendingTreasury) return null;
+  if (hasPendingAnnualTreasury) return null;
 
   const urgency = state.resources.nation.treasury < 3000 ? "urgent" : "routine";
   const title = urgency === "urgent" ? "国库支绌请筹饷" : "户部奏请整饬岁入";
@@ -735,24 +738,33 @@ export function validateMemorials(state: GameState): GameError[] {
         e("MEMORIAL_BAD_REGION", `奏折「${m.id}」regionId「${m.payload.regionId}」非已知地域`, { id: m.id });
     }
 
-    // treasury 专属：matter/urgency/必需选项。
+    // treasury 专属：matter 合法；annual_revenue_plan 额外校验选项集与 urgency。
     if (m.payload.category === "treasury") {
+      const validTreasuryMatters = ["annual_revenue_plan", "quarterly_settlement_report"] as const;
       const treasuryMatter = m.payload.matter as string;
-      if (treasuryMatter !== "annual_revenue_plan")
+      if (!validTreasuryMatters.includes(m.payload.matter))
         e("MEMORIAL_BAD_MATTER", `奏折「${m.id}」matter「${treasuryMatter}」非法`, { id: m.id });
-      if (m.payload.urgency !== "routine" && m.payload.urgency !== "urgent")
-        e("MEMORIAL_BAD_URGENCY", `奏折「${m.id}」urgency「${m.payload.urgency}」非法`, { id: m.id });
-      const presentIds = new Set(m.payload.options.map((o) => o.id));
-      for (const req of TREASURY_OPTION_IDS) {
-        if (!presentIds.has(req))
-          e("MEMORIAL_MISSING_OPTION", `奏折「${m.id}」缺少必需选项「${req}」`, { id: m.id, missing: req });
-      }
-      // 不允许多余选项（exact match）。
-      const TREASURY_REQUIRED = new Set(TREASURY_OPTION_IDS);
-      for (const opt of m.payload.options) {
-        if (!TREASURY_REQUIRED.has(opt.id as typeof TREASURY_OPTION_IDS[number])) {
-          e("MEMORIAL_EXTRA_OPTION", `财政奏折「${m.id}」包含多余选项「${opt.id}」`, { id: m.id, extraOption: opt.id });
+
+      if (m.payload.matter === "annual_revenue_plan") {
+        if (m.payload.urgency !== "routine" && m.payload.urgency !== "urgent")
+          e("MEMORIAL_BAD_URGENCY", `奏折「${m.id}」urgency「${m.payload.urgency}」非法`, { id: m.id });
+        const presentIds = new Set(m.payload.options.map((o) => o.id));
+        for (const req of TREASURY_OPTION_IDS) {
+          if (!presentIds.has(req))
+            e("MEMORIAL_MISSING_OPTION", `奏折「${m.id}」缺少必需选项「${req}」`, { id: m.id, missing: req });
         }
+        const TREASURY_REQUIRED = new Set(TREASURY_OPTION_IDS);
+        for (const opt of m.payload.options) {
+          if (!TREASURY_REQUIRED.has(opt.id as typeof TREASURY_OPTION_IDS[number])) {
+            e("MEMORIAL_EXTRA_OPTION", `财政奏折「${m.id}」包含多余选项「${opt.id}」`, { id: m.id, extraOption: opt.id });
+          }
+        }
+      }
+
+      if (m.payload.matter === "quarterly_settlement_report") {
+        // 季度简录只允许 "acknowledge" 单选项，无国库变动。
+        if (m.payload.options.length !== 1 || m.payload.options[0]?.id !== "acknowledge")
+          e("MEMORIAL_BAD_OPTIONS", `季度财政简录奏折「${m.id}」须有且仅有 acknowledge 选项`, { id: m.id });
       }
     }
 

@@ -192,7 +192,7 @@ describe("validateMemorials — Group G: treasury payload", () => {
   it("bad urgency → MEMORIAL_BAD_URGENCY", () => {
     const s = createNewGameState(db, 1);
     const m = baseTreasuryMemorial(s);
-    if (m.payload.category !== "treasury") return;
+    if (m.payload.category !== "treasury" || m.payload.matter !== "annual_revenue_plan") return;
     const bad: Memorial = { ...m, payload: { ...m.payload, urgency: "unknown" as never } };
     expect(codes(withTreasuryMemorial(s, bad))).toContain("MEMORIAL_BAD_URGENCY");
   });

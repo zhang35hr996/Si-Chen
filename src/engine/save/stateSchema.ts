@@ -256,7 +256,7 @@ const frontierAssessmentSchema = z.strictObject({
   ]),
 });
 
-const memorialPayloadSchema = z.discriminatedUnion("category", [
+const memorialPayloadSchema = z.union([
   z.strictObject({
     category: z.literal("disaster"),
     regionId: z.string().min(1),
@@ -267,6 +267,12 @@ const memorialPayloadSchema = z.discriminatedUnion("category", [
     category: z.literal("treasury"),
     matter: z.literal("annual_revenue_plan"),
     urgency: z.enum(["routine", "urgent"]),
+    options: z.array(memorialOptionSchema).min(1),
+  }),
+  z.strictObject({
+    category: z.literal("treasury"),
+    matter: z.literal("quarterly_settlement_report"),
+    season: z.string().min(1),
     options: z.array(memorialOptionSchema).min(1),
   }),
   z.strictObject({
