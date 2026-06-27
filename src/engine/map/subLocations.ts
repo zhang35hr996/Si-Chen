@@ -9,6 +9,23 @@ import type { GameEventContent } from "../content/schemas";
 import type { GameState } from "../state/types";
 import { getEligibleEvents } from "../events/engine";
 import { resolveEntryMode } from "../events/entryMode";
+import { fnv1a64Hex } from "../save/canonical";
+
+/**
+ * 将一个御花园在场角色稳定地分配到且仅分配到一个子地点。
+ *
+ * - 同一角色在同一组子地点中始终只返回一个 id，避免进入不同子地点时重复出现。
+ * - 不做容量限制，因此同一子地点可容纳任意多名角色。
+ * - 传入顺序采用地点配置中的权威顺序；空列表返回 null。
+ */
+export function gardenSubLocationForCharacter(
+  characterId: string,
+  subLocationIds: readonly string[],
+): string | null {
+  if (subLocationIds.length === 0) return null;
+  const roll = parseInt(fnv1a64Hex(`garden-sub-location:${characterId}`).slice(0, 8), 16);
+  return subLocationIds[roll % subLocationIds.length] ?? null;
+}
 
 export function pickSubLocationEvent(
   db: ContentDB,
