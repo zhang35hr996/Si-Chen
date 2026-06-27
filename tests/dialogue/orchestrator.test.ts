@@ -1004,3 +1004,35 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
     });
   });
 });
+
+describe("assembleDialogueRequest — etiquette.forbiddenTerms lifted by resolvedAddress", () => {
+  const gameState = createNewGameState(db);
+
+  it("凤君 remains forbidden when register=public (fail-closed)", () => {
+    const r = assembleDialogueRequest(db, gameState, "shen_zhibai", "zichendian", { register: "public" });
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.etiquette.forbiddenTerms).toContain("凤君");
+  });
+
+  it("凤君 is lifted from forbiddenTerms when 皇后 × target=player × private", () => {
+    const r = assembleDialogueRequest(db, gameState, "shen_zhibai", "zichendian", { register: "private" });
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.etiquette.forbiddenTerms).not.toContain("凤君");
+    expect(r.value.resolvedAddress?.liftedForbiddenTerms).toContain("凤君");
+  });
+
+  it("凤君 is lifted when 皇后 × target=player × intimate", () => {
+    const r = assembleDialogueRequest(db, gameState, "shen_zhibai", "zichendian", { register: "intimate" });
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.etiquette.forbiddenTerms).not.toContain("凤君");
+  });
+
+  it("凤君 stays forbidden for 皇后 × non-player target (not the emperor)", () => {
+    const r = assembleDialogueRequest(db, gameState, "shen_zhibai", "zichendian", {
+      register: "private",
+      targetId: "lu_huaijin",
+    });
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.etiquette.forbiddenTerms).toContain("凤君");
+  });
+});

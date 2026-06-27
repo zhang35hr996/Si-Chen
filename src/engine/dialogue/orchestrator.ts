@@ -180,6 +180,11 @@ export function assembleDialogueRequest(
     ...(behavioralState !== undefined ? { behavioralState } : {}),
   };
   const { scripted, sceneDirective, transcript } = options;
+  const resolvedAddress = resolveAddress(db, state, speakerId, targetId, {
+    register: options.register ?? "public",
+    addressPermissions: character.dialoguePolicy?.addressPermissions ?? [],
+  });
+  const liftedSet = new Set(resolvedAddress.liftedForbiddenTerms);
   return ok({
     speakerId,
     targetId,
@@ -194,13 +199,12 @@ export function assembleDialogueRequest(
     },
     etiquette: {
       allowedTerms: db.lexicon.approvedTerms,
-      forbiddenTerms: db.lexicon.forbiddenTerms,
+      forbiddenTerms: liftedSet.size > 0
+        ? db.lexicon.forbiddenTerms.filter((t) => !liftedSet.has(t))
+        : db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
-    resolvedAddress: resolveAddress(db, state, speakerId, targetId, {
-      register: options.register ?? "public",
-      addressPermissions: character.dialoguePolicy?.addressPermissions ?? [],
-    }),
+    resolvedAddress,
     register: options.register ?? "public",
     sceneDirective,
     transcript: transcript ?? [],
