@@ -17,6 +17,7 @@ const none: GlobalInterruptInputs = {
   successorDue: false,
   centennialDue: false,
   coldPalaceReportDue: false,
+  haremDisciplineDue: false,
   haremAdminReviewDue: false,
   grandSelectionDue: false,
 };
@@ -39,6 +40,15 @@ describe("pickNextGlobalInterrupt priority", () => {
   });
   it("grand-selection is lowest", () => {
     expect(pickNextGlobalInterrupt({ ...none, grandSelectionDue: true })).toBe("grand_selection");
+  });
+  it("cold_palace_report outranks harem_discipline", () => {
+    expect(pickNextGlobalInterrupt({ ...none, coldPalaceReportDue: true, haremDisciplineDue: true })).toBe("cold_palace_report");
+  });
+  it("harem_discipline outranks harem_admin_review", () => {
+    expect(pickNextGlobalInterrupt({ ...none, haremDisciplineDue: true, haremAdminReviewDue: true })).toBe("harem_discipline");
+  });
+  it("harem_admin_review outranks grand_selection", () => {
+    expect(pickNextGlobalInterrupt({ ...none, haremAdminReviewDue: true, grandSelectionDue: true })).toBe("harem_admin_review");
   });
 });
 

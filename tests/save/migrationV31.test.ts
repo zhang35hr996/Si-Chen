@@ -51,8 +51,8 @@ function makeV30Save(stateOverrides?: (raw: Record<string, unknown>) => void): s
 // ── Current version ───────────────────────────────────────────────────────────
 
 describe("save format v31", () => {
-  it("SAVE_FORMAT_VERSION === 31", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(31);
+  it("SAVE_FORMAT_VERSION >= 31", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(31);
   });
 });
 

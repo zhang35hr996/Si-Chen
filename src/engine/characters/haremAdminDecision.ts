@@ -8,12 +8,15 @@
  * 确定性：同一 state 必然产生同一结果；tie-break 使用年月种子的 FNV-1a hash。
  */
 import type { ContentDB } from "../content/loader";
-import { isAssignableRank } from "../content/schemas";
 import type { ConsortPersonality, GameState } from "../state/types";
 import { isConfined } from "./confinement";
 import { isInColdPalace } from "./coldPalace";
 import { resolveConsortRuntimeAttrs } from "./consortAttrs";
 import { canEmpressAdjustRank, canAdministratorAdjustRank } from "./haremRankAuthority";
+import {
+  nextAdministrativeRank,
+  previousAdministrativeRank,
+} from "./haremRankLadder";
 
 // ── 结果类型 ──────────────────────────────────────────────────────────────────
 
@@ -38,29 +41,8 @@ export interface HaremAdminDecision {
   score: number;
 }
 
-// ── rank ladder helpers ───────────────────────────────────────────────────────
-
-function sortedHaremRanks(db: ContentDB) {
-  return Object.values(db.ranks)
-    .filter((r) => r.domain === "harem" && isAssignableRank(r))
-    .sort((a, b) => a.order - b.order);
-}
-
-/** 晋一级（上一个可授位分）。不存在时返回 null。 */
-export function nextAdministrativeRank(db: ContentDB, currentRankId: string): string | null {
-  const ladder = sortedHaremRanks(db);
-  const idx = ladder.findIndex((r) => r.id === currentRankId);
-  if (idx < 0 || idx + 1 >= ladder.length) return null;
-  return ladder[idx + 1]!.id;
-}
-
-/** 降一级（下一个可授位分）。不存在时返回 null。 */
-export function previousAdministrativeRank(db: ContentDB, currentRankId: string): string | null {
-  const ladder = sortedHaremRanks(db);
-  const idx = ladder.findIndex((r) => r.id === currentRankId);
-  if (idx <= 0) return null;
-  return ladder[idx - 1]!.id;
-}
+// Re-export for backward compatibility (some callers import from this module).
+export { nextAdministrativeRank, previousAdministrativeRank } from "./haremRankLadder";
 
 // ── 冷却检查 ──────────────────────────────────────────────────────────────────
 

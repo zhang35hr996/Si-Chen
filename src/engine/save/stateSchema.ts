@@ -15,6 +15,7 @@ import type { GameState } from "../state/types";
 import { validateJusticeState } from "../justice/validation";
 import { validateJusticeLinks } from "../justice/crossLink";
 import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks, validateColdPalaceMadnessLinks } from "../characters/coldPalaceValidator";
+import { validateHaremDisciplineLinks } from "../characters/haremDisciplineValidator";
 import { validatePeakFavor } from "../characters/peakFavorValidator";
 
 const nonEmpty = z.string().min(1);
@@ -839,6 +840,52 @@ export const gameStateSchema = z.strictObject({
     createdAt: gameTimeSchema,
     dismissed: z.boolean(),
   })).default([]),
+  haremDisciplineIncidents: z.array(z.strictObject({
+    id: idSchema,
+    actorId: idSchema,
+    targetId: idSchema,
+    disciplineKind: z.enum(["copy_scripture", "kneeling", "slapping"]),
+    occurredAt: gameTimeSchema,
+    actorSnapshot: z.strictObject({
+      rankId: idSchema,
+      favor: z.number().int().min(0).max(100),
+      peakFavor: z.number().int().min(0).max(100),
+      imperialProtectionScore: z.number().int(),
+      isHaremAdministrator: z.boolean(),
+    }),
+    targetSnapshot: z.strictObject({
+      rankId: idSchema,
+      favor: z.number().int().min(0).max(100),
+      peakFavor: z.number().int().min(0).max(100),
+      imperialProtectionScore: z.number().int(),
+      isCarrying: z.boolean(),
+      healthBefore: z.number().int().min(0).max(100),
+    }),
+    courtEventId: z.string(),
+    status: z.enum(["pending_response", "resolved"]),
+    resolution: z.enum(["upheld", "protected", "rebuked_both"]).optional(),
+    resolvedAt: gameTimeSchema.optional(),
+    resolutionEventId: z.string().optional(),
+  }).superRefine((inc, ctx) => {
+    if (inc.status === "resolved" && !inc.resolution) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: resolved 必须有 resolution` });
+    }
+    if (inc.status === "resolved" && !inc.resolvedAt) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: resolved 必须有 resolvedAt` });
+    }
+    if (inc.status === "resolved" && !inc.resolutionEventId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: resolved 必须有 resolutionEventId` });
+    }
+    if (inc.status === "pending_response" && inc.resolution !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: pending_response 不可有 resolution` });
+    }
+    if (inc.status === "pending_response" && inc.resolvedAt !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: pending_response 不可有 resolvedAt` });
+    }
+    if (inc.status === "pending_response" && inc.resolutionEventId !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: pending_response 不可有 resolutionEventId` });
+    }
+  })).default([]),
   haremAdminReviews: z.array(z.strictObject({
     id: idSchema,
     year: z.number().int().min(1),
@@ -870,6 +917,7 @@ export const gameStateSchema = z.strictObject({
 }).superRefine((data, ctx) => {
   const errs = [
     ...validateJusticeLinks(data as Parameters<typeof validateJusticeLinks>[0]),
+    ...validateHaremDisciplineLinks(data as Parameters<typeof validateHaremDisciplineLinks>[0]),
     ...validateColdPalaceIncidentLinks(data as Parameters<typeof validateColdPalaceIncidentLinks>[0]),
     ...validateColdPalaceInterventionLinks(data as Parameters<typeof validateColdPalaceInterventionLinks>[0]),
     ...validateColdPalaceMadnessLinks(data as Parameters<typeof validateColdPalaceMadnessLinks>[0]),
