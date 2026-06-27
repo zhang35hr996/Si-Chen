@@ -42,3 +42,5 @@ jobs:
           path: /tmp/main.tar.gz
           if-no-files-found: error
           retention-days: 1
+
+      # Keep this marker so a push can refresh both archives after concurrent changes.
