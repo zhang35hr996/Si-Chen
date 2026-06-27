@@ -808,6 +808,14 @@ export const gameStateSchema = z.strictObject({
     }).optional(),
     settledAt: gameTimeSchema,
     acknowledged: z.boolean(),
+  }).superRefine((r, ctx) => {
+    if (r.outcome === "rank_changed") {
+      if (!r.administratorId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: rank_changed 必须有 administratorId` });
+      if (!r.office) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: rank_changed 必须有 office` });
+      if (!r.decision) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: rank_changed 必须有 decision` });
+    } else {
+      if (!r.acknowledged) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: ${r.outcome} 必须 acknowledged=true` });
+    }
   })).default([]),
   justice: justiceStateSchema,
   rngSeed: z.number(),

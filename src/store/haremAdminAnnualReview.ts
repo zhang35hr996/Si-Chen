@@ -22,6 +22,57 @@ import {
   resolveHaremAdminRankCommand,
 } from "./haremAdminCommands";
 
+// ─── 乘风禀报文案生成 ─────────────────────────────────────────────────────────
+
+const REASON_PHRASE: Record<"service_merit" | "household_order" | "disloyalty" | "household_disorder", string> = {
+  service_merit:      "念其侍奉勤谨",
+  household_order:    "念其宫中有序",
+  disloyalty:         "以其失于恭谨",
+  household_disorder: "以其宫中失序",
+};
+
+/** 从 character content 中提取"氏"形简称（有姓用「某氏」，无姓用本名）。 */
+function bareConsorName(db: ContentDB, consortId: string): string {
+  const char = db.characters[consortId];
+  if (!char) return consortId;
+  return char.profile.surname ? char.profile.surname + "氏" : char.profile.name;
+}
+
+/**
+ * 生成乘风年度例核禀报台词（纯函数，可独立测试）。
+ *
+ * 皇后：乘风回禀：皇后念文氏侍奉勤谨，将其由常在晋为才人。
+ * 协理：乘风回禀：协理六宫的许驸以文氏宫中失序，将其由常在降为答应。
+ *
+ * @param db       合并了 generatedConsorts 的运行态 ContentDB
+ * @param review   outcome === "rank_changed" 的例核记录
+ */
+export function buildHaremAdminReviewLine(
+  db: ContentDB,
+  review: HaremAdminReviewRecord & { outcome: "rank_changed"; decision: NonNullable<HaremAdminReviewRecord["decision"]> },
+): string {
+  const { administratorId, office, decision } = review;
+  const { targetId, direction, fromRankId, toRankId, reason } = decision;
+
+  const fromRankName = db.ranks[fromRankId]?.name ?? fromRankId;
+  const toRankName   = db.ranks[toRankId]?.name   ?? toRankId;
+  const dirChinese   = direction === "promote" ? "晋为" : "降为";
+  const reasonPhrase = REASON_PHRASE[reason];
+  const targetName   = bareConsorName(db, targetId);
+
+  let adminPrefix: string;
+  if (office === "empress") {
+    adminPrefix = "皇后";
+  } else if (administratorId) {
+    const adminName = bareConsorName(db, administratorId);
+    adminPrefix = `协理六宫的${adminName}`;
+  } else {
+    adminPrefix = "六宫主理";
+  }
+
+  return `乘风回禀：${adminPrefix}${reasonPhrase}，将${targetName}由${fromRankName}${dirChinese}${toRankName}。`;
+}
+
 const REVIEW_MONTH = 6;
 
 function makeReviewId(year: number): string {
@@ -111,6 +162,17 @@ export function settleAnnualHaremAdminReview(
   }
 
   const office: "empress" | "acting_consort" = admin.mode === "empress" ? "empress" : "acting_consort";
+
+  // P2-2: 验证代行者合法性（死亡/候补/无 standing → no_administrator）。
+  if (office === "acting_consort") {
+    const adminSt = state.standing[administratorId];
+    if (!adminSt || adminSt.lifecycle === "deceased" || adminSt.lifecycle === "candidate") {
+      const record: HaremAdminReviewRecord = {
+        id, year, outcome: "no_administrator", settledAt: now, acknowledged: true,
+      };
+      return ok({ ...state, haremAdminReviews: [...state.haremAdminReviews, record] });
+    }
+  }
 
   // 决策引擎。
   const planned = planAdministratorRankDecision(db, state, administratorId);

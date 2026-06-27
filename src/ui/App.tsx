@@ -129,8 +129,7 @@ import { ColdPalaceCriticalIncidentModal } from "./components/ColdPalaceCritical
 import { ColdPalaceInterventionModal } from "./components/ColdPalaceInterventionModal";
 import { ColdPalaceMadnessModal } from "./components/ColdPalaceMadnessModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
-import { oldestPendingHaremAdminReport } from "../store/haremAdminAnnualReview";
-import { resolveDisplayName } from "../engine/characters/standing";
+import { oldestPendingHaremAdminReport, buildHaremAdminReviewLine } from "../store/haremAdminAnnualReview";
 import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
@@ -1264,21 +1263,13 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (activeGlobalInterrupt !== "harem_admin_review") return;
     if (reaction !== null) return; // 已有台词在播，等播完后重选
     const st = store.getState();
-    const review = st.haremAdminReviews.find((r) => r.outcome === "rank_changed" && !r.acknowledged) ?? null;
+    const review = oldestPendingHaremAdminReport(st);
     if (!review || !review.decision) return;
     const db_ = { ...content.value, characters: { ...content.value.characters, ...st.generatedConsorts } };
-    const { targetId, direction, toRankId, reason } = review.decision;
-    const char = db_.characters[targetId];
-    const charSt = st.standing[targetId];
-    const toRankMeta = db_.ranks[toRankId];
-    const displayName = char ? resolveDisplayName(char, charSt, toRankMeta) : targetId;
-    const dirChinese = direction === "promote" ? "晋位" : "降位";
-    const reasonChinese =
-      reason === "service_merit" ? "恩宠有加、宫务恭谨"
-      : reason === "household_order" ? "宫室秩序优良"
-      : reason === "disloyalty" ? "忠诚有亏"
-      : "宫室失于秩序";
-    const line = `陛下，${displayName}${dirChinese}，位列${toRankMeta?.name ?? toRankId}。（${reasonChinese}）`;
+    const line = buildHaremAdminReviewLine(
+      db_,
+      review as typeof review & { outcome: "rank_changed"; decision: NonNullable<typeof review.decision> },
+    );
     setPendingHaremAdminReviewId(review.id);
     setReaction({ speakerId: "cheng_feng", lines: [line] });
   }, [activeGlobalInterrupt, reaction]);

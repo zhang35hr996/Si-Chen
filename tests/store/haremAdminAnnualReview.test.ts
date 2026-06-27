@@ -15,6 +15,7 @@ import {
   hasHaremAdminReviewForYear,
   oldestPendingHaremAdminReport,
   settleAnnualHaremAdminReview,
+  buildHaremAdminReviewLine,
 } from "../../src/store/haremAdminAnnualReview";
 import { GameStore } from "../../src/store/gameStore";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -492,4 +493,118 @@ it("AR-27: v28 存档升级 v29 后 haremAdminReviews 回填为 []", () => {
   if (!loaded.ok) return;
   expect(Array.isArray(loaded.value.state.haremAdminReviews)).toBe(true);
   expect(loaded.value.state.haremAdminReviews).toHaveLength(0);
+});
+
+// ─── AR-28..32: buildHaremAdminReviewLine ────────────────────────────────────
+
+type RankChangedReview = HaremAdminReviewRecord & { outcome: "rank_changed"; decision: NonNullable<HaremAdminReviewRecord["decision"]> };
+
+/** 生成 rank_changed 例核记录用于 buildHaremAdminReviewLine 测试。 */
+function makeRankChangedReview(decisionOverrides?: Partial<NonNullable<HaremAdminReviewRecord["decision"]>>, recordOverrides?: Partial<HaremAdminReviewRecord>): RankChangedReview {
+  return {
+    id: "harem_admin_review_1",
+    year: 1,
+    outcome: "rank_changed",
+    administratorId: "wenya",
+    office: "empress",
+    settledAt: makeGameTime(1, 7, "early"),
+    acknowledged: false,
+    ...recordOverrides,
+    decision: {
+      targetId: "wenya",
+      direction: "promote",
+      fromRankId: "changzai",
+      toRankId: "cairen",
+      reason: "service_merit",
+      score: 5,
+      ...decisionOverrides,
+    },
+  } as RankChangedReview;
+}
+
+describe("buildHaremAdminReviewLine", () => {
+  it("AR-28: 皇后晋位报告含「皇后」、原位分和新位分，不重复新位分", () => {
+    // wenya 是固定角色，有 surname="文"；皇后晋 wenya → 文氏，常在→才人
+    const review = makeRankChangedReview(
+      { targetId: "wenya", direction: "promote", fromRankId: "changzai", toRankId: "cairen" },
+      { administratorId: "wenya", office: "empress" },
+    );
+    const line = buildHaremAdminReviewLine(db, review);
+    expect(line).toContain("皇后");
+    expect(line).toContain(db.ranks["changzai"]?.name ?? "changzai"); // 原位分
+    expect(line).toContain(db.ranks["cairen"]?.name ?? "cairen");     // 新位分
+    // 不能以「才人文氏晋为才人」这种形式重复
+    const toRankName = db.ranks["cairen"]?.name ?? "cairen";
+    const doubled = `${toRankName}.*${toRankName}`;
+    expect(line).not.toMatch(new RegExp(doubled));
+  });
+
+  it("AR-29: acting_consort 报告含行政者姓名而非「皇后」", () => {
+    // xu_qinghuan surname="许"，acting_consort 主理
+    const review = makeRankChangedReview(
+      { targetId: "wenya", direction: "demote", fromRankId: "cairen", toRankId: "changzai" },
+      { administratorId: "xu_qinghuan", office: "acting_consort" },
+    );
+    const line = buildHaremAdminReviewLine(db, review);
+    expect(line).not.toContain("皇后");
+    expect(line).toContain("协理六宫");
+    const char = db.characters["xu_qinghuan"]!;
+    const expectedName = char.profile.surname ? char.profile.surname + "氏" : char.profile.name;
+    expect(line).toContain(expectedName);
+  });
+
+  it("AR-30: 降位报告使用 fromRankId→toRankId，且含「降为」", () => {
+    const review = makeRankChangedReview({ direction: "demote", fromRankId: "cairen", toRankId: "changzai" });
+    const line = buildHaremAdminReviewLine(db, review);
+    expect(line).toContain(db.ranks["cairen"]?.name ?? "cairen");   // fromRankId
+    expect(line).toContain(db.ranks["changzai"]?.name ?? "changzai"); // toRankId
+    expect(line).toContain("降为");
+  });
+
+  it("AR-31: generated consort（有姓）使用「某氏」形式", () => {
+    const genChar = {
+      ...db.characters["wenya"]!,
+      profile: { ...db.characters["wenya"]!.profile, surname: "林", name: "林小雪" },
+    };
+    const db_ = { ...db, characters: { ...db.characters, gen_1: genChar } };
+    const review = makeRankChangedReview(
+      { targetId: "gen_1", direction: "promote", fromRankId: "changzai", toRankId: "cairen" },
+    );
+    const line = buildHaremAdminReviewLine(db_, review);
+    expect(line).toContain("林氏");
+  });
+
+  it("AR-32: service_merit→念其侍奉勤谨；household_disorder→以其宫中失序", () => {
+    const r1 = makeRankChangedReview({ reason: "service_merit" });
+    expect(buildHaremAdminReviewLine(db, r1)).toContain("念其侍奉勤谨");
+    const r2 = makeRankChangedReview({ reason: "household_disorder" });
+    expect(buildHaremAdminReviewLine(db, r2)).toContain("以其宫中失序");
+  });
+});
+
+// ─── AR-33: invalid acting_consort → no_administrator ────────────────────────
+
+describe("settleAnnualHaremAdminReview — invalid acting_consort", () => {
+  it("AR-33: acting_consort 已死亡 → no_administrator 而非 no_candidate", () => {
+    const state = withCalendar(createNewGameState(db), 7, "early");
+    const xuSt = state.standing["xu_qinghuan"]!;
+    const s: GameState = {
+      ...state,
+      standing: {
+        ...state.standing,
+        xu_qinghuan: { ...xuSt, lifecycle: "deceased" as const },
+      },
+      haremAdministration: {
+        mode: "acting_consort",
+        charId: "xu_qinghuan",
+        appointedAt: makeGameTime(1, 1, "early"),
+        reason: "empress_confined",
+      },
+    };
+    const result = settleAnnualHaremAdminReview(db, s);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.haremAdminReviews[0]!.outcome).toBe("no_administrator");
+    expect(result.value.haremAdminReviews[0]!.acknowledged).toBe(true);
+  });
 });
