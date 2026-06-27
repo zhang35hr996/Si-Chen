@@ -74,7 +74,9 @@ describe("resolveAddress — non-harem target (official / elder)", () => {
     expect(addr.forbiddenInContext).toContain("本宫");
   });
 
-  it("uses character display name as targetAddress, not internal ID", () => {
+  it("uses profile.name as targetAddress fallback, not raw internal ID", () => {
+    // Register-aware addressing (大人/司礼/先生 by role) is follow-up scope.
+    // This test locks in the minimum: profile.name beats a raw character ID.
     const addr = resolveAddress(db, state, "shen_zhibai", "cheng_feng");
     const expectedName = db.characters["cheng_feng"]!.profile.name;
     expect(addr.targetAddress).toBe(expectedName);

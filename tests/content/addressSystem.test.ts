@@ -21,6 +21,7 @@ import {
   SAVE_FORMAT_VERSION,
   SAVE_KEY_PREFIX,
   createSaveData,
+  MIGRATIONS,
 } from "../../src/engine/save/saveSystem";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -217,10 +218,9 @@ describe("save migration v26→v27 rank remapping", () => {
 
   it("deathRecord.originalRankId is remapped (fenghou → huanghou)", () => {
     const s = createNewGameState(db);
-    const stateV25 = structuredClone(s) as GameState;
-    // Inject a deathRecord with old rankId into a known character's standing
-    if (stateV25.standing["shen_zhibai"]) {
-      (stateV25.standing["shen_zhibai"] as unknown as { deathRecord: unknown }).deathRecord = {
+    const stateV26 = structuredClone(s) as GameState;
+    if (stateV26.standing["shen_zhibai"]) {
+      (stateV26.standing["shen_zhibai"] as unknown as { deathRecord: unknown }).deathRecord = {
         diedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
         cause: "illness",
         originalRankId: "fenghou",
@@ -230,8 +230,8 @@ describe("save migration v26→v27 rank remapping", () => {
     const raw = JSON.stringify({
       ...current,
       formatVersion: 26,
-      state: stateV25,
-      checksum: checksumOf(stateV25),
+      state: stateV26,
+      checksum: checksumOf(stateV26),
     });
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, raw);
@@ -240,5 +240,88 @@ describe("save migration v26→v27 rank remapping", () => {
     if (!result.ok) return;
     const dr = (result.value.state.standing["shen_zhibai"] as { deathRecord?: { originalRankId: string } })?.deathRecord;
     expect(dr?.originalRankId).toBe("huanghou");
+  });
+
+  it("deathRecord.posthumousRankId is remapped (guijun → guifu)", () => {
+    const s = createNewGameState(db);
+    const stateV26 = structuredClone(s) as GameState;
+    if (stateV26.standing["shen_zhibai"]) {
+      (stateV26.standing["shen_zhibai"] as unknown as { deathRecord: unknown }).deathRecord = {
+        diedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+        cause: "scripted",
+        originalRankId: "fenghou",
+        posthumousRankId: "guijun",
+      };
+    }
+    const current = createSaveData(db, s, "slot1");
+    const raw = JSON.stringify({
+      ...current,
+      formatVersion: 26,
+      state: stateV26,
+      checksum: checksumOf(stateV26),
+    });
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, raw);
+    const result = readSlot(storage, db, "slot1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const dr = (result.value.state.standing["shen_zhibai"] as { deathRecord?: { posthumousRankId?: string } })?.deathRecord;
+    expect(dr?.posthumousRankId).toBe("guifu");
+  });
+
+  // For the remaining branches, we test MIGRATIONS[26] directly to avoid
+  // having to construct full schema-valid fixtures for chronicle/justice/generatedConsorts.
+  function applyMig26(state: unknown): unknown {
+    const envelope = { formatVersion: 26, state, checksum: "" };
+    const out = MIGRATIONS[26]!(envelope) as { state: unknown };
+    return out.state;
+  }
+
+  it("generatedConsorts.initialStanding.rank is remapped (jun → fu)", () => {
+    const state = {
+      standing: {}, chronicle: [], generatedConsorts: {
+        gen_test_001: { initialStanding: { rank: "jun" } },
+      },
+      justice: { punishments: {} },
+    };
+    const after = applyMig26(state) as typeof state;
+    expect(after.generatedConsorts["gen_test_001"]?.initialStanding?.rank).toBe("fu");
+  });
+
+  it("chronicle rank_changed payload.from/to fields are remapped", () => {
+    const state = {
+      standing: {}, generatedConsorts: {}, justice: { punishments: {} },
+      chronicle: [{ type: "rank_changed", payload: { from: "fenghou", to: "huangguijun" } }],
+    };
+    const after = applyMig26(state) as typeof state;
+    const p = after.chronicle[0]!.payload as Record<string, string>;
+    expect(p.from).toBe("huanghou");
+    expect(p.to).toBe("huangguifu");
+  });
+
+  it("chronicle rank_changed payload.fromRankId/toRankId are remapped (haremAdminCommands path)", () => {
+    const state = {
+      standing: {}, generatedConsorts: {}, justice: { punishments: {} },
+      chronicle: [{ type: "rank_changed", payload: { fromRankId: "guijun", toRankId: "zhaorong" } }],
+    };
+    const after = applyMig26(state) as typeof state;
+    const p = after.chronicle[0]!.payload as Record<string, string>;
+    expect(p.fromRankId).toBe("guifu");
+    expect(p.toRankId).toBe("zhaode");
+  });
+
+  it("justice rank_demotion details.fromRankId/toRankId are remapped", () => {
+    const state = {
+      standing: {}, chronicle: [], generatedConsorts: {},
+      justice: {
+        punishments: {
+          pun_test01: { kind: "rank_demotion", details: { fromRankId: "jun", toRankId: "guifu" } },
+        },
+      },
+    };
+    const after = applyMig26(state) as typeof state;
+    const pun = after.justice.punishments["pun_test01"] as { details: { fromRankId: string; toRankId: string } };
+    expect(pun.details.fromRankId).toBe("fu");
+    expect(pun.details.toRankId).toBe("zhaoyi");
   });
 });

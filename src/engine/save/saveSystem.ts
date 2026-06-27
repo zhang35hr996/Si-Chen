@@ -39,7 +39,7 @@ export type SaveSlot = (typeof ALL_SLOTS)[number];
  *
  * v1 → v2: single-line `gestation?` → multi-line `gestations[]`.
  */
-const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
+export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   1: (old) => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as Record<string, unknown>;

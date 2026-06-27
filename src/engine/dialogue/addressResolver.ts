@@ -68,7 +68,7 @@ export function resolveAddress(
 
   if (isTargetPlayer) {
     // 太后（elder）calls the emperor 皇帝 + kinship terms, not 陛下.
-    // Future: imperial heirs (taizi/wangzi kind) would call the emperor 母皇.
+    // 皇嗣→皇帝（母皇）and register-aware non-harem addressing are follow-up scope.
     if (char?.kind === "elder") {
       targetAddress = "皇帝";
       allowedAlternates = ["皇儿", "吾儿"];
