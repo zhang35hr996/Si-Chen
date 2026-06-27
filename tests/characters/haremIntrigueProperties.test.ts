@@ -12,6 +12,13 @@ import {
   INTRIGUE_PROPENSITY_THRESHOLD,
   INTRIGUE_PAIR_THRESHOLD,
 } from "../../src/engine/characters/haremIntrigue/scoring";
+
+// Minimal ladder for property tests
+const PROP_LADDER = [
+  { rankId: "meiren", order: 100, index: 0 },
+  { rankId: "guiren", order: 116, index: 1 },
+  { rankId: "huanghou", order: 1000, index: 2 },
+];
 import {
   planMonthlyHaremIntrigue,
 } from "../../src/engine/characters/haremIntrigue/planner";
@@ -48,6 +55,7 @@ function makeSnap(over: Partial<IntrigueParticipantSnapshot> = {}): IntriguePart
       jealousy: 50,
       emotionalStability: 50,
       pride: 50,
+      intelligence: 50,
     },
     household: {
       servantOpinion: 50,
@@ -113,7 +121,7 @@ describe("scoreTargetThreat property: output is finite integer in [0,100]", () =
     it(`favor=${favor}`, () => {
       const actor = makeSnap({ characterId: "actor" });
       const target = makeSnap({ characterId: "target", favor, peakFavor: Math.max(favor, 30) });
-      const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+      const result = scoreTargetThreat(actor, target, 0, PROP_LADDER);
       expect(Number.isFinite(result.score)).toBe(true);
       expect(Number.isInteger(result.score)).toBe(true);
       expect(result.score).toBeGreaterThanOrEqual(0);
@@ -127,7 +135,7 @@ describe("scoreTargetThreat property: grievance monotonic", () => {
     const actor = makeSnap({ characterId: "actor" });
     const target = makeSnap({ characterId: "target", favor: 50, peakFavor: 60 });
     const scores = [0, 25, 50, 75, 100].map((g) =>
-      scoreTargetThreat(actor, target, g, 52, 1000).score
+      scoreTargetThreat(actor, target, g, PROP_LADDER).score
     );
     for (let i = 1; i < scores.length; i++) {
       expect(scores[i]!).toBeGreaterThanOrEqual(scores[i - 1]!);
@@ -145,7 +153,7 @@ describe("pairTieJitter property: always -2..+2", () => {
     it(`pair (${a}, ${b})`, () => {
       for (let y = 1; y <= 3; y++) {
         for (let m = 1; m <= 12; m++) {
-          const j = pairTieJitter(y, m, a!, b!);
+          const j = pairTieJitter(y, m, a!, b!, 12345);
           expect(j).toBeGreaterThanOrEqual(-2);
           expect(j).toBeLessThanOrEqual(2);
           expect(Number.isInteger(j)).toBe(true);
@@ -215,7 +223,7 @@ describe("buildRationale property: always canonical order, no duplicates", () =>
   for (const loyalty of [0, 35, 50, 100]) {
     it(`loyalty=${loyalty}`, () => {
       const actor = makeSnap({ loyalty, ambition: 70, fear: 70,
-        personality: { scheming: 65, sociability: 30, compassion: 30, courage: 30, jealousy: 65, emotionalStability: 30, pride: 30 },
+        personality: { scheming: 65, sociability: 30, compassion: 30, courage: 30, jealousy: 65, emotionalStability: 30, pride: 30, intelligence: 50 },
         household: { servantOpinion: 70, livingStandard: 50, privateWealthLevel: 70 },
       });
       const target = makeSnap({ characterId: "target" });

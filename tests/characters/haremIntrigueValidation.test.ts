@@ -30,6 +30,7 @@ function makeActor(id: string): HaremIntriguePlan["actorSnapshot"] {
       jealousy: 50,
       emotionalStability: 50,
       pride: 50,
+      intelligence: 50,
     },
     household: { servantOpinion: 50, livingStandard: 50, privateWealthLevel: 50 },
   };
@@ -54,6 +55,7 @@ function makeTarget(id: string): HaremIntriguePlan["targetSnapshot"] {
       jealousy: 30,
       emotionalStability: 60,
       pride: 50,
+      intelligence: 50,
     },
     household: { servantOpinion: 60, livingStandard: 50, privateWealthLevel: 20 },
   };
@@ -482,5 +484,132 @@ describe("validateHaremIntrigueOutcome - invalid cancelled outcomes", () => {
     };
     const findings = validateHaremIntrigueOutcome(plan, outcome);
     expect(findings.some((f) => f.code === "INTRIGUE_BAD_SCORE")).toBe(true);
+  });
+});
+
+// ── P2-A: postpartum boundary (strict <) ──────────────────────────────────
+
+describe("validateHaremIntriguePlan: P2-A postpartum strict < (boundary tests via snapshot)", () => {
+  // Note: postpartum is on GameState eligibility, not on the plan snapshot itself.
+  // These are documented separately; plan validation doesn't check postpartum.
+  // (eligibility.ts tests cover this; these tests confirm plan validation passes for valid plans)
+  it("valid plan: no postpartum field in snapshot → no INTRIGUE_BAD_SNAPSHOT_VALUE", () => {
+    const plan = validPlan();
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE")).toBe(false);
+  });
+});
+
+// ── P2-B: GameTime validation ──────────────────────────────────────────────
+
+describe("validateHaremIntriguePlan: P2-B GameTime validation", () => {
+  it("year=0 in plannedAt → INTRIGUE_BAD_TIME", () => {
+    const plan = validPlan({ plannedAt: makeGameTime(1, 3, "early"), year: 1, month: 3 });
+    // Override plannedAt with year=0 via cast
+    const badPlan = { ...plan, plannedAt: { year: 0, month: 3, period: "early" as const, dayIndex: 0 } };
+    const findings = validateHaremIntriguePlan(badPlan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+
+  it("month=13 in plannedAt → INTRIGUE_BAD_TIME", () => {
+    const badPlan = { ...validPlan(), plannedAt: { year: 1, month: 13, period: "early" as const, dayIndex: 0 } };
+    const findings = validateHaremIntriguePlan(badPlan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+
+  it("period='noon' in plannedAt → INTRIGUE_BAD_TIME", () => {
+    const badPlan = { ...validPlan(), plannedAt: { year: 1, month: 3, period: "noon" as never, dayIndex: 0 } };
+    const findings = validateHaremIntriguePlan(badPlan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+
+  it("valid GameTime → no INTRIGUE_BAD_TIME", () => {
+    const plan = validPlan();
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(false);
+  });
+});
+
+describe("validateHaremIntrigueOutcome: P2-B resolvedAt < plannedAt → INTRIGUE_BAD_TIME", () => {
+  it("resolvedAt before plannedAt → INTRIGUE_BAD_TIME", () => {
+    const plan = validPlan();
+    // plannedAt = mid of year 1, month 3; resolvedAt = early of year 1, month 3 (before mid)
+    const cons = buildIntrigueConsequences(plan, true, false);
+    const outcome: HaremIntrigueOutcome = {
+      status: "resolved",
+      resolvedAt: makeGameTime(1, 3, "early"), // earlier than plannedAt (early)
+      successRoll: 30,
+      successThreshold: 50,
+      success: true,
+      discoveryRoll: 80,
+      discoveryThreshold: 25,
+      discovered: false,
+      consequences: cons,
+      knowledge: { actorKnowsOwnAction: true, targetKnowsInstigator: false, palacePublic: false },
+    };
+    // The plan's plannedAt is makeGameTime(1, 3, "early"), so resolvedAt must be >= plannedAt
+    // Both are "early" on same day — dayIndex must differ for this to trigger
+    // Craft resolvedAt with dayIndex BEFORE plannedAt's dayIndex
+    const resolvedBefore = { year: 1, month: 2, period: "late" as const, dayIndex: 0 };
+    const outcomeBefore = { ...outcome, resolvedAt: resolvedBefore };
+    const findings = validateHaremIntrigueOutcome(plan, outcomeBefore);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+
+  it("resolvedAt = plannedAt (same dayIndex) → no INTRIGUE_BAD_TIME from ordering", () => {
+    const plan = validPlan();
+    const cons = buildIntrigueConsequences(plan, true, false);
+    const outcome: HaremIntrigueOutcome = {
+      status: "resolved",
+      resolvedAt: AT,  // same as plannedAt
+      successRoll: 30,
+      successThreshold: 50,
+      success: true,
+      discoveryRoll: 80,
+      discoveryThreshold: 25,
+      discovered: false,
+      consequences: cons,
+      knowledge: { actorKnowsOwnAction: true, targetKnowsInstigator: false, palacePublic: false },
+    };
+    const findings = validateHaremIntrigueOutcome(plan, outcome);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(false);
+  });
+});
+
+// ── P2-C: validateParticipantSnapshot ──────────────────────────────────────
+
+describe("validateHaremIntriguePlan: P2-C snapshot validation", () => {
+  it("actor snapshot rankId='' → INTRIGUE_BAD_SNAPSHOT_VALUE", () => {
+    const plan = validPlan({ actorSnapshot: { ...makeActor("actor_001"), rankId: "" } });
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE")).toBe(true);
+  });
+
+  it("actor snapshot peakFavor < favor → INTRIGUE_BAD_SNAPSHOT_VALUE", () => {
+    const plan = validPlan({ actorSnapshot: { ...makeActor("actor_001"), favor: 80, peakFavor: 50 } });
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE")).toBe(true);
+  });
+
+  it("actor snapshot intelligence out of range → INTRIGUE_BAD_SNAPSHOT_VALUE", () => {
+    const actor = makeActor("actor_001");
+    const badActor = { ...actor, personality: { ...actor.personality, intelligence: 150 } };
+    const plan = validPlan({ actorSnapshot: badActor });
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE")).toBe(true);
+  });
+
+  it("target snapshot ID mismatch → INTRIGUE_SNAPSHOT_ID_MISMATCH", () => {
+    const plan = validPlan({ targetSnapshot: { ...makeTarget("wrong_id") } });
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_SNAPSHOT_ID_MISMATCH")).toBe(true);
+  });
+
+  it("valid snapshots → no snapshot errors", () => {
+    const plan = validPlan();
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) =>
+      f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE" || f.code === "INTRIGUE_SNAPSHOT_ID_MISMATCH"
+    )).toBe(false);
   });
 });

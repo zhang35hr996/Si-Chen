@@ -89,10 +89,12 @@ export function checkIntrigueActorEligibility(
   if (isCarrying) reasons.push("is_carrying");
 
   // Actor-specific: not in postpartum recovery
+  // Boundary: currentMonth < recoverUntilMonth means still recovering;
+  // at recoverUntilMonth itself the actor is eligible (recovery completed).
   const standing = state.standing[actorId];
   if (standing?.recoverUntilMonth !== undefined) {
-    const currentMonth = monthOrdinal(at);
-    if (currentMonth <= standing.recoverUntilMonth) {
+    const currentOrdinal = monthOrdinal(at);
+    if (currentOrdinal < standing.recoverUntilMonth) {
       reasons.push("is_postpartum");
     }
   }

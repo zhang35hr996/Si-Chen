@@ -1,4 +1,6 @@
 import { fnv1a64Hex } from "../../save/canonical";
+import type { ContentDB } from "../../content/loader";
+import { isAssignableRank } from "../../content/schemas";
 import type {
   IntrigueParticipantSnapshot,
   HaremIntrigueKind,
@@ -9,6 +11,35 @@ import { RATIONALE_CANONICAL_ORDER as RATIONALE_ORDER } from "./types";
 
 export const INTRIGUE_PROPENSITY_THRESHOLD = 45;
 export const INTRIGUE_PAIR_THRESHOLD = 45;
+
+/**
+ * Build an ordered index of assignable harem ranks, sorted by order ascending.
+ * Used to compute rank rivalry and rank protection as ladder index gaps,
+ * avoiding dilution from wide order gaps (e.g. huanghou order=1000).
+ */
+export function buildHaremRankLadder(
+  db: ContentDB,
+): { rankId: string; order: number; index: number }[] {
+  return Object.entries(db.ranks)
+    .filter(([, r]) => r.domain === "harem" && isAssignableRank(r))
+    .sort(([, a], [, b]) => a.order - b.order)
+    .map(([rankId, r], idx) => ({ rankId, order: r.order, index: idx }));
+}
+
+/**
+ * Compute rank rivalry as ladder index gap (0-100). Returns 0 when target is not
+ * higher than actor on the assignable harem ladder.
+ */
+export function computeRankRivalry(
+  actorRankId: string,
+  targetRankId: string,
+  ladder: { rankId: string; index: number }[],
+): number {
+  const actorIdx = ladder.findIndex((r) => r.rankId === actorRankId);
+  const targetIdx = ladder.findIndex((r) => r.rankId === targetRankId);
+  if (actorIdx < 0 || targetIdx < 0 || targetIdx <= actorIdx) return 0;
+  return Math.round((targetIdx - actorIdx) / Math.max(1, ladder.length - 1) * 100);
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -48,8 +79,7 @@ export function scoreTargetThreat(
   actor: IntrigueParticipantSnapshot,
   target: IntrigueParticipantSnapshot,
   grievanceStrength: number,
-  minHaremOrder: number,
-  maxHaremOrder: number,
+  ladder: { rankId: string; index: number }[],
 ): {
   score: number;
   favorGap: number;
@@ -60,13 +90,7 @@ export function scoreTargetThreat(
   const favorGap = Math.max(0, target.favor - actor.favor);
   const peakFavorGap = Math.max(0, target.peakFavor - actor.peakFavor);
 
-  const rankRivalry = target.rankOrder <= actor.rankOrder
-    ? 0
-    : Math.round(
-        (target.rankOrder - actor.rankOrder)
-        / Math.max(1, maxHaremOrder - minHaremOrder)
-        * 100,
-      );
+  const rankRivalry = computeRankRivalry(actor.rankId, target.rankId, ladder);
 
   const factionConflict =
     actor.factionId !== undefined &&
@@ -94,9 +118,10 @@ export function scoreTargetThreat(
 
 /**
  * Stable tie jitter for a pair. Returns -2..+2.
+ * Includes rngSeed so different save files diverge even with same year/month/actors.
  */
-export function pairTieJitter(year: number, month: number, actorId: string, targetId: string): number {
-  const seed = `harem_intrigue:pair:${year}:${String(month).padStart(2, "0")}:${actorId}:${targetId}`;
+export function pairTieJitter(year: number, month: number, actorId: string, targetId: string, rngSeed: number | string): number {
+  const seed = `harem_intrigue:pair:${rngSeed}:${year}:${String(month).padStart(2, "0")}:${actorId}:${targetId}`;
   const hash = parseInt(fnv1a64Hex(seed).slice(0, 8), 16);
   return (hash % 5) - 2;
 }
