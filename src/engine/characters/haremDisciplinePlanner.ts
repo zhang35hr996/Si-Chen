@@ -86,6 +86,12 @@ function isActorEligible(db: ContentDB, state: GameState, actorId: string): bool
   if (isInColdPalace(state, actorId)) return false;
   if (hasColdPalaceMadness(state, actorId)) return false;
   if ((st.healthStatus ?? "healthy") === "critical") return false;
+  // Actor cooldown: cannot act again within 2 months of a prior discipline they initiated.
+  const currentOrd = monthOrdinal(state.calendar);
+  const recentAsActor = state.haremDisciplineIncidents.some(
+    (i) => i.actorId === actorId && currentOrd - monthOrdinal(i.occurredAt) <= DISCIPLINE_TARGET_COOLDOWN_MONTHS,
+  );
+  if (recentAsActor) return false;
   return true;
 }
 
@@ -168,11 +174,23 @@ function factionModifier(state: GameState, actorId: string, targetId: string): n
   return actorFaction === targetFaction ? -10 : 5;
 }
 
-function favoriteModifier(db: ContentDB, state: GameState, targetId: string): number {
-  const ps = imperialProtectionSnapshot(db, state, targetId);
-  if (ps.favoriteStatus === "current_new_favorite") return -15;
-  if (ps.favoriteStatus === "fallen_new_favorite") return -8;
-  if (ps.favoriteStatus === "former_favorite") return -3;
+/**
+ * 盛宠修正：actor 有历史高帝眷时，倾向于攻击当前盛宠（嫉妒）或失宠的新宠（落井下石）。
+ * target 自身受到 protectionDelta 保护；此函数反映 actor 的主动动机，不重复给予 target 保护分。
+ */
+function favoriteModifier(db: ContentDB, state: GameState, actorId: string, targetId: string): number {
+  const targetPs = imperialProtectionSnapshot(db, state, targetId);
+  const actorSt = state.standing[actorId];
+  if (!actorSt) return 0;
+  const actorIsHighFavor = actorSt.favor >= 60 || actorSt.peakFavor >= 60;
+  if (targetPs.favoriteStatus === "current_new_favorite") {
+    // 若 actor 自身恩宠深厚，嫉妒心驱动攻击；否则轻微收手（新宠惹不起）。
+    return actorIsHighFavor ? 8 : -5;
+  }
+  if (targetPs.favoriteStatus === "fallen_new_favorite") {
+    // 失宠后可能遭落井下石，但仅限曾受帝眷的 actor。
+    return actorIsHighFavor ? 4 : 0;
+  }
   return 0;
 }
 
@@ -282,7 +300,7 @@ export function planHaremDiscipline(
         clamp(actorDriveScore(db, state, actorId), -AXIS_CAP, AXIS_CAP) +
         clamp(relationModifier(db, state, actorId, targetId), -AXIS_CAP, AXIS_CAP) +
         clamp(factionModifier(state, actorId, targetId), -AXIS_CAP, AXIS_CAP) +
-        clamp(favoriteModifier(db, state, targetId), -AXIS_CAP, AXIS_CAP);
+        clamp(favoriteModifier(db, state, actorId, targetId), -AXIS_CAP, AXIS_CAP);
 
       if (score < DISCIPLINE_THRESHOLD) continue;
 
@@ -304,19 +322,19 @@ export function planHaremDiscipline(
     }
   }
 
-  // Select highest pairScore among those whose roll is within occurrenceChance.
-  const triggered = candidates
-    .filter((c) => c.roll < c.occurrenceChance)
-    .sort(
-      (a, b) =>
-        b.pairScore - a.pairScore ||
-        a.actorId.localeCompare(b.actorId) ||
-        a.targetId.localeCompare(b.targetId),
-    );
+  // Select the single highest-scoring pair (deterministic), then roll once for it.
+  // If that roll fails, no event this month — lower-ranked pairs get no second chance.
+  candidates.sort(
+    (a, b) =>
+      b.pairScore - a.pairScore ||
+      a.actorId.localeCompare(b.actorId) ||
+      a.targetId.localeCompare(b.targetId),
+  );
 
-  if (triggered.length === 0) return null;
+  if (candidates.length === 0) return null;
 
-  const top = triggered[0]!;
+  const top = candidates[0]!;
+  if (top.roll >= top.occurrenceChance) return null;
   const { actorId, targetId, rankSteps, pairScore, actorAttrs, actorRankOrder } = top;
 
   const actorSnapshot = buildActorSnapshot(db, state, actorId);

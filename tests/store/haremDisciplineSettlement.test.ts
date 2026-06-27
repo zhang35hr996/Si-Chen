@@ -195,7 +195,7 @@ describe("resolveHaremDisciplineOccurrence", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("HDS-OCC-09: 受罚者恐惧上升", () => {
+  it("HDS-OCC-09: occurrence 阶段不改变 favor/affection/fear/loyalty（皇帝尚未表态）", () => {
     const seed = findTriggeringSeed();
     if (seed === null) return;
     const s = makePairState({ rngSeed: seed });
@@ -204,12 +204,13 @@ describe("resolveHaremDisciplineOccurrence", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const { state } = result.value;
-    const beforeFear = s.standing[TARGET_ID]?.fear ?? 30;
-    const afterFear = state.standing[TARGET_ID]?.fear ?? 30;
-    expect(afterFear).toBeGreaterThan(beforeFear);
+    // emperor-facing relationship attrs must not change at occurrence time
+    expect(state.standing[TARGET_ID]?.fear).toBe(s.standing[TARGET_ID]?.fear);
+    expect(state.standing[TARGET_ID]?.affection).toBe(s.standing[TARGET_ID]?.affection);
+    expect(state.standing[ACTOR_ID]?.loyalty).toBe(s.standing[ACTOR_ID]?.loyalty);
   });
 
-  it("HDS-OCC-10: 受罚者好感下降", () => {
+  it("HDS-OCC-10: occurrence 阶段不改变 target favor", () => {
     const seed = findTriggeringSeed();
     if (seed === null) return;
     const s = makePairState({ rngSeed: seed });
@@ -218,9 +219,7 @@ describe("resolveHaremDisciplineOccurrence", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const { state } = result.value;
-    const beforeAff = s.standing[TARGET_ID]?.affection ?? 50;
-    const afterAff = state.standing[TARGET_ID]?.affection ?? 50;
-    expect(afterAff).toBeLessThan(beforeAff);
+    expect(state.standing[TARGET_ID]?.favor).toBe(s.standing[TARGET_ID]?.favor);
   });
 });
 
@@ -237,17 +236,17 @@ function makeIncidentState(): { state: GameState; incident: HaremDisciplineIncid
 }
 
 describe("resolveHaremDiscipline", () => {
-  it("HDS-RES-01: 维持处分 → 施罚者忠诚+5", () => {
+  it("HDS-RES-01: 维持处分 → actor favor 上升（+2）", () => {
     const pair = makeIncidentState();
     if (!pair) return;
-    const before = pair.state.standing[ACTOR_ID]?.loyalty ?? 50;
+    const before = pair.state.standing[ACTOR_ID]?.favor ?? 30;
     const result = resolveHaremDiscipline(db, pair.state, {
       incidentId: pair.incident.id,
       resolution: "upheld",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const after = result.value.standing[ACTOR_ID]?.loyalty ?? 50;
+    const after = result.value.standing[ACTOR_ID]?.favor ?? 30;
     expect(after).toBeGreaterThan(before);
   });
 
@@ -279,7 +278,7 @@ describe("resolveHaremDiscipline", () => {
     expect(after).toBeGreaterThan(before);
   });
 
-  it("HDS-RES-04: 裁断后 incident.status = resolved", () => {
+  it("HDS-RES-04: 裁断后 incident.status = resolved，持久化 resolutionEventId", () => {
     const pair = makeIncidentState();
     if (!pair) return;
     const result = resolveHaremDiscipline(db, pair.state, {
@@ -292,6 +291,9 @@ describe("resolveHaremDiscipline", () => {
     expect(inc?.status).toBe("resolved");
     expect(inc?.resolution).toBe("upheld");
     expect(inc?.resolvedAt).toBeDefined();
+    expect(inc?.resolutionEventId).toBeDefined();
+    // Resolution event must exist in chronicle
+    expect(result.value.chronicle.some((e) => e.id === inc?.resolutionEventId)).toBe(true);
   });
 
   it("HDS-RES-05: 不存在的 incidentId 返回 err", () => {

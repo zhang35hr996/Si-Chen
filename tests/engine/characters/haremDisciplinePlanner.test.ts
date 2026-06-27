@@ -437,6 +437,46 @@ describe("planHaremDiscipline — target cooldown", () => {
   });
 });
 
+// ── actor 冷却 ────────────────────────────────────────────────────────────────
+
+describe("planHaremDiscipline — actor cooldown", () => {
+  it("HD-ACOOL-01: actor 在本月已施罚（作为 actorId）→ 本月不可再次施罚", () => {
+    const s = baseState();
+    const actorSt = s.standing[ACTOR_ID]!;
+    const targetSt = s.standing[TARGET_ID]!;
+    const now = makeGameTime(1, 1, "early");
+    const priorAsActor: HaremDisciplineIncident = {
+      id: "hdi_1_01",
+      actorId: ACTOR_ID,
+      targetId: TARGET_ID,
+      disciplineKind: "copy_scripture",
+      occurredAt: now,
+      actorSnapshot: { rankId: "fu", favor: 30, peakFavor: 30, imperialProtectionScore: 6, isHaremAdministrator: false },
+      targetSnapshot: { rankId: "changzai", favor: 30, peakFavor: 30, imperialProtectionScore: 6, isCarrying: false, healthBefore: 80 },
+      courtEventId: "evt_000001",
+      status: "resolved",
+      resolution: "upheld",
+      resolvedAt: now,
+      resolutionEventId: "evt_000002",
+    };
+    const state: GameState = {
+      ...s,
+      standing: {
+        [ACTOR_ID]: { ...actorSt, rank: "fu" },
+        [TARGET_ID]: { ...targetSt, rank: "changzai" },
+      },
+      bedchamber: {
+        [ACTOR_ID]: { encounters: [] },
+        [TARGET_ID]: { encounters: [] },
+      },
+      haremDisciplineIncidents: [priorAsActor],
+      rngSeed: 42,
+    };
+    // Actor was the initiator this month → should be blocked by actor cooldown
+    expect(planHaremDiscipline(db, state)).toBeNull();
+  });
+});
+
 // ── factionModifier 四种组合回归 ─────────────────────────────────────────────
 describe("pairScore factionModifier regression", () => {
   const FACTION_A = "faction_phoenix";
@@ -495,6 +535,49 @@ describe("pairScore factionModifier regression", () => {
     const withDiff = planHaremDiscipline(db, diffFaction);
     if (baseline && withDiff) {
       expect(withDiff.pairScore).toBe(baseline.pairScore + 5);
+    }
+  });
+});
+
+// ── favoriteModifier actor-centric 回归 ────────────────────────────────────────
+
+describe("pairScore favoriteModifier actor-centric regression", () => {
+  function stateWithFavors(actorFavor: number, actorPeakFavor: number, targetFavoriteStatus: "current_new_favorite" | "fallen_new_favorite" | "ordinary"): GameState {
+    const s = makePairState({ actorFavor, actorPeakFavor });
+    // Set target favor to control getFavoriteStatus result:
+    // current_new_favorite: favor >= 70, peakFavor >= 70, recently assigned
+    // We approximate: ordinary = low favor/peakFavor; current = high favor; fallen = high peak, low current
+    const targetFavor = targetFavoriteStatus === "current_new_favorite" ? 80
+      : targetFavoriteStatus === "fallen_new_favorite" ? 20 : 15;
+    const targetPeakFavor = targetFavoriteStatus === "fallen_new_favorite" ? 80
+      : targetFavoriteStatus === "current_new_favorite" ? 80 : 15;
+    return {
+      ...s,
+      standing: {
+        ...s.standing,
+        [TARGET_ID]: { ...s.standing[TARGET_ID]!, favor: targetFavor, peakFavor: targetPeakFavor },
+      },
+    };
+  }
+
+  it("HD-FAV-01: high-favor actor vs current_new_favorite target → positive bonus (+8)", () => {
+    const base = makePairState({ actorFavor: 65, actorPeakFavor: 65 });
+    const withCurrentFav = stateWithFavors(65, 65, "current_new_favorite");
+    const r1 = planHaremDiscipline(db, base);
+    const r2 = planHaremDiscipline(db, withCurrentFav);
+    if (r1 && r2) {
+      // favoriteModifier is clamped to AXIS_CAP=10, so bonus is min(8,10)=8
+      expect(r2.pairScore).toBeGreaterThan(r1.pairScore);
+    }
+  });
+
+  it("HD-FAV-02: low-favor actor vs current_new_favorite target → small penalty (-5)", () => {
+    const base = makePairState({ actorFavor: 20, actorPeakFavor: 20 });
+    const withCurrentFav = stateWithFavors(20, 20, "current_new_favorite");
+    const r1 = planHaremDiscipline(db, base);
+    const r2 = planHaremDiscipline(db, withCurrentFav);
+    if (r1 && r2) {
+      expect(r2.pairScore).toBeLessThan(r1.pairScore);
     }
   });
 });

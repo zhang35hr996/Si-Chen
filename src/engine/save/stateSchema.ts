@@ -835,12 +835,16 @@ export const gameStateSchema = z.strictObject({
     status: z.enum(["pending_response", "resolved"]),
     resolution: z.enum(["upheld", "protected", "rebuked_both"]).optional(),
     resolvedAt: gameTimeSchema.optional(),
+    resolutionEventId: z.string().optional(),
   }).superRefine((inc, ctx) => {
     if (inc.status === "resolved" && !inc.resolution) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: resolved 必须有 resolution` });
     }
     if (inc.status === "resolved" && !inc.resolvedAt) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: resolved 必须有 resolvedAt` });
+    }
+    if (inc.status === "resolved" && !inc.resolutionEventId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: resolved 必须有 resolutionEventId` });
     }
     if (inc.status === "pending_response" && inc.resolution !== undefined) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: pending_response 不可有 resolution` });

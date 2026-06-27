@@ -20,6 +20,7 @@ interface IncidentSlice {
   resolvedAt?: unknown;
   occurredAt?: unknown;
   courtEventId: string;
+  resolutionEventId?: string;
   actorSnapshot?: { peakFavor?: number; favor?: number };
   targetSnapshot?: { peakFavor?: number; favor?: number };
 }
@@ -27,7 +28,7 @@ interface IncidentSlice {
 interface ChronicleSlice {
   id: string;
   type?: string;
-  payload?: { subtype?: string; incidentId?: string };
+  payload?: { subtype?: string; incidentId?: string; resolution?: string };
   participants?: Array<{ charId: string; role?: string }>;
 }
 
@@ -62,6 +63,7 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
 
   const seenIds = new Set<string>();
   const pendingTargets = new Set<string>();
+  const usedResolutionEventIds = new Set<string>();
 
   for (const inc of data.haremDisciplineIncidents) {
     // 1. Unique ID.
@@ -228,6 +230,55 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
             `haremDisciplineIncidents[id=${inc.id}]: target peakFavor ${peakFavor} < favor ${favor}`,
           ),
         );
+      }
+    }
+
+    // 15. resolved 必须有 resolutionEventId；已有则交叉校验裁断事件。
+    if (inc.status === "resolved") {
+      if (!inc.resolutionEventId) {
+        errors.push(
+          stateError(
+            "HDI_MISSING_RESOLUTION_EVENT",
+            `haremDisciplineIncidents[id=${inc.id}]: resolved incident missing resolutionEventId`,
+          ),
+        );
+      } else {
+        if (usedResolutionEventIds.has(inc.resolutionEventId)) {
+          errors.push(
+            stateError(
+              "HDI_RESOLUTION_EVENT_REUSED",
+              `haremDisciplineIncidents[id=${inc.id}]: resolutionEventId ${inc.resolutionEventId} is shared by another incident`,
+            ),
+          );
+        }
+        usedResolutionEventIds.add(inc.resolutionEventId);
+
+        const resEvt = eventMap.get(inc.resolutionEventId);
+        if (!resEvt) {
+          errors.push(
+            stateError(
+              "HDI_MISSING_RESOLUTION_EVENT",
+              `haremDisciplineIncidents[id=${inc.id}]: resolutionEventId ${inc.resolutionEventId} not found in chronicle`,
+            ),
+          );
+        } else {
+          if (resEvt.payload?.subtype !== "harem_discipline_resolution") {
+            errors.push(
+              stateError(
+                "HDI_BAD_RESOLUTION_EVENT",
+                `haremDisciplineIncidents[id=${inc.id}]: resolution event subtype "${resEvt.payload?.subtype}" expected "harem_discipline_resolution"`,
+              ),
+            );
+          }
+          if (resEvt.payload?.incidentId !== inc.id) {
+            errors.push(
+              stateError(
+                "HDI_RESOLUTION_INCIDENT_MISMATCH",
+                `haremDisciplineIncidents[id=${inc.id}]: resolution event payload.incidentId "${resEvt.payload?.incidentId}" !== "${inc.id}"`,
+              ),
+            );
+          }
+        }
       }
     }
   }

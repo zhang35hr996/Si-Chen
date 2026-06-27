@@ -52,7 +52,22 @@ function makeIncident(
     occurredAt,
     actorSnapshot: { peakFavor: 50, favor: 30 },
     targetSnapshot: { peakFavor: 40, favor: 30 },
-    ...(status === "resolved" ? { resolution: "upheld" as const, resolvedAt: now } : {}),
+    ...(status === "resolved"
+      ? { resolution: "upheld" as const, resolvedAt: now, resolutionEventId: `res_evt_${id}` }
+      : {}),
+  };
+}
+
+function makeResolutionEvent(incidentId: string) {
+  return {
+    id: `res_evt_${incidentId}`,
+    type: "conflict" as const,
+    payload: { subtype: "harem_discipline_resolution", incidentId, resolution: "upheld" },
+    participants: [
+      { charId: "player", role: "arbitrator" },
+      { charId: actorId, role: "discipliner" },
+      { charId: targetId, role: "disciplined" },
+    ],
   };
 }
 
@@ -114,7 +129,7 @@ describe("validateHaremDisciplineLinks", () => {
     const s = makeSlice();
     const jan = gt(1, 1);
     const feb = gt(1, 2);
-    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), makeEvent("evt_hdi_1_02", "hdi_1_02"));
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), makeResolutionEvent("hdi_1_01"), makeEvent("evt_hdi_1_02", "hdi_1_02"));
     s.haremDisciplineIncidents.push(
       { ...makeIncident("hdi_1_01", "resolved", jan), resolvedAt: jan },
       makeIncident("hdi_1_02", "pending_response", feb),
@@ -163,7 +178,7 @@ describe("validateHaremDisciplineLinks", () => {
     const s = makeSlice();
     const occ = gt(1, 1, "mid");
     const occ2 = gt(1, 2);
-    s.chronicle.push(makeEvent("evt_hdi_1_02", "hdi_1_02"));
+    s.chronicle.push(makeEvent("evt_hdi_1_02", "hdi_1_02"), makeResolutionEvent("hdi_1_02"));
     s.haremDisciplineIncidents.push({
       ...makeIncident("hdi_1_02", "resolved", occ2),
       resolvedAt: occ2, // same time
@@ -178,7 +193,7 @@ describe("validateHaremDisciplineLinks", () => {
     // occurred late, resolved early of same month
     const occLate = gt(1, 2, "late");
     const resEarly = gt(1, 2, "early");
-    s.chronicle.push(makeEvent("evt_hdi_1_02", "hdi_1_02"));
+    s.chronicle.push(makeEvent("evt_hdi_1_02", "hdi_1_02"), makeResolutionEvent("hdi_1_02"));
     s.haremDisciplineIncidents.push({
       ...makeIncident("hdi_1_02", "resolved", occLate),
       resolvedAt: resEarly,
@@ -286,5 +301,67 @@ describe("validateHaremDisciplineLinks", () => {
     });
     const errs = validateHaremDisciplineLinks(s);
     expect(errs.some((e) => e.code === "HDI_BAD_SNAPSHOT")).toBe(true);
+  });
+
+  it("HDV-22: resolved without resolutionEventId → HDI_MISSING_RESOLUTION_EVENT", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"));
+    const inc = { ...makeIncident("hdi_1_01", "resolved") };
+    // remove resolutionEventId that makeIncident added
+    delete (inc as Record<string, unknown>)["resolutionEventId"];
+    s.haremDisciplineIncidents.push(inc);
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_MISSING_RESOLUTION_EVENT")).toBe(true);
+  });
+
+  it("HDV-23: resolutionEventId not in chronicle → HDI_MISSING_RESOLUTION_EVENT", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"));
+    // no resolution event added to chronicle
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved"));
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_MISSING_RESOLUTION_EVENT")).toBe(true);
+  });
+
+  it("HDV-24: resolution event has wrong subtype → HDI_BAD_RESOLUTION_EVENT", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), {
+      id: "res_evt_hdi_1_01",
+      type: "conflict",
+      payload: { subtype: "birth", incidentId: "hdi_1_01" }, // wrong subtype
+    });
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved"));
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_BAD_RESOLUTION_EVENT")).toBe(true);
+  });
+
+  it("HDV-25: resolution event incidentId mismatch → HDI_RESOLUTION_INCIDENT_MISMATCH", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), {
+      id: "res_evt_hdi_1_01",
+      type: "conflict",
+      payload: { subtype: "harem_discipline_resolution", incidentId: "hdi_9_99" }, // wrong id
+    });
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved"));
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_RESOLUTION_INCIDENT_MISMATCH")).toBe(true);
+  });
+
+  it("HDV-26: two resolved incidents share resolutionEventId → HDI_RESOLUTION_EVENT_REUSED", () => {
+    const s = makeSlice();
+    const jan = gt(1, 1);
+    const feb = gt(1, 2);
+    const sharedResId = "res_evt_shared";
+    s.chronicle.push(
+      makeEvent("evt_hdi_1_01", "hdi_1_01"),
+      makeEvent("evt_hdi_1_02", "hdi_1_02"),
+      { id: sharedResId, type: "conflict", payload: { subtype: "harem_discipline_resolution", incidentId: "hdi_1_01" } },
+    );
+    s.haremDisciplineIncidents.push(
+      { ...makeIncident("hdi_1_01", "resolved", jan), resolutionEventId: sharedResId },
+      { ...makeIncident("hdi_1_02", "resolved", feb), resolutionEventId: sharedResId },
+    );
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_RESOLUTION_EVENT_REUSED")).toBe(true);
   });
 });

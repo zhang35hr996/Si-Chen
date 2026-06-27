@@ -60,37 +60,18 @@ export function resolveHaremDisciplineOccurrence(
     return err([stateError("DUPLICATE_INCIDENT", `harem discipline incident ${id} already exists`)]);
   }
 
-  // 1) 组装效果列表。
-  const effects: EventEffect[] = [];
-
-  // 1a) 目标健康变化（仅 kneeling / slapping，且必须非致死）。
+  // 1) 应用健康变化（仅 kneeling / slapping，且必须非致死）。
+  //    favor / affection / fear / loyalty 全部留到御前裁断阶段，不在事件发生时提前改变。
+  let cur = state;
   if (healthDelta !== 0) {
-    effects.push({
-      type: "set_consort_health",
-      char: targetId,
-      healthDelta,
+    const effResult = applyEffects(db, state, [{ type: "set_consort_health", char: targetId, healthDelta }], {
+      allowInternalEffects: true,
     });
+    if (!effResult.ok) return err(effResult.error);
+    cur = effResult.value;
   }
 
-  // 1b) 目标恐惧上升。
-  const fearDelta = disciplineKind === "slapping" ? 12 : disciplineKind === "kneeling" ? 7 : 3;
-  effects.push({ type: "adjust_consort_attr", char: targetId, field: "fear", delta: fearDelta });
-
-  // 1c) 目标好感下降。
-  const affectionDelta = disciplineKind === "slapping" ? -15 : disciplineKind === "kneeling" ? -8 : -3;
-  effects.push({ type: "adjust_consort_attr", char: targetId, field: "affection", delta: affectionDelta });
-
-  // 1d) 施罚者目标忠诚小幅增加（威慑效果，仅对 kneeling/slapping）。
-  if (disciplineKind !== "copy_scripture") {
-    effects.push({ type: "adjust_consort_attr", char: actorId, field: "loyalty", delta: 3 });
-  }
-
-  // 2) 应用效果。
-  const effResult = applyEffects(db, state, effects, { allowInternalEffects: true });
-  if (!effResult.ok) return err(effResult.error);
-  let cur = effResult.value;
-
-  // 3) 追加 CourtEvent。
+  // 2) 追加 CourtEvent。
   const { publicity, publicSalience } = disciplinePublicity(disciplineKind, actorId, targetId);
   const evtDraft = {
     type: "conflict" as const,
@@ -199,9 +180,11 @@ export interface ResolveHaremDisciplineInput {
 /**
  * 玩家御前裁断。
  *
- * upheld        — 维持处分：施罚者忠诚+5；受罚者额外恐惧+8，好感−10。
- * protected     — 回护受罚者：受罚者好感+20，恐惧−5；施罚者好感−15，忠诚−8。
- * rebuked_both  — 各自申饬：施罚者恐惧+8，忠诚−5；受罚者恐惧+5，好感−5。
+ * upheld       — 维持处分：actor favor+2 / affection+3 / ambition+2；target favor-2 / affection-6 / fear+4
+ * protected    — 回护受罚者：actor favor-3 / affection-6 / fear+5；target favor+3 / affection+5
+ * rebuked_both — 各自申饬：actor favor-1 / affection-2 / fear+3；target affection-1 / fear+2
+ *
+ * 顺序：先应用属性效果 → 追加裁断 CourtEvent → 写入裁断记忆（sourceEventId=裁断事件）→ 持久化 resolutionEventId。
  */
 export function resolveHaremDiscipline(
   db: ContentDB,
@@ -218,36 +201,71 @@ export function resolveHaremDiscipline(
 
   const { actorId, targetId } = incident;
   const now = toGameTime(state.calendar);
-  const effects: EventEffect[] = [];
 
+  // 1) 应用属性效果（favor / affection / fear / ambition）。
+  const attrEffects: EventEffect[] = [];
   switch (input.resolution) {
     case "upheld":
-      effects.push(
-        { type: "adjust_consort_attr", char: actorId, field: "loyalty", delta: 5 },
-        { type: "adjust_consort_attr", char: targetId, field: "fear", delta: 8 },
-        { type: "adjust_consort_attr", char: targetId, field: "affection", delta: -10 },
+      attrEffects.push(
+        { type: "favor", char: actorId, delta: 2 },
+        { type: "adjust_consort_attr", char: actorId, field: "affection", delta: 3 },
+        { type: "adjust_consort_attr", char: actorId, field: "ambition", delta: 2 },
+        { type: "favor", char: targetId, delta: -2 },
+        { type: "adjust_consort_attr", char: targetId, field: "affection", delta: -6 },
+        { type: "adjust_consort_attr", char: targetId, field: "fear", delta: 4 },
       );
       break;
     case "protected":
-      effects.push(
-        { type: "adjust_consort_attr", char: targetId, field: "affection", delta: 20 },
-        { type: "adjust_consort_attr", char: targetId, field: "fear", delta: -5 },
-        { type: "adjust_consort_attr", char: actorId, field: "affection", delta: -15 },
-        { type: "adjust_consort_attr", char: actorId, field: "loyalty", delta: -8 },
+      attrEffects.push(
+        { type: "favor", char: actorId, delta: -3 },
+        { type: "adjust_consort_attr", char: actorId, field: "affection", delta: -6 },
+        { type: "adjust_consort_attr", char: actorId, field: "fear", delta: 5 },
+        { type: "favor", char: targetId, delta: 3 },
+        { type: "adjust_consort_attr", char: targetId, field: "affection", delta: 5 },
       );
       break;
     case "rebuked_both":
-      effects.push(
-        { type: "adjust_consort_attr", char: actorId, field: "fear", delta: 8 },
-        { type: "adjust_consort_attr", char: actorId, field: "loyalty", delta: -5 },
-        { type: "adjust_consort_attr", char: targetId, field: "fear", delta: 5 },
-        { type: "adjust_consort_attr", char: targetId, field: "affection", delta: -5 },
+      attrEffects.push(
+        { type: "favor", char: actorId, delta: -1 },
+        { type: "adjust_consort_attr", char: actorId, field: "affection", delta: -2 },
+        { type: "adjust_consort_attr", char: actorId, field: "fear", delta: 3 },
+        { type: "adjust_consort_attr", char: targetId, field: "affection", delta: -1 },
+        { type: "adjust_consort_attr", char: targetId, field: "fear", delta: 2 },
       );
       break;
   }
 
-  // 裁断记忆。
-  effects.push(
+  const attrResult = applyEffects(db, state, attrEffects);
+  if (!attrResult.ok) return err(attrResult.error);
+  let cur = attrResult.value;
+
+  // 2) 追加裁断 CourtEvent（记忆必须在此之后创建，以获取 resolutionEvent.id）。
+  const evtDraft = {
+    type: "conflict" as const,
+    occurredAt: now,
+    participants: [
+      { charId: "player", role: "arbitrator" },
+      { charId: actorId, role: "discipliner" },
+      { charId: targetId, role: "disciplined" },
+    ],
+    payload: {
+      subtype: "harem_discipline_resolution",
+      incidentId: incident.id,
+      resolution: input.resolution,
+      disciplineKind: incident.disciplineKind,
+    },
+    publicity: { scope: "palace" as const, persistence: "contemporaneous" as const },
+    publicSalience: 50,
+    retention: "slow" as const,
+    tags: ["harem_discipline", "imperial_ruling", input.resolution],
+  };
+  const evtResult = appendCourtEvent(cur, evtDraft);
+  if (!evtResult.ok) return err(evtResult.error);
+  const { state: afterEvt, event: resolutionEvent } = evtResult.value;
+  cur = afterEvt;
+
+  // 3) 裁断记忆（sourceEventId 指向裁断事件，而非发生事件）。
+  const memEffects: EventEffect[] = [
     {
       type: "memory",
       char: actorId,
@@ -271,7 +289,7 @@ export function resolveHaremDiscipline(
             : input.resolution === "protected"
               ? { anger: 50, shame: 30 }
               : { fear: 35, anger: 20 },
-        sourceEventId: incident.courtEventId,
+        sourceEventId: resolutionEvent.id,
       },
     },
     {
@@ -297,45 +315,27 @@ export function resolveHaremDiscipline(
             : input.resolution === "upheld"
               ? { anger: 40, grief: 30, fear: 20 }
               : { relief: 30, fear: 25 },
-        sourceEventId: incident.courtEventId,
+        sourceEventId: resolutionEvent.id,
       },
     },
-  );
+  ];
 
-  const effResult = applyEffects(db, state, effects);
-  if (!effResult.ok) return err(effResult.error);
-  let cur = effResult.value;
+  const memResult = applyEffects(db, cur, memEffects);
+  if (!memResult.ok) return err(memResult.error);
+  cur = memResult.value;
 
-  // 追加裁断 CourtEvent。
-  const evtDraft = {
-    type: "conflict" as const,
-    occurredAt: now,
-    participants: [
-      { charId: "player", role: "arbitrator" },
-      { charId: actorId, role: "discipliner" },
-      { charId: targetId, role: "disciplined" },
-    ],
-    payload: {
-      subtype: "harem_discipline_resolution",
-      incidentId: incident.id,
-      resolution: input.resolution,
-      disciplineKind: incident.disciplineKind,
-    },
-    publicity: { scope: "palace" as const, persistence: "contemporaneous" as const },
-    publicSalience: 50,
-    retention: "slow" as const,
-    tags: ["harem_discipline", "imperial_ruling", input.resolution],
-  };
-  const evtResult = appendCourtEvent(cur, evtDraft);
-  if (!evtResult.ok) return err(evtResult.error);
-  cur = evtResult.value.state;
-
-  // 更新 incident 状态。
+  // 4) 更新 incident（持久化 resolutionEventId）。
   cur = {
     ...cur,
     haremDisciplineIncidents: cur.haremDisciplineIncidents.map((i) =>
       i.id === input.incidentId
-        ? { ...i, status: "resolved" as const, resolution: input.resolution, resolvedAt: now }
+        ? {
+            ...i,
+            status: "resolved" as const,
+            resolution: input.resolution,
+            resolvedAt: now,
+            resolutionEventId: resolutionEvent.id,
+          }
         : i,
     ),
   };

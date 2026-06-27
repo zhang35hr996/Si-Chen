@@ -1193,10 +1193,13 @@ export interface HaremDisciplineIncident {
   occurredAt: GameTime;
   actorSnapshot: HaremDisciplineActorSnapshot;
   targetSnapshot: HaremDisciplineTargetSnapshot;
+  /** 发生时写入的后宫冲突 CourtEvent id。 */
   courtEventId: string;
   status: "pending_response" | "resolved";
   resolution?: HaremDisciplineResolution;
   resolvedAt?: GameTime;
+  /** 御前裁断事件 id（status=resolved 时必须存在）。 */
+  resolutionEventId?: string;
 }
 
 // ── 后宫主理权 ─────────────────────────────────────────────────────────────────
