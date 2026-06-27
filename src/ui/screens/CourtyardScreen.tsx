@@ -1,8 +1,8 @@
 /**
  * 后宫院子（gongdian_yuanzi）。点后宫某宫进入此院：
  * 设 5 宫室的 7 座居所，左→右排 西偏殿｜西侧殿｜主殿｜东侧殿｜东偏殿，按 chamber 显住客；
- * 坤宁/长门等单居所只显居中主殿。储秀宫按实际住客动态显示厢房一至厢房三十，
- * 让所有暂住秀男可以从院子直接进入，不必先点主殿再切换人物。
+ * 坤宁/长门等单居所只显居中主殿。储秀宫保留第一位住客所在的主殿，并按实际人数
+ * 增加厢房一至厢房三十，让所有暂住侍君可以从院子直接进入，不必先点主殿再切换人物。
  * 院子留作日后院中剧情的场所。
  */
 import type { AssetRegistry } from "../../engine/assets/registry";
@@ -27,17 +27,20 @@ export interface Hall {
 /**
  * 院子里的殿位：
  * - 设宫室居所给 5 殿（按 CHAMBERS 序）；
- * - 储秀宫按实际住客数给厢房一…三十，每间一人；
+ * - 储秀宫第一人居主殿，后续每人一间厢房，最多厢房三十；
  * - 其它特殊宫只给主殿。
  */
 export function hallsFor(db: ContentDB, state: GameState, location: LocationContent): Hall[] {
   const consorts = getPresentAt(db, state, location.id).filter((c) => c.kind === "consort");
   if (location.id === CANDIDATE_PALACE) {
-    return consorts.slice(0, MAX_CHUXIU_ROOMS).map((occupant, index) => ({
-      chamber: `candidate_room_${index + 1}`,
-      name: `厢房${chineseNumeral(index + 1)}`,
-      occupant,
-    }));
+    return [
+      { chamber: "main", name: "主殿", occupant: consorts[0] },
+      ...consorts.slice(1, MAX_CHUXIU_ROOMS + 1).map((occupant, index) => ({
+        chamber: `candidate_room_${index + 1}` as const,
+        name: `厢房${chineseNumeral(index + 1)}`,
+        occupant,
+      })),
+    ];
   }
   if (hasChambers(location.id)) {
     return CHAMBERS.map((ch) => ({
@@ -95,9 +98,7 @@ export function CourtyardScreen({
           overflowY: "auto",
         } : undefined}
       >
-        {ordered.length === 0 && isCandidatePalace ? (
-          <p className="courtyard__empty">储秀宫暂无待迁侍君</p>
-        ) : ordered.map((h) => (
+        {ordered.map((h) => (
           <button
             key={h.chamber}
             type="button"
