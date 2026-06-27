@@ -19,6 +19,7 @@ export interface ChengfengDispatchProps {
   interruptible: boolean;
   disabledReason?: string;
   onSummonConsort: () => void;
+  onSummonHeir?: () => void;
   onManageRank: () => void;
   onBestow: () => void;
   onPhysician: () => void;
@@ -35,6 +36,7 @@ export function ChengfengDispatch({
   interruptible,
   disabledReason,
   onSummonConsort,
+  onSummonHeir,
   onManageRank,
   onBestow,
   onPhysician,
@@ -76,6 +78,7 @@ export function ChengfengDispatch({
 
   const decrees: Decree[] = [
     { label: "召见侍君", run: onSummonConsort },
+    ...(onSummonHeir ? [{ label: "召见皇嗣", run: onSummonHeir }] : []),
     { label: "管理侍君", run: onManageRank },
     { label: "赏赐", run: onBestow },
     { label: "传太医", run: onPhysician },

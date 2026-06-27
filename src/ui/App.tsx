@@ -107,6 +107,7 @@ import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
 import { HeirListModal } from "./components/HeirListModal";
+import { HeirSummonPicker, buildHeirSummonReaction } from "./components/HeirSummonPicker";
 import { ConsortListModal } from "./components/ConsortListModal";
 import { HeirNameModal } from "./components/HeirNameModal";
 import { centennialDue } from "../engine/characters/heirs";
@@ -235,6 +236,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [centennialDismissedMonth, setCentennialDismissedMonth] = useState<number | null>(null);
   const [physicianOpen, setPhysicianOpen] = useState(false);
   const [heirListOpen, setHeirListOpen] = useState(false);
+  const [heirSummonPickerOpen, setHeirSummonPickerOpen] = useState(false);
   const [consortListOpen, setConsortListOpen] = useState(false);
   // 从「查看侍君」列表进入封号管理/搬迁时记录该侍君：先关列表（两个弹窗叠层会互相遮挡点击），
   // 操作（或取消）结束后据此重开列表并定位回同一位侍君。非列表入口（紫宸殿卡片/召见）保持 null。
@@ -883,6 +885,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (request !== "preserve") {
       pendingReactionDispatch({ type: "begin", request }); // 非空登记请求；null 覆盖清空
     }
+    // 对话历史：一批 beats 全部写入日志（台词内容在发送时已确定）。
+    const now = store.getState().calendar;
+    store.appendNarrativeLog(beats.map((b) => ({ at: now, speakerId: b.speakerId, lines: b.lines })));
     setReaction(beats[0]!);
     setReactionQueue(beats.slice(1));
   };
@@ -1080,9 +1085,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (r.ok) doAutosave();
   };
 
-  // 御书房·行动：批阅奏折（耗 2 行动点，提升朝堂资源）。
+  // 御书房·行动：批阅奏折（耗 2 行动点，提升朝堂资源）。前朝奏折已并入此入口。
   const reviewMemorials = () => {
-    setSummonedConsortId(null);
     if (store.getState().calendar.ap < 2) return; // 行动点不足
     const applied = store.applyEffects(db, [
       { type: "resource", pillar: "sovereign", field: "diligence", delta: 5 },
@@ -1094,10 +1098,15 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (!spend.ok) return;
     if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
+    const pendingCourt = getPendingMemorials(store.getState());
     const own: DecreeReaction[] = spend.value.rolledOver
       ? []
       : [{ speakerId: "wei_sui", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] }];
     playReactions([...own, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
+    // 前朝奏折并入：批阅结束后若有前朝待批奏折，自动跳转前朝奏折屏处理（不重复扣行动点）。
+    if (pendingCourt.length > 0 && !spend.value.rolledOver) {
+      setView("courtMemorials");
+    }
   };
 
   // 御书房·行动：独自休息（弃当旬剩余行动点，直接进入次旬早上）。
@@ -1179,11 +1188,13 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     // 上香在慈恩寺(ciensi)；求签移步正觉殿(zhengjuedian)。先由住持当面禀报签辞/祝祷，
     // 再由乘风回禀俗世应验（流言四起 / 民心归附）。
     const sceneBg = kind === "incense" ? "bg.ciensi" : "bg.zhengjuedian";
+    // 寺庙行动已含乘风禀报（chengfengLines），跳过 decreeBeats 中的乘风节拍避免重复出场。
+    const templeBeats = decreeBeats.filter((b) => b.speakerId !== "cheng_feng");
     playReactions(
       [
         { speakerId: "zhuchi", lines: plan.zhuchiLines, backgroundKey: sceneBg },
         { speakerId: "cheng_feng", lines: plan.chengfengLines, backgroundKey: sceneBg },
-        ...decreeBeats,
+        ...templeBeats,
       ],
       settled.value.rolledOver ? stationaryRequest() : null,
     );
@@ -1867,7 +1878,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               summonedConsort={summonedView}
               onConverseSummonedConsort={summonedConsortId ? () => { const id = summonedConsortId; if (id) void converse(id); } : undefined}
               summonedConverseDisabledReason={summonedConsortId && !canConverseSummoned ? "行动力不足" : undefined}
-              onDismissSummonedConsort={summonedConsortId ? () => setSummonedConsortId(null) : undefined}
+              onDismissSummonedConsort={summonedConsortId ? () => {
+                const id = summonedConsortId;
+                setSummonedConsortId(null);
+                // 侍君告退：先显立绘说台词，不由乘风代替。
+                if (id) setReaction({ speakerId: id, lines: ["臣侍告退。"] });
+              } : undefined}
               onBedchamberSummonedConsort={summonedConsortId && canBedchamber(liveState).ok ? () => {
                 const id = summonedConsortId;
                 setSummonedConsortId(null);
@@ -1882,11 +1898,11 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               }}
               onAdmitPendingAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
               onReviewMemorials={reviewMemorials}
+              memorialTotalCount={getPendingMemorials(liveState).length}
               onReviewPersonnel={() => setView("personnelDecisions")}
               personnelDecisionCount={getPendingPersonnelDecisions(liveState).length}
-              onReviewCourtMemorials={() => setView("courtMemorials")}
-              courtMemorialCount={getPendingMemorials(liveState).length}
               onSummonConsort={summonConsortPicker}
+              onSummonHeir={liveState.resources.bloodline.heirs.some((h) => h.lifecycle === "alive") ? () => setHeirSummonPickerOpen(true) : undefined}
               onRest={restAlone}
               onLeave={leaveZichendian}
               onManageRank={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
@@ -2447,7 +2463,15 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       )}
       {giftItemId && (
         <BestowModal db={db} store={store} itemId={giftItemId}
-          onClose={() => setGiftItemId(null)} onConfirmed={() => setGiftItemId(null)} />
+          onClose={() => setGiftItemId(null)}
+          onConfirmed={(_name, recipientId, recipientKind) => {
+            setGiftItemId(null);
+            // 赏赐成功后侍君谢恩：仅限侍君（皇嗣/宗亲暂无立绘反应）。
+            if (recipientKind === "consort") {
+              const char = db.characters[recipientId] ?? liveState.generatedConsorts[recipientId];
+              if (char) setReaction({ speakerId: recipientId, lines: ["臣侍谢陛下赏赐。"] });
+            }
+          }} />
       )}
       {flipOpen && (
         <BedchamberPicker
@@ -2611,6 +2635,19 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onSummon={summonHeir}
           canSummon={liveState.calendar.ap >= 1}
           onClose={() => setHeirListOpen(false)}
+        />
+      )}
+      {heirSummonPickerOpen && (
+        <HeirSummonPicker
+          db={db}
+          state={liveState}
+          registry={registry}
+          onClose={() => setHeirSummonPickerOpen(false)}
+          onPick={(result) => {
+            setHeirSummonPickerOpen(false);
+            const rx = buildHeirSummonReaction(result);
+            setReaction({ speakerId: rx.speakerId, lines: rx.lines });
+          }}
         />
       )}
       {namePetHeirId && (

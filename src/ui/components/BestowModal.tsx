@@ -69,7 +69,8 @@ export function BestowModal({
   store: GameStore;
   itemId: string;
   onClose: () => void;
-  onConfirmed?: (targetName: string) => void;
+  /** 赏赐成功：携带接收者姓名与 ID（供父层播放谢恩反应）。 */
+  onConfirmed?: (targetName: string, recipientId: string, recipientKind: RecipientKind) => void;
   onFailed?: (reason: string) => void;
 }) {
   const state = useGameState(store);
@@ -91,7 +92,7 @@ export function BestowModal({
     const selectedTarget = selected;
     const result = store.applyBestow(db, itemId, { kind: selectedTarget.kind, id: selectedTarget.id });
     if (result.ok) {
-      onConfirmed?.(selectedTarget.name);
+      onConfirmed?.(selectedTarget.name, selectedTarget.id, selectedTarget.kind);
     } else {
       onFailed?.("reason" in result ? result.reason : "未知错误");
     }

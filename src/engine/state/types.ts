@@ -1266,6 +1266,18 @@ export interface IntrigueNotification {
   dismissed: boolean;
 }
 
+/** 对话历史日志条目：记录每次播放反应时的发言人与台词，上限 NARRATIVE_LOG_MAX 条，先进先出。 */
+export interface NarrativeEntry {
+  /** 游戏时间（存档时的 calendar 日历）。 */
+  at: GameTime;
+  /** 发言人 charId（系统/旁白使用 "narrator"）。 */
+  speakerId: string;
+  /** 台词（可多行）。 */
+  lines: string[];
+}
+
+export const NARRATIVE_LOG_MAX = 300;
+
 export interface GameState {
   calendar: CalendarState;
   playerLocation: string;
@@ -1348,6 +1360,8 @@ export interface GameState {
   justice: JusticeState;
   /** 已完成季度财政结算的期号集合（格式 "quarterly_settlement:${year}:${month}"）。独立幂等键，与奏折存在无关。 */
   settledQuarterlyPeriods: string[];
+  /** 对话历史日志（上限 NARRATIVE_LOG_MAX，溢出时从头删除）。*/
+  narrativeLog?: NarrativeEntry[];
   rngSeed: number;
 }
 
