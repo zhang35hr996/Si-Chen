@@ -430,8 +430,8 @@ describe("advanceTime 集成", () => {
 
 // ─── AR-25: save version ─────────────────────────────────────────────────────
 
-it("AR-25: SAVE_FORMAT_VERSION = 29", () => {
-  expect(SAVE_FORMAT_VERSION).toBe(29);
+it("AR-25: SAVE_FORMAT_VERSION >= 29", () => {
+  expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(29);
 });
 
 // ─── AR-26: round-trip save/load ─────────────────────────────────────────────

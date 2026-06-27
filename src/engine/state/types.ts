@@ -476,6 +476,25 @@ export interface MemorialOption {
 /** 向后兼容别名（第一刀的 DisasterOption 直接映射到 MemorialOption）。 */
 export type DisasterOption = MemorialOption;
 
+/** 各项季度支出的细分金额（计划/实付/缺口共用此形状）。 */
+export interface QuarterlyExpenseBreakdownFields {
+  palace: number;
+  consortAllowance: number;
+  officialSalary: number;
+  armyMaintenance: number;
+  royalChildrenEducation: number;
+}
+
+/**
+ * 税收因子归因（正=增益，负=拖累）。
+ * PR #82 将扩展 type 支持 "disaster" / "tax_relief" 等新类型。
+ */
+export interface QuarterlyRevenueCause {
+  type: "productivity" | "corruption" | "public_support" | "border_pressure" | "random";
+  /** actual - actual_if_this_factor_were_neutral(1.0)。负数代表该因素拖累了税收。 */
+  impact: number;
+}
+
 /** 财政奏折载荷（年度岁入计划 / 季度财政简录）。 */
 export type TreasuryMemorialPayload =
   | {
@@ -489,6 +508,28 @@ export type TreasuryMemorialPayload =
       matter: "quarterly_settlement_report";
       /** 季节标签，如"春"/"夏"/"秋"/"冬"。 */
       season: string;
+      /** "${year}:${month}" 格式，用于历史查询。 */
+      periodKey: string;
+      openingTreasury: number;
+      revenueBase: number;
+      revenueActual: number;
+      /** 各税收因子的实际归因（impact≠0 的因子）。 */
+      revenueCauses: QuarterlyRevenueCause[];
+      expensePlanned: number;
+      expensePaid: number;
+      /**
+       * 本季未能拨付的支出总额（expensePlanned - expensePaid）。
+       * 仅代表本季度缺口，不构成跨季度债务。
+       * 下一季度用度政策将反映实际供给减少（PR #81）。
+       */
+      fundingShortfall: number;
+      /** 按优先级分配后的各项计划/实付/缺口明细。 */
+      expenseAllocation: {
+        planned: QuarterlyExpenseBreakdownFields;
+        paid: QuarterlyExpenseBreakdownFields;
+        shortfall: QuarterlyExpenseBreakdownFields;
+      };
+      closingTreasury: number;
       options: MemorialOption[];
     };
 
@@ -1201,6 +1242,8 @@ export interface GameState {
   haremAdminReviews: HaremAdminReviewRecord[];
   /** 司法记录持久层（PUNISH-3B1）。 */
   justice: JusticeState;
+  /** 已完成季度财政结算的期号集合（格式 "quarterly_settlement:${year}:${month}"）。独立幂等键，与奏折存在无关。 */
+  settledQuarterlyPeriods: string[];
   rngSeed: number;
 }
 
