@@ -792,6 +792,31 @@ export const gameStateSchema = z.strictObject({
       ]),
     }),
   ]).default({ mode: "empress" }),
+  haremAdminReviews: z.array(z.strictObject({
+    id: idSchema,
+    year: z.number().int().min(1),
+    outcome: z.enum(["rank_changed", "no_candidate", "no_administrator"]),
+    administratorId: idSchema.optional(),
+    office: z.enum(["empress", "acting_consort"]).optional(),
+    decision: z.strictObject({
+      targetId: idSchema,
+      direction: z.enum(["promote", "demote"]),
+      fromRankId: idSchema,
+      toRankId: idSchema,
+      reason: z.enum(["service_merit", "household_order", "disloyalty", "household_disorder"]),
+      score: z.number(),
+    }).optional(),
+    settledAt: gameTimeSchema,
+    acknowledged: z.boolean(),
+  }).superRefine((r, ctx) => {
+    if (r.outcome === "rank_changed") {
+      if (!r.administratorId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: rank_changed 必须有 administratorId` });
+      if (!r.office) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: rank_changed 必须有 office` });
+      if (!r.decision) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: rank_changed 必须有 decision` });
+    } else {
+      if (!r.acknowledged) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremAdminReviews[id=${r.id}]: ${r.outcome} 必须 acknowledged=true` });
+    }
+  })).default([]),
   justice: justiceStateSchema,
   rngSeed: z.number(),
 }).superRefine((data, ctx) => {

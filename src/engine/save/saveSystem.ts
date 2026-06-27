@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 28;
+export const SAVE_FORMAT_VERSION = 29;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -510,6 +510,12 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     }
     const gs = state as unknown as GameState;
     return { ...env, formatVersion: 28, state: gs, checksum: checksumOf(gs) };
+  },
+  // v28 → v29: 六宫年度例核（PR #76）。新增 haremAdminReviews 字段；
+  // 旧档无此字段，schema.default([]) 负责填充，此处仅升版本号。
+  28: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    return { ...env, formatVersion: 29, checksum: checksumOf(env.state) };
   },
 };
 

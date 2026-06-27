@@ -1072,6 +1072,43 @@ export type HaremAdministrationReason =
   | "no_eligible_consort"
   | "imperial_reassignment";
 
+/** 六宫年度例核结果。 */
+export type HaremAdminReviewOutcome =
+  | "rank_changed"     // 选出候选并成功执行位分变动
+  | "no_candidate"     // 无合格候选（已在窗口期，但决策引擎返回 null）
+  | "no_administrator"; // 当前无有效主理人（neiwu_proxy 模式）
+
+/** rank_changed 时保存的决策快照（来自 PR #75 HaremAdminDecision）。 */
+export interface HaremAdminDecisionSnapshot {
+  targetId: string;
+  direction: "promote" | "demote";
+  fromRankId: string;
+  toRankId: string;
+  /** 原因（不再从 score 倒推；在候选生成时确定）。 */
+  reason: "service_merit" | "household_order" | "disloyalty" | "household_disorder";
+  score: number;
+}
+
+/**
+ * 六宫年度例核记录。
+ * - 每年至多一条（hasHaremAdminReviewForYear 保证幂等）。
+ * - rank_changed && acknowledged=false 时乘风禀报尚未呈报，构成全局中断。
+ * - no_candidate / no_administrator 仅作幂等标记，直接 acknowledged=true。
+ */
+export interface HaremAdminReviewRecord {
+  id: string;
+  year: number;
+  outcome: HaremAdminReviewOutcome;
+  /** rank_changed 时记录执行者 charId。 */
+  administratorId?: string;
+  /** rank_changed 时记录执行者职务。 */
+  office?: "empress" | "acting_consort";
+  /** rank_changed 时保存完整决策快照。 */
+  decision?: HaremAdminDecisionSnapshot;
+  settledAt: GameTime;
+  acknowledged: boolean;
+}
+
 /**
  * 后宫主理权运行态。
  *   empress        — 皇后正常掌宫（默认）。
@@ -1160,6 +1197,8 @@ export interface GameState {
   gameOver?: { cause: "sovereign_death"; at: GameTime };
   /** 后宫主理权运行态（六宫主理）。皇后正常时为 empress；禁足期间由侍君/内务府代理。 */
   haremAdministration: HaremAdministrationState;
+  /** 六宫年度例核记录（每年最多一条；同时作为幂等标记与未读禀报队列）。 */
+  haremAdminReviews: HaremAdminReviewRecord[];
   /** 司法记录持久层（PUNISH-3B1）。 */
   justice: JusticeState;
   rngSeed: number;

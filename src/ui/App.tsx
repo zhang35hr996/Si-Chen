@@ -129,6 +129,7 @@ import { ColdPalaceCriticalIncidentModal } from "./components/ColdPalaceCritical
 import { ColdPalaceInterventionModal } from "./components/ColdPalaceInterventionModal";
 import { ColdPalaceMadnessModal } from "./components/ColdPalaceMadnessModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
+import { oldestPendingHaremAdminReport, buildHaremAdminReviewLine } from "../store/haremAdminAnnualReview";
 import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
@@ -207,6 +208,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [restoreCharId, setRestoreCharId] = useState<string | null>(null);
   const [coldPalaceInterventionTarget, setColdPalaceInterventionTarget] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
+  /** 当前展示的乘风年度例核禀报 id（瞬时，不持久化）；onDone 时才 acknowledge。 */
+  const [pendingHaremAdminReviewId, setPendingHaremAdminReviewId] = useState<string | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 过场（对话/反应/初夜提示）若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   // 原 reactionRollover + reactionStayOnBoardId 合并为单一原子待处理上下文：null=无；非空={boardId}
@@ -1227,6 +1230,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
         coldPalaceReportDue: oldestPresentableIncident(liveState) !== undefined,
+        haremAdminReviewDue: oldestPendingHaremAdminReport(liveState) !== null,
         grandSelectionDue: liveState.pendingDaxuan !== undefined,
       });
 
@@ -1251,6 +1255,24 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       setDaxuanPrompt(daxuanDianxuanPromptFor(pd.year)); // 按 pending.year 构造（年份权威，不取当前日历年）
     }
   }, [activeGlobalInterrupt]);
+
+  // 六宫年度例核禀报（PR #76）：rank_changed 未读记录 → 乘风被动禀报；
+  // acknowledge 推迟至 onDone（玩家按「知道了」后）才执行，防止崩溃/刷新后报告丢失。
+  useEffect(() => {
+    if (!content.ok) return;
+    if (activeGlobalInterrupt !== "harem_admin_review") return;
+    if (reaction !== null) return; // 已有台词在播，等播完后重选
+    const st = store.getState();
+    const review = oldestPendingHaremAdminReport(st);
+    if (!review || !review.decision) return;
+    const db_ = { ...content.value, characters: { ...content.value.characters, ...st.generatedConsorts } };
+    const line = buildHaremAdminReviewLine(
+      db_,
+      review as typeof review & { outcome: "rank_changed"; decision: NonNullable<typeof review.decision> },
+    );
+    setPendingHaremAdminReviewId(review.id);
+    setReaction({ speakerId: "cheng_feng", lines: [line] });
+  }, [activeGlobalInterrupt, reaction]);
 
   // 紫宸殿外部 busy 归属（§9）：atomicFlow 之外、本殿仍可触达的浮层/选择器/全局中断一并计入。
   // 复用权威 atomicFlowInProgress，不另立第二套原子流程定义。
@@ -2315,6 +2337,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           choicePending={choicePendingToken !== null}
           onDone={() => {
             setReaction(null);
+            // 例核禀报：玩家点「知道了」后才持久化 acknowledge，防止崩溃/刷新时丢失报告。
+            if (pendingHaremAdminReviewId !== null) {
+              store.acknowledgeHaremAdminReview(pendingHaremAdminReviewId);
+              setPendingHaremAdminReviewId(null);
+              doAutosave();
+            }
             if (reactionQueue.length > 0) {
               const [nextLine, ...rest] = reactionQueue;
               setReactionQueue(rest);
@@ -2722,7 +2750,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); setPendingHaremAdminReviewId(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); invalidateDialogue(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
