@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { consortLocationAt, presentAt } from "../../src/engine/characters/presence";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
-import type { GameState } from "../../src/engine/state/types";
+import type { GameState, HealthStatus } from "../../src/engine/state/types";
 
 const db = loadRealContent();
 const base = createNewGameState(db);
@@ -11,6 +11,16 @@ const home = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
 /** 把日历调到指定 slot（apMax-ap=slot）。 */
 function atSlot(state: GameState, slot: number): GameState {
   return { ...state, calendar: { ...state.calendar, ap: state.calendar.apMax - slot } };
+}
+
+function withConsortHealthStatus(state: GameState, healthStatus: HealthStatus): GameState {
+  return {
+    ...state,
+    standing: {
+      ...state.standing,
+      lu_huaijin: { ...state.standing.lu_huaijin!, healthStatus },
+    },
+  };
 }
 
 describe("consortLocationAt", () => {
@@ -22,6 +32,13 @@ describe("consortLocationAt", () => {
     const di = base.calendar.dayIndex;
     const s = { ...base, excusedFromGreeting: { dayIndex: di, charIds: ["lu_huaijin"] } };
     expect(consortLocationAt(db, s, "lu_huaijin", 0)).toBe(home);
+  });
+
+  it.each(["sick", "critical"] as const)("卯时病情为 %s 的侍君自动免请安并留寝殿", (status) => {
+    const s = withConsortHealthStatus(base, status);
+    expect(consortLocationAt(db, s, "lu_huaijin", 0)).toBe(home);
+    // 自动卧病免请安不污染/消耗玩家手动免请安记录。
+    expect(s.excusedFromGreeting).toBeUndefined();
   });
 
   it("卯时留宿对象（未离宫）仍在住处", () => {
@@ -69,6 +86,12 @@ describe("presentAt (按当前 slot)", () => {
 
   it("卯时某后宫居所空（住客去请安）", () => {
     expect(presentAt(db, atSlot(base, 0), "zhongcui_gong").map((c) => c.id)).toEqual([]);
+  });
+
+  it("卯时生病侍君不在皇后请安名单，并在自己寝殿休息", () => {
+    const sick = atSlot(withConsortHealthStatus(base, "sick"), 0);
+    expect(presentAt(db, sick, "kunninggong").map((c) => c.id)).not.toContain("lu_huaijin");
+    expect(presentAt(db, sick, home).map((c) => c.id)).toContain("lu_huaijin");
   });
 
   it("非侍君（乘风/卫绥）按住处在场，不受请安影响", () => {
