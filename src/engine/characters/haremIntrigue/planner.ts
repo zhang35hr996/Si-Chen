@@ -80,19 +80,25 @@ function buildParticipantSnapshot(
   };
 }
 
+interface CandidateEnumerationResult {
+  candidates: readonly HaremIntrigueCandidate[];
+  grievanceIndex: Map<string, Map<string, number>>;
+}
+
 /**
- * Enumerate all viable intrigue candidates (actor-target pairs).
+ * Internal: enumerate candidates AND return the grievance index for reuse.
+ * Builds the grievance index exactly once.
  */
-export function enumerateIntrigueCandidates(
+function _enumerateCandidatesWithIndex(
   db: ContentDB,
   state: GameState,
   context: HaremIntriguePlanningContext,
-): readonly HaremIntrigueCandidate[] {
+): CandidateEnumerationResult {
   const { at } = context;
   const consortIds = runtimeConsortIds(state);
   const ladder = buildHaremRankLadder(db);
 
-  // Build grievance index once: actorId → targetId → maxGrievanceStrength
+  // Build grievance index exactly once: actorId → targetId → maxGrievanceStrength
   const grievanceIndex = buildUnresolvedGrievanceIndex(state, consortIds);
 
   // Cache snapshots
@@ -172,7 +178,18 @@ export function enumerateIntrigueCandidates(
     }
   }
 
-  return candidates;
+  return { candidates, grievanceIndex };
+}
+
+/**
+ * Enumerate all viable intrigue candidates (actor-target pairs).
+ */
+export function enumerateIntrigueCandidates(
+  db: ContentDB,
+  state: GameState,
+  context: HaremIntriguePlanningContext,
+): readonly HaremIntrigueCandidate[] {
+  return _enumerateCandidatesWithIndex(db, state, context).candidates;
 }
 
 /**
@@ -190,8 +207,8 @@ export function planMonthlyHaremIntrigue(
   // 1. Already planned for this month
   if (context.existingSourceKeys?.has(sourceKey)) return null;
 
-  // 2. Enumerate candidates
-  const candidates = enumerateIntrigueCandidates(db, state, context);
+  // 2. Enumerate candidates — reuse the grievance index (built exactly once)
+  const { candidates, grievanceIndex } = _enumerateCandidatesWithIndex(db, state, context);
   if (candidates.length === 0) return null;
 
   // 3. Sort: priority desc → tieBreak asc → actorId asc → targetId asc
@@ -204,14 +221,12 @@ export function planMonthlyHaremIntrigue(
 
   const best = sorted[0]!;
 
-  // 4. Build full plan — reuse single index, no second scan
+  // 4. Build full plan — reuse the grievance index from enumeration (no second build)
   const ladder = buildHaremRankLadder(db);
   const actorSnap = buildParticipantSnapshot(db, state, best.actorId)!;
   const targetSnap = buildParticipantSnapshot(db, state, best.targetId)!;
 
-  // Re-use the grievance index already built in enumerateIntrigueCandidates
-  const fullGrievanceIndex = buildUnresolvedGrievanceIndex(state, runtimeConsortIds(state));
-  const grievanceStrength = fullGrievanceIndex.get(best.actorId)?.get(best.targetId) ?? 0;
+  const grievanceStrength = grievanceIndex.get(best.actorId)?.get(best.targetId) ?? 0;
 
   const threatResult = scoreTargetThreat(actorSnap, targetSnap, grievanceStrength, ladder);
   const { kind, motive } = chooseIntrigueKindAndMotive(

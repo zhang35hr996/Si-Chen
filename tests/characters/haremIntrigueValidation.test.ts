@@ -550,7 +550,7 @@ describe("validateHaremIntrigueOutcome: P2-B resolvedAt < plannedAt → INTRIGUE
     // The plan's plannedAt is makeGameTime(1, 3, "early"), so resolvedAt must be >= plannedAt
     // Both are "early" on same day — dayIndex must differ for this to trigger
     // Craft resolvedAt with dayIndex BEFORE plannedAt's dayIndex
-    const resolvedBefore = { year: 1, month: 2, period: "late" as const, dayIndex: 0 };
+    const resolvedBefore = { year: 1, month: 2, period: "late" as const, dayIndex: 5 };
     const outcomeBefore = { ...outcome, resolvedAt: resolvedBefore };
     const findings = validateHaremIntrigueOutcome(plan, outcomeBefore);
     expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
@@ -611,5 +611,63 @@ describe("validateHaremIntriguePlan: P2-C snapshot validation", () => {
     expect(findings.some((f) =>
       f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE" || f.code === "INTRIGUE_SNAPSHOT_ID_MISMATCH"
     )).toBe(false);
+  });
+});
+
+// ── P1-A: dayIndex consistency ──────────────────────────────────────────────
+
+describe("validateHaremIntriguePlan: P1-A dayIndex consistency", () => {
+  it("plannedAt.dayIndex inconsistent with year/month/period → INTRIGUE_BAD_TIME", () => {
+    // year=1, month=3, period="early" → expected dayIndex=6; we supply 0
+    const plan = validPlan({
+      plannedAt: { year: 1, month: 3, period: "early" as const, dayIndex: 0 },
+    });
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+
+  it("makeGameTime(1, 3, 'early') produces consistent GameTime → no INTRIGUE_BAD_TIME", () => {
+    const plan = validPlan(); // plannedAt = makeGameTime(1, 3, "early")
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(false);
+  });
+
+  it("plannedAt.dayIndex off by 1 → INTRIGUE_BAD_TIME", () => {
+    // Expected dayIndex for year=1, month=3, early = 6; supply 7
+    const plan = validPlan({
+      plannedAt: { year: 1, month: 3, period: "early" as const, dayIndex: 7 },
+    });
+    const findings = validateHaremIntriguePlan(plan);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+});
+
+describe("validateHaremIntrigueOutcome: P1-A resolvedAt.dayIndex consistency", () => {
+  it("resolvedAt.dayIndex inconsistent with year/month/period → INTRIGUE_BAD_TIME", () => {
+    const plan = validPlan();
+    const cons = buildIntrigueConsequences(plan, true, false);
+    // year=1, month=3, period="mid" → expected dayIndex=7; we supply 0
+    const outcome: HaremIntrigueOutcome = {
+      status: "resolved",
+      resolvedAt: { year: 1, month: 3, period: "mid" as const, dayIndex: 0 },
+      successRoll: 30,
+      successThreshold: 50,
+      success: true,
+      discoveryRoll: 80,
+      discoveryThreshold: 25,
+      discovered: false,
+      consequences: cons,
+      knowledge: { actorKnowsOwnAction: true, targetKnowsInstigator: false, palacePublic: false },
+    };
+    const findings = validateHaremIntrigueOutcome(plan, outcome);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+
+  it("resolvedAt from makeGameTime is consistent → no INTRIGUE_BAD_TIME on time field", () => {
+    const plan = validPlan();
+    const outcome = validResolvedOutcome(plan, true, false);
+    // resolvedAt = makeGameTime(1, 3, "mid") which is consistent
+    const findings = validateHaremIntrigueOutcome(plan, outcome);
+    expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(false);
   });
 });

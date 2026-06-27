@@ -1,15 +1,18 @@
 import type { ContentDB } from "../../content/loader";
 import type { GameState } from "../../state/types";
 import type { GameTime } from "../../calendar/time";
+import { compareGameTime } from "../../calendar/time";
+import { ok, err, type Result } from "../../infra/result";
 import { fnv1a64Hex } from "../../save/canonical";
 import { resolveConsortRuntimeAttrs } from "../consortAttrs";
 import { buildHaremRankLadder, computeRankRivalry } from "./scoring";
 import { checkIntrigueActorEligibility, checkIntrigueTargetEligibility } from "./eligibility";
-import { validateHaremIntriguePlan } from "./validation";
+import { validateHaremIntriguePlan, validateIntrigueGameTime } from "./validation";
 import { buildIntrigueConsequences } from "./consequences";
 import type {
   HaremIntriguePlan,
   HaremIntrigueOutcome,
+  HaremIntrigueValidationFinding,
 } from "./types";
 
 // Re-export for backward compatibility (tests import it from here)
@@ -94,10 +97,10 @@ function computeDiscoveryThreshold(
   return clamp(Math.round(raw), 5, 90);
 }
 
-/** Convenience factory for cancelled outcomes. */
+/** Convenience factory for cancelled outcomes (business cancellation — still Ok). */
 function cancelled(
   resolvedAt: GameTime,
-  reason: HaremIntriguePlan extends never ? never : "actor_unavailable" | "target_unavailable" | "actor_target_same" | "plan_invalid",
+  reason: "actor_unavailable" | "target_unavailable" | "actor_target_same",
 ): HaremIntrigueOutcome {
   return {
     status: "cancelled",
@@ -110,40 +113,63 @@ function cancelled(
 
 /**
  * Resolve a planned intrigue scheme at execution time.
- * Validates plan fully, re-checks eligibility, uses current state for resistance/discovery.
+ * Returns Ok(outcome) on success (including cancelled-as-business-result),
+ * or Err(findings) when the call itself violates the contract
+ * (invalid plan, invalid resolvedAt, or resolvedAt before plannedAt).
+ *
+ * Execution order:
+ *   1. validateHaremIntriguePlan(plan)          → Err if invalid
+ *   2. validateIntrigueGameTime(resolvedAt)      → Err if invalid
+ *   3. compareGameTime(resolvedAt, plannedAt)<0  → Err if time inverted
+ *   4. eligibility checks                        → Ok(cancelled) — normal business cancellation
+ *   5. compute rolls, consequences, knowledge    → Ok(resolved)
  */
 export function resolveIntrigueOutcome(
   db: ContentDB,
   state: GameState,
   plan: HaremIntriguePlan,
   resolvedAt: GameTime,
-): HaremIntrigueOutcome {
-  // 1. Full plan validation (replaces old isPlanResoluble weak check)
-  const findings = validateHaremIntriguePlan(plan);
-  if (findings.length > 0) {
-    return cancelled(resolvedAt, "plan_invalid");
+): Result<HaremIntrigueOutcome, HaremIntrigueValidationFinding[]> {
+  // 1. Full plan validation — contract violation → Err
+  const planFindings = validateHaremIntriguePlan(plan);
+  if (planFindings.length > 0) {
+    return err(planFindings);
+  }
+
+  // 2. resolvedAt structural validation — contract violation → Err
+  const timeFindings = validateIntrigueGameTime(resolvedAt, "resolvedAt");
+  if (timeFindings.length > 0) {
+    return err(timeFindings);
+  }
+
+  // 3. resolvedAt must be >= plannedAt — contract violation → Err
+  if (compareGameTime(resolvedAt, plan.plannedAt) < 0) {
+    return err([{
+      code: "INTRIGUE_BAD_TIME",
+      message: `resolvedAt (dayIndex=${resolvedAt.dayIndex}) is before plannedAt (dayIndex=${plan.plannedAt.dayIndex})`,
+    }]);
   }
 
   const { actorId, targetId, sourceKey } = plan;
 
-  // 2. Self-target sanity (also caught by validator, but explicit here for cancelled reason)
+  // 4. Self-target sanity (also caught by validator, but explicit here for cancelled reason)
   if (actorId === targetId) {
-    return cancelled(resolvedAt, "actor_target_same");
+    return ok(cancelled(resolvedAt, "actor_target_same"));
   }
 
-  // 3. Runtime actor eligibility re-check (skipping propensity threshold)
+  // 5. Runtime actor eligibility re-check (skipping propensity threshold)
   const actorCheck = checkIntrigueActorEligibility(db, state, actorId, resolvedAt);
   if (!actorCheck.eligible) {
-    return cancelled(resolvedAt, "actor_unavailable");
+    return ok(cancelled(resolvedAt, "actor_unavailable"));
   }
 
-  // 4. Runtime target eligibility re-check
+  // 6. Runtime target eligibility re-check
   const targetCheck = checkIntrigueTargetEligibility(db, state, targetId);
   if (!targetCheck.eligible) {
-    return cancelled(resolvedAt, "target_unavailable");
+    return ok(cancelled(resolvedAt, "target_unavailable"));
   }
 
-  // 5. Compute success and discovery rolls (deterministic, seeded by rngSeed)
+  // 7. Compute success and discovery rolls (deterministic, seeded by rngSeed)
   const rngSeed = state.rngSeed;
   const successThreshold = computeSuccessThreshold(db, state, plan);
   const discoveryThreshold = computeDiscoveryThreshold(db, state, plan);
@@ -160,7 +186,7 @@ export function resolveIntrigueOutcome(
 
   const consequences = buildIntrigueConsequences(plan, success, discovered);
 
-  return {
+  return ok({
     status: "resolved",
     resolvedAt,
     successRoll,
@@ -175,5 +201,5 @@ export function resolveIntrigueOutcome(
       targetKnowsInstigator: discovered,
       palacePublic: discovered,
     },
-  };
+  });
 }
