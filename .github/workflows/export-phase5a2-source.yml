@@ -1,0 +1,44 @@
+name: Export Phase 5A-2 source
+
+on:
+  push:
+    branches:
+      - tmp/export-source-phase5a2
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Archive PR head and main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --output=/tmp/pr-head.tar.gz HEAD
+          git archive --format=tar.gz --output=/tmp/main.tar.gz origin/main
+
+      - name: Upload PR head source
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5a2-concurrent-head-source
+          path: /tmp/pr-head.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload main source
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5a2-concurrent-main-source
+          path: /tmp/main.tar.gz
+          if-no-files-found: error
+          retention-days: 1
