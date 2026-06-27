@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { consortLocationAt, presentAt } from "../../src/engine/characters/presence";
+import { greetingAttendees } from "../../src/engine/characters/greeting";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 import type { GameState, HealthStatus } from "../../src/engine/state/types";
@@ -92,6 +93,21 @@ describe("presentAt (按当前 slot)", () => {
     const sick = atSlot(withConsortHealthStatus(base, "sick"), 0);
     expect(presentAt(db, sick, "kunninggong").map((c) => c.id)).not.toContain("lu_huaijin");
     expect(presentAt(db, sick, home).map((c) => c.id)).toContain("lu_huaijin");
+  });
+
+  it("生病侍君与请安地点同宫时，greetingAttendees 仍将其排除（同宫边界回归）", () => {
+    // 将陆怀瑾居所设为坤宁宫（即请安地点），模拟同宫极端情况
+    const s = atSlot({
+      ...base,
+      standing: {
+        ...base.standing,
+        lu_huaijin: { ...base.standing.lu_huaijin!, healthStatus: "sick", residence: "kunninggong" },
+      },
+    }, 0);
+    // 物理位置在坤宁宫（home=kunninggong），presentAt 会包含该侍君
+    expect(presentAt(db, s, "kunninggong").map((c) => c.id)).toContain("lu_huaijin");
+    // 但 greetingAttendees 健康过滤层将其排除
+    expect(greetingAttendees(db, s).map((c) => c.id)).not.toContain("lu_huaijin");
   });
 
   it("非侍君（乘风/卫绥）按住处在场，不受请安影响", () => {
