@@ -202,6 +202,7 @@ export const eventEffectSchema = z.union([
       "corruption",
       "clanDiscontent",
       "rumor",
+      "borderPressure",
     ]),
     delta,
   }),

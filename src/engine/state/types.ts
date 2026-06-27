@@ -58,6 +58,8 @@ export interface NationState {
   clanDiscontent: number;
   /** 谣言热度（暗） */
   rumor: number;
+  /** 边患压力（暗属性，0–100）。0=边境安宁；100=烽烟四起。年度边情评估更新。 */
+  borderPressure: number;
 }
 
 export type MenstrualStatus = "normal" | "irregular" | "absent";
@@ -411,6 +413,39 @@ export interface TreasuryLedgerEntry {
   reason: string;
 }
 
+// ── 边情评估（Phase 4C） ──────────────────────────────────────────────────
+export type FrontierTheaterId =
+  | "northern_frontier"
+  | "western_frontier"
+  | "southern_frontier";
+
+export type FrontierSeverity =
+  | "stable"
+  | "watch"
+  | "urgent"
+  | "critical";
+
+export interface FrontierAssessment {
+  id: string;
+  year: number;
+  assessedAt: GameTime;
+  theaterId: FrontierTheaterId;
+
+  pressureBefore: number;
+  pressureDelta: number;
+  pressureAfter: number;
+
+  militaryAtAssessment: number;
+  governanceAtAssessment: number;
+  publicSupportAtAssessment: number;
+
+  severity: FrontierSeverity;
+
+  generation:
+    | { status: "generated"; memorialId: string }
+    | { status: "blocked_by_pending"; blockingMemorialId: string };
+}
+
 // ── 奏折框架（Phase 4A 第一刀） ─────────────────────────────────────────
 /**
  * 紫宸殿奏折类别。第一刀只实地实现 `disaster`（地方灾情）；其余为框架占位（不生成），人事奏折仍由
@@ -449,10 +484,31 @@ export interface TreasuryMemorialPayload {
   options: MemorialOption[];
 }
 
+export type MilitaryMemorialMatter =
+  | "annual_readiness"
+  | "border_fortification"
+  | "frontier_incursion";
+
+export type MilitaryMemorialUrgency =
+  | "routine"
+  | "urgent"
+  | "critical";
+
+export interface MilitaryMemorialPayload {
+  category: "military";
+  matter: MilitaryMemorialMatter;
+  urgency: MilitaryMemorialUrgency;
+  theaterId: FrontierTheaterId;
+  pressureAtCreation: number;
+  militaryAtCreation: number;
+  options: MemorialOption[];
+}
+
 /** 各类别的结构化载荷（判别联合）。 */
 export type MemorialPayload =
   | { category: "disaster"; regionId: string; severity: "minor" | "major"; options: MemorialOption[] }
-  | TreasuryMemorialPayload;
+  | TreasuryMemorialPayload
+  | MilitaryMemorialPayload;
 
 /**
  * 待皇帝批阅/已批阅的奏折（pending 可存档；resolved 不可再次执行）。`sourceId` 为去重键；`id`（"mem_000001"）
@@ -1034,6 +1090,8 @@ export interface GameState {
   memorials: Record<string, Memorial>;
   /** 国库流水台账（Phase 4B）：奏折批阅产生的原子借贷记录，append-only。 */
   treasuryLedger: TreasuryLedgerEntry[];
+  /** 年度边情评估记录（Phase 4C）：append-only。 */
+  frontierAssessments: FrontierAssessment[];
   memories: Record<string, CharacterMemoryStore>;
   /** 每名侍君（含皇后）的侍寝日志；非侍君无条目。 */
   bedchamber: Record<string, BedchamberRecord>;

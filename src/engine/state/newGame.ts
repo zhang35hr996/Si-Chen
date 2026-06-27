@@ -104,7 +104,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     taihou: { health: 70, healthStatus: "healthy" },
     resources: {
       sovereign: { ...db.world.startingResources.sovereign, healthStatus: "healthy" as const },
-      nation: { ...db.world.startingResources.nation },
+      nation: { ...db.world.startingResources.nation, borderPressure: 35 },
       bloodline: {
         ...db.world.startingResources.bloodline,
         pregnancy: { status: "none", candidateIds: [] },
@@ -128,6 +128,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     personnelDecisions: {},
     memorials: {},
     treasuryLedger: [],
+    frontierAssessments: [],
     memories,
     bedchamber,
     eventLog: [],

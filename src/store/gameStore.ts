@@ -39,7 +39,7 @@ import { REVIEW_MONTH, buildAnnualReview, hasReviewedYear } from "../engine/offi
 import { punishOfficial, promoteOfficialAdministratively, type OfficialPunishmentCommand } from "../engine/officials/officialPunishment";
 import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionResolve";
 import { generateAnnualPersonnelEvents, generateFamilyImplication } from "../engine/officials/personnelDecisions";
-import { maybeGenerateAnnualDisaster, maybeGenerateAnnualTreasuryMemorial, resolveMemorial as resolveMemorialEngine } from "../engine/court/memorials";
+import { maybeGenerateAnnualDisaster, maybeGenerateAnnualTreasuryMemorial, maybeGenerateAnnualMilitaryAssessment, resolveMemorial as resolveMemorialEngine } from "../engine/court/memorials";
 import { applyTreasuryTransaction } from "../engine/court/treasuryLedger";
 import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
@@ -1643,6 +1643,13 @@ export class GameStore {
     // 跨入四月 → 年度财政奏折（户部岁入计划；Phase 4B）。同源去重保证幂等。
     if (monthChanged && candidate.calendar.month === 4) {
       candidate = maybeGenerateAnnualTreasuryMemorial(candidate, toGameTime(candidate.calendar));
+    }
+
+    // 跨入七月 → 年度边情评估 + 军务奏折（Phase 4C）。同源去重保证幂等。
+    if (monthChanged && candidate.calendar.month === 7) {
+      const beforeMilitary = candidate;
+      candidate = maybeGenerateAnnualMilitaryAssessment(candidate, db, toGameTime(candidate.calendar));
+      collector?.capturePhaseScheduled("annual_military_assessment", diffGameState(beforeMilitary, candidate));
     }
 
     // 二月（或其后首次推进，含本月内首次推进的 catch-up）→ 候补池增龄/退出 + 生成本年科举。

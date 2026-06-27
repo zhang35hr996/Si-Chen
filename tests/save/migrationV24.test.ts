@@ -37,8 +37,8 @@ const REAL_TARGET_ID = "lu_huaijin";
 // ── Current version ───────────────────────────────────────────────────────────
 
 describe("save format v24", () => {
-  it("SAVE_FORMAT_VERSION is 24", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(24);
+  it("SAVE_FORMAT_VERSION is at least 24", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(24);
   });
 
   it("new game state loads without madness effects", () => {

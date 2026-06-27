@@ -235,6 +235,26 @@ const memorialOptionSchema = z.strictObject({
   effects: z.array(memorialResourceEffectSchema),
   treasuryDelta: z.number().int().refine((n) => n !== 0, "treasuryDelta must be nonzero").optional(),
 });
+const frontierTheaterIdSchema = z.enum(["northern_frontier", "western_frontier", "southern_frontier"]);
+
+const frontierAssessmentSchema = z.strictObject({
+  id: z.string().min(1),
+  year: z.number().int().min(1),
+  assessedAt: gameTimeSchema,
+  theaterId: frontierTheaterIdSchema,
+  pressureBefore: z.number().int().min(0).max(100),
+  pressureDelta: z.number().int(),
+  pressureAfter: z.number().int().min(0).max(100),
+  militaryAtAssessment: z.number().int().min(0).max(100),
+  governanceAtAssessment: z.number().int().min(0).max(100),
+  publicSupportAtAssessment: z.number().int().min(0).max(100),
+  severity: z.enum(["stable", "watch", "urgent", "critical"]),
+  generation: z.discriminatedUnion("status", [
+    z.strictObject({ status: z.literal("generated"), memorialId: z.string().min(1) }),
+    z.strictObject({ status: z.literal("blocked_by_pending"), blockingMemorialId: z.string().min(1) }),
+  ]),
+});
+
 const memorialPayloadSchema = z.discriminatedUnion("category", [
   z.strictObject({
     category: z.literal("disaster"),
@@ -246,6 +266,15 @@ const memorialPayloadSchema = z.discriminatedUnion("category", [
     category: z.literal("treasury"),
     matter: z.literal("annual_revenue_plan"),
     urgency: z.enum(["routine", "urgent"]),
+    options: z.array(memorialOptionSchema).min(1),
+  }),
+  z.strictObject({
+    category: z.literal("military"),
+    matter: z.enum(["annual_readiness", "border_fortification", "frontier_incursion"]),
+    urgency: z.enum(["routine", "urgent", "critical"]),
+    theaterId: frontierTheaterIdSchema,
+    pressureAtCreation: z.number().int().min(0).max(100),
+    militaryAtCreation: z.number().int().min(0).max(100),
     options: z.array(memorialOptionSchema).min(1),
   }),
 ]);
@@ -498,6 +527,7 @@ export const gameStateSchema = z.strictObject({
       corruption: percent,
       clanDiscontent: percent,
       rumor: percent,
+      borderPressure: z.number().int().min(0).max(100).default(35),
     }),
     bloodline: z.strictObject({
       menstrualStatus: z.enum(["normal", "irregular", "absent"]),
@@ -584,6 +614,7 @@ export const gameStateSchema = z.strictObject({
   personnelDecisions: z.record(z.string(), personnelDecisionSchema),
   memorials: z.record(z.string(), memorialSchema),
   treasuryLedger: z.array(treasuryLedgerEntrySchema).default([]),
+  frontierAssessments: z.array(frontierAssessmentSchema).default([]),
   memories: z.record(
     idSchema,
     z.strictObject({ entries: z.array(memoryEntrySchema), nextSeq: z.number().int().min(1) }),
