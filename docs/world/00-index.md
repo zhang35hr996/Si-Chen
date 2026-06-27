@@ -12,6 +12,7 @@ gameplay numbers. For mechanics see [`../systems/`](../systems/00-index.md).
 | [`50-harem-ranks.md`](50-harem-ranks.md) | 后宫 rank table + self-reference rules. |
 | [`60-court-officials.md`](60-court-officials.md) | 官员/朝堂 roles and household-spouse titles. |
 | [`70-taboo-and-lexicon.md`](70-taboo-and-lexicon.md) | Approved/forbidden terms, wrong-title pitfalls, dialogue red lines. |
+| [`80-geography-v0.1.md`](80-geography-v0.1.md) | 大姒疆域、十二道、都护府、山川、地方物产与封爵地理。 |
 
 **★ Canonical reference:** [`../background-v1.0.md`](../background-v1.0.md) — the
 authoritative bible for lore, 位分, 称谓 and the attribute system. These split
