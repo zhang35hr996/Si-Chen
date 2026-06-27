@@ -133,7 +133,7 @@ function _enumerateCandidatesWithIndex(
       if (targetId === actorId) continue;
 
       // Check target eligibility
-      const targetElig = checkIntrigueTargetEligibility(db, state, targetId);
+      const targetElig = checkIntrigueTargetEligibility(db, state, targetId, at);
       if (!targetElig.eligible) continue;
 
       const targetSnap = getSnapshot(targetId);

@@ -164,7 +164,7 @@ export function resolveIntrigueOutcome(
   }
 
   // 6. Runtime target eligibility re-check
-  const targetCheck = checkIntrigueTargetEligibility(db, state, targetId);
+  const targetCheck = checkIntrigueTargetEligibility(db, state, targetId, resolvedAt);
   if (!targetCheck.eligible) {
     return ok(cancelled(resolvedAt, "target_unavailable"));
   }
