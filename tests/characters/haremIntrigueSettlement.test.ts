@@ -879,3 +879,93 @@ describe("settleHaremIntrigue: scheme outcome persistence", () => {
     }
   });
 });
+
+// ── P2 fix: discovered grievance subjectIds should be [actorId], not [targetId, actorId] ──
+
+describe("settleHaremIntrigue: grievance subjectIds (P2 fix)", () => {
+  it("discovered grievance subjectIds=[actorId], does NOT contain targetId", () => {
+    // secrecy=1 → high discovery chance
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 90,
+      secrecy: 1,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean } | undefined;
+      if (o?.discovered) {
+        const targetEntries = result.state.memories["target_001"]!.entries;
+        const grievance = targetEntries.find((m) => m.kind === "grievance");
+        expect(grievance).toBeDefined();
+        // grievance.subjectIds must point to the actor (the culprit), not the target herself
+        expect(grievance!.subjectIds).toContain("actor_001");
+        expect(grievance!.subjectIds).not.toContain("target_001");
+      }
+    }
+  });
+
+  it("discovered grievance subjectIds=[actorId] on failure too", () => {
+    // secrecy=1 → high discovery; potency=10 → lower success chance
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 10,
+      secrecy: 1,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean } | undefined;
+      if (o?.discovered) {
+        const targetEntries = result.state.memories["target_001"]!.entries;
+        const grievance = targetEntries.find((m) => m.kind === "grievance");
+        expect(grievance).toBeDefined();
+        expect(grievance!.subjectIds).toContain("actor_001");
+        expect(grievance!.subjectIds).not.toContain("target_001");
+      }
+    }
+  });
+
+  it("hidden episodic memory subjectIds does NOT contain actorId (actor unknown)", () => {
+    // secrecy=90 → low discovery → episodic memory
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 90,
+      secrecy: 90,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean } | undefined;
+      if (o !== undefined && !o.discovered) {
+        const targetEntries = result.state.memories["target_001"]!.entries;
+        const episodic = targetEntries.find((m) => m.kind === "episodic");
+        if (episodic) {
+          // Hidden: target doesn't know the actor — actorId should NOT be in subjectIds
+          expect(episodic.subjectIds).not.toContain("actor_001");
+        }
+      }
+    }
+  });
+
+  it("hidden failure episodic memory subjectIds does NOT contain actorId", () => {
+    // secrecy=90 → low discovery; potency=10 → lower success
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 10,
+      secrecy: 90,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean } | undefined;
+      if (o !== undefined && !o.discovered) {
+        const targetEntries = result.state.memories["target_001"]!.entries;
+        const episodic = targetEntries.find((m) => m.kind === "episodic");
+        if (episodic) {
+          expect(episodic.subjectIds).not.toContain("actor_001");
+        }
+      }
+    }
+  });
+});

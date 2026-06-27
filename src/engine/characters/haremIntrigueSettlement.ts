@@ -298,7 +298,7 @@ export function settleHaremIntrigue(
       summary: buildTargetConsequenceSummary(plan, resolved),
       strength: resolved.success ? 55 : 30,
       retention: "slow",
-      subjectIds: resolved.discovered ? [plan.targetId, plan.actorId] : [plan.targetId],
+      subjectIds: resolved.discovered ? [plan.actorId] : [plan.targetId],
       perspective: "witness",
       unresolved: resolved.discovered,
       emotions: buildTargetEmotions(resolved),

@@ -36,11 +36,14 @@ export function runtimeConsortIds(state: GameState): string[] {
 
 /**
  * Common eligibility checks for both actors and targets.
+ * Uses `at.dayIndex` (not `state.calendar`) for confinement/cold-palace checks,
+ * so future-month planning and settlement both evaluate against the correct turn.
  */
 function commonEligibility(
   db: ContentDB,
   state: GameState,
   charId: string,
+  at: GameTime,
 ): IntrigueIneligibilityReason[] {
   const reasons: IntrigueIneligibilityReason[] = [];
   const consortIds = runtimeConsortIds(state);
@@ -60,7 +63,7 @@ function commonEligibility(
   if (lifecycle === "deceased") reasons.push("is_deceased");
 
   if (isInColdPalace(state, charId)) reasons.push("in_cold_palace");
-  if (isConfined(state, charId)) reasons.push("in_confinement");
+  if (isConfined(state, charId, at.dayIndex)) reasons.push("in_confinement");
 
   if ((standing.healthStatus ?? "healthy") === "critical") reasons.push("critical_health");
 
@@ -80,7 +83,7 @@ export function checkIntrigueActorEligibility(
   actorId: string,
   at: GameTime,
 ): IntrigueEligibility {
-  const reasons = commonEligibility(db, state, actorId);
+  const reasons = commonEligibility(db, state, actorId, at);
 
   // Actor-specific: not carrying
   const isCarrying = state.resources.bloodline.gestations.some(
@@ -106,8 +109,9 @@ export function checkIntrigueTargetEligibility(
   db: ContentDB,
   state: GameState,
   targetId: string,
+  at: GameTime,
 ): IntrigueEligibility {
-  const reasons = commonEligibility(db, state, targetId);
+  const reasons = commonEligibility(db, state, targetId, at);
   // target carrying is ALLOWED (non-physical schemes)
   // target postpartum is ALLOWED
   return { eligible: reasons.length === 0, reasons };
