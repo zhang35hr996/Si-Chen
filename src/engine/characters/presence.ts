@@ -94,8 +94,8 @@ export function consortLocationAt(
     const o = state.overnightWith;
     if (o && o.charId === charId && o.morningDayIndex === state.calendar.dayIndex) return home; // 留宿未离宫
     if (isExcused(state, charId)) return home;
-    // 生病/危重侍君留在寝殿休息，不前往请安地点。
-    if (st.healthStatus === "sick" || st.healthStatus === "critical") return home;
+    // 生病/重病自动免请安，留在自己的寝殿静养；不写入手动免请安状态。
+    if (!canCharacterParticipate(state, charId, "greeting")) return home;
     // 请安地点由六宫主理权动态决定（坤宁宫/协理者寝殿/null=无正式请安→留家）。
     return getGreetingLocation(db, state) ?? home;
   }
