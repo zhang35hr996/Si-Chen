@@ -43,6 +43,8 @@ function fakeRequest(
       stances: [],
     },
     etiquette: { allowedTerms: [], forbiddenTerms: [], addressRules: [] },
+    register: "private",
+    addressPermissions: [],
     transcript: overrides.transcript ?? [],
     topicTags: overrides.topicTags ?? [],
     sceneDirective: overrides.sceneDirective,

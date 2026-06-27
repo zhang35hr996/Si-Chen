@@ -198,6 +198,8 @@ export function assembleDialogueRequest(
       addressRules: db.lexicon.rankAddressRules,
     },
     resolvedAddress: resolveAddress(db, state, speakerId, targetId),
+    register: options.register ?? "public",
+    addressPermissions: character.dialoguePolicy?.addressPermissions ?? [],
     sceneDirective,
     transcript: transcript ?? [],
     topicTags,
@@ -225,7 +227,12 @@ function finalizeLine(
   }
 
   // ── text gates (plan §8) ────────────────────────────────────────────
-  const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  const gateCtx = buildTextGateContext(
+    db,
+    request.speakerContext.standing.rank,
+    request.addressPermissions,
+    request.register,
+  );
   gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
     ...scanDialogueText(response.text, gateCtx),
@@ -413,7 +420,12 @@ export function validateDialogueProviderResult(
   }
 
   // ── 3. Text gate + expression normalize + line build ─────────────
-  const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  const gateCtx = buildTextGateContext(
+    db,
+    request.speakerContext.standing.rank,
+    request.addressPermissions,
+    request.register,
+  );
   gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
     ...scanDialogueText(response.text, gateCtx),

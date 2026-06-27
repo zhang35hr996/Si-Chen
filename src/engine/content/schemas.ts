@@ -515,6 +515,8 @@ export const characterSchema = z
     })).optional(),
     dialoguePolicy: z.strictObject({
       forbiddenClaims: z.array(dialogueClaimSchema).max(16),
+      /** Typed address permissions for terms that are globally forbidden but context-allowed. */
+      addressPermissions: z.array(z.enum(["fengjun"])).optional(),
     }).optional(),
     maternalClan: z
       .strictObject({

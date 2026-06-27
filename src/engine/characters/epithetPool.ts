@@ -1,0 +1,159 @@
+export type EpithetTarget =
+  | "emperor"
+  | "empress"
+  | "consort"
+  | "prince"
+  | "princess"
+  | "official";
+
+export type EpithetRarity = "common" | "uncommon" | "rare";
+
+export type EpithetSource = "逸周书" | "唐会要" | "后世常用" | "拟古";
+
+export interface Epithet {
+  char: string;
+  meaning: string;
+  tags: string[];
+  suitableFor: EpithetTarget[];
+  rarity: EpithetRarity;
+  source?: EpithetSource;
+}
+
+// Shorthand target groups used below
+const ALL: EpithetTarget[] = ["emperor", "empress", "consort", "prince", "princess", "official"];
+const VIRTUE: EpithetTarget[] = ["emperor", "empress", "consort", "official"];
+const BROAD: EpithetTarget[] = ["emperor", "empress", "consort", "prince", "official"];
+const FEMININE: EpithetTarget[] = ["empress", "consort", "princess"];
+const MILITARY: EpithetTarget[] = ["emperor", "prince", "official"];
+
+export const TITLE_EPITHETS: readonly Epithet[] = [
+  // ── 德行 ────────────────────────────────────────────────────────────────
+  { char: "惠", meaning: "柔质慈民、爱民好与曰惠。", tags: ["德行", "仁惠"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "穆", meaning: "布德执义、中情见貌曰穆。", tags: ["德行", "礼制"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "恭", meaning: "敬事尊上、尊贤贵义曰恭。", tags: ["礼制", "敬慎"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "文", meaning: "经纬天地、慈惠爱民曰文。", tags: ["文治", "仁惠"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "明", meaning: "照临四方、谗诉不行曰明。", tags: ["明察", "德行"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "德", meaning: "绥柔士民、谏争不威曰德。", tags: ["德行", "仁惠"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "孝", meaning: "慈惠爱亲、五宗安之曰孝。", tags: ["亲族", "德行"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "考", meaning: "秉德不回、大虑行节曰考。", tags: ["德行", "礼制"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "景", meaning: "由义而济、布义行刚曰景。", tags: ["德行", "义理"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "贞", meaning: "清白守节、大虑克就曰贞。", tags: ["节操", "德行"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "思", meaning: "道德纯备、外内思索曰思。", tags: ["德行", "思虑"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "元", meaning: "能思辨众、行义悦民曰元。", tags: ["德行", "首德"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "简", meaning: "壹德不懈、平易不疵曰简。", tags: ["德行", "简肃"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "劭", meaning: "勉德成行、修身有终曰劭。", tags: ["修德", "德行"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "忠", meaning: "危身奉上、尽心不二曰忠。", tags: ["忠诚", "德行"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "谦", meaning: "居贵不矜、受善能下曰谦。", tags: ["德行", "谦逊"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "让", meaning: "推功尚贤、不争其名曰让。", tags: ["谦逊", "德行"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "彰", meaning: "德业显著、善行外闻曰彰。", tags: ["声望", "德行"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "嘉", meaning: "令善可称、行美有闻曰嘉。", tags: ["德行", "声望"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "祥", meaning: "德感休征、和气致福曰祥。", tags: ["祥瑞", "德行"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "祯", meaning: "守正获福、邦家有吉曰祯。", tags: ["祥瑞", "德行"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "直", meaning: "肇敏行成、临事无曲曰直。", tags: ["刚正", "德行"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "允", meaning: "诚信中正、言行相孚曰允。", tags: ["诚信", "中正"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "贤", meaning: "尊德行义、可辅王政曰贤。", tags: ["德行", "辅政"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "淳", meaning: "质厚风淳、敦本尚德曰淳。", tags: ["德行", "宽厚"], suitableFor: VIRTUE, rarity: "uncommon", source: "后世常用" },
+  { char: "纯", meaning: "心无杂伪、守一不移曰纯。", tags: ["德行", "清正"], suitableFor: VIRTUE, rarity: "rare", source: "后世常用" },
+  { char: "敦", meaning: "笃实忠厚、崇礼尚德曰敦。", tags: ["德行", "宽厚"], suitableFor: VIRTUE, rarity: "uncommon", source: "后世常用" },
+  { char: "善", meaning: "行义修德、积善流光曰善。", tags: ["德行", "仁惠"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "清", meaning: "洁己奉公、清德自持曰清。", tags: ["清正", "德行"], suitableFor: VIRTUE, rarity: "uncommon", source: "后世常用" },
+  // ── 威仪 ────────────────────────────────────────────────────────────────
+  { char: "肃", meaning: "刚德克就、执心决断曰肃。", tags: ["德行", "威仪"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "昭", meaning: "明德有劳、威仪恭明曰昭。", tags: ["明德", "威仪"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "武", meaning: "刚强理直、克定祸乱曰武。", tags: ["武功", "威仪"], suitableFor: MILITARY, rarity: "common", source: "逸周书" },
+  { char: "威", meaning: "猛以刚果、强毅信正曰威。", tags: ["威仪", "武功"], suitableFor: MILITARY, rarity: "uncommon", source: "逸周书" },
+  { char: "庄", meaning: "睿圉克服、胜敌志强曰庄。", tags: ["威仪", "端庄"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "钦", meaning: "威仪表备、敬慎有容曰钦。", tags: ["威仪", "敬慎"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "严", meaning: "持法不纵、威重有节曰严。", tags: ["法度", "威仪"], suitableFor: MILITARY, rarity: "uncommon", source: "逸周书" },
+  // ── 明察 · 才智 ─────────────────────────────────────────────────────────
+  { char: "哲", meaning: "明辨通理、知几识变曰哲。", tags: ["才智", "明察"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "睿", meaning: "聪明先觉、照事有方曰睿。", tags: ["才智", "明察"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "献", meaning: "聪明睿哲、知质有圣曰献。", tags: ["才智", "德行"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "英", meaning: "才德出众、秀发不群曰英。", tags: ["才智", "声望"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "慧", meaning: "柔质受谏、明识通情曰慧。", tags: ["才智", "柔德"], suitableFor: FEMININE, rarity: "uncommon", source: "逸周书" },
+  { char: "亮", meaning: "明信不隐、临事洞然曰亮。", tags: ["明察", "诚信"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "显", meaning: "功德昭著、天下共闻曰显。", tags: ["声望", "功业"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  // ── 治世 · 安民 ─────────────────────────────────────────────────────────
+  { char: "康", meaning: "安乐抚民、渊源流通曰康。", tags: ["安民", "治世"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "定", meaning: "大虑静民、安民法古曰定。", tags: ["安民", "治世"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "成", meaning: "安民立政、功业有终曰成。", tags: ["功业", "治世"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "平", meaning: "治而无眚、布纲持纪曰平。", tags: ["治世", "法度"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "熙", meaning: "光明和乐、德泽旁流曰熙。", tags: ["治世", "祥瑞"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "安", meaning: "好和不争、安众息民曰安。", tags: ["安民", "柔德"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "裕", meaning: "宽民足用、德有余泽曰裕。", tags: ["安民", "宽厚"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "戴", meaning: "爱民好治、典礼不塞曰戴。", tags: ["安民", "礼制"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "祐", meaning: "德合天眷、保民受福曰祐。", tags: ["祥瑞", "安民"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "胡", meaning: "保民寿考、弥年有德曰胡。", tags: ["寿考", "安民"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "泰", meaning: "四海安泰、万民乐业曰泰。", tags: ["治世", "安民"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "丰", meaning: "德泽丰厚、物阜民安曰丰。", tags: ["治世", "祥瑞"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "宁", meaning: "息乱安民、邦家无扰曰宁。", tags: ["安民", "治世"], suitableFor: ALL, rarity: "common", source: "后世常用" },
+  // ── 功业 · 武功 ─────────────────────────────────────────────────────────
+  { char: "桓", meaning: "辟土服远、克敬勤民曰桓。", tags: ["武功", "功业"], suitableFor: MILITARY, rarity: "uncommon", source: "逸周书" },
+  { char: "烈", meaning: "有功安民、秉德遵业曰烈。", tags: ["功业", "节烈"], suitableFor: BROAD, rarity: "uncommon", source: "逸周书" },
+  { char: "昌", meaning: "德业兴盛、后嗣有庆曰昌。", tags: ["功业", "宗室"], suitableFor: ALL, rarity: "common", source: "后世常用" },
+  { char: "隆", meaning: "功德崇厚、礼命有加曰隆。", tags: ["功业", "尊贵"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "襄", meaning: "辟地有德、甲胄有劳曰襄。", tags: ["武功", "功业"], suitableFor: MILITARY, rarity: "rare", source: "逸周书" },
+  { char: "勇", meaning: "胜敌壮志、临难不惧曰勇。", tags: ["武功", "胆识"], suitableFor: MILITARY, rarity: "uncommon", source: "逸周书" },
+  { char: "毅", meaning: "临难不夺、果敢有守曰毅。", tags: ["刚正", "决断"], suitableFor: BROAD, rarity: "uncommon", source: "逸周书" },
+  // ── 礼制 · 法度 ─────────────────────────────────────────────────────────
+  { char: "敬", meaning: "夙夜警戒、恭事不怠曰敬。", tags: ["敬慎", "勤政"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "齐", meaning: "执心克庄、资辅共就曰齐。", tags: ["辅政", "端庄"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "宪", meaning: "博闻多能、法度可则曰宪。", tags: ["法度", "文治"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "章", meaning: "法度明备、文章可观曰章。", tags: ["文治", "法度"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "正", meaning: "内外宾服、守道不阿曰正。", tags: ["法度", "刚正"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "节", meaning: "好廉自克、守礼不逾曰节。", tags: ["节操", "礼制"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "端", meaning: "履礼守正、持身不倾曰端。", tags: ["端庄", "礼制"], suitableFor: FEMININE, rarity: "uncommon", source: "逸周书" },
+  { char: "令", meaning: "德音可法、仪范可遵曰令。", tags: ["礼制", "声望"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "雅", meaning: "辞令有度、容止合礼曰雅。", tags: ["礼制", "文雅"], suitableFor: FEMININE, rarity: "uncommon", source: "逸周书" },
+  { char: "顺", meaning: "慈和遍服、承礼不违曰顺。", tags: ["礼制", "柔德"], suitableFor: FEMININE, rarity: "uncommon", source: "逸周书" },
+  // ── 辅政 · 文治 ─────────────────────────────────────────────────────────
+  { char: "翼", meaning: "思虑深远、刚德克就曰翼。", tags: ["辅政", "思虑"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "宣", meaning: "善闻周达、施教布德曰宣。", tags: ["教化", "文治"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "誉", meaning: "状古述今、声实相副曰誉。", tags: ["声望", "文治"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "华", meaning: "文采昭美、声容有光曰华。", tags: ["文雅", "尊贵"], suitableFor: FEMININE, rarity: "common", source: "后世常用" },
+  { char: "匡", meaning: "贞心大度、扶危正乱曰匡。", tags: ["辅政", "正乱"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "芳", meaning: "芳德流馨、令闻远播曰芳。", tags: ["文雅", "声望"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "素", meaning: "质朴自然、澹泊有守曰素。", tags: ["清正", "文雅"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  // ── 柔德 · 后宫 ─────────────────────────────────────────────────────────
+  { char: "懿", meaning: "温柔圣善、柔德克成曰懿。", tags: ["德行", "后宫"], suitableFor: ["emperor", "empress", "consort", "princess"], rarity: "common", source: "逸周书" },
+  { char: "静", meaning: "柔德考众、恭己鲜言曰静。", tags: ["后宫", "柔德"], suitableFor: FEMININE, rarity: "common", source: "逸周书" },
+  { char: "淑", meaning: "柔嘉维则、内行清善曰淑。", tags: ["后宫", "柔德"], suitableFor: FEMININE, rarity: "common", source: "逸周书" },
+  { char: "婉", meaning: "言辞柔顺、动容中节曰婉。", tags: ["后宫", "柔德"], suitableFor: FEMININE, rarity: "common", source: "后世常用" },
+  { char: "瑜", meaning: "德美如玉、内外无瑕曰瑜。", tags: ["后宫", "玉德"], suitableFor: FEMININE, rarity: "uncommon", source: "拟古" },
+  { char: "瑾", meaning: "怀德自守、温润有章曰瑾。", tags: ["后宫", "玉德"], suitableFor: FEMININE, rarity: "uncommon", source: "拟古" },
+  { char: "琳", meaning: "美玉成文、才德兼备曰琳。", tags: ["后宫", "玉德"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "瑶", meaning: "玉质冰心、清华高洁曰瑶。", tags: ["后宫", "玉德"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "珩", meaning: "玉佩有声、德音远播曰珩。", tags: ["后宫", "玉德"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "琬", meaning: "温润如玉、仪范可亲曰琬。", tags: ["后宫", "玉德"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "和", meaning: "德性中平、上下无怨曰和。", tags: ["柔德", "安民"], suitableFor: ALL, rarity: "uncommon", source: "逸周书" },
+  { char: "温", meaning: "宽柔有礼、接下以恩曰温。", tags: ["柔德", "仁惠"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "良", meaning: "温良好乐、处事有常曰良。", tags: ["德行", "温良"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  // ── 清正 · 诚信 · 敬慎 ─────────────────────────────────────────────────
+  { char: "洁", meaning: "守身无玷、玉洁冰清曰洁。", tags: ["清正", "节操"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "真", meaning: "守真抱朴、诚心无伪曰真。", tags: ["诚信", "清正"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "悫", meaning: "行见中外、诚信无欺曰悫。", tags: ["诚信", "德行"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "质", meaning: "名实不爽、朴诚无伪曰质。", tags: ["诚信", "朴素"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "恪", meaning: "奉职敬慎、守事不怠曰恪。", tags: ["敬慎", "职守"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "慎", meaning: "临事戒惧、虑远不忽曰慎。", tags: ["敬慎", "思虑"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  // ── 勤政 · 修德 ─────────────────────────────────────────────────────────
+  { char: "勤", meaning: "夙夜在公、劳而不怨曰勤。", tags: ["勤政", "职守"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "厘", meaning: "质渊受谏、改过有成曰厘。", tags: ["纳谏", "修德"], suitableFor: VIRTUE, rarity: "rare", source: "逸周书" },
+  { char: "刚", meaning: "强毅果敢、追补前过曰刚。", tags: ["刚正", "决断"], suitableFor: BROAD, rarity: "uncommon", source: "逸周书" },
+  { char: "度", meaning: "心能制义、裁断合宜曰度。", tags: ["裁断", "法度"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  // ── 仁惠 · 宽厚 ─────────────────────────────────────────────────────────
+  { char: "慈", meaning: "爱育万民、柔惠及众曰慈。", tags: ["仁惠", "柔德"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "仁", meaning: "慈爱及众、惠下不伤曰仁。", tags: ["仁惠", "德行"], suitableFor: ALL, rarity: "common", source: "逸周书" },
+  { char: "厚", meaning: "思虑不爽、待下有恩曰厚。", tags: ["仁惠", "宽厚"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "怀", meaning: "执义扬善、慈仁念旧曰怀。", tags: ["仁惠", "念旧"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "宏", meaning: "度量恢广、容众得下曰宏。", tags: ["宽厚", "气度"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  { char: "弘", meaning: "弘济宽仁、施泽不狭曰弘。", tags: ["仁惠", "气度"], suitableFor: VIRTUE, rarity: "uncommon", source: "逸周书" },
+  // ── 祥瑞 · 吉庆 ─────────────────────────────────────────────────────────
+  { char: "瑞", meaning: "应时呈吉、承天有庆曰瑞。", tags: ["祥瑞", "尊贵"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "庆", meaning: "积善流光、福泽及后曰庆。", tags: ["祥瑞", "宗室"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "祺", meaning: "福履绵长、安乐无疆曰祺。", tags: ["祥瑞", "安乐"], suitableFor: FEMININE, rarity: "rare", source: "拟古" },
+  { char: "禧", meaning: "嘉庆集身、和乐有终曰禧。", tags: ["祥瑞", "安乐"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "永", meaning: "德泽长流、福祚绵远曰永。", tags: ["祥瑞", "宗室"], suitableFor: ALL, rarity: "uncommon", source: "后世常用" },
+  { char: "熹", meaning: "光明初著、德辉渐盛曰熹。", tags: ["祥瑞", "明德"], suitableFor: ALL, rarity: "rare", source: "拟古" },
+  // ── 法度 · 宽厚 ─────────────────────────────────────────────────────────
+  { char: "祁", meaning: "治典不杀、宽法得中曰祁。", tags: ["法度", "宽厚"], suitableFor: VIRTUE, rarity: "rare", source: "拟古" },
+];

@@ -7,6 +7,7 @@ import { buildTextGateContext, scanDialogueText } from "../../src/engine/dialogu
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
+// Default register = "private" — most tests target private harem context
 const huanghouCtx = buildTextGateContext(db, "huanghou"); // selfRefs: 臣侍/本宫
 const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 臣侍/本宫/我
 const siliCtx = buildTextGateContext(db, "sili_zhang"); // selfRefs: 臣/下官
@@ -110,6 +111,119 @@ describe("choice text uses content gates only (skipIdentityGates)", () => {
     const findings = scanDialogueText("传旨给那嫔妃。", huanghouCtx, { skipIdentityGates: true });
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ gate: "forbidden_lexicon", matched: "嫔妃" });
+  });
+});
+
+describe("凤君 conditional permission gate — full register × speaker matrix", () => {
+  // ── contexts built with explicit registers ───────────────────────────
+  const huanghouPrivate  = buildTextGateContext(db, "huanghou",   [], "private");
+  const huanghouIntimate = buildTextGateContext(db, "huanghou",   [], "intimate");
+  const huanghouCourt    = buildTextGateContext(db, "huanghou",   [], "court");
+  const huanghouPublic   = buildTextGateContext(db, "huanghou",   [], "public");
+
+  const zhaoyiPrivate  = buildTextGateContext(db, "zhaoyi", [], "private");
+  const zhaoyiIntimate = buildTextGateContext(db, "zhaoyi", [], "intimate");
+
+  // Authorized 侍君/大臣: character-level permission via typed addressPermissions key
+  const authConsortPrivate  = buildTextGateContext(db, "fu",          ["fengjun"], "private");
+  const authConsortCourt    = buildTextGateContext(db, "fu",          ["fengjun"], "court");
+  const authOfficialPrivate = buildTextGateContext(db, "sili_zhang",  ["fengjun"], "private");
+  const authOfficialCourt   = buildTextGateContext(db, "sili_zhang",  ["fengjun"], "court");
+  it("凤君 在 lexicon.forbiddenTerms 中（全局禁用）", () => {
+    expect(db.lexicon.forbiddenTerms).toContain("凤君");
+  });
+  it("凤君 不在 lexicon.approvedTerms 中", () => {
+    expect(db.lexicon.approvedTerms).not.toContain("凤君");
+  });
+
+  // ── 皇后 × register ─────────────────────────────────────────────────
+  it("皇后 × private → 凤君通过", () => {
+    expect(scanDialogueText("凤君今日心情不错。", huanghouPrivate).every((f) => f.matched !== "凤君")).toBe(true);
+  });
+  it("皇后 × intimate → 凤君通过", () => {
+    expect(scanDialogueText("凤君今日心情不错。", huanghouIntimate).every((f) => f.matched !== "凤君")).toBe(true);
+  });
+  it("皇后 × court → 凤君被拒", () => {
+    expect(scanDialogueText("凤君今日心情不错。", huanghouCourt).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  });
+  it("皇后 × public → 凤君被拒", () => {
+    expect(scanDialogueText("凤君今日心情不错。", huanghouPublic).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  });
+
+  // ── 未授权侍君 ───────────────────────────────────────────────────────
+  it("未授权侍君(zhaoyi) × private → 凤君被拒", () => {
+    expect(scanDialogueText("凤君今日心情不错。", zhaoyiPrivate).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  });
+  it("未授权侍君(zhaoyi) × intimate → 凤君被拒", () => {
+    expect(scanDialogueText("凤君今日心情不错。", zhaoyiIntimate).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  });
+
+  // ── 获授权亲密侍君 ───────────────────────────────────────────────────
+  it("授权侍君 × private → 凤君通过", () => {
+    expect(scanDialogueText("凤君今日心情不错。", authConsortPrivate).every((f) => f.matched !== "凤君")).toBe(true);
+  });
+  it("授权侍君 × court → 凤君仍被拒", () => {
+    expect(scanDialogueText("凤君今日心情不错。", authConsortCourt).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  });
+
+  // ── 获授权亲信大臣 ───────────────────────────────────────────────────
+  it("授权大臣 × private → 凤君通过", () => {
+    expect(scanDialogueText("凤君今日心情不错。", authOfficialPrivate).every((f) => f.matched !== "凤君")).toBe(true);
+  });
+  it("授权大臣 × court → 凤君仍被拒", () => {
+    expect(scanDialogueText("凤君今日心情不错。", authOfficialCourt).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  });
+
+  // ── 凤后不受豁免 ────────────────────────────────────────────────────
+  it("皇后 × private → 凤后仍被拒（无凤后豁免）", () => {
+    expect(scanDialogueText("凤后驾到。", huanghouPrivate).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤后")).toBe(true);
+  });
+});
+
+describe("雄→雌 褒义词迁移 gate", () => {
+  it("英雄被 gate 拒绝", () => {
+    const findings = scanDialogueText("真乃一代英雄。", huanghouCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "英雄")).toBe(true);
+  });
+
+  it("雄心壮志被拒绝", () => {
+    const findings = scanDialogueText("此人颇有雄心壮志。", chenghuiCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "雄心")).toBe(true);
+  });
+
+  it("一代枭雄被拒绝", () => {
+    const findings = scanDialogueText("是一代枭雄。", siliCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "枭雄")).toBe(true);
+  });
+
+  it("群雄逐鹿被拒绝", () => {
+    const findings = scanDialogueText("群雄并起，逐鹿天下。", siliCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "群雄")).toBe(true);
+  });
+
+  it("英雌通过 gate", () => {
+    expect(scanDialogueText("真乃一代英雌。", huanghouCtx)).toHaveLength(0);
+  });
+
+  it("雌心壮志通过 gate", () => {
+    expect(scanDialogueText("此人颇有雌心壮志。", chenghuiCtx)).toHaveLength(0);
+  });
+
+  it("枭雌通过 gate", () => {
+    expect(scanDialogueText("是一代枭雌。", siliCtx)).toHaveLength(0);
+  });
+
+  it("群雌逐鹿通过 gate", () => {
+    expect(scanDialogueText("群雌并起，逐鹿天下。", siliCtx)).toHaveLength(0);
+  });
+
+  it("雄性（生物性别标识）通过 gate — 不在禁词表", () => {
+    // 单字「雄」未入禁词，作为生物性别标识合法
+    expect(scanDialogueText("该犬为雄性。", siliCtx)).toHaveLength(0);
+  });
+
+  it("雄蕊（植物性别词）通过 gate", () => {
+    expect(scanDialogueText("此花雄蕊甚多。", siliCtx)).toHaveLength(0);
   });
 });
 

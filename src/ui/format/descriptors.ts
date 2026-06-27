@@ -74,7 +74,7 @@ export const DESCRIPTORS: Record<ScaleId, DescriptorConfig> = {
   },
   statecraft: {
     direction: "higher_is_better",
-    labels: ["毫无谋略", "不谙政事", "略通政务", "见识平平", "略有见地", "颇通谋略", "深谙政道", "老成谋国", "经天纬地", "雄才大略"],
+    labels: ["毫无谋略", "不谙政事", "略通政务", "见识平平", "略有见地", "颇通谋略", "深谙政道", "老成谋国", "经天纬地", "雌才大略"],
   },
   cruelty: {
     direction: "lower_is_better",
