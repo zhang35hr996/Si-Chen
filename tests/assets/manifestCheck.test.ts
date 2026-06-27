@@ -38,8 +38,19 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(76); // 73 − bg.simiao（悬挂项已删）+ 御花园 4 子地点背景（绛雪轩/太液池/浮碧亭/堆秀山）
+    expect(result.entryCount).toBe(82); // 76 + 选秀随机 consort1–consort6 立绘键
     expect(result.placeholderCount).toBe(0); // all consort portraits now have real art
+  });
+
+  it("selection portrait aliases all resolve to real files under portraits/consort", () => {
+    const manifest = realManifest();
+    for (let index = 1; index <= 6; index += 1) {
+      const entry = manifest.entries[`portrait.consort${index}.neutral`];
+      expect(entry).toBeDefined();
+      expect(entry?.kind).toBe("portrait");
+      expect(entry?.placeholder).toBe(false);
+      expect(entry?.path).toMatch(/^portraits\/consort\/.+\.png$/);
+    }
   });
 
   it("manifest path missing on disk is an error", () => {
