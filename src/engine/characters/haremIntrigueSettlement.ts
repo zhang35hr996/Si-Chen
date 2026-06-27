@@ -300,7 +300,7 @@ export function settleHaremIntrigue(
       retention: "slow",
       subjectIds: resolved.discovered ? [plan.targetId, plan.actorId] : [plan.targetId],
       perspective: "witness",
-      unresolved: resolved.discovered && resolved.success,
+      unresolved: resolved.discovered,
       emotions: buildTargetEmotions(resolved),
     }, at);
 

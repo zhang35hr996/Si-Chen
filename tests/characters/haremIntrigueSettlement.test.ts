@@ -755,6 +755,106 @@ describe("settleHaremIntrigue: multiple schemes", () => {
   });
 });
 
+// ── Fix: target memory unresolved=discovered (not discovered&&success) ────────
+
+describe("settleHaremIntrigue: target memory unresolved flag", () => {
+  it("discovered+success → target memory unresolved=true", () => {
+    // secrecy=1 → high discovery; potency=90 → high success chance
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 90,
+      secrecy: 1,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
+      if (o?.discovered && o?.success) {
+        const targetEntry = result.state.memories["target_001"]!.entries[0];
+        expect(targetEntry?.unresolved).toBe(true);
+      }
+    }
+  });
+
+  it("discovered+failure → target memory unresolved=true (core fix)", () => {
+    // secrecy=1 → high discovery; potency=10 → lower success chance
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 10,
+      secrecy: 1,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
+      if (o?.discovered && !o?.success) {
+        const targetEntry = result.state.memories["target_001"]!.entries[0];
+        // A discovered but failed plot still creates unresolved grievance
+        expect(targetEntry?.unresolved).toBe(true);
+      }
+    }
+  });
+
+  it("hidden+success → target memory unresolved=false", () => {
+    // secrecy=90 → low discovery
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 90,
+      secrecy: 90,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
+      if (o !== undefined && !o.discovered && o.success) {
+        const targetEntry = result.state.memories["target_001"]!.entries[0];
+        // Target doesn't know the instigator — no unresolved grievance
+        expect(targetEntry?.unresolved).toBe(false);
+      }
+    }
+  });
+
+  it("hidden+failure → target memory unresolved=false", () => {
+    // secrecy=90 → low discovery; potency=10 → lower success
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 10,
+      secrecy: 90,
+    });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settleHaremIntrigue(db, state, AT);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    if (settled.status === "resolved") {
+      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
+      if (o !== undefined && !o.discovered && !o.success) {
+        const targetEntry = result.state.memories["target_001"]!.entries[0];
+        expect(targetEntry?.unresolved).toBe(false);
+      }
+    }
+  });
+});
+
+// ── Fix: corrupted actorSnapshot → scheme cancelled, no throw ──────────────
+
+describe("settleHaremIntrigue: corrupted actorSnapshot → no throw, scheme cancelled", () => {
+  it("scheme with actorSnapshot={} → does not throw, scheme is cancelled", () => {
+    const scheme = makeScheme("actor_001", "target_001");
+    const corruptedScheme: HaremScheme = {
+      ...scheme,
+      plan: {
+        ...scheme.plan,
+        actorSnapshot: {} as HaremIntriguePlan["actorSnapshot"],
+      },
+    };
+    const state = makeStateWithScheme("actor_001", "target_001", corruptedScheme);
+    let result: ReturnType<typeof settleHaremIntrigue>;
+    expect(() => {
+      result = settleHaremIntrigue(db, state, AT);
+    }).not.toThrow();
+    const settled = result!.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    expect(settled.status).toBe("cancelled");
+  });
+});
+
 // ── Scheme outcome recorded on scheme ────────────────────────────────────────
 
 describe("settleHaremIntrigue: scheme outcome persistence", () => {

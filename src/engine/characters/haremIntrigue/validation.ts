@@ -75,6 +75,7 @@ export function validateIntrigueGameTime(
 /**
  * Validate a participant snapshot for structural completeness.
  * Used for both actor and target snapshots.
+ * Handles corrupted/missing persisted plans defensively — never throws.
  */
 export function validateParticipantSnapshot(
   label: "actor" | "target",
@@ -83,6 +84,12 @@ export function validateParticipantSnapshot(
 ): HaremIntrigueValidationFinding[] {
   const results: HaremIntrigueValidationFinding[] = [];
   const prefix = `${label}Snapshot`;
+
+  // Guard: snapshot must be a non-null object
+  if (typeof snap !== "object" || snap === null) {
+    results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}: snapshot is not an object`));
+    return results;
+  }
 
   // characterId
   if (!snap.characterId) {
@@ -101,16 +108,32 @@ export function validateParticipantSnapshot(
     results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}.rankOrder=${snap.rankOrder} must be finite integer >= 0`));
   }
 
-  // Numeric fields 0-100
+  // Guard: personality must be a non-null object before accessing sub-fields
+  const hasPersonality = typeof snap.personality === "object" && snap.personality !== null;
+  if (!hasPersonality) {
+    results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}: personality is missing or not an object`));
+  }
+
+  // Guard: household must be a non-null object before accessing sub-fields
+  const hasHousehold = typeof snap.household === "object" && snap.household !== null;
+  if (!hasHousehold) {
+    results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}: household is missing or not an object`));
+  }
+
+  // Numeric fields 0-100 (personality/household sub-fields only checked when parent exists)
   const numericFields: [string, unknown][] = [
     ["favor", snap.favor], ["peakFavor", snap.peakFavor], ["affection", snap.affection],
     ["fear", snap.fear], ["ambition", snap.ambition], ["loyalty", snap.loyalty],
-    ["scheming", snap.personality.scheming], ["sociability", snap.personality.sociability],
-    ["compassion", snap.personality.compassion], ["courage", snap.personality.courage],
-    ["jealousy", snap.personality.jealousy], ["emotionalStability", snap.personality.emotionalStability],
-    ["pride", snap.personality.pride], ["intelligence", snap.personality.intelligence],
-    ["servantOpinion", snap.household.servantOpinion], ["livingStandard", snap.household.livingStandard],
-    ["privateWealthLevel", snap.household.privateWealthLevel],
+    ...(hasPersonality ? [
+      ["scheming", snap.personality.scheming], ["sociability", snap.personality.sociability],
+      ["compassion", snap.personality.compassion], ["courage", snap.personality.courage],
+      ["jealousy", snap.personality.jealousy], ["emotionalStability", snap.personality.emotionalStability],
+      ["pride", snap.personality.pride], ["intelligence", snap.personality.intelligence],
+    ] as [string, unknown][] : []),
+    ...(hasHousehold ? [
+      ["servantOpinion", snap.household.servantOpinion], ["livingStandard", snap.household.livingStandard],
+      ["privateWealthLevel", snap.household.privateWealthLevel],
+    ] as [string, unknown][] : []),
   ];
   for (const [name, val] of numericFields) {
     if (!isIntegerInRange(val, 0, 100)) {

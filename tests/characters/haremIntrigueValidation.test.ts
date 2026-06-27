@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   validateHaremIntriguePlan,
   validateHaremIntrigueOutcome,
+  validateParticipantSnapshot,
 } from "../../src/engine/characters/haremIntrigue/validation";
 import {
   buildIntrigueConsequences,
 } from "../../src/engine/characters/haremIntrigue/outcome";
-import type { HaremIntriguePlan, HaremIntrigueOutcome, HaremIntrigueResolvedOutcome } from "../../src/engine/characters/haremIntrigue/types";
+import type { HaremIntriguePlan, HaremIntrigueOutcome, HaremIntrigueResolvedOutcome, IntrigueParticipantSnapshot } from "../../src/engine/characters/haremIntrigue/types";
 import { makeGameTime } from "../../src/engine/calendar/time";
 
 const AT = makeGameTime(1, 3, "early");
@@ -639,6 +640,103 @@ describe("validateHaremIntriguePlan: P1-A dayIndex consistency", () => {
     });
     const findings = validateHaremIntriguePlan(plan);
     expect(findings.some((f) => f.code === "INTRIGUE_BAD_TIME")).toBe(true);
+  });
+});
+
+// ── P2-Fix1: validateParticipantSnapshot defensive guards ──────────────────
+
+describe("validateParticipantSnapshot: malformed persisted snapshots do not throw", () => {
+  const EXPECTED_ID = "char_001";
+
+  it("snap={} → INTRIGUE_BAD_SNAPSHOT_VALUE findings, does not throw", () => {
+    const snap = {} as unknown as IntrigueParticipantSnapshot;
+    let findings: ReturnType<typeof validateParticipantSnapshot>;
+    expect(() => {
+      findings = validateParticipantSnapshot("actor", snap, EXPECTED_ID);
+    }).not.toThrow();
+    expect(findings!.some((f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE")).toBe(true);
+  });
+
+  it("snap.personality=null → INTRIGUE_BAD_SNAPSHOT_VALUE for personality, does not throw", () => {
+    const snap = {
+      characterId: EXPECTED_ID,
+      rankId: "meiren",
+      rankOrder: 100,
+      favor: 30,
+      peakFavor: 50,
+      affection: 50,
+      fear: 30,
+      ambition: 50,
+      loyalty: 50,
+      personality: null,
+      household: { servantOpinion: 50, livingStandard: 50, privateWealthLevel: 50 },
+    } as unknown as IntrigueParticipantSnapshot;
+    let findings: ReturnType<typeof validateParticipantSnapshot>;
+    expect(() => {
+      findings = validateParticipantSnapshot("actor", snap, EXPECTED_ID);
+    }).not.toThrow();
+    expect(findings!.some(
+      (f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE" && f.message.includes("personality"),
+    )).toBe(true);
+  });
+
+  it("snap.household=undefined → INTRIGUE_BAD_SNAPSHOT_VALUE for household, does not throw", () => {
+    const snap = {
+      characterId: EXPECTED_ID,
+      rankId: "meiren",
+      rankOrder: 100,
+      favor: 30,
+      peakFavor: 50,
+      affection: 50,
+      fear: 30,
+      ambition: 50,
+      loyalty: 50,
+      personality: {
+        scheming: 50, sociability: 50, compassion: 50, courage: 50,
+        jealousy: 50, emotionalStability: 50, pride: 50, intelligence: 50,
+      },
+      household: undefined,
+    } as unknown as IntrigueParticipantSnapshot;
+    let findings: ReturnType<typeof validateParticipantSnapshot>;
+    expect(() => {
+      findings = validateParticipantSnapshot("target", snap, EXPECTED_ID);
+    }).not.toThrow();
+    expect(findings!.some(
+      (f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE" && f.message.includes("household"),
+    )).toBe(true);
+  });
+
+  it("snap=null → INTRIGUE_BAD_SNAPSHOT_VALUE, early return, does not throw", () => {
+    const snap = null as unknown as IntrigueParticipantSnapshot;
+    let findings: ReturnType<typeof validateParticipantSnapshot>;
+    expect(() => {
+      findings = validateParticipantSnapshot("actor", snap, EXPECTED_ID);
+    }).not.toThrow();
+    expect(findings!.some((f) => f.code === "INTRIGUE_BAD_SNAPSHOT_VALUE")).toBe(true);
+  });
+
+  it("valid snapshot → no personality/household findings", () => {
+    const snap: IntrigueParticipantSnapshot = {
+      characterId: EXPECTED_ID,
+      rankId: "meiren",
+      rankOrder: 100,
+      favor: 30,
+      peakFavor: 50,
+      affection: 50,
+      fear: 30,
+      ambition: 50,
+      loyalty: 50,
+      personality: {
+        scheming: 50, sociability: 50, compassion: 50, courage: 50,
+        jealousy: 50, emotionalStability: 50, pride: 50, intelligence: 50,
+      },
+      household: { servantOpinion: 50, livingStandard: 50, privateWealthLevel: 50 },
+    };
+    const findings = validateParticipantSnapshot("actor", snap, EXPECTED_ID);
+    expect(findings.some(
+      (f) => f.message.includes("personality") || f.message.includes("household"),
+    )).toBe(false);
+    expect(findings).toHaveLength(0);
   });
 });
 
