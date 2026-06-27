@@ -2270,6 +2270,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           db={db}
           character={db.characters[rankAdmin.charId]!}
           standing={store.getState().standing[rankAdmin.charId]!}
+          usedEpithetChars={Object.entries(store.getState().standing)
+            .filter(([id, st]) => id !== rankAdmin.charId && st.title)
+            .flatMap(([, st]) => Array.from(st.title!))}
           onApply={(req) => applyRankOp(rankAdmin.charId, req, rankAdmin.origin)}
           onClose={() => {
             const origin = rankAdmin.origin;

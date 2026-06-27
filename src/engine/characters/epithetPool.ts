@@ -1,3 +1,5 @@
+import { fnv1a64Hex } from "../save/canonical";
+
 export type EpithetTarget =
   | "emperor"
   | "empress"
@@ -17,6 +19,48 @@ export interface Epithet {
   suitableFor: EpithetTarget[];
   rarity: EpithetRarity;
   source?: EpithetSource;
+}
+
+export interface GetEpithetCandidatesOptions {
+  target: EpithetTarget;
+  count?: number;
+  excludeChars?: string[];
+  preferredTags?: string[];
+  rarity?: EpithetRarity[];
+  /** Stable seed (e.g. character id) for deterministic but varied selection. */
+  seed?: string;
+}
+
+const RARITY_PRIORITY: Record<EpithetRarity, number> = { common: 0, uncommon: 1, rare: 2 };
+
+export function getEpithetCandidates({
+  target,
+  count = 3,
+  excludeChars = [],
+  preferredTags = [],
+  rarity = ["common", "uncommon"],
+  seed,
+}: GetEpithetCandidatesOptions): Epithet[] {
+  const pool = TITLE_EPITHETS.filter(
+    (e) =>
+      e.suitableFor.includes(target) &&
+      !excludeChars.includes(e.char) &&
+      rarity.includes(e.rarity),
+  );
+
+  const scored = pool.map((e) => {
+    const tagBoost = preferredTags.some((t) => e.tags.includes(t)) ? 0 : 1;
+    const rarityScore = RARITY_PRIORITY[e.rarity];
+    // Deterministic hash per (seed, char) for stable but varied ordering
+    const hashVal = seed
+      ? parseInt(fnv1a64Hex(`${seed}:${e.char}`).slice(0, 8), 16)
+      : (e.char.codePointAt(0) ?? 0);
+    // Primary: tag preference, secondary: rarity preference, tertiary: hash spread
+    return { e, sort: tagBoost * 2_000_000_000 + rarityScore * 1_000_000 + (hashVal % 1_000_000) };
+  });
+
+  scored.sort((a, b) => a.sort - b.sort);
+  return scored.slice(0, count).map((s) => s.e);
 }
 
 // Shorthand target groups used below

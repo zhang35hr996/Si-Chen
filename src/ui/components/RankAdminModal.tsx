@@ -8,28 +8,42 @@ import type { ContentDB } from "../../engine/content/loader";
 import { isAssignableRank, type CharacterContent } from "../../engine/content/schemas";
 import type { CharacterStanding } from "../../engine/state/types";
 import type { RankOpRequest } from "../../store/rankOps";
+import { getEpithetCandidates } from "../../engine/characters/epithetPool";
+import { EpithetSuggest } from "./EpithetSuggest";
 import { EpithetPicker } from "./EpithetPicker";
 
 export function RankAdminModal({
   db,
   character,
   standing,
+  usedEpithetChars = [],
   onApply,
   onClose,
 }: {
   db: ContentDB;
   character: CharacterContent;
   standing: CharacterStanding;
+  /** Single chars already used as 封号 by other consorts in the harem. */
+  usedEpithetChars?: string[];
   onApply: (req: RankOpRequest) => void;
   onClose: () => void;
 }) {
   const [target, setTarget] = useState(standing.rank);
+  const [titleMode, setTitleMode] = useState<"suggest" | "custom">("suggest");
   const [title, setTitle] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const ladder = Object.values(db.ranks)
     .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "huanghou")
     .sort((a, b) => effectiveOrder(b, false) - effectiveOrder(a, false));
   const titleValid = /^[一-龥]{1,4}$/.test(title);
+
+  // Split the current title into individual chars so "昭宁" → excludes both "昭" and "宁"
+  const excludeChars = [...Array.from(standing.title ?? ""), ...usedEpithetChars];
+  const candidates = getEpithetCandidates({
+    target: "consort",
+    seed: character.id,
+    excludeChars,
+  });
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -54,22 +68,51 @@ export function RankAdminModal({
           </button>
         </section>
 
-        <section className="rank-modal__section">
-          <label>封号：</label>
-          <input value={title} maxLength={4} placeholder="1–4 字" onChange={(e) => { setTitle(e.target.value); setShowPicker(false); }} />
-          <button type="button" className={showPicker ? "rank-modal__picker-toggle rank-modal__picker-toggle--active" : "rank-modal__picker-toggle"} onClick={() => setShowPicker((v) => !v)} title="从封号字库选择">
-            字库
-          </button>
-          <button type="button" disabled={!titleValid} onClick={() => onApply({ kind: "set_title", title })}>
-            {standing.title ? "改封" : "加封"}
-          </button>
-          <button type="button" disabled={standing.title === undefined} onClick={() => onApply({ kind: "remove_title" })}>
-            褫夺封号
-          </button>
+        <section className="rank-modal__section--title">
+          <div className="rank-modal__section rank-modal__section--label-row">
+            <label>封号：</label>
+            {titleMode === "custom" && (
+              <button
+                type="button"
+                className="rank-modal__picker-toggle"
+                onClick={() => { setTitleMode("suggest"); setTitle(""); setShowPicker(false); }}
+              >
+                ← 内务府拟号
+              </button>
+            )}
+          </div>
+
+          {titleMode === "suggest" ? (
+            <EpithetSuggest
+              candidates={candidates}
+              onSelect={(char) => { setTitle(char); setTitleMode("custom"); }}
+              onCustom={() => setTitleMode("custom")}
+            />
+          ) : (
+            <>
+              <div className="rank-modal__section">
+                <input value={title} maxLength={4} placeholder="1–4 字" onChange={(e) => { setTitle(e.target.value); setShowPicker(false); }} />
+                <button type="button" className={showPicker ? "rank-modal__picker-toggle rank-modal__picker-toggle--active" : "rank-modal__picker-toggle"} onClick={() => setShowPicker((v) => !v)} title="从封号字库选择">
+                  字库
+                </button>
+                <button type="button" disabled={!titleValid} onClick={() => onApply({ kind: "set_title", title })}>
+                  {standing.title ? "改封" : "加封"}
+                </button>
+              </div>
+              {showPicker && (
+                <EpithetPicker onSelect={(char) => { setTitle(char); setShowPicker(false); }} />
+              )}
+            </>
+          )}
+
+          {standing.title !== undefined && (
+            <div className="rank-modal__section">
+              <button type="button" onClick={() => onApply({ kind: "remove_title" })}>
+                褫夺封号
+              </button>
+            </div>
+          )}
         </section>
-        {showPicker && (
-          <EpithetPicker onSelect={(char) => { setTitle(char); setShowPicker(false); }} />
-        )}
 
         <button type="button" className="rank-modal__close" onClick={onClose}>
           关闭
