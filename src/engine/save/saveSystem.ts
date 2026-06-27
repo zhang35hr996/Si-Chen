@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 30;
+export const SAVE_FORMAT_VERSION = 31;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -561,6 +561,16 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
 
     const gs = state as unknown as GameState;
     return { ...env, formatVersion: 30, state: gs, checksum: checksumOf(gs) };
+  },
+  // v30 → v31: 宫斗持久化（Phase 5A-2）。新增 haremSchemes / haremIncidents /
+  // pendingIntrigueNotifications 字段；schema.default([]) 负责填充，此处仅升版本号。
+  30: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (!Array.isArray(state["haremSchemes"])) state["haremSchemes"] = [];
+    if (!Array.isArray(state["haremIncidents"])) state["haremIncidents"] = [];
+    if (!Array.isArray(state["pendingIntrigueNotifications"])) state["pendingIntrigueNotifications"] = [];
+    return { ...env, formatVersion: 31, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

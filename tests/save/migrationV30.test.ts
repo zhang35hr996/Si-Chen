@@ -102,8 +102,8 @@ function makeV28Save(opts?: { withQuarterlyMemorial?: boolean; quarterlySourceId
 // ── Version check ─────────────────────────────────────────────────────────────
 
 describe("save format v30", () => {
-  it("SAVE_FORMAT_VERSION === 30", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(30);
+  it("SAVE_FORMAT_VERSION === 31", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(31);
   });
 });
 
