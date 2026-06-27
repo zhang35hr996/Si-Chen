@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { wanderChance, wanders } from "../../src/engine/characters/greeting";
+import { wanderChance, wanders, gardenSubLocationFor } from "../../src/engine/characters/greeting";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -32,5 +32,29 @@ describe("wanders (确定性)", () => {
   it("概率 0 永不出门、100 必出门", () => {
     expect(wanders(1, 10, 2, "lu_huaijin", 0)).toBe(false);
     expect(wanders(1, 10, 2, "lu_huaijin", 100)).toBe(true);
+  });
+});
+
+describe("gardenSubLocationFor (御花园子地点分配)", () => {
+  const subs = ["taiyechi", "jiangxuexuan", "fubiting", "tuixiushan"];
+
+  it("空列表返回 null", () => {
+    expect(gardenSubLocationFor(1, 10, "lu_huaijin", [])).toBeNull();
+  });
+
+  it("单子地点始终返回该子地点", () => {
+    expect(gardenSubLocationFor(1, 10, "lu_huaijin", ["taiyechi"])).toBe("taiyechi");
+  });
+
+  it("同 (seed,day,char) 恒定返回同一子地点", () => {
+    const a = gardenSubLocationFor(42, 5, "lu_huaijin", subs);
+    const b = gardenSubLocationFor(42, 5, "lu_huaijin", subs);
+    expect(a).toBe(b);
+  });
+
+  it("返回值必须在 subs 列表内", () => {
+    for (const charId of ["lu_huaijin", "shen_zhibai", "wei_sui"]) {
+      expect(subs).toContain(gardenSubLocationFor(99, 3, charId, subs));
+    }
   });
 });
