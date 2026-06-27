@@ -60,6 +60,16 @@ const MIN_SELF_REF_LEN = 2;
 /** v0 heuristic watch-list — globally wrong forms only; context-restricted terms (皇上/圣上/万岁/圣驾) excluded since the gate can't check context. */
 const WRONG_PLAYER_HONORIFICS: string[] = [];
 
+/**
+ * Terms in lexicon.forbiddenTerms that are conditionally permitted for specific ranks.
+ * 凤君 is globally forbidden (requires authorization) but permitted for 皇后 who
+ * may privately address the emperor this way. Future: authorized 侍君 and ministers
+ * will be handled via character-level dialoguePolicy.allowedTerms.
+ */
+const RANK_TERM_EXEMPTIONS: Record<string, string[]> = {
+  huanghou: ["凤君"],
+};
+
 /** Raw prompt-template tokens that must never survive into player-facing text. */
 const TEMPLATE_PATTERNS: RegExp[] = [
   /(?<!\$)\{\{?\s*[\w.]+\s*\}\}?/g, // {token} / {{token}} (but not the {} of ${})
@@ -76,6 +86,7 @@ function allSelfRefs(refs: CharacterRank["selfRefs"]): string[] {
 /** Assemble the gate context for one speaker from the loaded content. */
 export function buildTextGateContext(db: ContentDB, speakerRankId: string): TextGateContext {
   const forbidden = db.lexicon.forbiddenTerms;
+  const exempted = new Set(RANK_TERM_EXEMPTIONS[speakerRankId] ?? []);
 
   const own = new Set(db.ranks[speakerRankId] ? allSelfRefs(db.ranks[speakerRankId]!.selfRefs) : []);
   const foreign = new Set<string>();
@@ -87,11 +98,16 @@ export function buildTextGateContext(db: ContentDB, speakerRankId: string): Text
   }
 
   return {
-    forbiddenTerms: forbidden,
+    forbiddenTerms: forbidden.filter((t) => !exempted.has(t)),
     foreignSelfRefs: [...foreign],
     wrongPlayerHonorifics: WRONG_PLAYER_HONORIFICS.filter((t) => !forbidden.includes(t)),
     contextForbiddenRefs: [],
   };
+}
+
+/** Rank-specific terms that are normally forbidden but allowed for a given speaker rank. */
+export function getRankTermExemptions(rankId: string): string[] {
+  return RANK_TERM_EXEMPTIONS[rankId] ?? [];
 }
 
 export interface ScanOptions {

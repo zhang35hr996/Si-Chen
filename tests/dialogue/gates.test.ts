@@ -113,6 +113,79 @@ describe("choice text uses content gates only (skipIdentityGates)", () => {
   });
 });
 
+describe("凤君 conditional permission gate", () => {
+  const zhaoyi = buildTextGateContext(db, "zhaoyi"); // non-huanghou rank
+
+  it("非皇后角色使用凤君被 gate 拒绝", () => {
+    const findings = scanDialogueText("凤君今日心情不错。", zhaoyi);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  });
+
+  it("皇后使用凤君不被 gate 拒绝", () => {
+    const findings = scanDialogueText("凤君今日心情不错。", huanghouCtx);
+    expect(findings.every((f) => f.matched !== "凤君")).toBe(true);
+  });
+
+  it("皇后使用凤后仍被拒绝（凤后是禁词且无豁免）", () => {
+    const findings = scanDialogueText("凤后驾到。", huanghouCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤后")).toBe(true);
+  });
+
+  it("皇后 allowedTerms 包含凤君，其他位分不含", () => {
+    const db2 = loadRealContent();
+    const huanghouAllowed = [...db2.lexicon.approvedTerms, ...["凤君"]]; // huanghou exemption
+    expect(huanghouAllowed).toContain("凤君");
+    expect(db2.lexicon.approvedTerms).not.toContain("凤君"); // 非豁免者不含
+  });
+});
+
+describe("雄→雌 褒义词迁移 gate", () => {
+  it("英雄被 gate 拒绝", () => {
+    const findings = scanDialogueText("真乃一代英雄。", huanghouCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "英雄")).toBe(true);
+  });
+
+  it("雄心壮志被拒绝", () => {
+    const findings = scanDialogueText("此人颇有雄心壮志。", chenghuiCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "雄心")).toBe(true);
+  });
+
+  it("一代枭雄被拒绝", () => {
+    const findings = scanDialogueText("是一代枭雄。", siliCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "枭雄")).toBe(true);
+  });
+
+  it("群雄逐鹿被拒绝", () => {
+    const findings = scanDialogueText("群雄并起，逐鹿天下。", siliCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "群雄")).toBe(true);
+  });
+
+  it("英雌通过 gate", () => {
+    expect(scanDialogueText("真乃一代英雌。", huanghouCtx)).toHaveLength(0);
+  });
+
+  it("雌心壮志通过 gate", () => {
+    expect(scanDialogueText("此人颇有雌心壮志。", chenghuiCtx)).toHaveLength(0);
+  });
+
+  it("枭雌通过 gate", () => {
+    expect(scanDialogueText("是一代枭雌。", siliCtx)).toHaveLength(0);
+  });
+
+  it("群雌逐鹿通过 gate", () => {
+    expect(scanDialogueText("群雌并起，逐鹿天下。", siliCtx)).toHaveLength(0);
+  });
+
+  it("雄性（生物性别标识）通过 gate — 不在禁词表", () => {
+    // 单字「雄」未入禁词，作为生物性别标识合法
+    expect(scanDialogueText("该犬为雄性。", siliCtx)).toHaveLength(0);
+  });
+
+  it("雄蕊（植物性别词）通过 gate", () => {
+    expect(scanDialogueText("此花雄蕊甚多。", siliCtx)).toHaveLength(0);
+  });
+});
+
 describe("authored content passes every gate (mock output is clean)", () => {
   it("no scene line or choice in shipped content trips any gate", () => {
     for (const scene of Object.values(db.scenes)) {

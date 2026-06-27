@@ -16,7 +16,7 @@ import type { CharacterStanding, EventReactionRecord, GameState } from "../state
 import { buildAudienceContext } from "./audience";
 import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
-import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
+import { buildTextGateContext, getRankTermExemptions, scanDialogueText, type GateFinding } from "./gates";
 import {
   buildDialogueKnowledgeQuery,
   extractProvenance,
@@ -193,7 +193,7 @@ export function assembleDialogueRequest(
       stances: character.stances ?? [],
     },
     etiquette: {
-      allowedTerms: db.lexicon.approvedTerms,
+      allowedTerms: [...db.lexicon.approvedTerms, ...getRankTermExemptions(contextStanding.rank)],
       forbiddenTerms: db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
