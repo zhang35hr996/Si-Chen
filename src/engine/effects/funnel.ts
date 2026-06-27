@@ -307,25 +307,6 @@ export function validateEffects(
         }
         break;
       }
-      case "heir_adopt": {
-        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
-          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
-        }
-        const ch = db.characters[e.fatherId];
-        if (!ch || (ch.kind !== "consort" && ch.kind !== "elder")) {
-          bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort or elder: "${e.fatherId}"`, { char: e.fatherId });
-        } else if (ch.kind === "consort") {
-          const st = state.standing[e.fatherId];
-          if (!st) {
-            bad(index, "BAD_EFFECT_TARGET", `heir_adopt needs a consort with standing: "${e.fatherId}"`, { char: e.fatherId });
-          } else if (st.lifecycle === "deceased") {
-            bad(index, "BAD_EFFECT_TARGET", `adoptive father is deceased: "${e.fatherId}"`, { char: e.fatherId });
-          } else if (ch.defaultLocation === "changmengong") {
-            bad(index, "BAD_EFFECT_TARGET", `adoptive father is in 冷宫: "${e.fatherId}"`, { char: e.fatherId });
-          }
-        }
-        break;
-      }
       case "heir_custody": {
         const heir = state.resources.bloodline.heirs.find((h) => h.id === e.heirId);
         if (!heir) {
@@ -354,8 +335,6 @@ export function validateEffects(
             bad(index, "BAD_EFFECT_TARGET", `non-taihou elder cannot be custodian: "${e.custodianId}"`, { custodian: e.custodianId });
           } else if (state.taihou.deceased) {
             bad(index, "BAD_EFFECT_TARGET", `taihou is deceased, cannot be custodian`, { custodian: e.custodianId });
-          } else if (e.makeLegitimate) {
-            bad(index, "BAD_EFFECT", `makeLegitimate cannot be true when custodian is taihou`, { custodian: e.custodianId });
           }
           break;
         }
@@ -398,13 +377,6 @@ export function validateEffects(
         if (heir.sex === "son" && custRank.order <= changzaiOrder) {
           bad(index, "BAD_EFFECT", `皇郎抚养要求常在（${changzaiOrder}）以上位分，当前 "${custSt.rank}" 不足`, { custodian: e.custodianId, rank: custSt.rank });
           break;
-        }
-        if (e.makeLegitimate) {
-          if (custSt.rank !== "huanghou") {
-            bad(index, "BAD_EFFECT", `makeLegitimate requires custodian to be 皇后, got "${custSt.rank}"`, { custodian: e.custodianId });
-          } else if (isConfined(state, e.custodianId) || isInColdPalace(state, e.custodianId)) {
-            bad(index, "BAD_EFFECT", `makeLegitimate: 皇后 is confined or in cold palace`, { custodian: e.custodianId });
-          }
         }
         break;
       }
@@ -607,8 +579,7 @@ function describeEffect(effect: EventEffect): string {
     case "heir_name": return `heir_name ${effect.heirId} ${effect.field}="${effect.name}"`;
     case "heir_summon": return `heir_summon ${effect.heirId}`;
     case "heir_educate": return `heir_educate ${effect.heirId} ${effect.subject}`;
-    case "heir_adopt": return `heir_adopt ${effect.heirId}`;
-    case "heir_custody": return `heir_custody ${effect.heirId} → ${effect.custodianId}${effect.makeLegitimate ? " (legitimate)" : ""}`;
+    case "heir_custody": return `heir_custody ${effect.heirId} → ${effect.custodianId}`;
     case "child_favor": return `child_favor ${effect.heirId} ${effect.delta >= 0 ? "+" : ""}${effect.delta}`;
     case "heir_died": return `heir_died ${effect.heirId}`;
     case "heir_decease": return `heir_decease ${effect.heirId}`;
@@ -883,15 +854,14 @@ export function applyEffects(
         heir.favor = clampPct(heir.favor + effect.favorDelta);
         break;
       }
-      case "heir_adopt": {
-        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        heir.adoptiveFatherId = effect.fatherId;
-        break;
-      }
       case "heir_custody": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         heir.adoptiveFatherId = effect.custodianId;
-        if (effect.makeLegitimate) heir.legitimate = true;
+        // Derive legitimacy: custodian is current eligible empress (huanghou, alive, not confined, not cold-palace).
+        const custSt = next.standing[effect.custodianId];
+        if (custSt?.rank === "huanghou" && custSt.lifecycle !== "deceased" && !isConfined(next, effect.custodianId) && !isInColdPalace(next, effect.custodianId)) {
+          heir.legitimate = true;
+        }
         break;
       }
       case "child_favor": {

@@ -644,7 +644,7 @@ export const gameStateSchema = z.strictObject({
       type: z.enum([
         "residence_changed", "heir_born", "heir_died", "rank_changed",
         "punished", "rewarded", "conflict", "promise", "secret_discovered",
-        "harem_administration_changed",
+        "harem_administration_changed", "heir_custody_changed",
       ]),
       occurredAt: gameTimeSchema,
       participants: z.array(z.strictObject({ charId: idSchema, role: z.string().min(1) })),

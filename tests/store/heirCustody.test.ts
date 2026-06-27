@@ -1,5 +1,5 @@
 /**
- * PR #77A 奉先殿抚养权核心：37 test cases
+ * PR #77A 奉先殿抚养权核心：49 test cases
  *
  * 覆盖：
  *  A. currentEligibleEmpress (3)
@@ -7,8 +7,10 @@
  *  C. planHeirCustodyTransfer (10)
  *  D. resolveHeirCustodyTransfer — effects (6)
  *  E. chronicle + reactions (6)
+ *  F. GameStore.transferHeirCustodyAndAdvance — atomic transaction (8)
+ *  G. save round-trip — gameStateSchema (4)
  */
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { loadRealContent } from "../helpers/contentFixture";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { makeGameTime } from "../../src/engine/calendar/time";
@@ -18,6 +20,10 @@ import {
   planHeirCustodyTransfer,
   resolveHeirCustodyTransfer,
 } from "../../src/store/heirCustody";
+import { GameStore } from "../../src/store/gameStore";
+import { gameStateSchema } from "../../src/engine/save/stateSchema";
+import { autosave, readSlot } from "../../src/engine/save/saveSystem";
+import { createMemoryStorage } from "../../src/engine/save/storage";
 import type { GameState, Heir } from "../../src/engine/state/types";
 
 const db = loadRealContent();
@@ -33,6 +39,7 @@ function baseHeir(over: Partial<Heir> = {}): Heir {
     birthAt: makeGameTime(1, 1, "early"),
     favor: 50,
     legitimate: false,
+    petName: "",
     education: { scholarship: 5, martial: 5, virtue: 5 },
     health: 60,
     talent: 50,
@@ -52,18 +59,6 @@ function addHeirToState(state: GameState, heir: Heir): GameState {
     heir,
   ];
   return state;
-}
-
-/** Return first authored consort id with the given rank. */
-function findConsortsWithRank(state: GameState, rank: string): string[] {
-  return Object.entries(state.standing)
-    .filter(([id, st]) => {
-      if (st.rank !== rank) return false;
-      if (st.lifecycle === "deceased" || st.lifecycle === "candidate") return false;
-      const c = db.characters[id];
-      return c?.kind === "consort";
-    })
-    .map(([id]) => id);
 }
 
 /** Find or promote first available consort to given rank (mutates state). */
@@ -406,18 +401,14 @@ describe("D. resolveHeirCustodyTransfer – state effects", () => {
 
   it("D4: no favor penalty when previous custodian is taihou", () => {
     const state = createNewGameState(db);
-    // Set old custodian = taihou, new = empress
-    const empressId = findEmpressId(state);
     const heir = baseHeir({ sex: "daughter", adoptiveFatherId: "taihou" });
     addHeirToState(state, heir);
-    // We can't transfer from taihou to empress (same taihou won't be in pool since it's current custodian).
-    // Use a different consort as new custodian instead.
+    // taihou is current custodian — not in pool, use a guiren consort as new custodian instead.
     const guirenId = promoteToRank(state, "guiren");
     const result = resolveHeirCustodyTransfer(db, state, { heirId: heir.id, toCustodianId: guirenId, source: "fengxiandian" });
     expect(result.ok).toBe(true);
-    // taihou has no standing entry → no favor effect possible
     if (result.ok) {
-      // Verify no side effects on taihou via standing (it has none)
+      // taihou has no standing entry → no favor effect possible
       expect(result.value.state.standing["taihou"]).toBeUndefined();
     }
   });
@@ -525,5 +516,183 @@ describe("E. chronicle and reactions", () => {
     if (plan.ok) {
       expect(plan.value.reactions.some((r) => r.speakerId === "wei_sui")).toBe(false);
     }
+  });
+});
+
+// ── F. GameStore.transferHeirCustodyAndAdvance — atomic transaction ───────────
+
+describe("F. GameStore.transferHeirCustodyAndAdvance – atomic transaction", () => {
+  function makeStore(state: GameState) {
+    const store = new GameStore();
+    store.loadState(state);
+    return store;
+  }
+
+  it("F1: AP is deducted by exactly 1", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "son" });
+    addHeirToState(state, heir);
+    const store = makeStore(state);
+    const apBefore = store.getState().calendar.ap;
+    const result = store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
+    expect(result.ok).toBe(true);
+    expect(store.getState().calendar.ap).toBe(apBefore - 1);
+  });
+
+  it("F2: adoptiveFatherId updated after successful transfer", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "son" });
+    addHeirToState(state, heir);
+    const store = makeStore(state);
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
+    const updated = store.getState().resources.bloodline.heirs.find((h) => h.id === heir.id);
+    expect(updated?.adoptiveFatherId).toBe("taihou");
+  });
+
+  it("F3: heir becomes legitimate when assigned to empress", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "daughter" });
+    addHeirToState(state, heir);
+    const empressId = findEmpressId(state);
+    const store = makeStore(state);
+    const result = store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
+    expect(result.ok).toBe(true);
+    const updated = store.getState().resources.bloodline.heirs.find((h) => h.id === heir.id);
+    expect(updated?.legitimate).toBe(true);
+  });
+
+  it("F4: chronicle gains exactly one heir_custody_changed entry", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "son" });
+    addHeirToState(state, heir);
+    const store = makeStore(state);
+    const chronicleBefore = store.getState().chronicle.length;
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
+    const chronicle = store.getState().chronicle;
+    expect(chronicle.length).toBe(chronicleBefore + 1);
+    expect(chronicle.at(-1)?.type).toBe("heir_custody_changed");
+  });
+
+  it("F5: AP not deducted on validation failure", () => {
+    const state = createNewGameState(db);
+    // Legitimate heir — transfer should be rejected
+    const heir = baseHeir({ legitimate: true });
+    addHeirToState(state, heir);
+    const store = makeStore(state);
+    const apBefore = store.getState().calendar.ap;
+    const result = store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
+    expect(result.ok).toBe(false);
+    expect(store.getState().calendar.ap).toBe(apBefore);
+  });
+
+  it("F6: state unchanged on validation failure", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ legitimate: true });
+    addHeirToState(state, heir);
+    const store = makeStore(state);
+    const snapshotBefore = JSON.stringify(store.getState());
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
+    expect(JSON.stringify(store.getState())).toBe(snapshotBefore);
+  });
+
+  it("F7: old consort favor is exactly maxed at -10 (favor >= 0)", () => {
+    const state = createNewGameState(db);
+    const oldCustodianId = promoteToRank(state, "guiren");
+    const empressId = findEmpressId(state);
+    const oldFavor = state.standing[oldCustodianId]!.favor;
+    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: oldCustodianId });
+    addHeirToState(state, heir);
+    const store = makeStore(state);
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
+    const newFavor = store.getState().standing[oldCustodianId]!.favor;
+    expect(newFavor).toBe(Math.max(0, oldFavor - 10));
+  });
+
+  it("F8: old consort affection is reduced by exactly 10 (clamped at 0)", () => {
+    const state = createNewGameState(db);
+    const oldCustodianId = promoteToRank(state, "guiren");
+    const empressId = findEmpressId(state);
+    const oldAffection = state.standing[oldCustodianId]!.affection ?? 0;
+    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: oldCustodianId });
+    addHeirToState(state, heir);
+    const store = makeStore(state);
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
+    const newAffection = store.getState().standing[oldCustodianId]!.affection ?? 0;
+    expect(newAffection).toBe(Math.max(0, oldAffection - 10));
+  });
+});
+
+// ── G. Save round-trip ────────────────────────────────────────────────────────
+
+describe("G. save round-trip", () => {
+  it("G1: state after transfer passes gameStateSchema.safeParse", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "son" });
+    addHeirToState(state, heir);
+    const store = new GameStore();
+    store.loadState(state);
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
+    const parsed = gameStateSchema.safeParse(store.getState());
+    expect(parsed.success).toBe(true);
+  });
+
+  it("G2: state with heir_custody_changed in chronicle round-trips via autosave+readSlot", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "son" });
+    addHeirToState(state, heir);
+    const store = new GameStore();
+    store.loadState(state);
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
+    const storage = createMemoryStorage();
+    const saved = autosave(storage, db, store.getState());
+    expect(saved.ok).toBe(true);
+    const loaded = readSlot(storage, db, "auto");
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      const event = loaded.value.state.chronicle.find((e) => e.type === "heir_custody_changed");
+      expect(event).toBeDefined();
+      expect((event?.payload as { toCustodianId: string })?.toCustodianId).toBe("taihou");
+    }
+  });
+
+  it("G3: heir remains legitimate after save+load when assigned to empress", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "daughter" });
+    addHeirToState(state, heir);
+    const empressId = findEmpressId(state);
+    const store = new GameStore();
+    store.loadState(state);
+    store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
+    const storage = createMemoryStorage();
+    autosave(storage, db, store.getState());
+    const loaded = readSlot(storage, db, "auto");
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      const loadedHeir = loaded.value.state.resources.bloodline.heirs.find((h) => h.id === heir.id);
+      expect(loadedHeir?.legitimate).toBe(true);
+      expect(loadedHeir?.adoptiveFatherId).toBe(empressId);
+    }
+  });
+
+  it("G4: schema parse fails for invalid chronicle type (guard test)", () => {
+    const state = createNewGameState(db);
+    const stateWithBadChronicle = {
+      ...state,
+      chronicle: [
+        {
+          id: "evt_000001" as const,
+          type: "nonexistent_event_type",
+          occurredAt: makeGameTime(1, 1, "early"),
+          participants: [],
+          payload: {},
+          publicity: { scope: "palace" as const, persistence: "contemporaneous" as const },
+          publicSalience: 50,
+          retention: "permanent" as const,
+          tags: [],
+        },
+      ],
+    };
+    const parsed = gameStateSchema.safeParse(stateWithBadChronicle);
+    expect(parsed.success).toBe(false);
   });
 });

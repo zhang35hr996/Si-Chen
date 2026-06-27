@@ -54,17 +54,18 @@ export interface HeirCustodyTransferPlan {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * 当前正常皇后：rank=huanghou + 未亡 + 未禁足 + 不在冷宫。
+ * 当前正常皇后：rank=huanghou + 在宫 + 未亡 + 非候选 + 未禁足 + 不在冷宫（含 authored defaultLocation）。
  * 不可硬编码皇后 charId。
  */
 export function currentEligibleEmpress(db: ContentDB, state: GameState): CharacterContent | null {
   for (const [id, st] of Object.entries(state.standing)) {
     if (st.rank !== "huanghou") continue;
-    if (st.lifecycle === "deceased") continue;
+    if (st.lifecycle === "deceased" || st.lifecycle === "candidate") continue;
     if (isConfined(state, id)) continue;
     if (isInColdPalace(state, id)) continue;
     const char = db.characters[id] ?? state.generatedConsorts[id];
     if (!char || char.kind !== "consort") continue;
+    if (char.defaultLocation === "changmengong") continue;
     return char;
   }
   return null;
@@ -240,7 +241,7 @@ export function planHeirCustodyTransfer(
 
   // Build effects
   const effects: EventEffect[] = [
-    { type: "heir_custody", heirId, custodianId: toCustodianId, makeLegitimate: becomesLegitimate },
+    { type: "heir_custody", heirId, custodianId: toCustodianId },
   ];
 
   // Old custodian consequences (living consort only, not taihou)
