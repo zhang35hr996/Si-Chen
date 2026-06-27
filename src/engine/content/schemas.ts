@@ -113,7 +113,10 @@ export const characterStandingSchema = z.strictObject({
   birthFamilyId: idSchema.optional(),
   personality: consortPersonalitySchema.optional(),
   household: consortHouseholdSchema.optional(),
-}) satisfies z.ZodType<CharacterStanding>;
+}).refine(
+  (st) => st.peakFavor >= st.favor,
+  { path: ["peakFavor"], message: "peakFavor must be >= favor" },
+) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
 export const memoryKindSchema = z.enum([

@@ -31,9 +31,10 @@ export function livingHeirCountForConsort(state: GameState, consortId: string): 
 
 /**
  * Whether this consort is currently carrying (pregnant with) an heir.
+ * Queries the authoritative gestation record, not the derived standing lifecycle.
  */
 export function isCurrentCarrier(state: GameState, consortId: string): boolean {
-  return state.standing[consortId]?.lifecycle === "carrying";
+  return state.resources.bloodline.gestations.some((g) => g.carrier === consortId);
 }
 
 export type FavoriteStatus =

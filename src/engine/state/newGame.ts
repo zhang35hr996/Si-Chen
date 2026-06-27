@@ -77,9 +77,6 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
         ...consortStandingExtras(character, startTime),
         ...(birthFamilyId !== undefined ? { birthFamilyId } : {}),
       };
-      // Ensure peakFavor is initialized to initial favor
-      const st = standing[character.id]!;
-      st.peakFavor = st.favor;
     }
     memories[character.id] = {
       entries: character.initialMemories.map((draft, index) => ({

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../../src/engine/state/newGame";
 import { loadRealContent } from "../../helpers/contentFixture";
-import { createGameStore } from "../../../src/store/gameStore";
 import {
   rankDistance,
   livingHeirCountForConsort,
@@ -10,9 +9,9 @@ import {
   imperialProtectionSnapshot,
 } from "../../../src/engine/characters/imperialProtection";
 import { validatePeakFavor } from "../../../src/engine/characters/peakFavorValidator";
-import { bestow } from "../../../src/store/treasury";
+import { bestow, grantItem } from "../../../src/store/treasury";
 import { applyEffects } from "../../../src/engine/effects/funnel";
-import type { GameState } from "../../../src/engine/state/types";
+import type { GameState, GestationState, Heir } from "../../../src/engine/state/types";
 import { gameStateSchema } from "../../../src/engine/save/stateSchema";
 
 const db = loadRealContent();
@@ -27,11 +26,16 @@ const TARGET = "lu_huaijin";
 // A1 — peakFavor maintained across all favor write paths
 // ────────────────────────────────────────────────────────────────────────────
 describe("peakFavor — A1", () => {
-  it("new-game initializes peakFavor = favor for all consorts", () => {
+  it("new-game preserves authored peakFavor from initialStanding", () => {
     const state = baseState();
-    for (const [id, st] of Object.entries(state.standing)) {
-      expect(st.peakFavor, `${id}: peakFavor >= favor`).toBeGreaterThanOrEqual(st.favor);
-    }
+    // lu_huaijin is authored with favor=30, peakFavor=30 (from content JSON)
+    const st = state.standing[TARGET]!;
+    expect(st.favor).toBe(30);
+    expect(st.peakFavor).toBe(30);
+    // shen_zhibai (凤后) authored with favor=25, peakFavor=25
+    const fenghou = state.standing["shen_zhibai"]!;
+    expect(fenghou.favor).toBe(25);
+    expect(fenghou.peakFavor).toBe(25);
   });
 
   it("validatePeakFavor passes on new-game state", () => {
@@ -54,7 +58,6 @@ describe("peakFavor — A1", () => {
   });
 
   it("funnel case 'favor' raises peakFavor when favor exceeds it", () => {
-    // Start at favor=10, peakFavor=10; add +10 → favor=20, peakFavor=20
     const base = baseState();
     const state: GameState = {
       ...base,
@@ -75,12 +78,10 @@ describe("peakFavor — A1", () => {
   });
 
   it("funnel case 'favor' does NOT lower peakFavor when favor decreases", () => {
+    const base = baseState();
     const state: GameState = {
-      ...baseState(),
-      standing: {
-        ...baseState().standing,
-        [TARGET]: { ...baseState().standing[TARGET]!, favor: 80, peakFavor: 80 },
-      },
+      ...base,
+      standing: { ...base.standing, [TARGET]: { ...base.standing[TARGET]!, favor: 80, peakFavor: 80 } },
     };
     const result = applyEffects(
       db,
@@ -96,22 +97,18 @@ describe("peakFavor — A1", () => {
   });
 
   it("bestow raises peakFavor when favor increases beyond peak", () => {
+    const base = baseState();
     const state: GameState = {
-      ...baseState(),
-      standing: {
-        ...baseState().standing,
-        [TARGET]: { ...baseState().standing[TARGET]!, favor: 10, peakFavor: 10 },
-      },
+      ...grantItem(base, "luozidai", 1),
+      standing: { ...base.standing, [TARGET]: { ...base.standing[TARGET]!, favor: 10, peakFavor: 10 } },
     };
-    // Find a bestowable item
-    const item = Object.values(db.items).find(
-      (i) => i.effects?.some?.((e) => e.type === "favor" && e.delta > 0),
-    );
-    if (!item) return; // Skip if no item in fixture
-    const r = bestow(state, db, item.id, { kind: "consort", id: TARGET });
-    if (!r.ok) return; // Bestow may fail if no storehouse stock
-    const after = r.value;
-    expect(after.standing[TARGET]!.peakFavor).toBeGreaterThanOrEqual(after.standing[TARGET]!.favor);
+    const r = bestow(state, db, "luozidai", { kind: "consort", id: TARGET });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const after = r.state;
+    // luozidai is "fine" tier → base=4; favor: 10+4=14
+    expect(after.standing[TARGET]!.favor).toBe(14);
+    expect(after.standing[TARGET]!.peakFavor).toBe(14);
     expect(validatePeakFavor(after)).toHaveLength(0);
   });
 
@@ -127,31 +124,36 @@ describe("peakFavor — A1", () => {
 // ────────────────────────────────────────────────────────────────────────────
 describe("rankDistance — A2", () => {
   it("same rank returns 0", () => {
-    const [r1] = Object.keys(db.ranks);
-    if (!r1) return;
-    expect(rankDistance(db, r1, r1)).toBe(0);
+    expect(rankDistance(db, "fenghou", "fenghou")).toBe(0);
+    expect(rankDistance(db, "jun", "jun")).toBe(0);
   });
 
-  it("higher-order actor returns positive", () => {
-    const ranked = Object.values(db.ranks)
-      .filter((r) => typeof r.order === "number")
-      .sort((a, b) => a.order - b.order);
-    if (ranked.length < 2) return;
-    const low = ranked[0]!;
-    const high = ranked[ranked.length - 1]!;
-    const d = rankDistance(db, high.id, low.id);
+  it("fenghou is higher than huangguijun (positive)", () => {
+    const d = rankDistance(db, "fenghou", "huangguijun");
     expect(d).not.toBeNull();
     expect(d!).toBeGreaterThan(0);
   });
 
-  it("lower-order actor returns negative", () => {
-    const ranked = Object.values(db.ranks)
-      .filter((r) => typeof r.order === "number")
-      .sort((a, b) => a.order - b.order);
-    if (ranked.length < 2) return;
-    const low = ranked[0]!;
-    const high = ranked[ranked.length - 1]!;
-    const d = rankDistance(db, low.id, high.id);
+  it("huangguijun is higher than jun (positive)", () => {
+    const d = rankDistance(db, "huangguijun", "jun");
+    expect(d).not.toBeNull();
+    expect(d!).toBeGreaterThan(0);
+  });
+
+  it("jun is higher than fu (positive)", () => {
+    const d = rankDistance(db, "jun", "fu");
+    expect(d).not.toBeNull();
+    expect(d!).toBeGreaterThan(0);
+  });
+
+  it("chenghui is higher than cairen (positive)", () => {
+    const d = rankDistance(db, "chenghui", "cairen");
+    expect(d).not.toBeNull();
+    expect(d!).toBeGreaterThan(0);
+  });
+
+  it("cairen is lower than chenghui (negative)", () => {
+    const d = rankDistance(db, "cairen", "chenghui");
     expect(d).not.toBeNull();
     expect(d!).toBeLessThan(0);
   });
@@ -165,54 +167,114 @@ describe("rankDistance — A2", () => {
 // ────────────────────────────────────────────────────────────────────────────
 // A3 — livingHeirCountForConsort, isCurrentCarrier
 // ────────────────────────────────────────────────────────────────────────────
+function makeHeir(overrides: Partial<Heir> & { fatherId: string | null }): Heir {
+  const base = baseState().calendar;
+  const { fatherId, ...rest } = overrides;
+  return {
+    id: "heir_000001",
+    sex: "daughter",
+    fatherId,
+    bearer: "sovereign",
+    birthAt: { year: base.year, month: base.month, period: "early", dayIndex: base.dayIndex },
+    favor: 50,
+    legitimate: false,
+    petName: "小乙",
+    education: { scholarship: 0, martial: 0, virtue: 0 },
+    health: 80,
+    talent: 60,
+    diligence: 60,
+    ambition: 40,
+    closeness: 50,
+    support: 30,
+    faction: "none",
+    lifecycle: "alive",
+    ...rest,
+  };
+}
+
 describe("livingHeirCountForConsort — A3", () => {
   it("returns 0 for new-game state with no heirs", () => {
     const state = baseState();
     expect(livingHeirCountForConsort(state, TARGET)).toBe(0);
   });
 
-  it("counts heirs by fatherId whose lifecycle is not deceased", () => {
+  it("counts alive heir whose fatherId matches consortId", () => {
+    const heir = makeHeir({ id: "heir_000001", fatherId: TARGET, lifecycle: "alive" });
     const state = baseState();
-    const stateWithHeir: GameState = {
+    const s: GameState = {
       ...state,
       resources: {
         ...state.resources,
-        bloodline: {
-          ...state.resources.bloodline,
-          heirs: [
-            {
-              id: "heir_000001",
-              name: "皇嗣",
-              fatherId: TARGET,
-              lifecycle: "normal",
-              age: 5,
-              closeness: 50,
-              aptitude: {},
-            } as Parameters<typeof livingHeirCountForConsort>[0]["resources"]["bloodline"]["heirs"][number],
-          ],
-        },
+        bloodline: { ...state.resources.bloodline, heirs: [heir] },
       },
     };
-    expect(livingHeirCountForConsort(stateWithHeir, TARGET)).toBe(1);
+    expect(livingHeirCountForConsort(s, TARGET)).toBe(1);
+  });
+
+  it("does not count deceased heir", () => {
+    const heir = makeHeir({ id: "heir_000001", fatherId: TARGET, lifecycle: "deceased" });
+    const state = baseState();
+    const s: GameState = {
+      ...state,
+      resources: {
+        ...state.resources,
+        bloodline: { ...state.resources.bloodline, heirs: [heir] },
+      },
+    };
+    expect(livingHeirCountForConsort(s, TARGET)).toBe(0);
+  });
+
+  it("does not count heir with different fatherId", () => {
+    const heir = makeHeir({ id: "heir_000001", fatherId: "other_consort", lifecycle: "alive" });
+    const state = baseState();
+    const s: GameState = {
+      ...state,
+      resources: {
+        ...state.resources,
+        bloodline: { ...state.resources.bloodline, heirs: [heir] },
+      },
+    };
+    expect(livingHeirCountForConsort(s, TARGET)).toBe(0);
   });
 });
 
 describe("isCurrentCarrier — A3", () => {
-  it("returns false for normal lifecycle", () => {
+  it("returns false when no gestations", () => {
     const state = baseState();
     expect(isCurrentCarrier(state, TARGET)).toBe(false);
   });
 
-  it("returns true when lifecycle is 'carrying'", () => {
+  it("returns true when consortId appears as carrier in gestations", () => {
     const state = baseState();
-    const patched: GameState = {
+    const gestation: GestationState = {
+      carrier: TARGET,
+      conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+      fatherId: "other",
+    };
+    const s: GameState = {
       ...state,
-      standing: {
-        ...state.standing,
-        [TARGET]: { ...state.standing[TARGET]!, lifecycle: "carrying" },
+      resources: {
+        ...state.resources,
+        bloodline: { ...state.resources.bloodline, gestations: [gestation] },
       },
     };
-    expect(isCurrentCarrier(patched, TARGET)).toBe(true);
+    expect(isCurrentCarrier(s, TARGET)).toBe(true);
+  });
+
+  it("returns false when another consort is carrier", () => {
+    const state = baseState();
+    const gestation: GestationState = {
+      carrier: "other_consort",
+      conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+    };
+    const s: GameState = {
+      ...state,
+      resources: {
+        ...state.resources,
+        bloodline: { ...state.resources.bloodline, gestations: [gestation] },
+      },
+    };
+    expect(isCurrentCarrier(s, TARGET)).toBe(false);
   });
 });
 
@@ -224,10 +286,9 @@ describe("getFavoriteStatus — A4", () => {
 
   function mkState(favor: number, peakFavor: number, fullMonthsInPalace: number): GameState {
     const state = baseState();
-    const enteredYear = cal.year - Math.floor(fullMonthsInPalace / 12);
-    const enteredMonth = cal.month - (fullMonthsInPalace % 12);
-    const normalizedYear = enteredMonth <= 0 ? enteredYear - 1 : enteredYear;
-    const normalizedMonth = enteredMonth <= 0 ? enteredMonth + 12 : enteredMonth;
+    let enteredYear = cal.year;
+    let enteredMonth = cal.month - fullMonthsInPalace;
+    while (enteredMonth <= 0) { enteredMonth += 12; enteredYear -= 1; }
     return {
       ...state,
       standing: {
@@ -236,7 +297,7 @@ describe("getFavoriteStatus — A4", () => {
           ...state.standing[TARGET]!,
           favor,
           peakFavor,
-          palaceEnteredAt: { year: normalizedYear, month: normalizedMonth, period: "early", dayIndex: 0 },
+          palaceEnteredAt: { year: enteredYear, month: enteredMonth, period: "early", dayIndex: 0 },
         },
       },
     };
@@ -273,6 +334,11 @@ describe("getFavoriteStatus — A4", () => {
     };
     expect(getFavoriteStatus(s, TARGET)).toBe("ordinary");
   });
+
+  it("ordinary: returns 'ordinary' for unknown character", () => {
+    const state = baseState();
+    expect(getFavoriteStatus(state, "nonexistent_char")).toBe("ordinary");
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -297,17 +363,11 @@ describe("imperialProtectionSnapshot — A5", () => {
     expect(snap.isCurrentCarrier).toBe(false);
   });
 
-  it("heirs capped at 3 in score", () => {
+  it("heirs capped at 3 in score; livingHeirCount reports actual count", () => {
     const state = baseState();
-    const manyHeirs = [1, 2, 3, 4].map((i) => ({
-      id: `heir_00000${i}`,
-      name: `皇嗣${i}`,
-      fatherId: TARGET,
-      lifecycle: "normal" as const,
-      age: i,
-      closeness: 50,
-      aptitude: {},
-    })) as GameState["resources"]["bloodline"]["heirs"];
+    const manyHeirs: Heir[] = [1, 2, 3, 4].map((i) =>
+      makeHeir({ id: `heir_00000${i}`, fatherId: TARGET, lifecycle: "alive" }),
+    );
     const patched: GameState = {
       ...state,
       standing: {
@@ -325,18 +385,46 @@ describe("imperialProtectionSnapshot — A5", () => {
     expect(snap.livingHeirCount).toBe(4);
   });
 
-  it("carrying adds +6 to score", () => {
+  it("carrying adds +6 to score (via gestation, not lifecycle)", () => {
     const state = baseState();
+    const gestation: GestationState = {
+      carrier: TARGET,
+      conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+    };
     const patched: GameState = {
       ...state,
       standing: {
         ...state.standing,
-        [TARGET]: { ...state.standing[TARGET]!, favor: 0, peakFavor: 0, lifecycle: "carrying" },
+        [TARGET]: { ...state.standing[TARGET]!, favor: 0, peakFavor: 0 },
+      },
+      resources: {
+        ...state.resources,
+        bloodline: { ...state.resources.bloodline, gestations: [gestation] },
       },
     };
     const snap = imperialProtectionSnapshot(db, patched, TARGET);
     expect(snap.score).toBe(6);
     expect(snap.isCurrentCarrier).toBe(true);
+  });
+
+  it("deceased heirs are not counted in score", () => {
+    const state = baseState();
+    const alive = makeHeir({ id: "heir_000001", fatherId: TARGET, lifecycle: "alive" });
+    const dead = makeHeir({ id: "heir_000002", fatherId: TARGET, lifecycle: "deceased" });
+    const patched: GameState = {
+      ...state,
+      standing: {
+        ...state.standing,
+        [TARGET]: { ...state.standing[TARGET]!, favor: 0, peakFavor: 0 },
+      },
+      resources: {
+        ...state.resources,
+        bloodline: { ...state.resources.bloodline, heirs: [alive, dead] },
+      },
+    };
+    const snap = imperialProtectionSnapshot(db, patched, TARGET);
+    expect(snap.livingHeirCount).toBe(1);
+    expect(snap.score).toBe(8); // 0 + 0 + 1*8 + 0
   });
 
   it("unknown character returns score 0 with all zeros", () => {
@@ -345,40 +433,7 @@ describe("imperialProtectionSnapshot — A5", () => {
     expect(snap.score).toBe(0);
     expect(snap.currentFavor).toBe(0);
     expect(snap.peakFavor).toBe(0);
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// A6 — migration v25 → v26 (peakFavor backfill)
-// ────────────────────────────────────────────────────────────────────────────
-describe("migration v25 → v26", () => {
-  it("peakFavor backfill adds peakFavor = favor for v25 standing entries", () => {
-    const store = createGameStore();
-    store.loadState(baseState());
-    const state = store.getState();
-
-    // Simulate v25 save: strip peakFavor from all standing entries
-    const v25Like: Record<string, unknown> = {};
-    for (const [id, st] of Object.entries(state.standing)) {
-      const { peakFavor, ...rest } = st as { peakFavor: number } & Record<string, unknown>;
-      void peakFavor;
-      v25Like[id] = rest;
-    }
-    expect(Object.values(v25Like)[0]).not.toHaveProperty("peakFavor");
-
-    // Run migration
-    const raw = { standing: v25Like };
-    // The migration fn is not exported; simulate what it does
-    for (const st of Object.values(raw.standing)) {
-      const s = st as Record<string, unknown>;
-      if (typeof s.peakFavor !== "number" && typeof s.favor === "number") {
-        s.peakFavor = s.favor;
-      }
-    }
-    // After migration, every entry has peakFavor = favor
-    for (const [id, st] of Object.entries(raw.standing)) {
-      const s = st as Record<string, unknown>;
-      expect(s.peakFavor, `${id} peakFavor should equal favor`).toBe(s.favor);
-    }
+    expect(snap.livingHeirCount).toBe(0);
+    expect(snap.isCurrentCarrier).toBe(false);
   });
 });

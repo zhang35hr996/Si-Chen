@@ -18,6 +18,7 @@ import type { TraceCollector } from "../trace/collector";
 import { diffGameState } from "../trace/diff";
 import { toGameTime } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
+import { applyFavorDelta } from "../characters/favor";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
 import { activeColdPalaceEffectFor, isInColdPalace, hasColdPalaceMadness } from "../characters/coldPalace";
 import { eligibleHaremAdministrators } from "../characters/haremAdministration";
@@ -605,8 +606,7 @@ export function applyEffects(
       case "favor": {
         const target = next.standing[effect.char]!;
         const applied = cappedDelta(`favor:${effect.char}`, effect.delta);
-        target.favor = clampPct(target.favor + applied);
-        target.peakFavor = Math.max(target.peakFavor, target.favor);
+        Object.assign(target, applyFavorDelta(target, applied));
         break;
       }
       case "adjust_consort_attr": {
