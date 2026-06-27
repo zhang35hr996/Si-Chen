@@ -1425,7 +1425,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       // object feeds the opening turn and every choice-driven continuation.
       const sceneContext = deriveConverseSceneContext(charId);
       converseSceneCtxRef.current = sceneContext;
-      const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation, { ...sceneContext, register: "private" });
+      const reqResult = assembleDialogueRequest(db, expectedState, charId, expectedState.playerLocation, sceneContext);
       if (reqResult.ok) {
         const started = startDialogueOp(dialogueOpRef.current); // 唯一 token + 占用
         if (started.token !== null) {
@@ -1500,7 +1500,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       const expectedState = store.getState();
       // Reuse the conversation's scene context so presence/privacy stay stable across turns.
       const sceneContext = converseSceneCtxRef.current ?? deriveConverseSceneContext(speakerId);
-      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { ...sceneContext, register: "private", transcript });
+      const reqResult = assembleDialogueRequest(db, expectedState, speakerId, expectedState.playerLocation, { ...sceneContext, transcript });
       if (!reqResult.ok) {
         if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：失效后不得改界面
         // Assembly failed — strip generatedLine so normal onDone drains the queue/rollover

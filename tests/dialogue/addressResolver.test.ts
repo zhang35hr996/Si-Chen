@@ -34,11 +34,21 @@ describe("resolveAddress — 太后 speaking to emperor (player)", () => {
 });
 
 describe("resolveAddress — harem consort speaking to emperor (player)", () => {
-  it("皇后 (shen_zhibai) uses 陛下 and 皇上/圣上 alternates", () => {
+  it("皇后 (shen_zhibai) uses 陛下; no alternates without register (fail-closed)", () => {
     const addr = resolveAddress(db, state, "shen_zhibai", "player");
     expect(addr.targetAddress).toBe("陛下");
+    expect(addr.allowedAlternates).toEqual([]); // 皇上 only in private/intimate
+  });
+
+  it("皇后 × private → 皇上 在 allowedAlternates（内廷日常）", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "private" });
     expect(addr.allowedAlternates).toContain("皇上");
-    expect(addr.allowedAlternates).toContain("圣上");
+    expect(addr.allowedAlternates).not.toContain("圣上"); // 圣上 is third-person only
+  });
+
+  it("皇后 × court → allowedAlternates 为空（朝堂礼制：陛下唯一）", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "court" });
+    expect(addr.allowedAlternates).toEqual([]);
   });
 
   it("皇后 has 本宫 in forbiddenInContext when speaking to emperor", () => {

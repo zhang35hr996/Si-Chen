@@ -32,11 +32,13 @@ export interface PairwiseAddress {
 }
 
 const EMPEROR_ADDRESS = "陛下";
-const EMPEROR_ALTERNATES = ["皇上", "圣上"];
+// 皇上 is acceptable only in inner quarters (private/intimate); not in court or outer areas.
+// 圣上 / 今上 / 圣驾 / 万岁 are solemn third-person or ceremonial forms — never direct-address alternates.
+const INNER_QUARTERS_ALTERNATES = ["皇上"];
 const BEN_GONG = "本宫";
 const FENGJUN = "凤君";
 const HUANGHOU_RANK_ID = "huanghou";
-/** Registers that allow the 凤君 term for authorized speakers addressing the emperor. */
+/** Registers that allow inner-quarters address forms (皇上, 凤君) when addressing the emperor. */
 const PRIVATE_REGISTERS = new Set(["private", "intimate"]);
 
 /** Options for resolveAddress — used by orchestrator to encode scene + character permissions. */
@@ -97,7 +99,12 @@ export function resolveAddress(
       allowedAlternates = ["皇儿", "吾儿"];
     } else {
       targetAddress = EMPEROR_ADDRESS;
-      allowedAlternates = [...EMPEROR_ALTERNATES];
+      // court register: strict protocol, 陛下 only.
+      // public (default, fail-closed): 陛下 only — outer areas or unknown context.
+      // private/intimate (inner quarters): 皇上 is acceptable.
+      allowedAlternates = (options.register !== undefined && PRIVATE_REGISTERS.has(options.register))
+        ? [...INNER_QUARTERS_ALTERNATES]
+        : [];
     }
   } else if (targetIsHarem) {
     // Harem consort target: look up canonical address form from rankAddressRules.

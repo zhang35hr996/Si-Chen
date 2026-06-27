@@ -25,15 +25,17 @@ Why they're wrong here:
 - **凤后** — the empress is now styled 皇后, not 凤后.
 - **公主** — deprecated; use 凤主 for enfeoffed female 皇子.
 - **男女 / 夫妻 / 兄弟姐妹 / 雄雌 / 公母** — male-first ordering; use 女男 / 妇夫 / 姐妹兄弟 / 雌雄 / 母公.
-- **大夫** — implies official rank; use 医师/医者 (or 太医 for court physicians).
+- **大夫** — implies official rank; globally forbidden (including in official titles); use 医师/医者 for folk healers, 太医 for court physicians.
 - **凤君** — private address for the emperor; global ban with register exemption for authorized speakers.
 - **英雄 / 雄\*（褒义）** — replace with 英雌 / 雌\*; 雄 only valid for biological sex markers.
 
 ## Context-restricted terms
 
-**皇上, 圣上, 万岁, 圣驾** — valid informal or colloquial addresses for the sovereign,
-permitted in private / daily speech, but **not** in formal 奏折, 朝对, or 典礼.
-In those contexts, use **陛下** exclusively.
+**皇上** — acceptable second-person address in inner quarters (private / intimate); must NOT appear in formal 奏折, 朝对, or 典礼 — use **陛下** exclusively in court register.
+
+**圣上 / 今上 / 圣驾** — solemn third-person references (not direct address); never list as second-person alternates in prompts.
+
+**万岁** — ceremonial exclamation permitted during 朝贺 / 山呼; globally forbidden in the diminutive form **万岁爷**.
 
 ## Wrong-title pitfalls
 
