@@ -277,7 +277,7 @@ export function validateHaremIntrigueOutcome(
   }
 
   if (outcome.status === "cancelled") {
-    const validReasons = new Set(["actor_unavailable", "target_unavailable", "actor_target_same", "plan_invalid"]);
+    const validReasons = new Set(["actor_unavailable", "target_unavailable", "actor_target_same"]);
     if (!validReasons.has(outcome.reason)) {
       findings.push(finding("INTRIGUE_BAD_SCORE", `Invalid cancellation reason: "${outcome.reason}"`));
     }

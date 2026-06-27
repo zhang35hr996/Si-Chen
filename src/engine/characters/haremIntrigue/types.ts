@@ -105,8 +105,7 @@ export interface HaremIntrigueCandidate {
 export type HaremIntrigueCancellationReason =
   | "actor_unavailable"
   | "target_unavailable"
-  | "actor_target_same"
-  | "plan_invalid";
+  | "actor_target_same";
 
 export interface IntrigueStandingDelta {
   characterId: string;
