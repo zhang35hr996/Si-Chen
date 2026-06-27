@@ -136,7 +136,7 @@ import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
 import { GreetingCeremonyOverlay } from "./components/GreetingCeremonyOverlay";
 import { MorningAfterOverlay } from "./components/MorningAfterOverlay";
-import { buildRelocate } from "../store/relocate";
+import { buildRelocate, autoAssignChamber } from "../store/relocate";
 import { planPregnancyTransfer } from "../store/pregnancyCost";
 import { canHoldCourt, canBedchamber } from "../store/gating";
 import { CharacterProfileDrawer } from "./components/CharacterProfileDrawer";
@@ -206,6 +206,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   // 禁足令在侍君宫殿内发布后需回主图：confinement 成功 + 人在该宫→ 反应播完后 goHome。
   const [punishGoHome, setPunishGoHome] = useState(false);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
+  const [housingQueue, setHousingQueue] = useState<{ charId: string; name: string; rankId: string }[]>([]);
   const [restoreCharId, setRestoreCharId] = useState<string | null>(null);
   const [coldPalaceInterventionTarget, setColdPalaceInterventionTarget] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
@@ -1695,9 +1696,16 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         lines: [`陛下留步——有一位${npcKept.candidate.announce.replace(/，年.*$/, "")}颇得太后青眼，太后留了他的牌子，封为${db.ranks[npcKept.rank]?.name ?? ""}。`],
       });
     }
+    // 询问住处：对玩家亲自留牌的侍君（不含 NPC 代留）按序弹出询问框。
+    const newQueue = kept.map((k) => ({
+      charId: k.candidate.content.id,
+      name: k.candidate.content.profile.name,
+      rankId: k.rank,
+    }));
     setDianxuan(null);
     doAutosave();
     goHome();
+    if (newQueue.length > 0) setHousingQueue(newQueue);
     if (beats.length > 0) { const [f, ...rest] = beats; setReaction(f!); setReactionQueue(rest); }
   };
 
@@ -2322,6 +2330,48 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onClose={() => setRestoreCharId(null)}
         />
       )}
+      {housingQueue.length > 0 && reaction === null && (() => {
+        const cur = housingQueue[0]!;
+        const rankName = db.ranks[cur.rankId]?.name ?? cur.rankId;
+        const advance = () => setHousingQueue((q) => q.slice(1));
+        const autoAssign = () => {
+          const assignment = autoAssignChamber(db, store.getState(), cur.rankId);
+          if (assignment) {
+            const effects = buildRelocate(db, store.getState(), cur.charId, assignment.locationId, assignment.chamberId);
+            if (effects) { const r = store.applyEffects(db, effects); if (r.ok) doAutosave(); }
+            const palaceName = db.locations[assignment.locationId]?.name ?? assignment.locationId;
+            const CHAMBER_LABELS: Record<string, string> = {
+              main: "主殿", east_side: "东侧殿", west_side: "西侧殿",
+              east_annex: "东偏殿", west_annex: "西偏殿",
+            };
+            const chamberName = CHAMBER_LABELS[assignment.chamberId] ?? assignment.chamberId;
+            setReaction({ speakerId: "shen_zhibai", lines: [`那么${cur.name}就先住${palaceName}的${chamberName}吧。`] });
+          } else {
+            setReaction({ speakerId: "shen_zhibai", lines: [`宫中的宫室还需要洒扫，${cur.name}先暂住储秀宫吧。`] });
+          }
+          advance();
+        };
+        return (
+          <div className="modal-backdrop" onClick={advance}>
+            <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+              <p className="modal-panel__body">
+                {cur.name}已封为{rankName}，是否现在安排住处？
+              </p>
+              <div className="modal-panel__actions">
+                <button type="button" onClick={() => { setRelocateCharId(cur.charId); advance(); }}>
+                  是，现在安排
+                </button>
+                <button type="button" onClick={autoAssign}>
+                  由皇后安排
+                </button>
+                <button type="button" onClick={advance}>
+                  暂不安排
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {relocateCharId && db.characters[relocateCharId] && store.getState().standing[relocateCharId] && (
         <RelocateModal
           db={db}
