@@ -24,11 +24,6 @@ export function EpithetSuggest({
             >
               <span className="epithet-suggest__char">{e.char}</span>
               <span className="epithet-suggest__meaning">{e.meaning}</span>
-              <span className="epithet-suggest__tags">
-                {e.tags.map((t) => (
-                  <span key={t} className="epithet-suggest__tag">{t}</span>
-                ))}
-              </span>
             </button>
           </li>
         ))}
