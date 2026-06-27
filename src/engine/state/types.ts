@@ -7,6 +7,7 @@
 import type { CalendarState, GameTime } from "../calendar/time";
 import type { CharacterContent } from "../content/schemas";
 import type { JusticeState, JusticeLinks } from "../justice/types";
+import type { HaremIntriguePlan, HaremIntrigueOutcome, HaremIntrigueKind } from "../characters/haremIntrigue/types";
 
 // ── Global resource pillars (scaffold values 0–100) ──────────────────
 // 皇帝(玩家本人)属性。明面: health/diligence/prestige/martial/statecraft；
@@ -1056,7 +1057,8 @@ export type CourtEventType =
   | "promise"
   | "secret_discovered"
   | "harem_administration_changed"
-  | "heir_custody_changed";
+  | "heir_custody_changed"
+  | "intrigue_discovered";
 // claim_corrected 延后到【首个有错误信念/可证伪 claim 的 PR】——它需生产者+消费者；
 // 加入即死类型。
 
@@ -1224,6 +1226,46 @@ export type HaremAdministrationState =
       reason: HaremAdministrationReason;
     };
 
+/** 宫斗阴谋持久化记录（Phase 5A-2）。 */
+export interface HaremScheme {
+  /** "scheme_{year}_{MM}_{actorId}_{targetId}" */
+  id: string;
+  /** "harem_intrigue:{year}:{MM}" — 幂等键 */
+  sourceKey: string;
+  plan: HaremIntriguePlan;
+  status: "pending" | "resolved" | "cancelled";
+  outcome?: HaremIntrigueOutcome;
+  scheduledForYear: number;
+  scheduledForMonth: number;
+}
+
+/** 宫斗结果事件记录（Phase 5A-2）。 */
+export interface HaremIncident {
+  /** "incident_{schemeId}" */
+  id: string;
+  schemeId: string;
+  kind: HaremIntrigueKind;
+  actorId: string;
+  targetId: string;
+  success: boolean;
+  discovered: boolean;
+  resolvedAt: GameTime;
+  consequencesApplied: boolean;
+}
+
+/** 已揭发阴谋的待消费通知（Phase 5A-2）。 */
+export interface IntrigueNotification {
+  /** "inotif_{schemeId}" */
+  id: string;
+  schemeId: string;
+  kind: HaremIntrigueKind;
+  actorId: string;
+  targetId: string;
+  success: boolean;
+  createdAt: GameTime;
+  dismissed: boolean;
+}
+
 export interface GameState {
   calendar: CalendarState;
   playerLocation: string;
@@ -1294,6 +1336,12 @@ export interface GameState {
   haremAdministration: HaremAdministrationState;
   /** 六宫年度例核记录（每年最多一条；同时作为幂等标记与未读禀报队列）。 */
   haremAdminReviews: HaremAdminReviewRecord[];
+  /** 宫斗阴谋持久化队列（Phase 5A-2）。append-only；status 原地更新。 */
+  haremSchemes: HaremScheme[];
+  /** 宫斗结果事件记录（Phase 5A-2）。append-only。 */
+  haremIncidents: HaremIncident[];
+  /** 已揭发阴谋的待消费通知（Phase 5A-2）。 */
+  pendingIntrigueNotifications: IntrigueNotification[];
   /** 后宫内部惩戒事件（PUNISH-4G-B）：append-only；pending_response 构成全局中断。 */
   haremDisciplineIncidents: HaremDisciplineIncident[];
   /** 司法记录持久层（PUNISH-3B1）。 */
