@@ -57,6 +57,11 @@ import {
   planHaremAdministrationTransfer,
   type TransferHaremAdministrationCommand,
 } from "./haremAdminTransfer";
+import {
+  planHeirCustodyTransfer,
+  type HeirCustodyTransferCommand,
+  type HeirCustodyTransferPlan,
+} from "./heirCustody";
 import { deriveQueueTraceEvents } from "../engine/trace/queueDiff";
 import { captureEligibilityTransitions } from "../engine/trace/eligibilityDiff";
 import type { QueueTraceEvent } from "../engine/trace/domainEvents";
@@ -1881,6 +1886,38 @@ export class GameStore {
     command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
   ): Result<TimedOutcome, GameError[]> {
     return this.resolveTimedAction(db, [], command);
+  }
+
+  /**
+   * 奉先殿抚养权转移 — 原子事务：effects + chronicle + 1 AP + settlePostAdvance，一次 commit，一次 emit。
+   * 任一步骤失败时 this.state 保持原值，不扣 AP，不写 chronicle，不写 memory。
+   */
+  transferHeirCustodyAndAdvance(
+    db: ContentDB,
+    command: HeirCustodyTransferCommand,
+  ): Result<TimedOutcome & { plan: HeirCustodyTransferPlan }, GameError[]> {
+    const planResult = planHeirCustodyTransfer(db, this.state, command);
+    if (!planResult.ok) return err(planResult.error);
+    const plan = planResult.value;
+
+    const postAdvance = (settled: GameState): GameState => {
+      let s = settled;
+      for (const draft of plan.chronicle) {
+        const ap = appendCourtEvent(s, draft);
+        if (!ap.ok) throw new Error(`chronicle_append: ${ap.error[0]?.message ?? "failed"}`);
+        s = ap.value.state;
+      }
+      return s;
+    };
+
+    const txResult = this.resolveTimedActionWithPostAdvance(
+      db,
+      plan.effects,
+      { type: "SPEND_AP", amount: 1 },
+      postAdvance,
+    );
+    if (!txResult.ok) return err(txResult.error);
+    return ok({ ...txResult.value, plan });
   }
 
   /**

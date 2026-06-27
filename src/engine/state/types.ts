@@ -1014,7 +1014,8 @@ export type CourtEventType =
   | "conflict"
   | "promise"
   | "secret_discovered"
-  | "harem_administration_changed";
+  | "harem_administration_changed"
+  | "heir_custody_changed";
 // claim_corrected 延后到【首个有错误信念/可证伪 claim 的 PR】——它需生产者+消费者；
 // 加入即死类型。
 

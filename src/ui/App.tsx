@@ -100,7 +100,6 @@ import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
-import { buildAdoptionReaction } from "../store/adoption";
 import { CharacterReactionScreen } from "./screens/CharacterReactionScreen";
 import { buildBirth, collectNewbornIds, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
@@ -1151,21 +1150,13 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
-  const adoptHeir = (heirId: string, fatherId: string) => {
-    const heir = store.getState().resources.bloodline.heirs.find((h) => h.id === heirId);
-    if (!heir) return;
-    const reactions = buildAdoptionReaction(db, store.getState(), heir, fatherId);
-    // 行动先于时间：承养落库后再推进时间（跨月 tick 不会先杀死再承养）。
-    const settled = store.resolveTimedAction(
-      db,
-      [{ type: "heir_adopt", heirId, fatherId }],
-      { type: "SPEND_AP", amount: 1 },
-    );
+  const transferHeirCustody = (heirId: string, toCustodianId: string) => {
+    const settled = store.transferHeirCustodyAndAdvance(db, { heirId, toCustodianId, source: "fengxiandian" });
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
-    const [first, ...rest] = reactions;
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
+    const [first, ...rest] = settled.value.plan.reactions;
     setReactionQueue(rest);
     if (first) setReaction(first);
   };
@@ -1794,7 +1785,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           registry={registry}
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
           onOpenSettings={() => setSettingsOpen(true)}
-          onAdopt={adoptHeir}
+          onTransferCustody={transferHeirCustody}
         />
       )}
       {view === "cining_gong" && (
