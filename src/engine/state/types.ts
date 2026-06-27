@@ -855,7 +855,7 @@ export interface ConfinementEffect {
   sourcePunishmentId?: string;
 }
 
-export type ColdPalaceLiftReason = "lifted_by_emperor" | "pardoned";
+export type ColdPalaceLiftReason = "lifted_by_emperor" | "pardoned" | "death";
 
 export interface ColdPalaceEffect {
   /** "status_<charId>_NNNNNN" 单调。 */

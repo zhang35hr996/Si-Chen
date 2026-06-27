@@ -23,6 +23,26 @@ export function isColdPalaceEffectActiveAt(effect: ColdPalaceEffect, turn: numbe
   return turn >= effect.startTurn;
 }
 
+/**
+ * 历史事件校验专用：冷宫记录在给定旬是否「有效覆盖」该历史事件。
+ *
+ * 与 isColdPalaceEffectActiveAt 唯一的区别在于「同旬死亡解除」场景：
+ * 当角色在产生事件的同一旬被处决（liftReason === "death" && liftedTurn === turn），
+ * 运行态规则 isColdPalaceEffectActiveAt 判定为已失效，但该旬内发生的事件（如精神失常）
+ * 确实是在死亡之前生成的，历史上仍属于冷宫有效期内。
+ */
+export function wasColdPalaceEffectActiveForHistoricalEvent(
+  effect: ColdPalaceEffect,
+  turn: number,
+): boolean {
+  if (isColdPalaceEffectActiveAt(effect, turn)) return true;
+  return (
+    effect.liftReason === "death" &&
+    effect.liftedTurn === turn &&
+    turn >= effect.startTurn
+  );
+}
+
 /** 该角色所有冷宫记录（含历史）。 */
 export function coldPalaceEffectsOf(state: GameState, charId: string): ColdPalaceEffect[] {
   return state.statusEffects.filter(

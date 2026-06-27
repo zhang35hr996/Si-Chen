@@ -45,6 +45,8 @@ import {
 } from "../../../src/engine/characters/coldPalaceIncidents";
 import { validateColdPalaceMadnessLinks } from "../../../src/engine/characters/coldPalaceValidator";
 import { applyEffects } from "../../../src/engine/effects/funnel";
+import type { ImperialCommand } from "../../../src/store/imperialCommands";
+import { gameStateSchema } from "../../../src/engine/save/stateSchema";
 import { dayIndexOf, makeGameTime, createCalendar } from "../../../src/engine/calendar/time";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
@@ -683,6 +685,84 @@ describe("restoreFromColdPalace rejects mad resident", () => {
   });
 });
 
+// ── Same-day execution round-trip ────────────────────────────────────────────
+// Covers: mad resident executed on the same dayIndex as the madness onset.
+// This is the critical edge case where liftedTurn === madness.startedAt.dayIndex.
+
+describe("same-day execution of mad cold-palace resident", () => {
+  function stateWithMadAndIncident(): GameState {
+    const base = stateWithColdPalaceResident();
+    const effect = activeColdPalaceEffectFor(base, REAL_TARGET_ID)!;
+    const { year, month, period, dayIndex } = base.calendar;
+    const madnessEffectId = `status_${REAL_TARGET_ID}_000099`;
+    const madnessEffect: ColdPalaceMadnessEffect = {
+      id: madnessEffectId,
+      kind: "cold_palace_madness",
+      characterId: REAL_TARGET_ID,
+      sourceColdPalaceEffectId: effect.id,
+      startedAt: { year, month, period, dayIndex },
+      startTurn: dayIndex,
+    };
+    const incident: ColdPalaceMentalBreakdownIncident = {
+      id: `cpi_${REAL_TARGET_ID}_${year}_${String(month).padStart(2, "0")}`,
+      residentId: REAL_TARGET_ID,
+      effectId: effect.id,
+      kind: "mental_breakdown",
+      occurredAt: { year, month, period, dayIndex },
+      acknowledged: false,
+      madnessEffectId,
+    };
+    return {
+      ...base,
+      statusEffects: [...base.statusEffects, madnessEffect],
+      coldPalaceIncidents: [...base.coldPalaceIncidents, incident],
+    };
+  }
+
+  it("execution on same dayIndex succeeds and leaves state that passes schema + validator + save round-trip", () => {
+    const store = createGameStore();
+    store.loadState(stateWithMadAndIncident());
+
+    // Execute immediately — no time advance, so liftedTurn === madness dayIndex
+    const execCmd: ImperialCommand = { type: "execute", targetId: REAL_TARGET_ID };
+    const execResult = store.applyImperialPunishmentWithConsequences(db, execCmd, {});
+    expect(execResult.ok).toBe(true);
+
+    const state = store.getState();
+
+    // Character is deceased
+    expect(state.standing[REAL_TARGET_ID]?.lifecycle).toBe("deceased");
+
+    // Madness effect is preserved
+    expect(state.statusEffects.some((e) => e.kind === "cold_palace_madness" && e.characterId === REAL_TARGET_ID)).toBe(true);
+
+    // Breakdown incident is preserved
+    expect(state.coldPalaceIncidents.some((i) => i.kind === "mental_breakdown" && i.residentId === REAL_TARGET_ID)).toBe(true);
+
+    // Cold palace effect is lifted with liftReason === "death"
+    const cpEffect = state.statusEffects.find((e) => e.kind === "cold_palace" && e.characterId === REAL_TARGET_ID);
+    expect(cpEffect).toBeDefined();
+    if (!cpEffect || cpEffect.kind !== "cold_palace") return;
+    expect(cpEffect.liftedTurn).toBe(state.calendar.dayIndex);
+    expect(cpEffect.liftReason).toBe("death");
+
+    // Schema round-trip passes
+    const parsed = gameStateSchema.safeParse(state);
+    expect(parsed.success).toBe(true);
+
+    // Validator passes
+    const errors = validateColdPalaceMadnessLinks(state);
+    expect(errors).toHaveLength(0);
+
+    // Save round-trip
+    const saveData = createSaveData(db, state, "slot1");
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(saveData));
+    const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
+    expect(loaded.ok).toBe(true);
+  });
+});
+
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
 describe("selectors", () => {
@@ -1206,7 +1286,7 @@ describe("validateColdPalaceMadnessLinks — invariant 8 and 9", () => {
       },
       statusEffects: state.statusEffects.map((e) =>
         e.kind === "cold_palace" && e.characterId === REAL_TARGET_ID
-          ? { ...e, liftedTurn: state.calendar.dayIndex + 1, liftReason: "lifted_by_emperor" as const }
+          ? { ...e, liftedTurn: state.calendar.dayIndex, liftReason: "death" as const }
           : e,
       ),
     };

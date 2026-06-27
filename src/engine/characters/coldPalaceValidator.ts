@@ -5,7 +5,7 @@
  */
 import { gameError, type GameError } from "../infra/errors";
 import type { ColdPalaceEffect, ColdPalaceMadnessEffect, ColdPalaceMentalBreakdownIncident, GameState } from "../state/types";
-import { isColdPalaceEffectActiveAt } from "./coldPalace";
+import { isColdPalaceEffectActiveAt, wasColdPalaceEffectActiveForHistoricalEvent } from "./coldPalace";
 import { coldPalaceIncidentId, coldPalaceInterventionId } from "./coldPalaceIncidents";
 
 function incidentErr(msg: string): GameError {
@@ -86,9 +86,9 @@ export function validateColdPalaceIncidentLinks(state: GameState): GameError[] {
           `ColdPalaceIncident "${id}": effectId "${effectId}" belongs to "${linkedEffect.characterId}", not "${residentId}"`,
         ));
       }
-      // 6. Effect was active at occurredAt.dayIndex. Uses isColdPalaceEffectActiveAt so
-      //    liftedTurn is checked — a pre-lifted effect cannot be linked to a later incident.
-      if (!isColdPalaceEffectActiveAt(linkedEffect, occurredAt.dayIndex)) {
+      // 6. Effect was active at occurredAt.dayIndex. Uses historical helper to allow
+      //    same-day death-lift (liftReason==="death" && liftedTurn===occurredAt.dayIndex).
+      if (!wasColdPalaceEffectActiveForHistoricalEvent(linkedEffect, occurredAt.dayIndex)) {
         errors.push(incidentErr(
           `ColdPalaceIncident "${id}": effect "${effectId}" was not active at dayIndex ${occurredAt.dayIndex} (startTurn=${linkedEffect.startTurn}, liftedTurn=${linkedEffect.liftedTurn ?? "none"})`,
         ));
@@ -248,8 +248,8 @@ export function validateColdPalaceInterventionLinks(state: GameState): GameError
           `ColdPalaceIntervention "${id}": effectId "${effectId}" belongs to "${linkedEffect.characterId}", not "${residentId}"`,
         ));
       }
-      // 6. Effect was active at occurredAt.dayIndex.
-      if (!isColdPalaceEffectActiveAt(linkedEffect, occurredAt.dayIndex)) {
+      // 6. Effect was active at occurredAt.dayIndex (uses historical helper for same-day death).
+      if (!wasColdPalaceEffectActiveForHistoricalEvent(linkedEffect, occurredAt.dayIndex)) {
         errors.push(interventionErr(
           `ColdPalaceIntervention "${id}": effect "${effectId}" was not active at dayIndex ${occurredAt.dayIndex} (startTurn=${linkedEffect.startTurn}, liftedTurn=${linkedEffect.liftedTurn ?? "none"})`,
         ));
@@ -326,8 +326,8 @@ export function validateColdPalaceMadnessLinks(state: GameState): GameError[] {
       if (sourceEffect.characterId !== characterId) {
         errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": source effect belongs to "${sourceEffect.characterId}", not "${characterId}"`));
       }
-      // 5. Source effect was active at startedAt.dayIndex.
-      if (!isColdPalaceEffectActiveAt(sourceEffect, startedAt.dayIndex)) {
+      // 5. Source effect was active at startedAt.dayIndex (uses historical helper for same-day death).
+      if (!wasColdPalaceEffectActiveForHistoricalEvent(sourceEffect, startedAt.dayIndex)) {
         errors.push(madnessErr(`ColdPalaceMadnessEffect "${id}": source effect was not active at startedAt.dayIndex ${startedAt.dayIndex}`));
       }
     }
@@ -410,7 +410,7 @@ export function validateColdPalaceMadnessLinks(state: GameState): GameError[] {
     );
     if (!sourceColdPalaceEffect) {
       errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": effectId "${effectId}" not found`));
-    } else if (!isColdPalaceEffectActiveAt(sourceColdPalaceEffect, occurredAt.dayIndex)) {
+    } else if (!wasColdPalaceEffectActiveForHistoricalEvent(sourceColdPalaceEffect, occurredAt.dayIndex)) {
       errors.push(madnessErr(`ColdPalaceMentalBreakdownIncident "${id}": source cold-palace effect was not active at occurredAt.dayIndex ${occurredAt.dayIndex}`));
     }
   }

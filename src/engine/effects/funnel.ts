@@ -1101,6 +1101,7 @@ export function applyEffects(
           if (se.characterId === effect.char && (se.kind === "confinement" || se.kind === "cold_palace") && se.liftedTurn === undefined) {
             se.liftedTurn = effect.at.dayIndex;
             se.liftedAt = effect.at;
+            if (se.kind === "cold_palace") (se as ColdPalaceEffect).liftReason = "death";
           }
         }
         // Resolve all active PunishmentRecords for the deceased character.

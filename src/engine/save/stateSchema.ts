@@ -309,7 +309,7 @@ const coldPalaceEffectSchema = z.strictObject({
   sourcePunishmentId: z.string().regex(/^pun_\d{6}$/),
   liftedAt: gameTimeSchema.optional(),
   liftedTurn: z.number().int().min(0).optional(),
-  liftReason: z.enum(["lifted_by_emperor", "pardoned"]).optional(),
+  liftReason: z.enum(["lifted_by_emperor", "pardoned", "death"]).optional(),
 });
 
 const coldPalaceMadnessEffectSchema = z.strictObject({
