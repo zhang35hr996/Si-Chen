@@ -347,7 +347,6 @@ describe("planAdministratorRankDecision — 冷却", () => {
 describe("planAdministratorRankDecision — 冷宫/禁足", () => {
   it("AD-26: wenya 正在禁足 → 跳过 → null", () => {
     let state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
-    // 注入一条 confinement status effect
     state = {
       ...state,
       statusEffects: [
@@ -363,8 +362,28 @@ describe("planAdministratorRankDecision — 冷宫/禁足", () => {
         },
       ],
     };
-    const result = planAdministratorRankDecision(db, state, "shen_zhibai");
-    expect(result).toBeNull();
+    expect(planAdministratorRankDecision(db, state, "shen_zhibai")).toBeNull();
+  });
+
+  it("AD-27b: wenya 在冷宫 → 跳过 → null", () => {
+    let state = wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 });
+    state = {
+      ...state,
+      statusEffects: [
+        ...state.statusEffects,
+        {
+          id: "test_cold_palace_wenya",
+          kind: "cold_palace" as const,
+          characterId: "wenya",
+          startedAt: toGameTime(state.calendar),
+          startTurn: state.calendar.dayIndex,
+          previousResidenceId: "chuxiu_gong",
+          coldPalaceResidenceId: "lengqing_gong",
+          sourcePunishmentId: "test_punishment_001",
+        },
+      ],
+    };
+    expect(planAdministratorRankDecision(db, state, "shen_zhibai")).toBeNull();
   });
 });
 

@@ -74,7 +74,9 @@ function wasRecentlyAdjustedByAdmin(
   for (const event of state.chronicle) {
     if (event.type !== "rank_changed") continue;
     if (!(event.tags as string[]).includes("harem_administration")) continue;
-    if (!event.participants.some((p) => p.charId === targetId)) continue;
+    if (!event.participants.some(
+      (p) => p.charId === targetId && (p.role === "recipient" || p.role === "demoted"),
+    )) continue;
     const { year, month } = event.occurredAt;
     const monthsAgo = (curYear - year) * 12 + (curMonth - month);
     if (monthsAgo >= 0 && monthsAgo < COOLDOWN_MONTHS) return true;
