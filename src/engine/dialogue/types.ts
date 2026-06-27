@@ -104,8 +104,6 @@ export interface DialogueRequest {
    * Defaults to "public" (fail-closed) when not explicitly provided.
    */
   register: SceneRegister;
-  /** Typed address permission keys from character's dialoguePolicy.addressPermissions. */
-  addressPermissions: string[];
   speakerContext: {
     profile: CharacterContent["profile"];
     voice: CharacterContent["voice"];
@@ -156,8 +154,8 @@ export interface DialogueAssemblyOptions {
   privacy?: "public" | "semi_private" | "private";
   /**
    * Scene register: drives conditional-term gate (e.g. 凤君 requires private/intimate).
-   * Defaults to "private" — most harem dialogue is private inner-quarters conversation.
-   * Callers should pass "court" or "public" for formal scenes.
+   * Defaults to "public" (fail-closed). Pass "private" or "intimate" for inner-quarters
+   * scenes; pass "court" for formal audiences.
    */
   register?: SceneRegister;
 }

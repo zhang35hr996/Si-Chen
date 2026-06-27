@@ -49,6 +49,14 @@ export interface TextGateContext {
    */
   wrongPlayerHonorifics: string[];
   /**
+   * Honorifics permitted in inner-quarters registers (private/intimate) but
+   * forbidden in all other registers (court, public, or default).
+   * 「皇上」 is the canonical example: acceptable in bedchamber daily speech,
+   * rejected in court audiences and outer-palace public scenes.
+   * Checked whenever register is NOT private/intimate.
+   */
+  courtRestrictedHonorifics: string[];
+  /**
    * Terms forbidden in THIS SPECIFIC conversational context due to the speaker–target
    * pairing (e.g. 本宫 when addressing someone of equal or higher rank).
    * Populated from resolvedAddress.forbiddenInContext at call time.
@@ -60,36 +68,32 @@ export interface TextGateContext {
    */
   register: SceneRegister;
   /**
-   * Subset of forbiddenTerms this speaker is authorized to use — but only
-   * in private / intimate registers. In court or public contexts these terms
-   * remain forbidden even for authorized speakers.
+   * Forbidden terms lifted for this specific (speaker × target × register) triple.
+   * Computed by resolveAddress and set by the orchestrator on the NPC gate context.
+   * Always empty for player choice gate contexts — NPC address permissions must
+   * not bleed into player-authored choice text.
    *
-   * Populated from the intersection of (rank exemptions + character-level
-   * allowedTerms) with lexicon.forbiddenTerms.
-   *
-   * Example: 「凤君」 for 皇后 — allowed in private but never in court.
+   * Example: 「凤君」 for 皇后 addressing the emperor in a private register.
    */
   privateAllowedTerms: string[];
 }
 
 const MIN_SELF_REF_LEN = 2;
+/** Registers that permit informal emperor address (皇上, 凤君). Must mirror addressResolver's PRIVATE_REGISTERS. */
+const PRIVATE_REGISTERS = new Set(["private", "intimate"]);
 
-/** v0 heuristic watch-list — globally wrong forms only; context-restricted terms (皇上/圣上/万岁/圣驾) excluded since the gate can't check context. */
+/** v0 heuristic watch-list — globally wrong forms only; 圣上 is blocked via contextForbiddenRefs (target-scoped by resolver). */
 const WRONG_PLAYER_HONORIFICS: string[] = [];
 
 /**
- * Rank-level private-term exemptions: terms in forbiddenTerms that a given rank
- * may use in private / intimate registers.
- * 凤君 — 皇后 may privately address the emperor this way (by rank, not individual permission).
+ * 「皇上」 is acceptable inner-quarters address (private/intimate) but forbidden in any
+ * non-private register (court, public, or unset default).
+ * 「万岁」 is a legitimate court cheer (朝贺山呼) — not in this list.
+ * 「圣上/今上/圣驾」 are solemn third-person references blocked when target=emperor via
+ * contextForbiddenRefs (set by orchestrator from resolvedAddress.forbiddenInContext);
+ * they are NOT blocked globally since non-emperor-target dialogue legitimately uses them.
  */
-const RANK_PRIVATE_EXEMPTIONS: Record<string, string[]> = {
-  huanghou: ["凤君"],
-};
-
-/** Maps typed addressPermission keys to the actual forbidden term strings they unlock. */
-const ADDRESS_PERMISSION_TERMS: Record<string, string> = {
-  fengjun: "凤君",
-};
+const EMPEROR_NON_PRIVATE_RESTRICTED: string[] = ["皇上"];
 
 /** Raw prompt-template tokens that must never survive into player-facing text. */
 const TEMPLATE_PATTERNS: RegExp[] = [
@@ -107,31 +111,21 @@ function allSelfRefs(refs: CharacterRank["selfRefs"]): string[] {
 /**
  * Assemble the gate context for one speaker from the loaded content.
  *
- * @param speakerRankId        The speaker's current harem rank ID (or "__elder__").
- * @param addressPermissions   Typed permission keys from character's dialoguePolicy
- *   (e.g. ["fengjun"]). Each key maps via ADDRESS_PERMISSION_TERMS to a forbidden
- *   term that is lifted in private/intimate registers. This is deliberately typed
- *   (not an arbitrary string list) to prevent bypassing arbitrary global bans.
- * @param register  Scene register. Defaults to "public" (fail-closed).
+ * `privateAllowedTerms` is NOT set here — it is populated by the orchestrator
+ * from resolvedAddress.liftedForbiddenTerms after calling resolveAddress with
+ * the register and addressPermissions. This keeps target-scoping out of the
+ * gate and in the resolver where it belongs.
+ *
+ * @param speakerRankId  The speaker's current harem rank ID (or "__elder__").
+ * @param register       Scene register. Defaults to "public" (fail-closed).
  */
 export function buildTextGateContext(
   db: ContentDB,
   speakerRankId: string,
-  addressPermissions: string[] = [],
   register: SceneRegister = "public",
 ): TextGateContext {
   const forbidden = db.lexicon.forbiddenTerms;
   const forbiddenSet = new Set(forbidden);
-
-  // Private-allowed = rank exemptions ∪ character addressPermissions (mapped to terms),
-  // intersected with forbiddenTerms so we only lift actually-banned terms.
-  const rankExemptions = RANK_PRIVATE_EXEMPTIONS[speakerRankId] ?? [];
-  const permissionTerms = addressPermissions.flatMap((p) =>
-    ADDRESS_PERMISSION_TERMS[p] !== undefined ? [ADDRESS_PERMISSION_TERMS[p]!] : [],
-  );
-  const privateAllowed = [...new Set([...rankExemptions, ...permissionTerms])].filter((t) =>
-    forbiddenSet.has(t),
-  );
 
   const own = new Set(db.ranks[speakerRankId] ? allSelfRefs(db.ranks[speakerRankId]!.selfRefs) : []);
   const foreign = new Set<string>();
@@ -146,9 +140,10 @@ export function buildTextGateContext(
     forbiddenTerms: forbidden,
     foreignSelfRefs: [...foreign],
     wrongPlayerHonorifics: WRONG_PLAYER_HONORIFICS.filter((t) => !forbiddenSet.has(t)),
+    courtRestrictedHonorifics: EMPEROR_NON_PRIVATE_RESTRICTED.filter((t) => !forbiddenSet.has(t)),
     contextForbiddenRefs: [],
     register,
-    privateAllowedTerms: privateAllowed,
+    privateAllowedTerms: [], // set externally by orchestrator from resolvedAddress.liftedForbiddenTerms
   };
 }
 
@@ -170,10 +165,9 @@ export function scanDialogueText(
 ): GateFinding[] {
   const findings: GateFinding[] = [];
 
-  // Register-aware exemption: in private/intimate registers, privateAllowedTerms
-  // are lifted from the forbidden list for this speaker.
-  const isPrivateRegister = ctx.register === "private" || ctx.register === "intimate";
-  const exempted = isPrivateRegister ? new Set(ctx.privateAllowedTerms) : new Set<string>();
+  // privateAllowedTerms is already fully resolved (speaker × target × register) by
+  // resolveAddress before reaching the gate. No register check needed here.
+  const exempted = new Set(ctx.privateAllowedTerms);
 
   for (const term of ctx.forbiddenTerms) {
     if (exempted.has(term)) continue;
@@ -184,6 +178,21 @@ export function scanDialogueText(
         message: `forbidden term 「${term}」`,
         matched: term,
       });
+    }
+  }
+
+  // Non-private register check: 皇上 is inner-quarters address only.
+  // Block it in court, public, and any unset/default register.
+  if (!PRIVATE_REGISTERS.has(ctx.register)) {
+    for (const term of ctx.courtRestrictedHonorifics) {
+      if (text.includes(term)) {
+        findings.push({
+          gate: "rank_title",
+          severity: "reject",
+          message: `「${term}」 is inner-quarters address only — use 陛下 in ${ctx.register} register`,
+          matched: term,
+        });
+      }
     }
   }
 

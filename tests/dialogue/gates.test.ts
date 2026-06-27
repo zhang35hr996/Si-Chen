@@ -7,7 +7,7 @@ import { buildTextGateContext, scanDialogueText } from "../../src/engine/dialogu
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
-// Default register = "private" — most tests target private harem context
+// Default register = "public" (fail-closed)
 const huanghouCtx = buildTextGateContext(db, "huanghou"); // selfRefs: 臣侍/本宫
 const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 臣侍/本宫/我
 const siliCtx = buildTextGateContext(db, "sili_zhang"); // selfRefs: 臣/下官
@@ -24,8 +24,16 @@ describe("buildTextGateContext", () => {
     expect(huanghouCtx.foreignSelfRefs).not.toContain("臣");
   });
 
-  it("wrongPlayerHonorifics is empty — 皇上/圣上/万岁/圣驾 are now context-restricted not globally wrong", () => {
+  it("wrongPlayerHonorifics is empty — 圣上 is blocked via contextForbiddenRefs (target-scoped), not globally", () => {
     expect(huanghouCtx.wrongPlayerHonorifics).toEqual([]);
+  });
+
+  it("courtRestrictedHonorifics contains 皇上 (inner-quarters only — blocked in court AND public)", () => {
+    expect(huanghouCtx.courtRestrictedHonorifics).toContain("皇上");
+  });
+
+  it("privateAllowedTerms starts empty — set externally by orchestrator from resolvedAddress", () => {
+    expect(huanghouCtx.privateAllowedTerms).toEqual([]);
   });
 });
 
@@ -46,9 +54,9 @@ describe("forbidden_lexicon gate", () => {
     expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤后")).toBe(true);
   });
 
-  it("does NOT reject 皇上 (context-restricted, not globally banned)", () => {
-    const findings = scanDialogueText("皇上圣明。", huanghouCtx);
-    expect(findings.every((f) => f.matched !== "皇上")).toBe(true);
+  it("does NOT reject 皇上 via forbidden_lexicon (context-restricted, not globally banned)", () => {
+    const findingsPrivate = scanDialogueText("皇上圣明。", buildTextGateContext(db, "huanghou", "private"));
+    expect(findingsPrivate.every((f) => f.gate !== "forbidden_lexicon" || f.matched !== "皇上")).toBe(true);
   });
 });
 
@@ -62,7 +70,7 @@ describe("self_ref gate", () => {
 
   it("allows a speaker using their OWN selfRef", () => {
     expect(scanDialogueText("臣侍累了。", chenghuiCtx)).toHaveLength(0);
-    expect(scanDialogueText("本宫累了。", huanghouCtx)).toHaveLength(0);
+    expect(scanDialogueText("本宫累了。", buildTextGateContext(db, "huanghou", "private"))).toHaveLength(0);
   });
 
   it("does not false-positive on compounds of single-char refs", () => {
@@ -72,14 +80,46 @@ describe("self_ref gate", () => {
 });
 
 describe("rank_title gate", () => {
-  it("returns no findings since WRONG_PLAYER_HONORIFICS is empty", () => {
-    const findings = scanDialogueText("圣上万安。", siliCtx);
+  it("gate alone (without contextForbiddenRefs) does not block 圣上 — third-person uses in non-emperor conversations pass", () => {
+    // 圣上 blocking is target-scoped: the orchestrator sets contextForbiddenRefs = ["圣上"]
+    // only when target=player. Without that context, the gate cannot distinguish direct
+    // address from third-person reference (e.g. "圣上已决" in a consort-to-consort scene).
+    const ctx = buildTextGateContext(db, "sili_zhang", "private");
+    const findings = scanDialogueText("圣上已决，臣侍遵旨。", ctx);
     const rankTitleFindings = findings.filter((f) => f.gate === "rank_title");
     expect(rankTitleFindings).toHaveLength(0);
   });
 
-  it("accepts the canonical 陛下 address", () => {
+  it("圣上 rejected as direct address when contextForbiddenRefs = ['圣上'] (set by orchestrator for emperor-target)", () => {
+    const ctx = buildTextGateContext(db, "huanghou", "private");
+    ctx.contextForbiddenRefs = ["圣上"]; // simulates resolvedAddress.forbiddenInContext when target=player
+    const findings = scanDialogueText("圣上万安。", ctx);
+    expect(findings.some((f) => f.gate === "self_ref" && f.matched === "圣上")).toBe(true);
+  });
+
+  it("accepts the canonical 陛下 address in any register", () => {
     expect(scanDialogueText("陛下万安。", siliCtx)).toHaveLength(0);
+  });
+
+  it("rejects 皇上 in court register (too informal for formal audience)", () => {
+    const courtCtx = buildTextGateContext(db, "huanghou", "court");
+    const findings = scanDialogueText("皇上圣明。", courtCtx);
+    expect(findings.some((f) => f.gate === "rank_title" && f.matched === "皇上")).toBe(true);
+  });
+
+  it("allows 皇上 in private register", () => {
+    const privateCtx = buildTextGateContext(db, "huanghou", "private");
+    expect(scanDialogueText("皇上圣明。", privateCtx).filter((f) => f.matched === "皇上")).toHaveLength(0);
+  });
+
+  it("rejects 皇上 in public register (inner-quarters address only — 陛下 required outside private/intimate)", () => {
+    const publicCtx = buildTextGateContext(db, "huanghou", "public");
+    expect(scanDialogueText("皇上圣明。", publicCtx).some((f) => f.gate === "rank_title" && f.matched === "皇上")).toBe(true);
+  });
+
+  it("allows 万岁 in court register (合法朝贺用词)", () => {
+    const courtCtx = buildTextGateContext(db, "huanghou", "court");
+    expect(scanDialogueText("皇上万岁。", courtCtx).filter((f) => f.gate === "rank_title" && f.matched === "万岁")).toHaveLength(0);
   });
 });
 
@@ -97,7 +137,7 @@ describe("template_leak gate", () => {
   });
 
   it("does not flag normal punctuation/CJK text", () => {
-    expect(scanDialogueText("陛下驾临，臣侍有一事启奏。", huanghouCtx)).toHaveLength(0);
+    expect(scanDialogueText("陛下驾临，臣侍有一事启奏。", buildTextGateContext(db, "huanghou", "private"))).toHaveLength(0);
   });
 });
 
@@ -114,21 +154,10 @@ describe("choice text uses content gates only (skipIdentityGates)", () => {
   });
 });
 
-describe("凤君 conditional permission gate — full register × speaker matrix", () => {
-  // ── contexts built with explicit registers ───────────────────────────
-  const huanghouPrivate  = buildTextGateContext(db, "huanghou",   [], "private");
-  const huanghouIntimate = buildTextGateContext(db, "huanghou",   [], "intimate");
-  const huanghouCourt    = buildTextGateContext(db, "huanghou",   [], "court");
-  const huanghouPublic   = buildTextGateContext(db, "huanghou",   [], "public");
+describe("凤君 conditional gate — target × register × permission (via privateAllowedTerms)", () => {
+  // privateAllowedTerms is set externally by the orchestrator from resolvedAddress.liftedForbiddenTerms.
+  // These tests verify that the gate correctly honours/enforces those lifted terms.
 
-  const zhaoyiPrivate  = buildTextGateContext(db, "zhaoyi", [], "private");
-  const zhaoyiIntimate = buildTextGateContext(db, "zhaoyi", [], "intimate");
-
-  // Authorized 侍君/大臣: character-level permission via typed addressPermissions key
-  const authConsortPrivate  = buildTextGateContext(db, "fu",          ["fengjun"], "private");
-  const authConsortCourt    = buildTextGateContext(db, "fu",          ["fengjun"], "court");
-  const authOfficialPrivate = buildTextGateContext(db, "sili_zhang",  ["fengjun"], "private");
-  const authOfficialCourt   = buildTextGateContext(db, "sili_zhang",  ["fengjun"], "court");
   it("凤君 在 lexicon.forbiddenTerms 中（全局禁用）", () => {
     expect(db.lexicon.forbiddenTerms).toContain("凤君");
   });
@@ -136,47 +165,38 @@ describe("凤君 conditional permission gate — full register × speaker matrix
     expect(db.lexicon.approvedTerms).not.toContain("凤君");
   });
 
-  // ── 皇后 × register ─────────────────────────────────────────────────
-  it("皇后 × private → 凤君通过", () => {
-    expect(scanDialogueText("凤君今日心情不错。", huanghouPrivate).every((f) => f.matched !== "凤君")).toBe(true);
-  });
-  it("皇后 × intimate → 凤君通过", () => {
-    expect(scanDialogueText("凤君今日心情不错。", huanghouIntimate).every((f) => f.matched !== "凤君")).toBe(true);
-  });
-  it("皇后 × court → 凤君被拒", () => {
-    expect(scanDialogueText("凤君今日心情不错。", huanghouCourt).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
-  });
-  it("皇后 × public → 凤君被拒", () => {
-    expect(scanDialogueText("凤君今日心情不错。", huanghouPublic).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  // ── gate honours lifted terms when privateAllowedTerms is set ─────────
+  it("gate 允许凤君 当 privateAllowedTerms 包含凤君（resolver 已验证权限）", () => {
+    const ctx = buildTextGateContext(db, "huanghou", "private");
+    ctx.privateAllowedTerms = ["凤君"]; // simulates orchestrator setting from liftedForbiddenTerms
+    expect(scanDialogueText("凤君今日心情不错。", ctx).every((f) => f.matched !== "凤君")).toBe(true);
   });
 
-  // ── 未授权侍君 ───────────────────────────────────────────────────────
-  it("未授权侍君(zhaoyi) × private → 凤君被拒", () => {
-    expect(scanDialogueText("凤君今日心情不错。", zhaoyiPrivate).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
-  });
-  it("未授权侍君(zhaoyi) × intimate → 凤君被拒", () => {
-    expect(scanDialogueText("凤君今日心情不错。", zhaoyiIntimate).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  it("gate 拒绝凤君 当 privateAllowedTerms 为空（无权限或 court register）", () => {
+    const ctx = buildTextGateContext(db, "huanghou", "private");
+    // privateAllowedTerms stays [] — resolver decided not to lift 凤君
+    expect(scanDialogueText("凤君今日心情不错。", ctx).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
   });
 
-  // ── 获授权亲密侍君 ───────────────────────────────────────────────────
-  it("授权侍君 × private → 凤君通过", () => {
-    expect(scanDialogueText("凤君今日心情不错。", authConsortPrivate).every((f) => f.matched !== "凤君")).toBe(true);
-  });
-  it("授权侍君 × court → 凤君仍被拒", () => {
-    expect(scanDialogueText("凤君今日心情不错。", authConsortCourt).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  it("gate 在 court register 下拒绝凤君（即使 privateAllowedTerms 为空）", () => {
+    const ctx = buildTextGateContext(db, "huanghou", "court");
+    expect(scanDialogueText("凤君今日心情不错。", ctx).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
   });
 
-  // ── 获授权亲信大臣 ───────────────────────────────────────────────────
-  it("授权大臣 × private → 凤君通过", () => {
-    expect(scanDialogueText("凤君今日心情不错。", authOfficialPrivate).every((f) => f.matched !== "凤君")).toBe(true);
-  });
-  it("授权大臣 × court → 凤君仍被拒", () => {
-    expect(scanDialogueText("凤君今日心情不错。", authOfficialCourt).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
+  // ── player choice gate must not inherit NPC's privateAllowedTerms ─────
+  it("player choice gate 不继承 NPC 的 privateAllowedTerms — 凤君仍被拒", () => {
+    // Simulate orchestrator: NPC gets lifted terms, player choice gate gets none.
+    const choiceCtx = buildTextGateContext(db, "huanghou", "private");
+    // choiceCtx.privateAllowedTerms stays [] intentionally
+    expect(scanDialogueText("凤君今日心情不错。", choiceCtx, { skipIdentityGates: true })
+      .some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤君")).toBe(true);
   });
 
   // ── 凤后不受豁免 ────────────────────────────────────────────────────
-  it("皇后 × private → 凤后仍被拒（无凤后豁免）", () => {
-    expect(scanDialogueText("凤后驾到。", huanghouPrivate).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤后")).toBe(true);
+  it("凤后 不能通过任何豁免", () => {
+    const ctx = buildTextGateContext(db, "huanghou", "private");
+    ctx.privateAllowedTerms = ["凤君"]; // only 凤君 is lifted, not 凤后
+    expect(scanDialogueText("凤后驾到。", ctx).some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤后")).toBe(true);
   });
 });
 

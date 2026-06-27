@@ -40,7 +40,7 @@ export function BedchamberScene({
     let alive = true;
     const text = lines[index];
     if (text === undefined) return;
-    const req = assembleDialogueRequest(db, state, speakerId, state.playerLocation, { scripted: { text } });
+    const req = assembleDialogueRequest(db, state, speakerId, state.playerLocation, { scripted: { text }, register: "intimate" });
     if (!req.ok) {
       finish();
       return;

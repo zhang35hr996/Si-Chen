@@ -14,7 +14,7 @@ export interface PairwiseAddress {
   selfRef: string;
   /** The correct form of address for the target in this conversation. */
   targetAddress: string;
-  /** Acceptable alternate forms (e.g. 皇上 alongside 陛下). */
+  /** Acceptable alternate forms (e.g. 皇上 alongside 陛下, 凤君 for authorized private). */
   allowedAlternates: string[];
   /**
    * Terms that would normally be valid for this speaker but are forbidden in
@@ -22,17 +22,42 @@ export interface PairwiseAddress {
    * Example: 本宫 is forbidden when the target outranks the speaker.
    */
   forbiddenInContext: string[];
+  /**
+   * Forbidden terms lifted for this exact (speaker × target × register) triple.
+   * Computed when speaker has permission, target is the emperor, and register is
+   * private/intimate. Set on the NPC gate ctx; NOT on the player choice gate ctx
+   * so NPC permissions never bleed into player choice text.
+   */
+  liftedForbiddenTerms: string[];
 }
 
 const EMPEROR_ADDRESS = "陛下";
-const EMPEROR_ALTERNATES = ["皇上", "圣上"];
+// 皇上 is acceptable only in inner quarters (private/intimate); not in court or outer areas.
+// 圣上 / 今上 / 圣驾 / 万岁 are solemn third-person or ceremonial forms — never direct-address alternates.
+const INNER_QUARTERS_ALTERNATES = ["皇上"];
 const BEN_GONG = "本宫";
+const FENGJUN = "凤君";
+const HUANGHOU_RANK_ID = "huanghou";
+/** Registers that allow inner-quarters address forms (皇上, 凤君) when addressing the emperor. */
+const PRIVATE_REGISTERS = new Set(["private", "intimate"]);
+
+/** Options for resolveAddress — used by orchestrator to encode scene + character permissions. */
+export interface ResolveAddressOptions {
+  /** Scene register. If private/intimate and speaker is authorized, lifts 凤君 when target=player. */
+  register?: string;
+  /**
+   * Typed permission keys from character's dialoguePolicy.addressPermissions.
+   * "fengjun" — this character may address the emperor as 凤君 in private/intimate.
+   */
+  addressPermissions?: string[];
+}
 
 export function resolveAddress(
   db: ContentDB,
   state: GameState,
   speakerId: string,
   targetId: string,
+  options: ResolveAddressOptions = {},
 ): PairwiseAddress {
   const char = db.characters[speakerId];
   const standing = state.standing[speakerId] ?? char?.initialStanding;
@@ -67,6 +92,10 @@ export function resolveAddress(
   const forbiddenInContext: string[] = [];
 
   if (isTargetPlayer) {
+    // 圣上/今上/圣驾 are solemn third-person references — never valid as direct address to emperor.
+    // Blocked via contextForbiddenRefs so non-emperor-target dialogue may still use them (third-person).
+    forbiddenInContext.push("圣上");
+
     // 太后（elder）calls the emperor 皇帝 + kinship terms, not 陛下.
     // 皇嗣→皇帝（母皇）and register-aware non-harem addressing are follow-up scope.
     if (char?.kind === "elder") {
@@ -74,7 +103,12 @@ export function resolveAddress(
       allowedAlternates = ["皇儿", "吾儿"];
     } else {
       targetAddress = EMPEROR_ADDRESS;
-      allowedAlternates = EMPEROR_ALTERNATES;
+      // court register: strict protocol, 陛下 only.
+      // public (default, fail-closed): 陛下 only — outer areas or unknown context.
+      // private/intimate (inner quarters): 皇上 is acceptable.
+      allowedAlternates = (options.register !== undefined && PRIVATE_REGISTERS.has(options.register))
+        ? [...INNER_QUARTERS_ALTERNATES]
+        : [];
     }
   } else if (targetIsHarem) {
     // Harem consort target: look up canonical address form from rankAddressRules.
@@ -93,5 +127,25 @@ export function resolveAddress(
     forbiddenInContext.push(BEN_GONG);
   }
 
-  return { selfRef, targetAddress, allowedAlternates, forbiddenInContext };
+  // 凤君 — lifted only when ALL conditions hold simultaneously:
+  //   1. target is the emperor (player)
+  //   2. register is private or intimate
+  //   3. speaker is 皇后 (by rank) OR has the typed "fengjun" address permission
+  //   4. speaker is not an elder (elders use kinship address, not 凤君)
+  const liftedForbiddenTerms: string[] = [];
+  if (
+    isTargetPlayer &&
+    char?.kind !== "elder" &&
+    options.register !== undefined &&
+    PRIVATE_REGISTERS.has(options.register)
+  ) {
+    const isHuanghou = standing?.rank === HUANGHOU_RANK_ID;
+    const hasFengjunPermission = (options.addressPermissions ?? []).includes("fengjun");
+    if (isHuanghou || hasFengjunPermission) {
+      allowedAlternates.push(FENGJUN);
+      liftedForbiddenTerms.push(FENGJUN);
+    }
+  }
+
+  return { selfRef, targetAddress, allowedAlternates, forbiddenInContext, liftedForbiddenTerms };
 }

@@ -46,7 +46,6 @@ export function makeDialogueRequest(): DialogueRequest {
       addressRules: [],
     },
     register: "private",
-    addressPermissions: [],
     transcript: [],
     topicTags: [],
     promptContext: {

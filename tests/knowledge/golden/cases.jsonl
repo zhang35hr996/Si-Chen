@@ -20,7 +20,7 @@
 {"id":"female-strength","query":"女性和男性哪个体能更强","limit":5,"expectedAnyOf":["world.biology#female-pregnancy-strength"],"category":"paraphrase","note":"女性怀胎不被视为虚弱，女官怀胎照常视事"}
 {"id":"huang-zi-vs-huang-lang","query":"皇子和皇郎有什么区别","limit":5,"expectedAnyOf":["titles.imperial-kinship#no-confusion","titles.imperial-kinship#imperial-daughters","titles.imperial-kinship#imperial-sons"],"forbiddenIds":[],"category":"confusable","note":"核心混淆：皇子=女，皇郎=男"}
 {"id":"guijun-vs-guizhu","query":"贵君和贵主是同一个称谓吗","limit":5,"expectedAnyOf":["titles.harem-ranks#rank-order","titles.harem-ranks#deprecated-ranks","titles.imperial-kinship#princess-titles"],"forbiddenIds":[],"category":"confusable","note":"贵君=已废弃的旧位称（非现行后宫位分），贵主=皇郎正式下赘并获册封后的封号（不因成年自动获封）"}
-{"id":"guifu-vs-huangzifu","query":"贵驸和皇子驸有什么不同","limit":5,"expectedAnyOf":["titles.harem-ranks#rank-order","titles.household-and-east-palace#imperial-daughter-household"],"category":"confusable","note":"贵驸=后宫第五位分，皇子驸=皇子正室的口语称谓（非侧室）"}
+{"id":"guifu-vs-huangzifu","query":"贵驸和皇子驸有什么不同","limit":5,"expectedAnyOf":["titles.harem-ranks#rank-order","titles.household-and-east-palace#imperial-daughter-household"],"category":"confusable","note":"贵驸=后宫从一品位分（皇贵驸之下），皇子驸=皇子正室的口语称谓（皇子成年封凤主后改称凤主驸）"}
 {"id":"zhu-vs-na","query":"收作正室称赘收作侧室称纳","limit":5,"expectedAnyOf":["titles.marriage-verbs#principal-marriage","titles.marriage-verbs#taking-concubine"],"category":"confusable","note":"赘=正式婚配（正室及正式侧室），纳=近侍小配/通房等非正式侧室"}
 {"id":"rugong-vs-zhu","query":"入宫和赘的区别","limit":5,"expectedAnyOf":["titles.marriage-verbs#emperor-selects-male","titles.marriage-verbs#principal-marriage"],"category":"confusable","note":"入宫=进后宫为侍君，赘=正式婚配正室或正式侧室"}
 {"id":"xiazhu-vs-shanghuan","query":"下赘和尚皇郎的区别","limit":5,"expectedAnyOf":["titles.marriage-verbs#imperial-son-marriage"],"category":"confusable","note":"下赘=皇郎嫁入，尚皇郎=女子迎娶皇郎"}
@@ -44,3 +44,5 @@
 {"id":"pregnancy-duty-static","query":"怀孕期间是否照常视事","limit":5,"expectedRetrievalSkipped":false,"category":"confusable","note":"含'怀孕'但问的是规则，不是询问具体人物状态，intent gate 不应拦截"}
 {"id":"summon-etiquette-static","query":"宣召臣下应遵循什么礼仪","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["etiquette.address-and-audience#audience-protocol"],"category":"confusable","note":"含'宣召'但问的是固定礼仪，intent gate 不应拦截"}
 {"id":"fengzhu-vs-gongzhu","query":"皇子成年后应称凤主还是公主","limit":5,"expectedAnyOf":["titles.imperial-heirs#fengzhu","titles.imperial-kinship#princess-titles"],"forbiddenIds":[],"category":"direct","note":"公主是废弃旧称，本朝女性皇嗣成年分封后称凤主"}
+{"id":"fengzhu-vs-fengjun","query":"凤主和凤君有什么区别","limit":5,"expectedAnyOf":["titles.imperial-heirs#fengzhu-vs-fengjun","titles.imperial-heirs#fengzhu"],"forbiddenIds":[],"category":"confusable","note":"凤主=皇室女性封爵（皇嗣成年分封），凤君=皇帝的私下特殊尊称；二者完全不同，不得混用"}
+{"id":"imperial-son-auto-guizhu","query":"皇郎成年后会自动成为贵主吗","limit":5,"expectedAnyOf":["titles.imperial-heirs#guizhu"],"forbiddenIds":[],"category":"direct","note":"皇郎不因成年自动获封贵主，必须完成正式下赘婚配并经册封，方称贵主"}

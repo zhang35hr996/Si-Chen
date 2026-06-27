@@ -180,6 +180,11 @@ export function assembleDialogueRequest(
     ...(behavioralState !== undefined ? { behavioralState } : {}),
   };
   const { scripted, sceneDirective, transcript } = options;
+  const resolvedAddress = resolveAddress(db, state, speakerId, targetId, {
+    register: options.register ?? "public",
+    addressPermissions: character.dialoguePolicy?.addressPermissions ?? [],
+  });
+  const liftedSet = new Set(resolvedAddress.liftedForbiddenTerms);
   return ok({
     speakerId,
     targetId,
@@ -194,12 +199,13 @@ export function assembleDialogueRequest(
     },
     etiquette: {
       allowedTerms: db.lexicon.approvedTerms,
-      forbiddenTerms: db.lexicon.forbiddenTerms,
+      forbiddenTerms: liftedSet.size > 0
+        ? db.lexicon.forbiddenTerms.filter((t) => !liftedSet.has(t))
+        : db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
-    resolvedAddress: resolveAddress(db, state, speakerId, targetId),
+    resolvedAddress,
     register: options.register ?? "public",
-    addressPermissions: character.dialoguePolicy?.addressPermissions ?? [],
     sceneDirective,
     transcript: transcript ?? [],
     topicTags,
@@ -227,17 +233,19 @@ function finalizeLine(
   }
 
   // ── text gates (plan §8) ────────────────────────────────────────────
-  const gateCtx = buildTextGateContext(
-    db,
-    request.speakerContext.standing.rank,
-    request.addressPermissions,
-    request.register,
-  );
-  gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
+  const speakerRankId = request.speakerContext.standing.rank;
+  // NPC gate: lifted terms from resolver (speaker × target × register).
+  const npcGateCtx = buildTextGateContext(db, speakerRankId, request.register);
+  npcGateCtx.privateAllowedTerms = request.resolvedAddress?.liftedForbiddenTerms ?? [];
+  npcGateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
+  // Choice gate: no privateAllowedTerms — NPC address permissions must NOT
+  // bleed into player-authored choice text.
+  const choiceGateCtx = buildTextGateContext(db, speakerRankId, request.register);
+  choiceGateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
-    ...scanDialogueText(response.text, gateCtx),
+    ...scanDialogueText(response.text, npcGateCtx),
     // Choices are the player's words, not the speaker's — content gates only.
-    ...response.choices.flatMap((c) => scanDialogueText(c.text, gateCtx, { skipIdentityGates: true })),
+    ...response.choices.flatMap((c) => scanDialogueText(c.text, choiceGateCtx, { skipIdentityGates: true })),
   ];
   for (const finding of findings) {
     logger?.logGameError(
@@ -420,16 +428,15 @@ export function validateDialogueProviderResult(
   }
 
   // ── 3. Text gate + expression normalize + line build ─────────────
-  const gateCtx = buildTextGateContext(
-    db,
-    request.speakerContext.standing.rank,
-    request.addressPermissions,
-    request.register,
-  );
-  gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
+  const speakerRankIdPolicy = request.speakerContext.standing.rank;
+  const npcGateCtxPolicy = buildTextGateContext(db, speakerRankIdPolicy, request.register);
+  npcGateCtxPolicy.privateAllowedTerms = request.resolvedAddress?.liftedForbiddenTerms ?? [];
+  npcGateCtxPolicy.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
+  const choiceGateCtxPolicy = buildTextGateContext(db, speakerRankIdPolicy, request.register);
+  choiceGateCtxPolicy.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
-    ...scanDialogueText(response.text, gateCtx),
-    ...response.choices.flatMap((c) => scanDialogueText(c.text, gateCtx, { skipIdentityGates: true })),
+    ...scanDialogueText(response.text, npcGateCtxPolicy),
+    ...response.choices.flatMap((c) => scanDialogueText(c.text, choiceGateCtxPolicy, { skipIdentityGates: true })),
   ];
   diagnostics.textFindings = findings;
   for (const finding of findings) {
