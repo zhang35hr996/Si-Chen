@@ -231,6 +231,7 @@ export function eventToAuthorizedClaims(
     case "secret_discovered":
     case "harem_administration_changed":
     case "heir_custody_changed":
+    case "intrigue_discovered":
       return [];
 
     default: {
