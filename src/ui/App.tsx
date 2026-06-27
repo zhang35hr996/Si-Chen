@@ -100,7 +100,6 @@ import { ShangshufangScreen } from "./screens/ShangshufangScreen";
 import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
-import { planHeirCustodyTransfer } from "../store/heirCustody";
 import { CharacterReactionScreen } from "./screens/CharacterReactionScreen";
 import { buildBirth, collectNewbornIds, dueGestation } from "../store/gestation";
 import { BirthScreen } from "./screens/BirthScreen";
@@ -1152,20 +1151,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   };
 
   const transferHeirCustody = (heirId: string, toCustodianId: string) => {
-    // Build reactions from current state before applying effects
-    const before = store.getState();
-    const heir = before.resources.bloodline.heirs.find((h) => h.id === heirId);
-    if (!heir) return;
-    const planResult = planHeirCustodyTransfer(db, before, { heirId, toCustodianId, source: "fengxiandian" });
-    if (!planResult.ok) return;
-    const reactions = planResult.value.reactions;
-    // 行动先于时间：抚养权落库后再推进时间（跨月 tick 不会先处置再赋权）。
     const settled = store.transferHeirCustodyAndAdvance(db, { heirId, toCustodianId, source: "fengxiandian" });
     if (!settled.ok) return;
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
     pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
-    const [first, ...rest] = reactions;
+    const [first, ...rest] = settled.value.plan.reactions;
     setReactionQueue(rest);
     if (first) setReaction(first);
   };
