@@ -15,6 +15,7 @@ import type { GameState, KinshipRelation, PendingDaxuan } from "../engine/state/
 import { getActiveSeatedOfficials } from "../engine/officials/selectors";
 import { validateOfficialWorld } from "../engine/officials/validation";
 import { isValidParentChildAge } from "../engine/officials/constraints";
+import { PERSONALITY_DEFAULTS, HOUSEHOLD_DEFAULTS } from "../engine/characters/consortAttrs";
 import { stateError, type GameError } from "../engine/infra/errors";
 import { err, ok, type Result } from "../engine/infra/result";
 import type { DecreeReaction } from "./empressDecree";
@@ -178,6 +179,16 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
         affection: 30 + (gestationRoll(`${seed}:aff`) % 31),   // 30–60
         fear: 20 + (gestationRoll(`${seed}:fear`) % 41),       // 20–60
         ambition: 20 + (gestationRoll(`${seed}:amb`) % 61),    // 20–80
+        personality: {
+          intelligence:       30 + (gestationRoll(`${seed}:intel`) % 61),   // 30–90
+          scheming:           10 + (gestationRoll(`${seed}:scheme`) % 61),  // 10–70
+          sociability:        20 + (gestationRoll(`${seed}:social`) % 61),  // 20–80
+          compassion:         20 + (gestationRoll(`${seed}:cps`) % 61),     // 20–80
+          courage:            20 + (gestationRoll(`${seed}:courage`) % 61), // 20–80
+          jealousy:           20 + (gestationRoll(`${seed}:jealous`) % 61), // 20–80
+          emotionalStability: 20 + (gestationRoll(`${seed}:estab`) % 61),  // 20–80
+          pride:              20 + (gestationRoll(`${seed}:pride`) % 61),   // 20–80
+        },
       },
       profile: {
         name: `${surname}${givenName}`,
@@ -480,6 +491,8 @@ export function addGeneratedConsort(
         fear:      content.hidden?.fear      ?? 30,
         ambition:  content.hidden?.ambition  ?? 35,
         loyalty:   content.hidden?.loyalty   ?? 50,
+        personality: content.hidden?.personality ?? PERSONALITY_DEFAULTS,
+        household: HOUSEHOLD_DEFAULTS,
         residence: "chuxiu_gong",
         chamber: "main",
         availableFromMonth: monthOrdinal({ year: state.calendar.year, month: 5 }),

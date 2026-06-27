@@ -9,7 +9,7 @@
  * All shipped content/** files are strict JSON (no comments, no trailing commas).
  */
 import { z } from "zod";
-import type { CharacterStanding, OfficialDepartment } from "../state/types";
+import type { CharacterStanding, ConsortPersonality, ConsortHousehold, OfficialDepartment } from "../state/types";
 import { dialogueClaimSchema } from "../dialogue/claims";
 
 // ── shared primitives ─────────────────────────────────────────────────
@@ -62,6 +62,24 @@ export const deathRecordSchema = z.strictObject({
   posthumousEpithet: z.string().min(1).max(2).optional(),
 });
 
+// ── social simulation sub-schemas ────────────────────────────────────
+export const consortPersonalitySchema = z.strictObject({
+  intelligence: percent,
+  scheming: percent,
+  sociability: percent,
+  compassion: percent,
+  courage: percent,
+  jealousy: percent,
+  emotionalStability: percent,
+  pride: percent,
+}) satisfies z.ZodType<ConsortPersonality>;
+
+export const consortHouseholdSchema = z.strictObject({
+  servantOpinion: percent,
+  livingStandard: percent,
+  privateWealth: percent,
+}) satisfies z.ZodType<ConsortHousehold>;
+
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
@@ -84,6 +102,8 @@ export const characterStandingSchema = z.strictObject({
   enteredAtYear: z.number().int().min(1).optional(),
   deathRecord: deathRecordSchema.optional(),
   birthFamilyId: idSchema.optional(),
+  personality: consortPersonalitySchema.optional(),
+  household: consortHouseholdSchema.optional(),
 }) satisfies z.ZodType<CharacterStanding>;
 
 // ── memory drafts ─────────────────────────────────────────────────────
@@ -431,6 +451,7 @@ export const consortHiddenSchema = z.strictObject({
   fear: percent, // 恐惧
   ambition: percent, // 野心
   loyalty: percent.optional(), // 忠诚（可选 authored 初值）
+  personality: consortPersonalitySchema.optional(), // 人格特质（可选 authored 初值）
 });
 
 export type ConsortHidden = z.infer<typeof consortHiddenSchema>;

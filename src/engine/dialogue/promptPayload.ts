@@ -9,6 +9,7 @@ import type { CharacterContent, CharacterRank } from "../content/schemas";
 import type { ContentDB } from "../content/loader";
 import type { MemoryEntry, MemoryKind, MemoryPerspective, MemoryEmotion, CourtEventType, CourtEvent } from "../state/types";
 import type { GameState } from "../state/types";
+import type { ConsortRuntimeAttrs } from "../characters/consortAttrs";
 import type { ReactionPlan } from "./reactionTypes";
 import type { DialogueAudienceContext } from "./audience";
 import type { DialogueClaim } from "./claims";
@@ -82,8 +83,8 @@ export interface DialoguePromptContext {
   /** The event id that triggered the speaker's reactionPlan, if any (populated in T6+). */
   reactionSourceEventId?: string;
   choiceCandidates: DialogueChoiceCandidate[];    // [] until LLM-2
-  /** Resolved hidden runtime attributes.  Only present for consorts. */
-  behavioralState?: { affection: number; fear: number; ambition: number; loyalty: number };
+  /** Resolved runtime attributes.  Only present for consorts. */
+  behavioralState?: ConsortRuntimeAttrs;
   /** Advisory world-knowledge chunks. Present only when a retriever is wired (PR3+). */
   knowledgeContext?: PromptKnowledgeChunk[];
 }
@@ -118,16 +119,11 @@ export interface DialogueSpeakerPayload {
   coreFacts: string[];
   voice: CharacterContent["voice"];
   /**
-   * Runtime hidden attributes.  Influences tone and emotional register only.
+   * Resolved runtime attributes.  Influences tone and emotional register only.
    * The LLM must NOT state these as numeric facts, must NOT modify them, and
    * must NOT treat them as public knowledge the character would announce.
    */
-  behavioralState?: {
-    affection: number;
-    fear: number;
-    ambition: number;
-    loyalty: number;
-  };
+  behavioralState?: ConsortRuntimeAttrs;
 }
 
 // ── DialoguePromptPayload ─────────────────────────────────────────────────────

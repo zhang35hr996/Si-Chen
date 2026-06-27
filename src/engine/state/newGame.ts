@@ -8,7 +8,8 @@ import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import { generateOfficialWorld } from "../officials/worldgen";
 import { assertGeneratedOfficialWorld } from "../officials/validation";
-import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding } from "./types";
+import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding, ConsortPersonality } from "./types";
+import { PERSONALITY_DEFAULTS, HOUSEHOLD_DEFAULTS } from "../characters/consortAttrs";
 import { createEmptyJusticeState } from "../justice/types";
 
 /** 新游戏私库种子（id 须存在于 content/items.json）。 */
@@ -32,7 +33,7 @@ export function memoryEntryId(charId: string, seq: number): string {
 export function consortStandingExtras(
   character: {
     kind: string;
-    hidden?: { affection?: number; fear?: number; ambition?: number; loyalty?: number };
+    hidden?: { affection?: number; fear?: number; ambition?: number; loyalty?: number; personality?: ConsortPersonality };
     initialStanding?: Partial<CharacterStanding>;
     attributes?: { health: number };
   },
@@ -46,6 +47,8 @@ export function consortStandingExtras(
       ambition:  character.hidden.ambition  ?? 35,
       loyalty:   character.hidden.loyalty   ?? 50,
     } : {}),
+    personality: character.hidden?.personality ?? PERSONALITY_DEFAULTS,
+    household: HOUSEHOLD_DEFAULTS,
     palaceEnteredAt: character.initialStanding?.palaceEnteredAt ?? startTime,
     health: (character as { attributes?: { health: number } }).attributes?.health ?? 100,
     healthStatus: "healthy",
