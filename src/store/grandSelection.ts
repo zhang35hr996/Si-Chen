@@ -15,11 +15,84 @@ import type { GameState, KinshipRelation, PendingDaxuan } from "../engine/state/
 import { getActiveSeatedOfficials } from "../engine/officials/selectors";
 import { validateOfficialWorld } from "../engine/officials/validation";
 import { isValidParentChildAge } from "../engine/officials/constraints";
-import { PERSONALITY_DEFAULTS, HOUSEHOLD_DEFAULTS } from "../engine/characters/consortAttrs";
+import { materializePersonality, createDefaultHousehold } from "../engine/characters/consortAttrs";
+import type { ConsortPersonality } from "../engine/state/types";
 import { stateError, type GameError } from "../engine/infra/errors";
 import { err, ok, type Result } from "../engine/infra/result";
 import type { DecreeReaction } from "./empressDecree";
 import type { ChengFengPrompt } from "./prompt";
+
+// ── Personality generation helpers ───────────────────────────────────────────
+
+type PersonalityKey = keyof ConsortPersonality;
+
+/**
+ * Base ranges for each personality dimension before trait biases are applied.
+ * Using gestationRollRaw (full 32-bit) to avoid the % 100 modulo-bias present
+ * in gestationRoll.
+ */
+const BASE_FLOORS: Record<PersonalityKey, number> = {
+  intelligence: 30, scheming: 10, sociability: 20, compassion: 20,
+  courage: 20, jealousy: 20, emotionalStability: 20, pride: 20,
+};
+const BASE_CEILINGS: Record<PersonalityKey, number> = {
+  intelligence: 90, scheming: 70, sociability: 80, compassion: 80,
+  courage: 80, jealousy: 80, emotionalStability: 80, pride: 80,
+};
+
+/** Per-trait minimum floor adjustments — ensure consistency between labels and numbers. */
+const TRAIT_FLOORS: Partial<Record<CanonicalReactionTrait, Partial<Record<PersonalityKey, number>>>> = {
+  calculating:      { scheming: 50, intelligence: 55 },
+  compassionate:    { compassion: 65 },
+  proud:            { pride: 60, emotionalStability: 50 },
+  status_conscious: { pride: 55, jealousy: 50 },
+  discreet:         { emotionalStability: 55 },
+  blunt:            { courage: 50 },
+  impulsive:        { courage: 45 },
+};
+
+/** Per-trait maximum ceiling adjustments — ensure consistency between labels and numbers. */
+const TRAIT_CEILINGS: Partial<Record<CanonicalReactionTrait, Partial<Record<PersonalityKey, number>>>> = {
+  cold:      { compassion: 35, sociability: 35 },
+  impulsive: { emotionalStability: 45 },
+  blunt:     { scheming: 40 },
+};
+
+/**
+ * Generate a ConsortPersonality deterministically from a seed string prefix,
+ * biased by the character's canonical reaction traits for narrative consistency.
+ */
+function generatePersonality(seedPrefix: string, reactionTraits: CanonicalReactionTrait[]): ConsortPersonality {
+  const floors = { ...BASE_FLOORS };
+  const ceilings = { ...BASE_CEILINGS };
+
+  for (const trait of reactionTraits) {
+    for (const [k, v] of Object.entries(TRAIT_FLOORS[trait] ?? {})) {
+      const key = k as PersonalityKey;
+      floors[key] = Math.max(floors[key], v);
+    }
+    for (const [k, v] of Object.entries(TRAIT_CEILINGS[trait] ?? {})) {
+      const key = k as PersonalityKey;
+      ceilings[key] = Math.min(ceilings[key], v);
+    }
+  }
+
+  const roll = (key: PersonalityKey, sub: string): number => {
+    const lo = floors[key], hi = Math.max(lo, ceilings[key]);
+    return lo + (gestationRollRaw(`${seedPrefix}:${sub}`) % (hi - lo + 1));
+  };
+
+  return {
+    intelligence:       roll("intelligence", "intel"),
+    scheming:           roll("scheming", "scheme"),
+    sociability:        roll("sociability", "social"),
+    compassion:         roll("compassion", "cps"),
+    courage:            roll("courage", "courage"),
+    jealousy:           roll("jealousy", "jealous"),
+    emotionalStability: roll("emotionalStability", "estab"),
+    pride:              roll("pride", "pride"),
+  };
+}
 
 /** 大选年：元年、四年、七年…（每三年）。 */
 export function isDaxuanYear(year: number): boolean {
@@ -176,19 +249,12 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
         likes,
       },
       hidden: {
-        affection: 30 + (gestationRoll(`${seed}:aff`) % 31),   // 30–60
-        fear: 20 + (gestationRoll(`${seed}:fear`) % 41),       // 20–60
-        ambition: 20 + (gestationRoll(`${seed}:amb`) % 61),    // 20–80
-        personality: {
-          intelligence:       30 + (gestationRoll(`${seed}:intel`) % 61),   // 30–90
-          scheming:           10 + (gestationRoll(`${seed}:scheme`) % 61),  // 10–70
-          sociability:        20 + (gestationRoll(`${seed}:social`) % 61),  // 20–80
-          compassion:         20 + (gestationRoll(`${seed}:cps`) % 61),     // 20–80
-          courage:            20 + (gestationRoll(`${seed}:courage`) % 61), // 20–80
-          jealousy:           20 + (gestationRoll(`${seed}:jealous`) % 61), // 20–80
-          emotionalStability: 20 + (gestationRoll(`${seed}:estab`) % 61),  // 20–80
-          pride:              20 + (gestationRoll(`${seed}:pride`) % 61),   // 20–80
-        },
+        // gestationRollRaw avoids the % 100 modulo-bias present in gestationRoll
+        affection: 30 + (gestationRollRaw(`${seed}:aff`)  % 31), // 30–60
+        fear:      20 + (gestationRollRaw(`${seed}:fear`) % 41), // 20–60
+        ambition:  20 + (gestationRollRaw(`${seed}:amb`)  % 61), // 20–80
+        // personality biased by reactionTraits for narrative consistency
+        personality: generatePersonality(seed, reactionTraits),
       },
       profile: {
         name: `${surname}${givenName}`,
@@ -491,8 +557,8 @@ export function addGeneratedConsort(
         fear:      content.hidden?.fear      ?? 30,
         ambition:  content.hidden?.ambition  ?? 35,
         loyalty:   content.hidden?.loyalty   ?? 50,
-        personality: content.hidden?.personality ?? PERSONALITY_DEFAULTS,
-        household: HOUSEHOLD_DEFAULTS,
+        personality: materializePersonality(content.hidden?.personality),
+        household: createDefaultHousehold(),
         residence: "chuxiu_gong",
         chamber: "main",
         availableFromMonth: monthOrdinal({ year: state.calendar.year, month: 5 }),

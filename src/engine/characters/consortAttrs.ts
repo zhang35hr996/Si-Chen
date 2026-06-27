@@ -8,8 +8,9 @@
  *   ?? character.hidden?.field  (authored initial value in content JSON)
  *   ?? DEFAULT                  (safe neutral baseline)
  *
- * personality uses the same three-tier order (standing > authored > default).
- * household is runtime-only: standing > DEFAULT (no authored value exists).
+ * personality uses the same three-tier order; h?.personality is a partial seed
+ * merged with PERSONALITY_DEFAULTS via materializePersonality().
+ * household is runtime-only: standing > DEFAULT (no authored value).
  *
  * All callers (funnel, consequence planner, dialogue orchestrator, DebugPanel)
  * MUST go through this function; never read standing.fear directly.
@@ -26,7 +27,7 @@ export interface ConsortRuntimeAttrs {
   household: ConsortHousehold;
 }
 
-const DEFAULTS = {
+const ATTR_DEFAULTS = {
   affection: 50,
   fear: 30,
   ambition: 35,
@@ -47,8 +48,25 @@ export const PERSONALITY_DEFAULTS: ConsortPersonality = {
 export const HOUSEHOLD_DEFAULTS: ConsortHousehold = {
   servantOpinion: 50,
   livingStandard: 40,
-  privateWealth: 20,
+  privateWealthLevel: 20,
 };
+
+/**
+ * Materialise a complete ConsortPersonality from an optional partial seed.
+ * Always returns a fresh object — never shares a reference with PERSONALITY_DEFAULTS
+ * or any authored content object.
+ */
+export function materializePersonality(seed?: Partial<ConsortPersonality>): ConsortPersonality {
+  return { ...PERSONALITY_DEFAULTS, ...seed };
+}
+
+/**
+ * Create a fresh ConsortHousehold initialised to defaults.
+ * Always returns a new object so each consort has an independent standing entry.
+ */
+export function createDefaultHousehold(): ConsortHousehold {
+  return { ...HOUSEHOLD_DEFAULTS };
+}
 
 export function resolveConsortRuntimeAttrs(
   db: ContentDB,
@@ -60,11 +78,13 @@ export function resolveConsortRuntimeAttrs(
   const h = char?.kind === "consort" ? char.hidden : undefined;
 
   return {
-    affection: st?.affection  ?? h?.affection  ?? DEFAULTS.affection,
-    fear:      st?.fear       ?? h?.fear       ?? DEFAULTS.fear,
-    ambition:  st?.ambition   ?? h?.ambition   ?? DEFAULTS.ambition,
-    loyalty:   st?.loyalty    ?? h?.loyalty    ?? DEFAULTS.loyalty,
-    personality: st?.personality ?? h?.personality ?? PERSONALITY_DEFAULTS,
-    household:   st?.household   ?? HOUSEHOLD_DEFAULTS,
+    affection: st?.affection  ?? h?.affection  ?? ATTR_DEFAULTS.affection,
+    fear:      st?.fear       ?? h?.fear       ?? ATTR_DEFAULTS.fear,
+    ambition:  st?.ambition   ?? h?.ambition   ?? ATTR_DEFAULTS.ambition,
+    loyalty:   st?.loyalty    ?? h?.loyalty    ?? ATTR_DEFAULTS.loyalty,
+    // personality: standing (materialised) > authored seed merged with defaults > defaults
+    personality: st?.personality ?? materializePersonality(h?.personality),
+    // household: standing (materialised) > defaults; no authored value
+    household: st?.household ?? createDefaultHousehold(),
   };
 }

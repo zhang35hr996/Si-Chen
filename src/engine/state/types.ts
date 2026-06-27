@@ -658,9 +658,9 @@ export interface ConsortPersonality {
 
 /** 侍君宫室状况（藏匿；运行时可调）。范围 0–100。 */
 export interface ConsortHousehold {
-  servantOpinion: number; // 宫人集体观感
-  livingStandard: number; // 实际生活水平（非位分官方标准）
-  privateWealth: number;  // 个人私财存量
+  servantOpinion: number;    // 宫人集体观感
+  livingStandard: number;    // 实际生活水平（非位分官方标准）
+  privateWealthLevel: number; // 私家经济能力等级（非精确货币；代表嫁妆/家援/贵重品/场外资源综合）
 }
 
 export interface CharacterStanding {

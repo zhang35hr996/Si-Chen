@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 25;
+export const SAVE_FORMAT_VERSION = 26;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -399,6 +399,32 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
 
     const gs = state as unknown as GameState;
     return { ...env, formatVersion: 25, state: gs, checksum: checksumOf(gs) };
+  },
+  // v25 → v26: 社交模拟层（Phase 4B-social）。
+  // personality / household 新增至 CharacterStanding。侍君 standing 以
+  // affection / fear / ambition 字段识别（官员无此字段），补写 defaults。
+  // defaults 内联以保证迁移值不随以后常量修改而变动。
+  25: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    const standing = state.standing as unknown as Record<string, Record<string, unknown>> | undefined;
+    if (standing) {
+      for (const entry of Object.values(standing)) {
+        if (!entry || typeof entry !== "object") continue;
+        // Consort standing carries affection / fear / ambition; official standing does not.
+        if (!("affection" in entry) && !("fear" in entry) && !("ambition" in entry)) continue;
+        if (!entry.personality) {
+          entry.personality = {
+            intelligence: 50, scheming: 25, sociability: 50, compassion: 50,
+            courage: 40, jealousy: 35, emotionalStability: 55, pride: 45,
+          };
+        }
+        if (!entry.household) {
+          entry.household = { servantOpinion: 50, livingStandard: 40, privateWealthLevel: 20 };
+        }
+      }
+    }
+    return { ...env, formatVersion: 26, state: state as GameState, checksum: checksumOf(state as GameState) };
   },
 };
 

@@ -74,10 +74,18 @@ export const consortPersonalitySchema = z.strictObject({
   pride: percent,
 }) satisfies z.ZodType<ConsortPersonality>;
 
+/**
+ * Partial personality seed for authored content. Authors may override only the
+ * dimensions relevant to a character; omitted dimensions are merged with
+ * PERSONALITY_DEFAULTS at materialisation time (new-game / grand selection).
+ */
+export const consortPersonalitySeedSchema = consortPersonalitySchema.partial();
+export type ConsortPersonalitySeed = z.infer<typeof consortPersonalitySeedSchema>;
+
 export const consortHouseholdSchema = z.strictObject({
   servantOpinion: percent,
   livingStandard: percent,
-  privateWealth: percent,
+  privateWealthLevel: percent,
 }) satisfies z.ZodType<ConsortHousehold>;
 
 export const characterStandingSchema = z.strictObject({
@@ -451,7 +459,7 @@ export const consortHiddenSchema = z.strictObject({
   fear: percent, // 恐惧
   ambition: percent, // 野心
   loyalty: percent.optional(), // 忠诚（可选 authored 初值）
-  personality: consortPersonalitySchema.optional(), // 人格特质（可选 authored 初值）
+  personality: consortPersonalitySeedSchema.optional(), // 人格特质种子（可选；可只覆盖个别维度）
 });
 
 export type ConsortHidden = z.infer<typeof consortHiddenSchema>;
