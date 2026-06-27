@@ -142,7 +142,7 @@ const REACTION_LINES: Record<PunishmentReactionKind, string[]> = {
   sympathy:       ["……侍身惶恐，不敢多言。"],
   schadenfreude:  ["此事……侍身不便置喙。"],
   opportunism:    ["侍身谨记陛下圣威。"],
-  anger:          ["……臣侍领旨。"],
+  anger:          ["……侍身领旨。"],
   warning:        ["侍身定当谨言慎行。"],
   plead_intent:   ["……侍身有一事，或可斗胆一言。"],
   revenge_intent: ["……是。"],

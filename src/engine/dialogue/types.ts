@@ -13,6 +13,7 @@ import type { DialogueAudienceContext } from "./audience";
 import type { ReactionPlan } from "./reactionTypes";
 import type { DialogueProviderResult, ProviderResult, ProviderCapabilities } from "./providerContract";
 import type { DialoguePromptContext } from "./promptPayload";
+import type { PairwiseAddress } from "./addressResolver";
 
 // ── §0 Core claim-authorization types (T6) ───────────────────────────────────
 
@@ -99,6 +100,13 @@ export interface DialogueRequest {
     forbiddenTerms: string[];
     addressRules: { rank: string; selfRefs: CharacterRank["selfRefs"]; addressedAs: string }[];
   };
+  /**
+   * Pre-computed pairwise address result for this specific conversation.
+   * Fulfills docs/world/45-address-and-title-system.md runtime requirement.
+   * Optional for backwards compatibility with manual test fixtures; always
+   * populated by assembleDialogueRequest.
+   */
+  resolvedAddress?: PairwiseAddress;
   sceneDirective?: string;
   transcript: { speaker: string; text: string }[];
   /** Topic tags for the current beat — surfaced to the LLM as currentScene.topicTags. */

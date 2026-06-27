@@ -8,7 +8,7 @@ import type { GameState } from "../engine/state/types";
 export const DECREE_CHANCE = 3; // 每行动点 3%
 export const PROMOTE_FAVOR = 65;
 export const DEMOTE_FAVOR = 35;
-export const DECREE_RANK_CEILING = 100; // 贵人
+export const DECREE_RANK_CEILING = 116; // 贵人（正五品）
 export const DECREE_RANK_FLOOR = 50; // 更衣（最低正式位分）
 
 export type { ReactionBeat as DecreeReaction } from "../engine/punishments/types";

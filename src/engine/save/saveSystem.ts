@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 26;
+export const SAVE_FORMAT_VERSION = 27;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -428,6 +428,70 @@ const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       }
     }
     return { ...env, formatVersion: 26, state: state as GameState, checksum: checksumOf(state as GameState) };
+  },
+  // v26 → v27: 称谓系统权威化（PR #68）。后宫位分 ID 全量重映射：
+  //   fenghou → huanghou, huangguijun → huangguifu, guijun → guifu,
+  //   jun → fu, guifu(旧正二品贵驸) → zhaoyi, zhaorong → zhaode
+  // 覆盖所有存储旧 rankId 的位置：standing.rank、deathRecord、
+  // generatedConsorts.initialStanding.rank、chronicle rank_changed payload
+  // （支持 from/to 和 fromRankId/toRankId 两种字段名）、justice rank_demotion details。
+  26: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState;
+    const RANK_REMAP: Record<string, string> = {
+      fenghou: "huanghou",
+      huangguijun: "huangguifu",
+      guijun: "guifu",
+      jun: "fu",
+      guifu: "zhaoyi",
+      zhaorong: "zhaode",
+    };
+    const remap = (id: string): string => RANK_REMAP[id] ?? id;
+
+    // standing.rank + deathRecord rank fields
+    for (const standing of Object.values(state.standing)) {
+      standing.rank = remap(standing.rank);
+      if (standing.deathRecord) {
+        standing.deathRecord.originalRankId = remap(standing.deathRecord.originalRankId);
+        if (standing.deathRecord.posthumousRankId !== undefined) {
+          standing.deathRecord.posthumousRankId = remap(standing.deathRecord.posthumousRankId);
+        }
+      }
+    }
+
+    // generatedConsorts.initialStanding.rank
+    for (const consort of Object.values(state.generatedConsorts)) {
+      const initSt = (consort as { initialStanding?: { rank?: string } }).initialStanding;
+      if (initSt?.rank !== undefined) initSt.rank = remap(initSt.rank);
+    }
+
+    // chronicle rank_changed payload — two field variants:
+    // haremAdminCommands writes fromRankId/toRankId;
+    // chronicle rules validator uses from/to.
+    for (const entry of state.chronicle) {
+      if (entry.type === "rank_changed") {
+        const p = entry.payload as Record<string, unknown>;
+        if (typeof p.from === "string") p.from = remap(p.from);
+        if (typeof p.to === "string") p.to = remap(p.to);
+        if (typeof p.fromRankId === "string") p.fromRankId = remap(p.fromRankId);
+        if (typeof p.toRankId === "string") p.toRankId = remap(p.toRankId);
+      }
+    }
+
+    // justice punishment rank_demotion details.fromRankId / toRankId
+    const jPunishments = (state as unknown as {
+      justice?: { punishments?: Record<string, { kind?: string; details?: Record<string, string> }> }
+    }).justice?.punishments;
+    if (jPunishments) {
+      for (const pun of Object.values(jPunishments)) {
+        if (pun.kind === "rank_demotion" && pun.details) {
+          if (typeof pun.details.fromRankId === "string") pun.details.fromRankId = remap(pun.details.fromRankId);
+          if (typeof pun.details.toRankId === "string") pun.details.toRankId = remap(pun.details.toRankId);
+        }
+      }
+    }
+
+    return { ...env, formatVersion: 27, state, checksum: checksumOf(state) };
   },
 };
 

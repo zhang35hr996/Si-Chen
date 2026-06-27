@@ -1,127 +1,1024 @@
 {
   "contentVersion": "0.1.0",
-  "calendar": { "apMax": 5, "start": { "year": 1, "month": 1, "period": "early" } },
+  "calendar": {
+    "apMax": 5,
+    "start": {
+      "year": 1,
+      "month": 1,
+      "period": "early"
+    }
+  },
   "startingLocation": "zichendian",
-  "sovereign": { "startingAge": 18 },
+  "sovereign": {
+    "startingAge": 18
+  },
   "startingResources": {
-    "sovereign": { "health": 70, "diligence": 50, "prestige": 50, "martial": 50, "statecraft": 50, "cruelty": 20, "fatigue": 20, "regimeSecurity": 60 },
-    "nation": { "military": 50, "treasury": 10000, "publicSupport": 50, "productivity": 50, "governance": 50, "consortClanPower": 30, "ministerLoyalty": 50, "corruption": 20, "clanDiscontent": 20, "rumor": 10 },
-    "bloodline": { "menstrualStatus": "normal" }
+    "sovereign": {
+      "health": 70,
+      "diligence": 50,
+      "prestige": 50,
+      "martial": 50,
+      "statecraft": 50,
+      "cruelty": 20,
+      "fatigue": 20,
+      "regimeSecurity": 60
+    },
+    "nation": {
+      "military": 50,
+      "treasury": 10000,
+      "publicSupport": 50,
+      "productivity": 50,
+      "governance": 50,
+      "consortClanPower": 30,
+      "ministerLoyalty": 50,
+      "corruption": 20,
+      "clanDiscontent": 20,
+      "rumor": 10
+    },
+    "bloodline": {
+      "menstrualStatus": "normal"
+    }
   },
   "ranks": [
-    { "id": "huanghou",   "name": "皇后",   "grade": "正宫",       "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 1000, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "huangguifu", "name": "皇贵驸", "grade": "超品",       "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 194,  "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "guifu",      "name": "贵驸",   "grade": "正一品第一序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 188,  "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "xianfu",     "name": "贤驸",   "grade": "正一品第二序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 186,  "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "liangfu",    "name": "良驸",   "grade": "正一品第三序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 184,  "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "defu",       "name": "德驸",   "grade": "正一品第四序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 182,  "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "fu",         "name": "驸",     "grade": "从一品",     "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "order": 176,  "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "zhaoyi",     "name": "昭仪",   "grade": "正二品第一序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 168, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "zhaohui",    "name": "昭徽",   "grade": "正二品第二序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 166, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "zhaode",     "name": "昭德",   "grade": "正二品第三序","selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 164, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "chengyi",    "name": "承仪",   "grade": "从二品第一序","selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 158, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "chenghui",   "name": "承徽",   "grade": "从二品第二序","selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 156, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "chengde",    "name": "承德",   "grade": "从二品第三序","selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 154, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "jieyu",      "name": "倢伃",   "grade": "正三品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 146, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "shichen",    "name": "侍宸",   "grade": "从三品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "order": 140, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "changyu",    "name": "长御",   "grade": "正四品",     "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "order": 132, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "shaoshi",    "name": "少使",   "grade": "从四品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 124, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "guiren",     "name": "贵人",   "grade": "正五品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 116, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "liangren",   "name": "良人",   "grade": "从五品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 108, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "meiren",     "name": "美人",   "grade": "正六品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 100, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "cairen",     "name": "才人",   "grade": "从六品",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "order": 92,  "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "changzai",   "name": "常在",   "grade": "正七品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 84, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "daying",     "name": "答应",   "grade": "从七品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 76, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "gengyi",     "name": "更衣",   "grade": "正八品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 68, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "xuanshi",    "name": "选侍",   "grade": "从八品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 60, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "guannanzi",  "name": "官男子", "grade": "正九品",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "order": 52, "domain": "harem", "favorTerm": "恩宠" },
-    { "id": "sili_zhang",   "name": "司礼",     "grade": "正五品", "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "order": 50, "domain": "official", "favorTerm": "圣眷" },
-    { "id": "shiwei_zhang", "name": "侍卫总管", "grade": "正三品", "selfRefs": { "toPlayer": ["臣"], "formal": ["属下"] }, "order": 130, "domain": "official", "favorTerm": "圣眷" }
+    {
+      "id": "huanghou",
+      "name": "皇后",
+      "grade": "正宫",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "order": 1000,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "huangguifu",
+      "name": "皇贵驸",
+      "grade": "超品",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "order": 194,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "guifu",
+      "name": "贵驸",
+      "grade": "正一品第一序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "order": 188,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "xianfu",
+      "name": "贤驸",
+      "grade": "正一品第二序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "order": 186,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "liangfu",
+      "name": "良驸",
+      "grade": "正一品第三序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "order": 184,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "defu",
+      "name": "德驸",
+      "grade": "正一品第四序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "order": 182,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "fu",
+      "name": "驸",
+      "grade": "从一品",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "order": 176,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "zhaoyi",
+      "name": "昭仪",
+      "grade": "正二品第一序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 168,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "zhaohui",
+      "name": "昭徽",
+      "grade": "正二品第二序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 166,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "zhaode",
+      "name": "昭德",
+      "grade": "正二品第三序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 164,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "chengyi",
+      "name": "承仪",
+      "grade": "从二品第一序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 158,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "chenghui",
+      "name": "承徽",
+      "grade": "从二品第二序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 156,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "chengde",
+      "name": "承德",
+      "grade": "从二品第三序",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 154,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "jieyu",
+      "name": "倢伃",
+      "grade": "正三品",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 146,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "shichen",
+      "name": "侍宸",
+      "grade": "从三品",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 140,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "changyu",
+      "name": "长御",
+      "grade": "正四品",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "order": 132,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "shaoshi",
+      "name": "少使",
+      "grade": "从四品",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 124,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "guiren",
+      "name": "贵人",
+      "grade": "正五品",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 116,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "liangren",
+      "name": "良人",
+      "grade": "从五品",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 108,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "meiren",
+      "name": "美人",
+      "grade": "正六品",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 100,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "cairen",
+      "name": "才人",
+      "grade": "从六品",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 92,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "changzai",
+      "name": "常在",
+      "grade": "正七品",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 84,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "daying",
+      "name": "答应",
+      "grade": "从七品",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 76,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "gengyi",
+      "name": "更衣",
+      "grade": "正八品",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 68,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "xuanshi",
+      "name": "选侍",
+      "grade": "从八品",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 60,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "guannanzi",
+      "name": "官男子",
+      "grade": "正九品",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "order": 52,
+      "domain": "harem",
+      "favorTerm": "恩宠"
+    },
+    {
+      "id": "sili_zhang",
+      "name": "司礼",
+      "grade": "正五品",
+      "selfRefs": {
+        "toPlayer": [
+          "臣"
+        ],
+        "formal": [
+          "下官"
+        ]
+      },
+      "order": 50,
+      "domain": "official",
+      "favorTerm": "圣眷"
+    },
+    {
+      "id": "shiwei_zhang",
+      "name": "侍卫总管",
+      "grade": "正三品",
+      "selfRefs": {
+        "toPlayer": [
+          "臣"
+        ],
+        "formal": [
+          "属下"
+        ]
+      },
+      "order": 130,
+      "domain": "official",
+      "favorTerm": "圣眷"
+    }
   ],
   "officialPosts": [
-    { "id": "chengxiang",          "name": "丞相",       "grade": "正一品", "gradeOrder": 18, "department": "chancellery" },
-    { "id": "taifu",               "name": "太傅",       "grade": "从一品", "gradeOrder": 17, "department": "chancellery" },
-    { "id": "taibao",              "name": "太保",       "grade": "从一品", "gradeOrder": 17, "department": "chancellery" },
-    { "id": "dadudu",              "name": "大都督",     "grade": "从一品", "gradeOrder": 17, "department": "military" },
-    { "id": "yushi_dafu",          "name": "御史",       "grade": "正二品", "gradeOrder": 16, "department": "censorate" },
-    { "id": "zuo_cheng",           "name": "左丞",       "grade": "正二品", "gradeOrder": 16, "department": "chancellery" },
-    { "id": "you_cheng",           "name": "右丞",       "grade": "正二品", "gradeOrder": 16, "department": "chancellery" },
-    { "id": "libu_shangshu",       "name": "吏部尚书",   "grade": "从二品", "gradeOrder": 15, "department": "personnel" },
-    { "id": "hubu_shangshu",       "name": "户部尚书",   "grade": "从二品", "gradeOrder": 15, "department": "revenue" },
-    { "id": "libu2_shangshu",      "name": "礼部尚书",   "grade": "从二品", "gradeOrder": 15, "department": "rites" },
-    { "id": "bingbu_shangshu",     "name": "兵部尚书",   "grade": "从二品", "gradeOrder": 15, "department": "military" },
-    { "id": "xingbu_shangshu",     "name": "刑部尚书",   "grade": "从二品", "gradeOrder": 15, "department": "justice" },
-    { "id": "gongbu_shangshu",     "name": "工部尚书",   "grade": "从二品", "gradeOrder": 15, "department": "works" },
-    { "id": "zongzheng_si_zheng",  "name": "宗正寺正",   "grade": "正三品", "gradeOrder": 14, "department": "academy" },
-    { "id": "dali_si_zheng",       "name": "大理寺正",   "grade": "正三品", "gradeOrder": 14, "department": "justice" },
-    { "id": "taichang_si_zheng",   "name": "太常寺正",   "grade": "正三品", "gradeOrder": 14, "department": "academy" },
-    { "id": "guozijian_jijiu",     "name": "国子监祭酒", "grade": "正三品", "gradeOrder": 14, "department": "academy" },
-    { "id": "zhihui_shi",          "name": "指挥使",     "grade": "正三品", "gradeOrder": 14, "department": "military" },
-    { "id": "buzhengshi",          "name": "布政使",     "grade": "从三品", "gradeOrder": 13, "department": "provincial" },
-    { "id": "anchashi",            "name": "按察使",     "grade": "从三品", "gradeOrder": 13, "department": "provincial" },
-    { "id": "duzhihui_tongzhi",    "name": "都指挥同知", "grade": "从三品", "gradeOrder": 13, "department": "military" },
-    { "id": "liubu_fu_shangshu",   "name": "六部副尚书", "grade": "正四品", "gradeOrder": 12, "department": "personnel" },
-    { "id": "dali_si_fuzheng",     "name": "大理寺副正", "grade": "正四品", "gradeOrder": 12, "department": "justice" },
-    { "id": "taichang_si_fuzheng", "name": "太常寺副正", "grade": "正四品", "gradeOrder": 12, "department": "academy" },
-    { "id": "zongzheng_si_fuzheng","name": "宗正寺副正", "grade": "正四品", "gradeOrder": 12, "department": "academy" },
-    { "id": "zhifu",               "name": "知府",       "grade": "从四品", "gradeOrder": 11, "department": "provincial", "seatCount": 3 },
-    { "id": "yushi_zhongcheng",    "name": "御史中丞",   "grade": "从四品", "gradeOrder": 11, "department": "censorate" },
-    { "id": "bushi_zheng",         "name": "部司正",     "grade": "正五品", "gradeOrder": 10, "department": "personnel" },
-    { "id": "tongzhi",             "name": "同知",       "grade": "正五品", "gradeOrder": 10, "department": "provincial", "seatCount": 2 },
-    { "id": "qianhu",              "name": "千户",       "grade": "正五品", "gradeOrder": 10, "department": "military", "seatCount": 3 },
-    { "id": "bushi_fuzheng",       "name": "部司副正",   "grade": "从五品", "gradeOrder": 9, "department": "personnel" },
-    { "id": "zhizhou",             "name": "知州",       "grade": "从五品", "gradeOrder": 9, "department": "provincial", "seatCount": 3 },
-    { "id": "baihu",               "name": "百户",       "grade": "从五品", "gradeOrder": 9, "department": "military", "seatCount": 4 },
-    { "id": "tongpan",             "name": "通判",       "grade": "正六品", "gradeOrder": 8, "department": "provincial", "seatCount": 2 },
-    { "id": "siye",                "name": "司业",       "grade": "正六品", "gradeOrder": 8, "department": "academy" },
-    { "id": "zhushi",              "name": "主事",       "grade": "从六品", "gradeOrder": 7, "department": "personnel", "seatCount": 2 },
-    { "id": "xiancheng",           "name": "县丞",       "grade": "从六品", "gradeOrder": 7, "department": "provincial" },
-    { "id": "zhixian",             "name": "知县",       "grade": "正七品", "gradeOrder": 6, "department": "provincial", "seatCount": 4 },
-    { "id": "boshi",               "name": "博士",       "grade": "正七品", "gradeOrder": 6, "department": "academy" },
-    { "id": "dianbu",              "name": "典簿",       "grade": "从七品", "gradeOrder": 5, "department": "academy" },
-    { "id": "jingli",              "name": "经历",       "grade": "从七品", "gradeOrder": 5, "department": "provincial" },
-    { "id": "xunjian",             "name": "巡检",       "grade": "正八品", "gradeOrder": 4, "department": "provincial", "seatCount": 3 },
-    { "id": "xuezheng",            "name": "学正",       "grade": "正八品", "gradeOrder": 4, "department": "academy" },
-    { "id": "zhaomo",              "name": "照磨",       "grade": "从八品", "gradeOrder": 3, "department": "provincial" },
-    { "id": "xundao",              "name": "训导",       "grade": "从八品", "gradeOrder": 3, "department": "academy" },
-    { "id": "zhubo",               "name": "主簿",       "grade": "正九品", "gradeOrder": 2, "department": "provincial", "seatCount": 2 },
-    { "id": "dianshi",             "name": "典史",       "grade": "从九品", "gradeOrder": 1, "department": "provincial" },
-    { "id": "commoner",            "name": "平民",       "grade": "无",     "gradeOrder": 0, "department": "none" }
+    {
+      "id": "chengxiang",
+      "name": "丞相",
+      "grade": "正一品",
+      "gradeOrder": 18,
+      "department": "chancellery"
+    },
+    {
+      "id": "taifu",
+      "name": "太傅",
+      "grade": "从一品",
+      "gradeOrder": 17,
+      "department": "chancellery"
+    },
+    {
+      "id": "taibao",
+      "name": "太保",
+      "grade": "从一品",
+      "gradeOrder": 17,
+      "department": "chancellery"
+    },
+    {
+      "id": "dadudu",
+      "name": "大都督",
+      "grade": "从一品",
+      "gradeOrder": 17,
+      "department": "military"
+    },
+    {
+      "id": "yushi_dafu",
+      "name": "御史",
+      "grade": "正二品",
+      "gradeOrder": 16,
+      "department": "censorate"
+    },
+    {
+      "id": "zuo_cheng",
+      "name": "左丞",
+      "grade": "正二品",
+      "gradeOrder": 16,
+      "department": "chancellery"
+    },
+    {
+      "id": "you_cheng",
+      "name": "右丞",
+      "grade": "正二品",
+      "gradeOrder": 16,
+      "department": "chancellery"
+    },
+    {
+      "id": "libu_shangshu",
+      "name": "吏部尚书",
+      "grade": "从二品",
+      "gradeOrder": 15,
+      "department": "personnel"
+    },
+    {
+      "id": "hubu_shangshu",
+      "name": "户部尚书",
+      "grade": "从二品",
+      "gradeOrder": 15,
+      "department": "revenue"
+    },
+    {
+      "id": "libu2_shangshu",
+      "name": "礼部尚书",
+      "grade": "从二品",
+      "gradeOrder": 15,
+      "department": "rites"
+    },
+    {
+      "id": "bingbu_shangshu",
+      "name": "兵部尚书",
+      "grade": "从二品",
+      "gradeOrder": 15,
+      "department": "military"
+    },
+    {
+      "id": "xingbu_shangshu",
+      "name": "刑部尚书",
+      "grade": "从二品",
+      "gradeOrder": 15,
+      "department": "justice"
+    },
+    {
+      "id": "gongbu_shangshu",
+      "name": "工部尚书",
+      "grade": "从二品",
+      "gradeOrder": 15,
+      "department": "works"
+    },
+    {
+      "id": "zongzheng_si_zheng",
+      "name": "宗正寺正",
+      "grade": "正三品",
+      "gradeOrder": 14,
+      "department": "academy"
+    },
+    {
+      "id": "dali_si_zheng",
+      "name": "大理寺正",
+      "grade": "正三品",
+      "gradeOrder": 14,
+      "department": "justice"
+    },
+    {
+      "id": "taichang_si_zheng",
+      "name": "太常寺正",
+      "grade": "正三品",
+      "gradeOrder": 14,
+      "department": "academy"
+    },
+    {
+      "id": "guozijian_jijiu",
+      "name": "国子监祭酒",
+      "grade": "正三品",
+      "gradeOrder": 14,
+      "department": "academy"
+    },
+    {
+      "id": "zhihui_shi",
+      "name": "指挥使",
+      "grade": "正三品",
+      "gradeOrder": 14,
+      "department": "military"
+    },
+    {
+      "id": "buzhengshi",
+      "name": "布政使",
+      "grade": "从三品",
+      "gradeOrder": 13,
+      "department": "provincial"
+    },
+    {
+      "id": "anchashi",
+      "name": "按察使",
+      "grade": "从三品",
+      "gradeOrder": 13,
+      "department": "provincial"
+    },
+    {
+      "id": "duzhihui_tongzhi",
+      "name": "都指挥同知",
+      "grade": "从三品",
+      "gradeOrder": 13,
+      "department": "military"
+    },
+    {
+      "id": "liubu_fu_shangshu",
+      "name": "六部副尚书",
+      "grade": "正四品",
+      "gradeOrder": 12,
+      "department": "personnel"
+    },
+    {
+      "id": "dali_si_fuzheng",
+      "name": "大理寺副正",
+      "grade": "正四品",
+      "gradeOrder": 12,
+      "department": "justice"
+    },
+    {
+      "id": "taichang_si_fuzheng",
+      "name": "太常寺副正",
+      "grade": "正四品",
+      "gradeOrder": 12,
+      "department": "academy"
+    },
+    {
+      "id": "zongzheng_si_fuzheng",
+      "name": "宗正寺副正",
+      "grade": "正四品",
+      "gradeOrder": 12,
+      "department": "academy"
+    },
+    {
+      "id": "zhifu",
+      "name": "知府",
+      "grade": "从四品",
+      "gradeOrder": 11,
+      "department": "provincial",
+      "seatCount": 3
+    },
+    {
+      "id": "yushi_zhongcheng",
+      "name": "御史中丞",
+      "grade": "从四品",
+      "gradeOrder": 11,
+      "department": "censorate"
+    },
+    {
+      "id": "bushi_zheng",
+      "name": "部司正",
+      "grade": "正五品",
+      "gradeOrder": 10,
+      "department": "personnel"
+    },
+    {
+      "id": "tongzhi",
+      "name": "同知",
+      "grade": "正五品",
+      "gradeOrder": 10,
+      "department": "provincial",
+      "seatCount": 2
+    },
+    {
+      "id": "qianhu",
+      "name": "千户",
+      "grade": "正五品",
+      "gradeOrder": 10,
+      "department": "military",
+      "seatCount": 3
+    },
+    {
+      "id": "bushi_fuzheng",
+      "name": "部司副正",
+      "grade": "从五品",
+      "gradeOrder": 9,
+      "department": "personnel"
+    },
+    {
+      "id": "zhizhou",
+      "name": "知州",
+      "grade": "从五品",
+      "gradeOrder": 9,
+      "department": "provincial",
+      "seatCount": 3
+    },
+    {
+      "id": "baihu",
+      "name": "百户",
+      "grade": "从五品",
+      "gradeOrder": 9,
+      "department": "military",
+      "seatCount": 4
+    },
+    {
+      "id": "tongpan",
+      "name": "通判",
+      "grade": "正六品",
+      "gradeOrder": 8,
+      "department": "provincial",
+      "seatCount": 2
+    },
+    {
+      "id": "siye",
+      "name": "司业",
+      "grade": "正六品",
+      "gradeOrder": 8,
+      "department": "academy"
+    },
+    {
+      "id": "zhushi",
+      "name": "主事",
+      "grade": "从六品",
+      "gradeOrder": 7,
+      "department": "personnel",
+      "seatCount": 2
+    },
+    {
+      "id": "xiancheng",
+      "name": "县丞",
+      "grade": "从六品",
+      "gradeOrder": 7,
+      "department": "provincial"
+    },
+    {
+      "id": "zhixian",
+      "name": "知县",
+      "grade": "正七品",
+      "gradeOrder": 6,
+      "department": "provincial",
+      "seatCount": 4
+    },
+    {
+      "id": "boshi",
+      "name": "博士",
+      "grade": "正七品",
+      "gradeOrder": 6,
+      "department": "academy"
+    },
+    {
+      "id": "dianbu",
+      "name": "典簿",
+      "grade": "从七品",
+      "gradeOrder": 5,
+      "department": "academy"
+    },
+    {
+      "id": "jingli",
+      "name": "经历",
+      "grade": "从七品",
+      "gradeOrder": 5,
+      "department": "provincial"
+    },
+    {
+      "id": "xunjian",
+      "name": "巡检",
+      "grade": "正八品",
+      "gradeOrder": 4,
+      "department": "provincial",
+      "seatCount": 3
+    },
+    {
+      "id": "xuezheng",
+      "name": "学正",
+      "grade": "正八品",
+      "gradeOrder": 4,
+      "department": "academy"
+    },
+    {
+      "id": "zhaomo",
+      "name": "照磨",
+      "grade": "从八品",
+      "gradeOrder": 3,
+      "department": "provincial"
+    },
+    {
+      "id": "xundao",
+      "name": "训导",
+      "grade": "从八品",
+      "gradeOrder": 3,
+      "department": "academy"
+    },
+    {
+      "id": "zhubo",
+      "name": "主簿",
+      "grade": "正九品",
+      "gradeOrder": 2,
+      "department": "provincial",
+      "seatCount": 2
+    },
+    {
+      "id": "dianshi",
+      "name": "典史",
+      "grade": "从九品",
+      "gradeOrder": 1,
+      "department": "provincial"
+    },
+    {
+      "id": "commoner",
+      "name": "平民",
+      "grade": "无",
+      "gradeOrder": 0,
+      "department": "none"
+    }
   ],
   "mapBoards": [
-    { "id": "palace", "name": "紫禁城", "art": { "key": "map.palace", "kind": "map" } },
-    { "id": "hougong", "name": "后宫", "art": { "key": "bg.hougong", "kind": "background" } },
-    { "id": "jingcheng", "name": "京城", "art": { "key": "bg.jingcheng", "kind": "background" } },
-    { "id": "jingjiao", "name": "郊外", "art": { "key": "bg.jingjiao", "kind": "background" } }
+    {
+      "id": "palace",
+      "name": "紫禁城",
+      "art": {
+        "key": "map.palace",
+        "kind": "map"
+      }
+    },
+    {
+      "id": "hougong",
+      "name": "后宫",
+      "art": {
+        "key": "bg.hougong",
+        "kind": "background"
+      }
+    },
+    {
+      "id": "jingcheng",
+      "name": "京城",
+      "art": {
+        "key": "bg.jingcheng",
+        "kind": "background"
+      }
+    },
+    {
+      "id": "jingjiao",
+      "name": "郊外",
+      "art": {
+        "key": "bg.jingjiao",
+        "kind": "background"
+      }
+    }
   ],
   "mapPortals": [
-    { "from": "palace", "to": "hougong", "name": "后宫", "position": { "x": 0.74, "y": 0.3 } },
-    { "from": "palace", "to": "jingcheng", "name": "宫门", "position": { "x": 0.5, "y": 0.88 } },
-    { "from": "jingcheng", "to": "jingjiao", "name": "郊外", "position": { "x": 0.85, "y": 0.52 } }
+    {
+      "from": "palace",
+      "to": "hougong",
+      "name": "后宫",
+      "position": {
+        "x": 0.74,
+        "y": 0.3
+      }
+    },
+    {
+      "from": "palace",
+      "to": "jingcheng",
+      "name": "宫门",
+      "position": {
+        "x": 0.5,
+        "y": 0.88
+      }
+    },
+    {
+      "from": "jingcheng",
+      "to": "jingjiao",
+      "name": "郊外",
+      "position": {
+        "x": 0.85,
+        "y": 0.52
+      }
+    }
   ],
   "rankChangeReactions": {
-    "promote":     { "lines": ["谢陛下隆恩！{self}定当尽心侍奉，不负圣眷。"], "memory": "陛下晋我为{rank}，圣眷正隆。" },
-    "demote":      { "lines": ["……{self}知罪。谢陛下教诲。"], "memory": "陛下贬我为{rank}，颜面无存。" },
-    "grant_title": { "lines": ["蒙陛下赐号，{self}惶恐领赏。谢陛下隆恩！"], "memory": "陛下赐我封号「{title}」，恩宠加身。" },
-    "strip_title": { "lines": ["陛下息怒……{self}知罪，惶恐请罪，恳请陛下开恩。"], "memory": "陛下褫夺我封号，我惶惶不可终日。" }
+    "promote": {
+      "lines": [
+        "谢陛下隆恩！{self}定当尽心侍奉，不负圣眷。"
+      ],
+      "memory": "陛下晋我为{rank}，圣眷正隆。"
+    },
+    "demote": {
+      "lines": [
+        "……{self}知罪。谢陛下教诲。"
+      ],
+      "memory": "陛下贬我为{rank}，颜面无存。"
+    },
+    "grant_title": {
+      "lines": [
+        "蒙陛下赐号，{self}惶恐领赏。谢陛下隆恩！"
+      ],
+      "memory": "陛下赐我封号「{title}」，恩宠加身。"
+    },
+    "strip_title": {
+      "lines": [
+        "陛下息怒……{self}知罪，惶恐请罪，恳请陛下开恩。"
+      ],
+      "memory": "陛下褫夺我封号，我惶惶不可终日。"
+    }
   },
   "administratorRankChangeReactions": {
     "empress": {
-      "promote":     { "lines": ["臣侍谨领皇后懿旨。"], "memory": "皇后下旨晋我为{rank}。" },
-      "demote":      { "lines": ["……{self}领旨。"], "memory": "皇后下旨贬我为{rank}，{self}不敢有违。" },
-      "grant_title": { "lines": ["谢皇后赐号，{self}惶恐领旨。"], "memory": "皇后赐我封号「{title}」。" },
-      "strip_title": { "lines": ["{self}领旨，不敢有违。"], "memory": "皇后下令褫夺我封号。" }
+      "promote": {
+        "lines": [
+          "臣侍谨领皇后懿旨。"
+        ],
+        "memory": "皇后下旨晋我为{rank}。"
+      },
+      "demote": {
+        "lines": [
+          "……{self}领旨。"
+        ],
+        "memory": "皇后下旨贬我为{rank}，{self}不敢有违。"
+      },
+      "grant_title": {
+        "lines": [
+          "谢皇后赐号，{self}惶恐领旨。"
+        ],
+        "memory": "皇后赐我封号「{title}」。"
+      },
+      "strip_title": {
+        "lines": [
+          "{self}领旨，不敢有违。"
+        ],
+        "memory": "皇后下令褫夺我封号。"
+      }
     },
     "acting_consort": {
-      "promote":     { "lines": ["侍身谨领协理六宫之令。"], "memory": "协理六宫者晋我为{rank}。" },
-      "demote":      { "lines": ["……侍身领令。"], "memory": "协理六宫者贬我为{rank}，侍身不敢违命。" },
-      "grant_title": { "lines": ["侍身谨领，不敢轻慢。"], "memory": "协理六宫者赐我封号「{title}」。" },
-      "strip_title": { "lines": ["侍身领令，不敢有违。"], "memory": "协理六宫者褫夺我封号。" }
+      "promote": {
+        "lines": [
+          "侍身谨领协理六宫之令。"
+        ],
+        "memory": "协理六宫者晋我为{rank}。"
+      },
+      "demote": {
+        "lines": [
+          "……侍身领令。"
+        ],
+        "memory": "协理六宫者贬我为{rank}，侍身不敢违命。"
+      },
+      "grant_title": {
+        "lines": [
+          "侍身谨领，不敢轻慢。"
+        ],
+        "memory": "协理六宫者赐我封号「{title}」。"
+      },
+      "strip_title": {
+        "lines": [
+          "侍身领令，不敢有违。"
+        ],
+        "memory": "协理六宫者褫夺我封号。"
+      }
     }
   },
   "bedchamber": {
     "conceptionChance": 30,
-    "tiers": { "small": 3, "favored": 5, "abundant": 10 }
+    "tiers": {
+      "small": 3,
+      "favored": 5,
+      "abundant": 10
+    }
   },
   "bedchamberScript": {
     "passion": {
@@ -159,17 +1056,33 @@
   "gestation": {
     "termMonths": 10,
     "transferEarliestMonth": 3,
-    "earlyBirth": { "month8": 10, "month9": 20 },
-    "recovery": { "safeMonths": 1, "dystociaMonths": 3 },
+    "earlyBirth": {
+      "month8": 10,
+      "month9": 20
+    },
+    "recovery": {
+      "safeMonths": 1,
+      "dystociaMonths": 3
+    },
     "dystocia": {
       "baseAtMonth3": 5,
       "perMonthAfter": 8,
-      "outcomeSplit": { "childDies": 50, "bearerDies": 30, "both": 20 }
+      "outcomeSplit": {
+        "childDies": 50,
+        "bearerDies": 30,
+        "both": 20
+      }
     },
     "childFavor": {
       "selfPregnancy": 65,
       "empressBonus": 15,
-      "tierValues": { "abundant": 46, "favored": 38, "small": 30, "fallen": 22, "none": 15 }
+      "tierValues": {
+        "abundant": 46,
+        "favored": 38,
+        "small": 30,
+        "fallen": 22,
+        "none": 15
+      }
     }
   }
 }

@@ -63,7 +63,7 @@ export function buildAdoptionReaction(
     speakerId: fatherId,
     lines: [
       `${adoptive}闻陛下择其抚育皇嗣，趋前叩谢天恩。`,
-      `${adoptive}哽咽叩首：臣定当视如己出，倾心教养这${child}，不负陛下托付。`,
+      `${adoptive}哽咽叩首：定当视如己出，倾心教养这${child}，不负陛下托付。`,
     ],
   };
   if (bioFatherAvailable(db, state, heir)) {

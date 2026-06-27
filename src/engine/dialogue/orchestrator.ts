@@ -36,6 +36,7 @@ import {
   type DialoguePromptContext,
 } from "./promptPayload";
 import { buildReactionPlan } from "./reactionAssembler";
+import { resolveAddress } from "./addressResolver";
 import {
   contextRefKey,
   type DialogueAssemblyOptions,
@@ -196,6 +197,7 @@ export function assembleDialogueRequest(
       forbiddenTerms: db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
+    resolvedAddress: resolveAddress(db, state, speakerId, targetId),
     sceneDirective,
     transcript: transcript ?? [],
     topicTags,

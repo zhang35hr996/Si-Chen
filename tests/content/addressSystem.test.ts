@@ -51,11 +51,11 @@ describe("rank ID canonicalization", () => {
 describe("selfRefs tiers", () => {
   const CHEN_SHI_TIER = [
     "huanghou", "huangguifu", "guifu", "xianfu", "liangfu", "defu", "fu",
-    "zhaoyi", "zhaohui", "zhaode", "changyu",
+    "zhaoyi", "zhaohui", "zhaode",
+    "chengyi", "chenghui", "chengde", "jieyu", "shichen",
+    "changyu",
   ];
   const SHI_TIER = [
-    "chengyi", "chenghui", "chengde",
-    "jieyu", "shichen",
     "shaoshi", "guiren", "liangren", "meiren", "cairen",
   ];
   const WO_TIER = ["changzai", "daying", "gengyi", "xuanshi", "guannanzi"];
@@ -130,31 +130,31 @@ describe("gates WRONG_PLAYER_HONORIFICS", () => {
   });
 });
 
-describe("save migration v22→v23 rank remapping", () => {
-  function makeV22Save(rankOverrides: Record<string, string>): string {
+describe("save migration v25→v26 rank remapping", () => {
+  function makeV25Save(rankOverrides: Record<string, string>): string {
     const s = createNewGameState(db);
-    const stateV22 = structuredClone(s) as GameState;
+    const stateV25 = structuredClone(s) as GameState;
     for (const [charId, rankId] of Object.entries(rankOverrides)) {
-      if (stateV22.standing[charId]) {
-        stateV22.standing[charId]!.rank = rankId;
+      if (stateV25.standing[charId]) {
+        stateV25.standing[charId]!.rank = rankId;
       }
     }
     const current = createSaveData(db, s, "slot1");
     return JSON.stringify({
       ...current,
-      formatVersion: 22,
-      state: stateV22,
-      checksum: checksumOf(stateV22),
+      formatVersion: 25,
+      state: stateV25,
+      checksum: checksumOf(stateV25),
     });
   }
 
-  it("SAVE_FORMAT_VERSION is 23", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(23);
+  it("SAVE_FORMAT_VERSION is 26", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(26);
   });
 
-  it("fenghou → huanghou", () => {
+  it("fenghou → huanghou in standing.rank", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV22Save({ shen_zhibai: "fenghou" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ shen_zhibai: "fenghou" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -163,7 +163,7 @@ describe("save migration v22→v23 rank remapping", () => {
 
   it("huangguijun → huangguifu", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV22Save({ shen_zhibai: "huangguijun" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ shen_zhibai: "huangguijun" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -172,7 +172,7 @@ describe("save migration v22→v23 rank remapping", () => {
 
   it("guijun → guifu", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV22Save({ lu_huaijin: "guijun" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ lu_huaijin: "guijun" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -181,7 +181,7 @@ describe("save migration v22→v23 rank remapping", () => {
 
   it("jun → fu", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV22Save({ xu_qinghuan: "jun" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "jun" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -190,7 +190,7 @@ describe("save migration v22→v23 rank remapping", () => {
 
   it("guifu (old 正二品 贵驸) → zhaoyi", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV22Save({ xu_qinghuan: "guifu" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "guifu" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -199,7 +199,7 @@ describe("save migration v22→v23 rank remapping", () => {
 
   it("zhaorong → zhaode", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV22Save({ xu_qinghuan: "zhaorong" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "zhaorong" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -208,10 +208,37 @@ describe("save migration v22→v23 rank remapping", () => {
 
   it("ranks not in remap are unchanged", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV22Save({ xu_qinghuan: "meiren" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "meiren" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.state.standing["xu_qinghuan"]?.rank).toBe("meiren");
+  });
+
+  it("deathRecord.originalRankId is remapped (fenghou → huanghou)", () => {
+    const s = createNewGameState(db);
+    const stateV25 = structuredClone(s) as GameState;
+    // Inject a deathRecord with old rankId into a known character's standing
+    if (stateV25.standing["shen_zhibai"]) {
+      (stateV25.standing["shen_zhibai"] as unknown as { deathRecord: unknown }).deathRecord = {
+        diedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+        cause: "illness",
+        originalRankId: "fenghou",
+      };
+    }
+    const current = createSaveData(db, s, "slot1");
+    const raw = JSON.stringify({
+      ...current,
+      formatVersion: 25,
+      state: stateV25,
+      checksum: checksumOf(stateV25),
+    });
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, raw);
+    const result = readSlot(storage, db, "slot1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const dr = (result.value.state.standing["shen_zhibai"] as { deathRecord?: { originalRankId: string } })?.deathRecord;
+    expect(dr?.originalRankId).toBe("huanghou");
   });
 });

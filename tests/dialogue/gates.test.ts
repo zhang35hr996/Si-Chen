@@ -8,7 +8,7 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const huanghouCtx = buildTextGateContext(db, "huanghou"); // selfRefs: 臣侍/本宫
-const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 侍/侍身/本宫/我
+const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 臣侍/本宫/我
 const siliCtx = buildTextGateContext(db, "sili_zhang"); // selfRefs: 臣/下官
 
 describe("buildTextGateContext", () => {
@@ -53,14 +53,14 @@ describe("forbidden_lexicon gate", () => {
 
 describe("self_ref gate", () => {
   it("rejects a speaker borrowing another rank's selfRef", () => {
-    // chenghui does not use 臣侍; 臣侍 belongs to 驸-tier and above
-    const findings = scanDialogueText("臣侍自有主张。", chenghuiCtx);
+    // chenghui uses 臣侍 (长御+ tier); 侍身 belongs to 少使/贵人 mid tier
+    const findings = scanDialogueText("侍身自有主张。", chenghuiCtx);
     expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ gate: "self_ref", matched: "臣侍" });
+    expect(findings[0]).toMatchObject({ gate: "self_ref", matched: "侍身" });
   });
 
   it("allows a speaker using their OWN selfRef", () => {
-    expect(scanDialogueText("侍身累了。", chenghuiCtx)).toHaveLength(0);
+    expect(scanDialogueText("臣侍累了。", chenghuiCtx)).toHaveLength(0);
     expect(scanDialogueText("本宫累了。", huanghouCtx)).toHaveLength(0);
   });
 

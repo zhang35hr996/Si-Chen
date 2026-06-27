@@ -53,7 +53,7 @@ export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: s
         char: attendantId,
         entry: {
           kind: "episodic",
-          summary: "太后凤体违和，臣往慈宁宫侍疾，蒙太后与陛下嘉许。",
+          summary: "太后凤体违和，往慈宁宫侍疾，蒙太后与陛下嘉许。",
           strength: 55,
           retention: "slow",
           subjectIds: ["taihou", attendantId, "player"],
@@ -67,7 +67,7 @@ export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: s
     beats: [
       { speakerId: "taihou", lines: [`哀家病中，难为${name}日日来侍奉汤药，难得这份孝心。`] },
       { speakerId: "player", lines: [`${name}侍疾辛劳，朕都看在眼里。`] },
-      { speakerId: attendantId, lines: [`侍奉太后，是臣的本分，不敢当太后与陛下夸赞。`] },
+      { speakerId: attendantId, lines: [`侍奉太后，是侍身的本分，不敢当太后与陛下夸赞。`] },
     ],
   };
 }

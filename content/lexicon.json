@@ -63,41 +63,396 @@
     "婊子"
   ],
   "rankAddressRules": [
-    { "rank": "huanghou",   "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "addressedAs": "皇后" },
-    { "rank": "huangguifu", "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "addressedAs": "皇贵驸" },
-    { "rank": "guifu",      "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "addressedAs": "贵驸" },
-    { "rank": "xianfu",     "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "addressedAs": "贤驸" },
-    { "rank": "liangfu",    "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "addressedAs": "良驸" },
-    { "rank": "defu",       "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "addressedAs": "德驸" },
-    { "rank": "fu",         "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"] }, "addressedAs": "驸" },
-    { "rank": "zhaoyi",     "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "昭仪" },
-    { "rank": "zhaohui",    "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "昭徽" },
-    { "rank": "zhaode",     "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "昭德" },
-    { "rank": "chengyi",    "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "承仪" },
-    { "rank": "chenghui",   "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "承徽" },
-    { "rank": "chengde",    "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "承德" },
-    { "rank": "jieyu",      "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "倢伃" },
-    { "rank": "shichen",    "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "侍宸" },
-    { "rank": "changyu",    "selfRefs": { "toPlayer": ["臣侍"], "formal": ["本宫"], "informal": ["我"] }, "addressedAs": "长御" },
-    { "rank": "shaoshi",    "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "addressedAs": "少使" },
-    { "rank": "guiren",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "addressedAs": "贵人" },
-    { "rank": "liangren",   "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "addressedAs": "良人" },
-    { "rank": "meiren",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "addressedAs": "美人" },
-    { "rank": "cairen",     "selfRefs": { "toPlayer": ["侍", "侍身"], "formal": ["我"] }, "addressedAs": "才人" },
-    { "rank": "changzai",   "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "常在" },
-    { "rank": "daying",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "答应" },
-    { "rank": "gengyi",     "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "更衣" },
-    { "rank": "xuanshi",    "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "选侍" },
-    { "rank": "guannanzi",  "selfRefs": { "toPlayer": ["小侍"], "formal": ["我"] }, "addressedAs": "官男子" },
-    { "rank": "sili_zhang",   "selfRefs": { "toPlayer": ["臣"], "formal": ["下官"] }, "addressedAs": "司礼" },
-    { "rank": "shiwei_zhang", "selfRefs": { "toPlayer": ["臣"], "formal": ["属下"] }, "addressedAs": "侍卫总管" }
+    {
+      "rank": "huanghou",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "addressedAs": "皇后"
+    },
+    {
+      "rank": "huangguifu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "addressedAs": "皇贵驸"
+    },
+    {
+      "rank": "guifu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "addressedAs": "贵驸"
+    },
+    {
+      "rank": "xianfu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "addressedAs": "贤驸"
+    },
+    {
+      "rank": "liangfu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "addressedAs": "良驸"
+    },
+    {
+      "rank": "defu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "addressedAs": "德驸"
+    },
+    {
+      "rank": "fu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ]
+      },
+      "addressedAs": "驸"
+    },
+    {
+      "rank": "zhaoyi",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "昭仪"
+    },
+    {
+      "rank": "zhaohui",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "昭徽"
+    },
+    {
+      "rank": "zhaode",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "昭德"
+    },
+    {
+      "rank": "chengyi",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "承仪"
+    },
+    {
+      "rank": "chenghui",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "承徽"
+    },
+    {
+      "rank": "chengde",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "承德"
+    },
+    {
+      "rank": "jieyu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "倢伃"
+    },
+    {
+      "rank": "shichen",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "侍宸"
+    },
+    {
+      "rank": "changyu",
+      "selfRefs": {
+        "toPlayer": [
+          "臣侍"
+        ],
+        "formal": [
+          "本宫"
+        ],
+        "informal": [
+          "我"
+        ]
+      },
+      "addressedAs": "长御"
+    },
+    {
+      "rank": "shaoshi",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "少使"
+    },
+    {
+      "rank": "guiren",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "贵人"
+    },
+    {
+      "rank": "liangren",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "良人"
+    },
+    {
+      "rank": "meiren",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "美人"
+    },
+    {
+      "rank": "cairen",
+      "selfRefs": {
+        "toPlayer": [
+          "侍",
+          "侍身"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "才人"
+    },
+    {
+      "rank": "changzai",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "常在"
+    },
+    {
+      "rank": "daying",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "答应"
+    },
+    {
+      "rank": "gengyi",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "更衣"
+    },
+    {
+      "rank": "xuanshi",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "选侍"
+    },
+    {
+      "rank": "guannanzi",
+      "selfRefs": {
+        "toPlayer": [
+          "小侍"
+        ],
+        "formal": [
+          "我"
+        ]
+      },
+      "addressedAs": "官男子"
+    },
+    {
+      "rank": "sili_zhang",
+      "selfRefs": {
+        "toPlayer": [
+          "臣"
+        ],
+        "formal": [
+          "下官"
+        ]
+      },
+      "addressedAs": "司礼"
+    },
+    {
+      "rank": "shiwei_zhang",
+      "selfRefs": {
+        "toPlayer": [
+          "臣"
+        ],
+        "formal": [
+          "属下"
+        ]
+      },
+      "addressedAs": "侍卫总管"
+    }
   ],
   "kinshipTerms": [
-    { "concept": "皇帝亲生子嗣统称", "term": "皇嗣" },
-    { "concept": "皇帝女儿", "term": "皇子" },
-    { "concept": "皇帝男儿", "term": "皇郎" },
-    { "concept": "成年受封的女性皇子", "term": "公主" },
-    { "concept": "皇郎成年后的尊称", "term": "贵主" }
+    {
+      "concept": "皇帝亲生子嗣统称",
+      "term": "皇嗣"
+    },
+    {
+      "concept": "皇帝女儿",
+      "term": "皇子"
+    },
+    {
+      "concept": "皇帝男儿",
+      "term": "皇郎"
+    },
+    {
+      "concept": "成年受封的女性皇子",
+      "term": "公主"
+    },
+    {
+      "concept": "皇郎成年后的尊称",
+      "term": "贵主"
+    }
   ],
   "styleRules": [
     "不得创造新的官职、位分、宗嗣术语；制度未定时用普通描述，不要造词",

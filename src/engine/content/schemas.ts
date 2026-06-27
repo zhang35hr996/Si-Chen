@@ -555,9 +555,15 @@ export const officialDepartmentSchema = z.enum([
   "chancellery", "personnel", "revenue", "rites", "military",
   "justice", "works", "censorate", "academy", "provincial", "none",
 ]) satisfies z.ZodType<OfficialDepartment>;
+// Terms forbidden in official post names (gendered terms that must not appear as titles)
+const OFFICIAL_POST_FORBIDDEN = ["大夫", "夫人", "郎君", "相公", "公主", "妻子", "国公"] as const;
+
 export const officialPostSchema = z.strictObject({
   id: idSchema,
-  name: nonEmpty,
+  name: nonEmpty.refine(
+    (n) => !OFFICIAL_POST_FORBIDDEN.some((term) => n.includes(term)),
+    { message: `官职名不得包含禁用性别词（${OFFICIAL_POST_FORBIDDEN.join("、")}）` },
+  ),
   grade: nonEmpty,
   gradeOrder: z.number().int().min(0).max(18),
   /** 所属部门。缺省 "chancellery"（仅最小测试内容省略时回退；真实 world.json 显式声明）。 */
