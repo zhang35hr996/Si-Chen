@@ -8,11 +8,19 @@
  *   - 效果仍走同一 funnel，权限校验由 funnel.validateEffects 兜底
  */
 import { toGameTime } from "../engine/calendar/time";
+import {
+  planAdministratorRankDecision as planDecision,
+  type HaremAdminDecision,
+} from "../engine/characters/haremAdminDecision";
 import { canAdministratorAdjustRank, canEmpressAdjustRank } from "../engine/characters/haremRankAuthority";
 import { resolveDisplayName } from "../engine/characters/standing";
+import { appendCourtEvent } from "../engine/chronicle/append";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
+import { stateError, type GameError } from "../engine/infra/errors";
+import { ok, err, type Result } from "../engine/infra/result";
 import type { CourtEvent, GameState } from "../engine/state/types";
+import { applyEffects } from "../engine/effects/funnel";
 import { buildRankOp, type RankOpRequest } from "./rankOps";
 
 export type HaremAdminRankCommand = {
@@ -31,6 +39,17 @@ export interface HaremAdminCommandPlan {
 export type HaremAdminCommandResult =
   | { ok: true; plan: HaremAdminCommandPlan }
   | { ok: false; reason: string };
+
+/**
+ * 自主决策完整结果：decision（含 reason/score）+ command + plan。
+ * #73B 的 settlePostAdvance 用此类型持久化原因并生成乘风禀报台词，
+ * 无需重新运行决策引擎或重新推断原因。
+ */
+export interface PlannedAutonomousRankDecision {
+  decision: HaremAdminDecision;
+  command: HaremAdminRankCommand;
+  plan: HaremAdminCommandPlan;
+}
 
 /**
  * 校验并组装六宫行政位分处分命令。
@@ -106,13 +125,52 @@ export function planHaremAdminRankCommand(
 }
 
 /**
- * 协理者自主晋降决策占位符（第二阶段实现，基于性格/关系/恩宠）。
- * 现阶段返回 null，调用方跳过。
+ * 纯 resolver：校验 → applyEffects → chronicle，返回最终 state 和 plan。
+ * 不修改 GameStore，不 emit。供 settlePostAdvance 内的事务使用。
+ */
+export function resolveHaremAdminRankCommand(
+  db: ContentDB,
+  state: GameState,
+  command: HaremAdminRankCommand,
+): Result<{ state: GameState; plan: HaremAdminCommandPlan }, GameError[]> {
+  const planned = planHaremAdminRankCommand(db, state, command);
+  if (!planned.ok) {
+    return err([stateError("HAREM_ADMIN_RANK_REJECTED", planned.reason)]);
+  }
+  const plan = planned.plan;
+
+  const applied = applyEffects(db, state, plan.effects);
+  if (!applied.ok) return err(applied.error);
+  let candidate = applied.value;
+
+  for (const draft of plan.chronicle) {
+    const ap = appendCourtEvent(candidate, draft);
+    if (!ap.ok) return err(ap.error);
+    candidate = ap.value.state;
+  }
+
+  return ok({ state: candidate, plan });
+}
+
+/**
+ * 自主位分决策：委托决策引擎，将结果包装为 PlannedAutonomousRankDecision。
+ * 返回 null 表示无合格目标、无权限、或引擎权限复验失败（理应不出现）。
+ * #73B 的 settlePostAdvance 直接消费此函数的返回值。
  */
 export function planAdministratorRankDecision(
-  _db: ContentDB,
-  _state: GameState,
-  _administratorId: string,
-): HaremAdminCommandResult | null {
-  return null;
+  db: ContentDB,
+  state: GameState,
+  administratorId: string,
+): PlannedAutonomousRankDecision | null {
+  const decision = planDecision(db, state, administratorId);
+  if (!decision) return null;
+  const command: HaremAdminRankCommand = {
+    type: "harem_admin_rank_change",
+    actorId: decision.actorId,
+    targetId: decision.targetId,
+    request: { kind: "set_rank", rank: decision.toRankId },
+  };
+  const cmdResult = planHaremAdminRankCommand(db, state, command);
+  if (!cmdResult.ok) return null;
+  return { decision, command, plan: cmdResult.plan };
 }

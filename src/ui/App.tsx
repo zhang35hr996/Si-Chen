@@ -43,7 +43,7 @@ import { greetingAttendees } from "../engine/characters/greeting";
 import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
-import type { HaremAdminRankCommand } from "../store/haremAdminCommands";
+
 import type { HaremAdministrationTarget } from "../store/haremAdminTransfer";
 import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
@@ -121,7 +121,7 @@ import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
 import { RankAdminModal } from "./components/RankAdminModal";
-import { HaremAdminRankModal } from "./components/HaremAdminRankModal";
+// HaremAdminRankModal removed — harem admin decisions are NPC-autonomous (PR #73A)
 import { PunishmentModal } from "./components/PunishmentModal";
 import { ColdPalaceRestoreModal } from "./components/ColdPalaceModal";
 import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
@@ -201,7 +201,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [rankAdmin, setRankAdmin] = useState<RankAdminSession>(null);
   const [punishCharId, setPunishCharId] = useState<string | null>(null);
   // 六宫行政位分管理：actorId = 协理侍君 charId。
-  const [haremAdminActorId, setHaremAdminActorId] = useState<string | null>(null);
+  // haremAdminActorId removed — harem admin rank changes are now NPC-autonomous
   // 禁足令在侍君宫殿内发布后需回主图：confinement 成功 + 人在该宫→ 反应播完后 goHome。
   const [punishGoHome, setPunishGoHome] = useState(false);
   const [relocateCharId, setRelocateCharId] = useState<string | null>(null);
@@ -546,21 +546,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     applyFirstNightRankDrain(origin, outcome);
   };
 
-  /** 六宫行政位分处分：由代理侍君对低位侍君晋封/降位。 */
-  const applyHaremAdminRankOp = (command: HaremAdminRankCommand): { ok: boolean; reason?: string } => {
-    const result = store.applyHaremAdminRankCommand(db, command);
-    if (result.ok) {
-      setHaremAdminActorId(null);
-      doAutosave();
-      if (result.value.lines.length > 0) {
-        setReaction({ speakerId: command.targetId, lines: result.value.lines });
-      }
-      return { ok: true };
-    } else {
-      const reason = result.error[0]?.message ?? "操作失败，请重试。";
-      return { ok: false, reason };
-    }
-  };
+  // applyHaremAdminRankOp removed — harem admin decisions are NPC-autonomous (PR #73A)
 
   /** 惩罚命令（禁足/解除/赐死）统一入口；紫宸殿与侍君宫殿共用。 */
   const applyImperialCommand = (charId: string, command: ImperialCommand) => {
@@ -662,7 +648,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       navDispatch({ type: "clear" }); // 读档清空事件返回上下文（场景态从不入档）
       pendingReactionDispatch({ type: "clear" });
       setRankAdmin(null);
-      setHaremAdminActorId(null);
+
       timeSettlementDispatch({ type: "clear" });
       invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
       // 先帝已崩：该存档是终局，不可继续。回 title 并提示开新局。
@@ -872,7 +858,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
-    setHaremAdminActorId(null);
     timeSettlementDispatch({ type: "clear" });
     invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     doAutosave();
@@ -914,7 +899,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
-    setHaremAdminActorId(null);
     timeSettlementDispatch({ type: "clear" });
     invalidateDialogue(); // 作废 await 中的旧对话与续接（含 UI pending）
     setView("coronation");
@@ -1238,7 +1222,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     reaction !== null || childReaction !== null || physicianReaction !== null ||
     firstNightPromptId !== null || namePetHeirId !== null ||
     bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
-    haremAdminActorId !== null ||
     prompt !== null || daxuanPrompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
     activeEventId !== null || court !== null || dianxuan !== null ||
     shopId !== null || view === "shop" || dialogueInFlight ||
@@ -1765,8 +1748,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
           onPunish={(id) => setPunishCharId(id)}
           onRelocate={(id) => setRelocateCharId(id)}
-          onHaremAdminManage={(actorId) => setHaremAdminActorId(actorId)}
-          onRestoreFromColdPalace={(id) => setRestoreCharId(id)}
+              onRestoreFromColdPalace={(id) => setRestoreCharId(id)}
           onBedchamber={(id) => beginBedchamber(id)}
           onConverse={converse}
           onOpenResources={() => setResourcePanelOpen(true)}
@@ -1963,8 +1945,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               onViewProfile={(id) => setProfileCharId(id)}
               onManage={(id) => setRankAdmin({ charId: id, origin: "normal" })}
               onRelocate={(id) => setRelocateCharId(id)}
-              onHaremAdminManage={(actorId) => setHaremAdminActorId(actorId)}
-            />
+                    />
           </GameShell>
         );
       })()}
@@ -2254,15 +2235,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             }
             restoreReturn(); // → 宣政殿专用屏（结果态由 courtResult 决定）
           }}
-        />
-      )}
-      {haremAdminActorId && store.getState().standing[haremAdminActorId] && (
-        <HaremAdminRankModal
-          db={db}
-          state={liveState}
-          actorId={haremAdminActorId}
-          onCommand={applyHaremAdminRankOp}
-          onClose={() => setHaremAdminActorId(null)}
         />
       )}
       {rankAdmin && store.getState().standing[rankAdmin.charId] && (
@@ -2759,8 +2731,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); setHaremAdminActorId(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
-          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setHaremAdminActorId(null); setSettingsOpen(false); setView("title"); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onReturnTitle={() => { doAutosave(); invalidateDialogue(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
       )}

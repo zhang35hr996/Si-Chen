@@ -24,7 +24,6 @@ export function LocationScreen({
   onManage,
   onPunish,
   onRelocate,
-  onHaremAdminManage,
   onRestoreFromColdPalace,
   onBedchamber,
   onConverse,
@@ -45,7 +44,6 @@ export function LocationScreen({
   onManage?: (charId: string) => void;
   onPunish?: (charId: string) => void;
   onRelocate?: (charId: string) => void;
-  onHaremAdminManage?: (actorId: string) => void;
   onRestoreFromColdPalace?: (charId: string) => void;
   onBedchamber?: (charId: string) => void;
   onConverse?: (charId: string) => void;
@@ -128,7 +126,6 @@ export function LocationScreen({
           onManage={onManage}
           onPunish={onPunish}
           onRelocate={onRelocate}
-          onHaremAdminManage={onHaremAdminManage}
           onRestoreFromColdPalace={onRestoreFromColdPalace}
         />
       ) : (
