@@ -22,7 +22,7 @@ The setting deliberately redefines kinship words so "子/儿/主" don't default 
 |---|---|---|
 | sovereign's sisters | 长凤主 / 皇姊 / 皇妹 | adult kinswomen, may hold land & standing |
 | sisters' children | 皇侄 | significant matrilineal branch |
-| sisters' adult daughters | 宗凤主 / 郡凤主 | enfeoffed by standing |
+| sisters' adult daughters | 宗主 / 郡主 | enfeoffed by standing |
 | sisters' adult sons | 宗郎 / 宗君 | kin courtesy, no core power |
 | kin via imperial men (承养/marriage), off the main matriline | 皇甥 / 宗甥 / 外宗 | below 皇子/皇郎/皇侄; usually outside the core succession line |
 

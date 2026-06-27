@@ -66,6 +66,69 @@ describe("resolveAddress — consort speaking DOWN to lower consort", () => {
   });
 });
 
+describe("resolveAddress — liftedForbiddenTerms (凤君 conditional permission)", () => {
+  it("皇后 × target=player × private → liftedForbiddenTerms 含凤君", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "private" });
+    expect(addr.liftedForbiddenTerms).toContain("凤君");
+    expect(addr.allowedAlternates).toContain("凤君");
+  });
+
+  it("皇后 × target=player × intimate → liftedForbiddenTerms 含凤君", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "intimate" });
+    expect(addr.liftedForbiddenTerms).toContain("凤君");
+  });
+
+  it("皇后 × target=player × court → liftedForbiddenTerms 不含凤君", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "court" });
+    expect(addr.liftedForbiddenTerms).not.toContain("凤君");
+    expect(addr.allowedAlternates).not.toContain("凤君");
+  });
+
+  it("皇后 × target=player × public → liftedForbiddenTerms 不含凤君", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "public" });
+    expect(addr.liftedForbiddenTerms).not.toContain("凤君");
+  });
+
+  it("未授权侍君 × target=player × private → liftedForbiddenTerms 不含凤君", () => {
+    // lu_huaijin is chenghui rank — no fengjun permission
+    const addr = resolveAddress(db, state, "lu_huaijin", "player", { register: "private" });
+    expect(addr.liftedForbiddenTerms).not.toContain("凤君");
+  });
+
+  it("获授权 addressPermissions=['fengjun'] × private → liftedForbiddenTerms 含凤君", () => {
+    // Pass typed permission key — simulates character with dialoguePolicy.addressPermissions: ["fengjun"]
+    const addr = resolveAddress(db, state, "lu_huaijin", "player", {
+      register: "private",
+      addressPermissions: ["fengjun"],
+    });
+    expect(addr.liftedForbiddenTerms).toContain("凤君");
+    expect(addr.allowedAlternates).toContain("凤君");
+  });
+
+  it("获授权 × court → liftedForbiddenTerms 不含凤君（register 不满足）", () => {
+    const addr = resolveAddress(db, state, "lu_huaijin", "player", {
+      register: "court",
+      addressPermissions: ["fengjun"],
+    });
+    expect(addr.liftedForbiddenTerms).not.toContain("凤君");
+  });
+
+  it("太后（elder）× private → liftedForbiddenTerms 不含凤君（elders 不用凤君）", () => {
+    const addr = resolveAddress(db, state, "taihou", "player", { register: "private" });
+    expect(addr.liftedForbiddenTerms).not.toContain("凤君");
+  });
+
+  it("target 非皇帝 → liftedForbiddenTerms 为空（权限只限对皇帝）", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "lu_huaijin", { register: "private" });
+    expect(addr.liftedForbiddenTerms).toHaveLength(0);
+  });
+
+  it("无 register 选项 → liftedForbiddenTerms 为空（不推断 register）", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player");
+    expect(addr.liftedForbiddenTerms).toHaveLength(0);
+  });
+});
+
 describe("resolveAddress — non-harem target (official / elder)", () => {
   it("high-rank consort uses deferential selfRef (not 本宫) when speaking to official", () => {
     // cheng_feng is kind=official; consort must not use 本宫 to an official
