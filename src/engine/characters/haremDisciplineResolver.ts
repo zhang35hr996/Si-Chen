@@ -126,10 +126,10 @@ export function resolveHaremDisciplineOccurrence(
         kind: "episodic",
         summary:
           disciplineKind === "slapping"
-            ? "朕令其掌嘴受罚，威仪震慑宫闱"
+            ? "曾命其掌嘴受罚，以整肃宫规"
             : disciplineKind === "kneeling"
-              ? "朕令其罚跪，整肃后宫纲纪"
-              : "朕令其抄写经文，以示训诫",
+              ? "曾命其罚跪，以示训诫"
+              : "曾命其抄写经文",
         subjectIds: [targetId],
         perspective: "actor",
         strength: 60,
@@ -255,10 +255,10 @@ export function resolveHaremDiscipline(
         kind: "episodic",
         summary:
           input.resolution === "upheld"
-            ? "陛下维持了朕的处分，威权得以彰显"
+            ? "陛下维持了这场处分，所施之罚得以彰显"
             : input.resolution === "protected"
               ? "陛下回护了受罚者，心中难免委屈不平"
-              : "陛下对此事各打五十大板，颜面有所折损",
+              : "陛下对此事各自申饬，颜面有所折损",
         subjectIds: ["player", targetId],
         perspective: "actor",
         strength: 65,
@@ -283,8 +283,8 @@ export function resolveHaremDiscipline(
           input.resolution === "protected"
             ? "陛下亲自回护，委屈终得舒解"
             : input.resolution === "upheld"
-              ? "陛下维持了对朕的处分，甚是心寒"
-              : "陛下对此事各打五十大板，尚有些许告慰",
+              ? "陛下维持了施罚者的处置，甚是心寒"
+              : "陛下对此事各自申饬，尚有些许告慰",
         subjectIds: ["player", actorId],
         perspective: "target",
         strength: 70,

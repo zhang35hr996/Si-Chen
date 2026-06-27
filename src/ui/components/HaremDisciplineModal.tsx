@@ -30,16 +30,15 @@ export function HaremDisciplineModal({
   db: ContentDB;
   state: GameState;
   incident: HaremDisciplineIncident;
-  onResolve: (resolution: HaremDisciplineResolution) => void;
+  onResolve: (resolution: HaremDisciplineResolution) => boolean;
 }) {
   const submitted = useRef(false);
 
-  function guard(action: () => void): () => void {
-    return () => {
-      if (submitted.current) return;
-      submitted.current = true;
-      action();
-    };
+  function handleResolve(resolution: HaremDisciplineResolution): void {
+    if (submitted.current) return;
+    submitted.current = true;
+    const ok = onResolve(resolution);
+    if (!ok) submitted.current = false;
   }
 
   const actorName = resolveCharName(db, state, incident.actorId);
@@ -88,7 +87,7 @@ export function HaremDisciplineModal({
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button
-            onClick={guard(() => onResolve("upheld"))}
+            onClick={() => handleResolve("upheld")}
             style={btnStyle("#6b3d00")}
           >
             <span style={{ fontWeight: "bold" }}>维持处分</span>
@@ -97,7 +96,7 @@ export function HaremDisciplineModal({
             </span>
           </button>
           <button
-            onClick={guard(() => onResolve("protected"))}
+            onClick={() => handleResolve("protected")}
             style={btnStyle("#003d2e")}
           >
             <span style={{ fontWeight: "bold" }}>回护受罚者</span>
@@ -106,7 +105,7 @@ export function HaremDisciplineModal({
             </span>
           </button>
           <button
-            onClick={guard(() => onResolve("rebuked_both"))}
+            onClick={() => handleResolve("rebuked_both")}
             style={btnStyle("#2e2a00")}
           >
             <span style={{ fontWeight: "bold" }}>各自申饬</span>

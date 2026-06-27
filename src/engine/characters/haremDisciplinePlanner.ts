@@ -17,7 +17,6 @@ import { isConfined } from "./confinement";
 import { isInColdPalace, hasColdPalaceMadness } from "./coldPalace";
 import { resolveConsortRuntimeAttrs } from "./consortAttrs";
 import { imperialProtectionSnapshot, isCurrentCarrier } from "./imperialProtection";
-import { sameHaremFaction } from "./factionSelectors";
 import { haremRankStepDistance } from "./haremRankLadder";
 
 // ── 常量 ──────────────────────────────────────────────────────────────────────
@@ -162,7 +161,14 @@ function relationModifier(db: ContentDB, state: GameState, actorId: string, targ
 }
 
 function factionModifier(state: GameState, actorId: string, targetId: string): number {
-  return sameHaremFaction(state, actorId, targetId) ? -10 : 5;
+  const getHaremFactionId = (id: string): string | null => {
+    const st = state.standing[id];
+    return (st as { factionId?: string } | undefined)?.factionId ?? null;
+  };
+  const actorFaction = getHaremFactionId(actorId);
+  const targetFaction = getHaremFactionId(targetId);
+  if (!actorFaction || !targetFaction) return 0;
+  return actorFaction === targetFaction ? -10 : 5;
 }
 
 function favoriteModifier(db: ContentDB, state: GameState, targetId: string): number {
@@ -304,7 +310,12 @@ export function planHaremDiscipline(
   // Select highest pairScore among those whose roll is within occurrenceChance.
   const triggered = candidates
     .filter((c) => c.roll < c.occurrenceChance)
-    .sort((a, b) => b.pairScore - a.pairScore);
+    .sort(
+      (a, b) =>
+        b.pairScore - a.pairScore ||
+        a.actorId.localeCompare(b.actorId) ||
+        a.targetId.localeCompare(b.targetId),
+    );
 
   if (triggered.length === 0) return null;
 

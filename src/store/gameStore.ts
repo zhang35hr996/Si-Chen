@@ -1720,10 +1720,8 @@ export class GameStore {
         const plan = planHaremDiscipline(db, candidate);
         if (plan !== null) {
           const occResult = resolveHaremDisciplineOccurrence(db, candidate, plan);
-          if (occResult.ok) {
-            candidate = occResult.value.state;
-          }
-          // 结算失败不阻断（non-fatal）。
+          if (!occResult.ok) return err(occResult.error);
+          candidate = occResult.value.state;
         }
         collector?.capturePhaseScheduled(
           "harem_discipline_occurrence",

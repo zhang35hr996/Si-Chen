@@ -38,13 +38,13 @@ describe("v29 → v30 migration", () => {
       contentVersion: "test",
       contentHash: "test_hash",
       createdAt: new Date().toISOString(),
-      slot: "slot_1",
+      slot: "slot1",
       checksum: checksumOf(v29State),
       state: v29State,
     };
 
-    storage.set(`${SAVE_KEY_PREFIX}slot_1`, JSON.stringify(v29Envelope));
-    const result = readSlot(storage, db, "slot_1");
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(v29Envelope));
+    const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.state.haremDisciplineIncidents).toEqual([]);
@@ -53,9 +53,9 @@ describe("v29 → v30 migration", () => {
   it("V30-03: round-trip createSaveData → readSlot preserves haremDisciplineIncidents", () => {
     const storage = createMemoryStorage();
     const state = createNewGameState(db);
-    const saveData = createSaveData(db, state, "slot_1");
-    storage.set(`${SAVE_KEY_PREFIX}slot_1`, JSON.stringify(saveData));
-    const result = readSlot(storage, db, "slot_1");
+    const saveData = createSaveData(db, state, "slot1");
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(saveData));
+    const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.state.haremDisciplineIncidents).toEqual([]);

@@ -98,8 +98,8 @@ function makePairState(opts: {
   };
 
   const newBedchamber: GameState["bedchamber"] = {
-    [ACTOR_ID]: s.bedchamber[ACTOR_ID] ?? { chamber: "main" as const, groupIndex: 0 },
-    [TARGET_ID]: s.bedchamber[TARGET_ID] ?? { chamber: "main" as const, groupIndex: 1 },
+    [ACTOR_ID]: s.bedchamber[ACTOR_ID] ?? { encounters: [] },
+    [TARGET_ID]: s.bedchamber[TARGET_ID] ?? { encounters: [] },
   };
 
   let result: GameState = {
@@ -266,7 +266,7 @@ describe("planHaremDiscipline — null cases", () => {
     const singleState: GameState = {
       ...s,
       standing: { [ACTOR_ID]: { ...st, rank: "fu" } },
-      bedchamber: { [ACTOR_ID]: { chamber: "main", groupIndex: 0 } },
+      bedchamber: { [ACTOR_ID]: { encounters: [] } },
     };
     expect(planHaremDiscipline(db, singleState)).toBeNull();
   });
@@ -425,8 +425,8 @@ describe("planHaremDiscipline — target cooldown", () => {
         [TARGET_ID]: { ...targetSt, rank: "changzai" },
       },
       bedchamber: {
-        [ACTOR_ID]: { chamber: "main", groupIndex: 0 },
-        [TARGET_ID]: { chamber: "main", groupIndex: 1 },
+        [ACTOR_ID]: { encounters: [] },
+        [TARGET_ID]: { encounters: [] },
       },
       haremDisciplineIncidents: [resolved],
       rngSeed: 42,

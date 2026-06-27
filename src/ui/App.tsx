@@ -2622,12 +2622,14 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         if (!incident) return null;
         return (
           <HaremDisciplineModal
+            key={incident.id}
             db={db}
             state={liveState}
             incident={incident}
             onResolve={(resolution) => {
               const r = store.resolveHaremDisciplineIncident(db, { incidentId: incident.id, resolution });
               if (r.ok) doAutosave();
+              return r.ok;
             }}
           />
         );

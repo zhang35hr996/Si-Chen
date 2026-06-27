@@ -16,7 +16,7 @@ import {
   resolveHaremDiscipline,
 } from "../../src/engine/characters/haremDisciplineResolver";
 import { planHaremDiscipline } from "../../src/engine/characters/haremDisciplinePlanner";
-import { makeGameTime, toGameTime } from "../../src/engine/calendar/time";
+import { toGameTime } from "../../src/engine/calendar/time";
 import type { GameState, HaremDisciplineIncident } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 import { PERSONALITY_DEFAULTS } from "../../src/engine/characters/consortAttrs";
@@ -57,8 +57,8 @@ function makePairState(opts: { actorRank?: string; targetRank?: string; rngSeed?
       },
     },
     bedchamber: {
-      [ACTOR_ID]: s.bedchamber[ACTOR_ID] ?? { chamber: "main", groupIndex: 0 },
-      [TARGET_ID]: s.bedchamber[TARGET_ID] ?? { chamber: "main", groupIndex: 1 },
+      [ACTOR_ID]: s.bedchamber[ACTOR_ID] ?? { encounters: [] },
+      [TARGET_ID]: s.bedchamber[TARGET_ID] ?? { encounters: [] },
     },
     chronicle: [
       // 占位事件（供 resolveHaremDisciplineOccurrence 的 appendCourtEvent 产生 id 用）
