@@ -158,7 +158,7 @@ import { getPendingMemorials } from "../engine/court/memorials";
 import { getHighVacancyPosts } from "../engine/officials/selectors";
 import { getUnacknowledgedExaminationResults } from "../engine/officials/examination";
 import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations } from "../engine/map/subLocations";
-import { presentBarItems, focusedCharacterView, reconcileSelection } from "./sceneView";
+import { presentBarItems, focusedCharacterView, reconcileSelection, displayRole } from "./sceneView";
 import { courtAgendaPreview, snapshotCourtMetrics, diffCourtMetrics, type CourtMetrics, type CourtMetricsDiff } from "../engine/court/agenda";
 import { buildCourtSummary, courtHoldGate } from "./xuanzhengView";
 import { MapScreen } from "./screens/MapScreen";
@@ -1929,13 +1929,22 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         const subLocationIds = (loc.subLocations ?? []).map((sa) => sa.id);
         // 有剧情事件的参与者优先固定到事件子地点，其他侍君走哈希分配。
         const pinnedMap = eventPinnedSubLocations(db, liveState, loc.id, subLocationIds);
+        // 剧情参与者可能不在随机游走列表中（如卯时）——确保他们出现在园中。
+        const presentItemIds = new Set(presentItems.map((i) => i.id));
+        const eventParticipants = [...pinnedMap.keys()].flatMap((charId) => {
+          if (presentItemIds.has(charId)) return [];
+          const char = db.characters[charId];
+          if (!char || liveState.standing[charId]?.lifecycle === "deceased") return [];
+          return [{ id: charId, name: char.profile.name, role: displayRole(db, liveState, charId) }];
+        });
+        const allGardenItems = [...presentItems, ...eventParticipants];
         const subPresentItems = activeSub
-          ? presentItems.filter((i) => {
+          ? allGardenItems.filter((i) => {
               const pin = pinnedMap.get(i.id);
               if (pin !== undefined) return pin === activeSub.id;
               return gardenSubLocationFor(liveState.rngSeed, liveState.calendar.dayIndex, i.id, subLocationIds) === activeSub.id;
             })
-          : presentItems;
+          : allGardenItems;
         const subPresentIds = subPresentItems.map((i) => i.id);
         const effSel2 = gardenSelectedId == null ? null : reconcileSelection(subPresentIds, gardenSelectedId);
         const focused2 = effSel2 ? focusedCharacterView(db, liveState, registry, effSel2) : undefined;

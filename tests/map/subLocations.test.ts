@@ -115,7 +115,7 @@ describe("pickSubLocationEvent", () => {
 });
 
 describe("eventPinnedSubLocations", () => {
-  const SUB_IDS = ["taiyechi", "duixiushan", "jiangxuexuan"] as const;
+  const SUB_IDS = ["taiyechi", "tuixiushan", "jiangxuexuan"] as const;
 
   it("eligible event 的 scene participants 固定到其子地点", () => {
     // ev_shen_neglect 绑定 taiyechi，scene sc_shen_neglect participants=[lu_huaijin]
@@ -126,16 +126,16 @@ describe("eventPinnedSubLocations", () => {
   it("已触发（一次性）事件不再产生固定映射", () => {
     // ev_shen_neglect 是 once=true；写入 eventLog 后 getEligibleEvents 会排除它
     const base = at("yuhuayuan");
-    const fired = {
+    const fired: GameState = {
       ...base,
-      eventLog: [{ eventId: "ev_shen_neglect", dayIndex: 0, time: 0 }],
+      eventLog: [{ eventId: "ev_shen_neglect", firedAt: base.calendar }],
     };
-    const pinned = eventPinnedSubLocations(db, fired as Parameters<typeof eventPinnedSubLocations>[1], "yuhuayuan", SUB_IDS);
+    const pinned = eventPinnedSubLocations(db, fired, "yuhuayuan", SUB_IDS);
     expect(pinned.has("lu_huaijin")).toBe(false);
   });
 
   it("无 exploration 事件的子地点不产生固定映射", () => {
-    const pinned = eventPinnedSubLocations(db, at("yuhuayuan"), "yuhuayuan", ["duixiushan"]);
+    const pinned = eventPinnedSubLocations(db, at("yuhuayuan"), "yuhuayuan", ["tuixiushan"]);
     expect(pinned.size).toBe(0);
   });
 });
