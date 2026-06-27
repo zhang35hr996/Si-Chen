@@ -86,8 +86,8 @@ function viewOf(
 }
 
 function residentText(view: PalaceView): string {
-  if (view.role === "待选秀男") return "待选秀男";
-  if (view.residents.length === 0) return "暂无侍君";
+  const emptyText = view.role === "待选秀男" ? "暂无待选秀男" : "暂无侍君";
+  if (view.residents.length === 0) return emptyText;
   if (view.residents.length === 1) return view.residents[0]!.label;
   return `${view.residents[0]!.label} 等 ${view.residents.length} 人`;
 }
