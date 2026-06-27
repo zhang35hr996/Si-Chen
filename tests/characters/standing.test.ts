@@ -9,29 +9,29 @@ const consort = (over: Partial<CharacterContent["profile"]>) =>
 
 describe("resolveDisplayName", () => {
   it("composes surname + 位分 when untitled", () => {
-    expect(resolveDisplayName(consort({}), { rank: "chenghui", favor: 30 }, chenghui)).toBe("沈承徽");
+    expect(resolveDisplayName(consort({}), { rank: "chenghui", favor: 30, peakFavor: 30 }, chenghui)).toBe("沈承徽");
   });
   it("composes 封号 + 位分 when titled", () => {
-    expect(resolveDisplayName(consort({}), { rank: "chenghui", favor: 30, title: "婉" }, chenghui)).toBe("婉承徽");
+    expect(resolveDisplayName(consort({}), { rank: "chenghui", favor: 30, peakFavor: 30, title: "婉" }, chenghui)).toBe("婉承徽");
   });
   it("falls back to profile.name when there is no surname (皇后)", () => {
     const fenghou = { kind: "consort", profile: { name: "皇后" } } as unknown as CharacterContent;
-    expect(resolveDisplayName(fenghou, { rank: "huanghou", favor: 25 }, { ...chenghui, name: "皇后" })).toBe("皇后");
+    expect(resolveDisplayName(fenghou, { rank: "huanghou", favor: 25, peakFavor: 25 }, { ...chenghui, name: "皇后" })).toBe("皇后");
   });
 });
 
 describe("resolveIdentityLabel", () => {
   it("界面标识用 本名·位分 并列（不影响对话守礼称呼）", () => {
     const c = consort({ name: "徐清欢", surname: "徐" });
-    expect(resolveIdentityLabel(c, { rank: "chenghui", favor: 30 }, chenghui)).toBe("徐清欢·承徽");
+    expect(resolveIdentityLabel(c, { rank: "chenghui", favor: 30, peakFavor: 30 }, chenghui)).toBe("徐清欢·承徽");
   });
   it("有封号时拼 本名·封号位分", () => {
     const c = consort({ name: "徐清欢", surname: "徐" });
-    expect(resolveIdentityLabel(c, { rank: "chenghui", favor: 30, title: "婉" }, chenghui)).toBe("徐清欢·婉承徽");
+    expect(resolveIdentityLabel(c, { rank: "chenghui", favor: 30, peakFavor: 30, title: "婉" }, chenghui)).toBe("徐清欢·婉承徽");
   });
   it("无位分时退化为本名", () => {
     const fenghou = { kind: "consort", profile: { name: "皇后" } } as unknown as CharacterContent;
-    expect(resolveIdentityLabel(fenghou, { rank: "huanghou", favor: 25 }, undefined)).toBe("皇后");
+    expect(resolveIdentityLabel(fenghou, { rank: "huanghou", favor: 25, peakFavor: 25 }, undefined)).toBe("皇后");
   });
 });
 

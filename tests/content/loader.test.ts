@@ -67,7 +67,7 @@ function makeRaw(): RawContent {
     portraitSet: "char_a",
     expressions: ["neutral"],
     voice: { register: "formal", quirks: [], tabooTopics: [] },
-    initialStanding: { rank: "rank_a", favor: 10 },
+    initialStanding: { rank: "rank_a", favor: 10, peakFavor: 10 },
     initialMemories: [],
     secrets: [],
   };

@@ -62,7 +62,8 @@
   },
   "initialStanding": {
     "rank": "fu",
-    "favor": 45
+    "favor": 45,
+    "peakFavor": 45
   },
   "initialMemories": [
     {

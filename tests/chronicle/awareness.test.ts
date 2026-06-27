@@ -8,7 +8,7 @@ import type { CourtEvent, GameState } from "../../src/engine/state/types";
 function nowState(): GameState {
   return createInitialState({ calendar: { month: 8 } });
 }
-const entered = (m: number) => ({ rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, m, "early") });
+const entered = (m: number) => ({ rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, m, "early") });
 function evt(over: Partial<CourtEvent> = {}): CourtEvent {
   return {
     id: "evt_000001", type: "rank_changed",
@@ -53,13 +53,13 @@ describe("canKnowEvent", () => {
 
   it("palace：无 palaceEnteredAt（官员等）不知道宫内事", () => {
     const s = nowState();
-    s.standing["official_x"] = { rank: "shangshu", favor: 50 };
+    s.standing["official_x"] = { rank: "shangshu", favor: 50, peakFavor: 50 };
     expect(canKnowEvent(s, "official_x", evt())).toBe(false);
   });
 
   it("尚未入宫的未来角色：对所有 scope 都不知情（含 circle / realm）", () => {
     const s = nowState(); // now = 元年八月
-    s.standing["future"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(2, 1, "early") }; // 明年入宫
+    s.standing["future"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(2, 1, "early") }; // 明年入宫
     expect(canKnowEvent(s, "future", evt({ type: "heir_died", publicity: { scope: "palace", persistence: "institutional" } }))).toBe(false);
     expect(canKnowEvent(s, "future", evt({ publicity: { scope: "circle", circleIds: ["future"] } }))).toBe(false);
     expect(canKnowEvent(s, "future", evt({ publicity: { scope: "realm", persistence: "institutional" } }))).toBe(false);

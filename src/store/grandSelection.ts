@@ -589,6 +589,7 @@ export function addGeneratedConsort(
       [id]: {
         rank,
         favor,
+        peakFavor: favor,
         affection: content.hidden?.affection ?? 50,
         fear:      content.hidden?.fear      ?? 30,
         ambition:  content.hidden?.ambition  ?? 35,

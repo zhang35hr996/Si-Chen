@@ -51,7 +51,7 @@ export function buildScaffold(kind: ContentKind, id: string): Scaffold {
           portraitSet: id,
           expressions: ["neutral"],
           voice: { register: "formal", quirks: [], tabooTopics: [] },
-          initialStanding: { rank: "chenghui", favor: 20 },
+          initialStanding: { rank: "chenghui", favor: 20, peakFavor: 20 },
           initialMemories: [],
           secrets: [],
         },

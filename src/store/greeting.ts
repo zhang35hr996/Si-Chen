@@ -21,7 +21,7 @@ export function excuseFromGreeting(state: GameState, db: ContentDB, charId: stri
     ...state,
     standing: {
       ...state.standing,
-      [charId]: { ...st, favor: clampPct(st.favor + EXCUSE_FAVOR), affection: clampPct(baseAff + EXCUSE_AFFECTION) },
+      [charId]: { ...st, favor: clampPct(st.favor + EXCUSE_FAVOR), peakFavor: Math.max(st.peakFavor, clampPct(st.favor + EXCUSE_FAVOR)), affection: clampPct(baseAff + EXCUSE_AFFECTION) },
     },
     excusedFromGreeting: { dayIndex: di, charIds: [...new Set([...prev, charId])] },
     overnightWith: undefined,

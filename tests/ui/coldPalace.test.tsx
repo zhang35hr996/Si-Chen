@@ -230,7 +230,7 @@ describe("FreeViewScreen(changmengong) — 冷宫活跃居民", () => {
       generatedConsorts: { ...base.generatedConsorts, gen_yun_001: genChar as never },
       standing: {
         ...base.standing,
-        gen_yun_001: { rank: "guiren", favor: 0, lifecycle: "normal", residence: "zhaoning_gong" },
+        gen_yun_001: { rank: "guiren", favor: 0, peakFavor: 0, lifecycle: "normal", residence: "zhaoning_gong" },
       },
     };
     const inCold = stateInColdPalace(stateWithGen, "gen_yun_001", 1);

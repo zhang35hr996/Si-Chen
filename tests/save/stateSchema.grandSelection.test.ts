@@ -19,7 +19,7 @@ describe("generatedConsorts in GameState", () => {
     const withGen = {
       ...s,
       generatedConsorts: { xiunan_1_0: { ...sample, id: "xiunan_1_0", defaultLocation: "chuxiu_gong" } },
-      standing: { ...s.standing, xiunan_1_0: { rank: "gengyi", favor: 10, residence: "chuxiu_gong", chamber: "main" as const, availableFromMonth: 5 } },
+      standing: { ...s.standing, xiunan_1_0: { rank: "gengyi", favor: 10, peakFavor: 10, residence: "chuxiu_gong", chamber: "main" as const, availableFromMonth: 5 } },
     };
     const parsed = gameStateSchema.safeParse(withGen);
     expect(parsed.success).toBe(true);

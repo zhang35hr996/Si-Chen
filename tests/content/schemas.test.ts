@@ -40,7 +40,7 @@ const validCharacter = {
   portraitSet: "char_a",
   expressions: ["neutral", "smile"],
   voice: { register: "formal", quirks: [], tabooTopics: [] },
-  initialStanding: { rank: "rank_a", favor: 10 },
+  initialStanding: { rank: "rank_a", favor: 10, peakFavor: 10 },
   initialMemories: [],
   secrets: [],
 };
@@ -222,8 +222,8 @@ describe("worldSchema / rankSchema", () => {
 
 describe("rank/title fields", () => {
   it("standing accepts an optional 封号 title", () => {
-    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30, title: "婉" }).success).toBe(true);
-    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30 }).success).toBe(true);
+    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30, peakFavor: 30, title: "婉" }).success).toBe(true);
+    expect(characterStandingSchema.safeParse({ rank: "chenghui", favor: 30, peakFavor: 30 }).success).toBe(true);
   });
 });
 

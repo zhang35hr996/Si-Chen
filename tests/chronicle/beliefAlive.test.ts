@@ -17,9 +17,9 @@ function heir(over: Partial<Heir>): Heir {
 describe("alive 谓词（belief）", () => {
   it("侍君：在世 true，薨逝(deceased) → false（非 undefined）", () => {
     const s = createInitialState();
-    s.standing["viewer"] = { rank: "meiren", favor: 50 };
-    s.standing["a"] = { rank: "meiren", favor: 50 };
-    s.standing["b"] = { rank: "meiren", favor: 50, lifecycle: "deceased" };
+    s.standing["viewer"] = { rank: "meiren", favor: 50, peakFavor: 50 };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50 };
+    s.standing["b"] = { rank: "meiren", favor: 50, peakFavor: 50, lifecycle: "deceased" };
     const bp = new GroundTruthBeliefProjection(s);
     expect(bp.getFact("viewer", { predicate: "alive", subjectId: "a" })).toEqual({ value: true, certainty: 100 });
     expect(bp.getFact("viewer", { predicate: "alive", subjectId: "b" })).toEqual({ value: false, certainty: 100 });
@@ -27,7 +27,7 @@ describe("alive 谓词（belief）", () => {
 
   it("皇嗣：在世 alive=true；夭折 alive=false（可查死者，非 undefined）", () => {
     const s = createInitialState();
-    s.standing["viewer"] = { rank: "meiren", favor: 50 };
+    s.standing["viewer"] = { rank: "meiren", favor: 50, peakFavor: 50 };
     s.resources.bloodline.heirs.push(heir({}));                                   // 在世
     s.resources.bloodline.heirs.push(heir({ id: "heir_000002", lifecycle: "deceased", deceasedAt: makeGameTime(1, 5, "mid") }));
     const bp = new GroundTruthBeliefProjection(s);
@@ -37,16 +37,16 @@ describe("alive 谓词（belief）", () => {
 
   it("现状类谓词（resides_at）查死者 → undefined（死者不在场）", () => {
     const s = createInitialState();
-    s.standing["viewer"] = { rank: "meiren", favor: 50 };
-    s.standing["b"] = { rank: "meiren", favor: 50, residence: "x", lifecycle: "deceased" };
+    s.standing["viewer"] = { rank: "meiren", favor: 50, peakFavor: 50 };
+    s.standing["b"] = { rank: "meiren", favor: 50, peakFavor: 50, residence: "x", lifecycle: "deceased" };
     const bp = new GroundTruthBeliefProjection(s);
     expect(bp.getFact("viewer", { predicate: "resides_at", subjectId: "b" })).toBeUndefined();
   });
 
   it("已逝 viewer 查 alive → undefined（viewer 须在场）", () => {
     const s = createInitialState();
-    s.standing["deadViewer"] = { rank: "meiren", favor: 50, lifecycle: "deceased" };
-    s.standing["a"] = { rank: "meiren", favor: 50 };
+    s.standing["deadViewer"] = { rank: "meiren", favor: 50, peakFavor: 50, lifecycle: "deceased" };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50 };
     const bp = new GroundTruthBeliefProjection(s);
     expect(bp.getFact("deadViewer", { predicate: "alive", subjectId: "a" })).toBeUndefined();
   });

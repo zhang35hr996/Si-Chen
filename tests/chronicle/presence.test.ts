@@ -34,7 +34,7 @@ describe("presence（皇嗣感知化）", () => {
 
   it("薨逝侍君：存在、不在场、isDeceased", () => {
     const s = createInitialState({ calendar: { month: 8 } });
-    s.standing["b"] = { rank: "meiren", favor: 50, lifecycle: "deceased", palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["b"] = { rank: "meiren", favor: 50, peakFavor: 50, lifecycle: "deceased", palaceEnteredAt: makeGameTime(1, 1, "early") };
     expect(characterExists(s, "b")).toBe(true);
     expect(isCurrentlyPresent(s, "b")).toBe(false);
     expect(isDeceased(s, "b")).toBe(true);
@@ -48,7 +48,7 @@ describe("presence（皇嗣感知化）", () => {
 
   it("侍君：仍按 palaceEnteredAt", () => {
     const s = createInitialState({ calendar: { month: 8 } });
-    s.standing["c"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["c"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     expect(isCurrentlyPresent(s, "c")).toBe(true);
     expect(characterExists(s, "c")).toBe(true);
   });

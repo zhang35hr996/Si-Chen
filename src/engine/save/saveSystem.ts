@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 27;
+export const SAVE_FORMAT_VERSION = 28;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -492,6 +492,24 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     }
 
     return { ...env, formatVersion: 27, state, checksum: checksumOf(state) };
+  },
+  // v27 → v28: Add peakFavor to CharacterStanding. Initialize to current favor.
+  27: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as GameState & Record<string, unknown>;
+    const standing = (state as unknown as { standing?: Record<string, unknown> }).standing;
+    if (standing && typeof standing === "object") {
+      for (const st of Object.values(standing)) {
+        if (st && typeof st === "object" && typeof (st as Record<string, unknown>).favor === "number") {
+          const s = st as Record<string, unknown>;
+          if (typeof s.peakFavor !== "number") {
+            s.peakFavor = s.favor;
+          }
+        }
+      }
+    }
+    const gs = state as unknown as GameState;
+    return { ...env, formatVersion: 28, state: gs, checksum: checksumOf(gs) };
   },
 };
 

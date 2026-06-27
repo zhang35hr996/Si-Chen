@@ -62,6 +62,7 @@ export function bestow(
         [recipient.id]: {
           ...st,
           favor: clampPct(st.favor + base),
+          peakFavor: Math.max(st.peakFavor, clampPct(st.favor + base)),
           affection: clampPct(baseAff + affDelta),
         },
       },

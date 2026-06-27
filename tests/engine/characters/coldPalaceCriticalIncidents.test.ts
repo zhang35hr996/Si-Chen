@@ -699,7 +699,7 @@ describe("validateColdPalaceIncidentLinks: critical_illness rules", () => {
     };
     return {
       ...s,
-      standing: { ...s.standing, [incident.residentId]: { rank: "jieyu", favor: 0 } },
+      standing: { ...s.standing, [incident.residentId]: { rank: "jieyu", favor: 0, peakFavor: 0 } },
       statusEffects: [effect],
       coldPalaceIncidents: [incident],
     };

@@ -91,6 +91,7 @@ export const consortHouseholdSchema = z.strictObject({
 export const characterStandingSchema = z.strictObject({
   rank: idSchema,
   favor: percent,
+  peakFavor: z.number().int().min(0).max(100),
   title: nonEmpty.optional(),
   lifecycle: z.enum(["normal", "candidate", "carrying", "delivered", "deceased"]).optional(),
   recoverUntilMonth: z.number().int().min(1).optional(),

@@ -15,7 +15,7 @@ function mem(over: Partial<MemoryEntry>): MemoryEntry {
 describe("recallCandidates", () => {
   it("召回说话人高 strength 私人记忆（确定性、限量）", () => {
     const s = createInitialState({ calendar: { month: 8 } });
-    s.standing["a"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
+    s.standing["a"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 1, "early") };
     s.memories["a"] = { nextSeq: 4, entries: [
       mem({ id: "mem_a_000001", strength: 90, triggerTags: ["heir"] }),
       mem({ id: "mem_a_000002", strength: 20 }),
@@ -28,7 +28,7 @@ describe("recallCandidates", () => {
   });
   it("只召回说话人【可知】的 chronicle 事件", () => {
     const s = createInitialState({ calendar: { month: 8 } });
-    s.standing["newcomer"] = { rank: "meiren", favor: 50, palaceEnteredAt: makeGameTime(1, 6, "mid") };
+    s.standing["newcomer"] = { rank: "meiren", favor: 50, peakFavor: 50, palaceEnteredAt: makeGameTime(1, 6, "mid") };
     s.chronicle.push({
       id: "evt_000001", type: "rank_changed", occurredAt: makeGameTime(1, 3, "mid"),
       participants: [{ charId: "consort_gu", role: "subject" }], payload: {},

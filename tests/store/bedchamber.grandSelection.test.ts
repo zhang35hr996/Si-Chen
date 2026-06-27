@@ -13,7 +13,7 @@ describe("availableFromMonth gates 侍寝", () => {
     const s = createNewGameState(db); // 元年一月
     const unlock = monthOrdinal({ year: s.calendar.year, month: 5 });
     const id = "xiunan_1_0";
-    const blocked = { ...s, standing: { ...s.standing, [id]: { rank: "gengyi", favor: 10, availableFromMonth: unlock } } };
+    const blocked = { ...s, standing: { ...s.standing, [id]: { rank: "gengyi", favor: 10, peakFavor: 10, availableFromMonth: unlock } } };
     expect(canSummon(blocked, id)).toBe(false);
     expect(passionAllowed(blocked, id)).toBe(false);
 

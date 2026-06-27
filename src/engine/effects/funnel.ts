@@ -606,6 +606,7 @@ export function applyEffects(
         const target = next.standing[effect.char]!;
         const applied = cappedDelta(`favor:${effect.char}`, effect.delta);
         target.favor = clampPct(target.favor + applied);
+        target.peakFavor = Math.max(target.peakFavor, target.favor);
         break;
       }
       case "adjust_consort_attr": {

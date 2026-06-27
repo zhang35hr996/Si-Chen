@@ -44,6 +44,7 @@ async function main() {
       standing: {
         rank: "貴人",
         favor: 50,
+        peakFavor: 50,
         selfRefs: {
           toPlayer: ["臣妾"],
           formal: ["妾"],
