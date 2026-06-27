@@ -23,4 +23,24 @@ describe("greetingAttendees", () => {
     const s = atSlot({ ...base, excusedFromGreeting: { dayIndex: base.calendar.dayIndex, charIds: ["lu_huaijin"] } }, 0);
     expect(greetingAttendees(db, s).map((c) => c.id)).not.toContain("lu_huaijin");
   });
+
+  it("生病/危重侍君不出席请安", () => {
+    const s = atSlot({
+      ...base,
+      standing: {
+        ...base.standing,
+        lu_huaijin: { ...base.standing["lu_huaijin"]!, healthStatus: "sick" },
+      },
+    }, 0);
+    expect(greetingAttendees(db, s).map((c) => c.id)).not.toContain("lu_huaijin");
+
+    const s2 = atSlot({
+      ...base,
+      standing: {
+        ...base.standing,
+        lu_huaijin: { ...base.standing["lu_huaijin"]!, healthStatus: "critical" },
+      },
+    }, 0);
+    expect(greetingAttendees(db, s2).map((c) => c.id)).not.toContain("lu_huaijin");
+  });
 });

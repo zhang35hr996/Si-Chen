@@ -73,7 +73,10 @@ export function greetingAttendees(db: ContentDB, state: GameState): CharacterCon
   }
 
   return presentAt(db, state, loc).filter(
-    (c) => c.kind === "consort" && c.id !== excludeId,
+    (c) =>
+      c.kind === "consort" &&
+      c.id !== excludeId &&
+      (state.standing[c.id]?.healthStatus ?? "healthy") === "healthy",
   );
 }
 
