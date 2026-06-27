@@ -86,7 +86,6 @@ function viewOf(
 }
 
 function residentText(view: PalaceView): string {
-  if (view.role === "待选秀男") return "待选秀男";
   if (view.residents.length === 0) return "暂无侍君";
   if (view.residents.length === 1) return view.residents[0]!.label;
   return `${view.residents[0]!.label} 等 ${view.residents.length} 人`;
@@ -103,7 +102,7 @@ function PalaceCard({
   onSelect: () => void;
   className?: string;
 }) {
-  const empty = view.residents.length === 0 && view.role !== "待选秀男";
+  const empty = view.residents.length === 0;
   return (
     <button
       type="button"
