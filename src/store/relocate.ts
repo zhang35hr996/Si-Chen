@@ -46,6 +46,47 @@ export function relocationTargets(db: ContentDB, state: GameState): PalaceVacanc
   }));
 }
 
+const CHINESE_GRADE_NUM: Record<string, number> = {
+  一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+};
+
+function gradeNumber(gradeStr: string): number {
+  for (const [ch, n] of Object.entries(CHINESE_GRADE_NUM)) {
+    if (gradeStr.includes(ch)) return n;
+  }
+  return 9;
+}
+
+/** 按品级返回优先尝试的宫室顺序（正四品以上可住主殿）。 */
+function chamberPreference(grade: number): ChamberId[] {
+  if (grade <= 3) return ["main", "east_side", "west_side", "east_annex", "west_annex"];
+  if (grade <= 4) return ["main", "west_side", "east_side", "east_annex", "west_annex"];
+  if (grade <= 5) return ["west_side", "east_side", "east_annex", "west_annex"];
+  if (grade <= 7) return ["east_annex", "west_annex", "east_side", "west_side"];
+  return ["west_annex", "east_annex", "east_side", "west_side"];
+}
+
+/**
+ * 按品级自动分配：找到第一个符合优先级的空宫室。
+ * 无可用宫室时返回 null（侍君暂留储秀宫）。
+ */
+export function autoAssignChamber(
+  db: ContentDB,
+  state: GameState,
+  rankId: string,
+): { locationId: string; chamberId: ChamberId } | null {
+  const grade = gradeNumber(db.ranks[rankId]?.grade ?? "九品");
+  const prefs = chamberPreference(grade);
+  const targets = relocationTargets(db, state);
+  for (const chamberId of prefs) {
+    for (const palace of targets) {
+      const slot = palace.chambers.find((c) => c.id === chamberId && !c.occupant);
+      if (slot) return { locationId: palace.id, chamberId };
+    }
+  }
+  return null;
+}
+
 /**
  * 组装搬迁效果；无变化（已在该宫该室）或目标非法时返回 null（不触发）。
  * 占用冲突由效果漏斗再行校验。
