@@ -92,6 +92,10 @@ export function resolveAddress(
   const forbiddenInContext: string[] = [];
 
   if (isTargetPlayer) {
+    // 圣上/今上/圣驾 are solemn third-person references — never valid as direct address to emperor.
+    // Blocked via contextForbiddenRefs so non-emperor-target dialogue may still use them (third-person).
+    forbiddenInContext.push("圣上");
+
     // 太后（elder）calls the emperor 皇帝 + kinship terms, not 陛下.
     // 皇嗣→皇帝（母皇）and register-aware non-harem addressing are follow-up scope.
     if (char?.kind === "elder") {

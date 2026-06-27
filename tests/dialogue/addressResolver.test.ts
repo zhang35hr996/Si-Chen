@@ -76,6 +76,33 @@ describe("resolveAddress — consort speaking DOWN to lower consort", () => {
   });
 });
 
+describe("resolveAddress — forbiddenInContext 圣上 (third-person form, blocked as direct address to emperor)", () => {
+  it("target=player → forbiddenInContext 含圣上（所有 register 均适用）", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player");
+    expect(addr.forbiddenInContext).toContain("圣上");
+  });
+
+  it("target=player × court → forbiddenInContext 仍含圣上", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "court" });
+    expect(addr.forbiddenInContext).toContain("圣上");
+  });
+
+  it("target=player × private → forbiddenInContext 含圣上（私下亦不得直称）", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "private" });
+    expect(addr.forbiddenInContext).toContain("圣上");
+  });
+
+  it("target ≠ player → forbiddenInContext 不含圣上（第三人称用途合法）", () => {
+    const addr = resolveAddress(db, state, "shen_zhibai", "lu_huaijin");
+    expect(addr.forbiddenInContext).not.toContain("圣上");
+  });
+
+  it("太后（elder）target=player → forbiddenInContext 含圣上", () => {
+    const addr = resolveAddress(db, state, "taihou", "player");
+    expect(addr.forbiddenInContext).toContain("圣上");
+  });
+});
+
 describe("resolveAddress — liftedForbiddenTerms (凤君 conditional permission)", () => {
   it("皇后 × target=player × private → liftedForbiddenTerms 含凤君", () => {
     const addr = resolveAddress(db, state, "shen_zhibai", "player", { register: "private" });

@@ -49,9 +49,11 @@ export interface TextGateContext {
    */
   wrongPlayerHonorifics: string[];
   /**
-   * Honorifics forbidden in court register but allowed in public/private/intimate
-   * (e.g. 皇上 — too informal for a formal court audience, but acceptable in
-   * less formal settings). Checked only when register is "court".
+   * Honorifics permitted in inner-quarters registers (private/intimate) but
+   * forbidden in all other registers (court, public, or default).
+   * 「皇上」 is the canonical example: acceptable in bedchamber daily speech,
+   * rejected in court audiences and outer-palace public scenes.
+   * Checked whenever register is NOT private/intimate.
    */
   courtRestrictedHonorifics: string[];
   /**
@@ -77,17 +79,21 @@ export interface TextGateContext {
 }
 
 const MIN_SELF_REF_LEN = 2;
+/** Registers that permit informal emperor address (皇上, 凤君). Must mirror addressResolver's PRIVATE_REGISTERS. */
+const PRIVATE_REGISTERS = new Set(["private", "intimate"]);
 
-/** v0 heuristic watch-list — globally wrong forms only; context-restricted terms (皇上/圣上/万岁/圣驾) excluded since the gate can't check context. */
+/** v0 heuristic watch-list — globally wrong forms only; 圣上 is blocked via contextForbiddenRefs (target-scoped by resolver). */
 const WRONG_PLAYER_HONORIFICS: string[] = [];
 
 /**
- * Terms that are acceptable in private/intimate but forbidden in court/public.
- * 「皇上」 is too informal for a formal court audience but permitted in private.
+ * 「皇上」 is acceptable inner-quarters address (private/intimate) but forbidden in any
+ * non-private register (court, public, or unset default).
  * 「万岁」 is a legitimate court cheer (朝贺山呼) — not in this list.
- * 「圣上/今上/圣驾」 have third-person reference uses — not blocked globally.
+ * 「圣上/今上/圣驾」 are solemn third-person references blocked when target=emperor via
+ * contextForbiddenRefs (set by orchestrator from resolvedAddress.forbiddenInContext);
+ * they are NOT blocked globally since non-emperor-target dialogue legitimately uses them.
  */
-const COURT_RESTRICTED_HONORIFICS: string[] = ["皇上"];
+const EMPEROR_NON_PRIVATE_RESTRICTED: string[] = ["皇上"];
 
 /** Raw prompt-template tokens that must never survive into player-facing text. */
 const TEMPLATE_PATTERNS: RegExp[] = [
@@ -134,7 +140,7 @@ export function buildTextGateContext(
     forbiddenTerms: forbidden,
     foreignSelfRefs: [...foreign],
     wrongPlayerHonorifics: WRONG_PLAYER_HONORIFICS.filter((t) => !forbiddenSet.has(t)),
-    courtRestrictedHonorifics: COURT_RESTRICTED_HONORIFICS.filter((t) => !forbiddenSet.has(t)),
+    courtRestrictedHonorifics: EMPEROR_NON_PRIVATE_RESTRICTED.filter((t) => !forbiddenSet.has(t)),
     contextForbiddenRefs: [],
     register,
     privateAllowedTerms: [], // set externally by orchestrator from resolvedAddress.liftedForbiddenTerms
@@ -175,14 +181,15 @@ export function scanDialogueText(
     }
   }
 
-  // Court-restricted honorifics: informal emperor address blocked in formal court.
-  if (ctx.register === "court") {
+  // Non-private register check: 皇上 is inner-quarters address only.
+  // Block it in court, public, and any unset/default register.
+  if (!PRIVATE_REGISTERS.has(ctx.register)) {
     for (const term of ctx.courtRestrictedHonorifics) {
       if (text.includes(term)) {
         findings.push({
           gate: "rank_title",
           severity: "reject",
-          message: `「${term}」 is too informal for ${ctx.register} register`,
+          message: `「${term}」 is inner-quarters address only — use 陛下 in ${ctx.register} register`,
           matched: term,
         });
       }

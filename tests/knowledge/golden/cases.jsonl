@@ -44,3 +44,5 @@
 {"id":"pregnancy-duty-static","query":"怀孕期间是否照常视事","limit":5,"expectedRetrievalSkipped":false,"category":"confusable","note":"含'怀孕'但问的是规则，不是询问具体人物状态，intent gate 不应拦截"}
 {"id":"summon-etiquette-static","query":"宣召臣下应遵循什么礼仪","limit":5,"expectedRetrievalSkipped":false,"expectedAnyOf":["etiquette.address-and-audience#audience-protocol"],"category":"confusable","note":"含'宣召'但问的是固定礼仪，intent gate 不应拦截"}
 {"id":"fengzhu-vs-gongzhu","query":"皇子成年后应称凤主还是公主","limit":5,"expectedAnyOf":["titles.imperial-heirs#fengzhu","titles.imperial-kinship#princess-titles"],"forbiddenIds":[],"category":"direct","note":"公主是废弃旧称，本朝女性皇嗣成年分封后称凤主"}
+{"id":"fengzhu-vs-fengjun","query":"凤主和凤君有什么区别","limit":5,"expectedAnyOf":["titles.imperial-heirs#fengzhu-vs-fengjun","titles.imperial-heirs#fengzhu"],"forbiddenIds":[],"category":"confusable","note":"凤主=皇室女性封爵（皇嗣成年分封），凤君=皇帝的私下特殊尊称；二者完全不同，不得混用"}
+{"id":"imperial-son-auto-guizhu","query":"皇郎成年后会自动成为贵主吗","limit":5,"expectedAnyOf":["titles.imperial-heirs#guizhu"],"forbiddenIds":[],"category":"direct","note":"皇郎不因成年自动获封贵主，必须完成正式下赘婚配并经册封，方称贵主"}

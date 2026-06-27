@@ -24,11 +24,11 @@ describe("buildTextGateContext", () => {
     expect(huanghouCtx.foreignSelfRefs).not.toContain("臣");
   });
 
-  it("wrongPlayerHonorifics is empty — 皇上/圣上/万岁/圣驾 are now context-restricted not globally wrong", () => {
+  it("wrongPlayerHonorifics is empty — 圣上 is blocked via contextForbiddenRefs (target-scoped), not globally", () => {
     expect(huanghouCtx.wrongPlayerHonorifics).toEqual([]);
   });
 
-  it("courtRestrictedHonorifics contains 皇上 (too informal for court/public)", () => {
+  it("courtRestrictedHonorifics contains 皇上 (inner-quarters only — blocked in court AND public)", () => {
     expect(huanghouCtx.courtRestrictedHonorifics).toContain("皇上");
   });
 
@@ -80,11 +80,21 @@ describe("self_ref gate", () => {
 });
 
 describe("rank_title gate", () => {
-  it("returns no rank_title findings for 圣上 in private (context-restricted, allowed in private)", () => {
+  it("gate alone (without contextForbiddenRefs) does not block 圣上 — third-person uses in non-emperor conversations pass", () => {
+    // 圣上 blocking is target-scoped: the orchestrator sets contextForbiddenRefs = ["圣上"]
+    // only when target=player. Without that context, the gate cannot distinguish direct
+    // address from third-person reference (e.g. "圣上已决" in a consort-to-consort scene).
     const ctx = buildTextGateContext(db, "sili_zhang", "private");
-    const findings = scanDialogueText("圣上万安。", ctx);
+    const findings = scanDialogueText("圣上已决，臣侍遵旨。", ctx);
     const rankTitleFindings = findings.filter((f) => f.gate === "rank_title");
     expect(rankTitleFindings).toHaveLength(0);
+  });
+
+  it("圣上 rejected as direct address when contextForbiddenRefs = ['圣上'] (set by orchestrator for emperor-target)", () => {
+    const ctx = buildTextGateContext(db, "huanghou", "private");
+    ctx.contextForbiddenRefs = ["圣上"]; // simulates resolvedAddress.forbiddenInContext when target=player
+    const findings = scanDialogueText("圣上万安。", ctx);
+    expect(findings.some((f) => f.gate === "self_ref" && f.matched === "圣上")).toBe(true);
   });
 
   it("accepts the canonical 陛下 address in any register", () => {
@@ -102,9 +112,9 @@ describe("rank_title gate", () => {
     expect(scanDialogueText("皇上圣明。", privateCtx).filter((f) => f.matched === "皇上")).toHaveLength(0);
   });
 
-  it("allows 皇上 in public register (not as formal as court)", () => {
+  it("rejects 皇上 in public register (inner-quarters address only — 陛下 required outside private/intimate)", () => {
     const publicCtx = buildTextGateContext(db, "huanghou", "public");
-    expect(scanDialogueText("皇上圣明。", publicCtx).filter((f) => f.matched === "皇上")).toHaveLength(0);
+    expect(scanDialogueText("皇上圣明。", publicCtx).some((f) => f.gate === "rank_title" && f.matched === "皇上")).toBe(true);
   });
 
   it("allows 万岁 in court register (合法朝贺用词)", () => {
