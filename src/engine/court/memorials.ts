@@ -768,13 +768,24 @@ export function validateMemorials(state: GameState): GameError[] {
           e("MEMORIAL_BAD_OPTIONS", `季度财政简录奏折「${m.id}」须有且仅有 acknowledge 选项`, { id: m.id });
 
         // 内部等式不变量（防止损坏的存档通过 schema 检查）
-        const allocSum = (bd: typeof p.expenseAllocation.planned) =>
-          bd.palace + bd.consortAllowance + bd.officialSalary + bd.armyMaintenance + bd.royalChildrenEducation;
+        type AllocBD = typeof p.expenseAllocation.planned;
+        const EXPENSE_KEYS: (keyof AllocBD)[] = [
+          "palace", "consortAllowance", "officialSalary", "armyMaintenance", "royalChildrenEducation",
+        ];
+        const allocSum = (bd: AllocBD) => EXPENSE_KEYS.reduce((s, k) => s + bd[k], 0);
+
+        // 逐类别：paid[k] + shortfall[k] === planned[k]
+        for (const key of EXPENSE_KEYS) {
+          if (p.expenseAllocation.paid[key] + p.expenseAllocation.shortfall[key] !== p.expenseAllocation.planned[key])
+            e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」${key} 的 paid + shortfall ≠ planned`, { id: m.id, category: key });
+        }
 
         if (allocSum(p.expenseAllocation.planned) !== p.expensePlanned)
           e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」expenseAllocation.planned 汇总与 expensePlanned 不符`, { id: m.id });
         if (allocSum(p.expenseAllocation.paid) !== p.expensePaid)
           e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」expenseAllocation.paid 汇总与 expensePaid 不符`, { id: m.id });
+        if (allocSum(p.expenseAllocation.shortfall) !== p.fundingShortfall)
+          e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」shortfall 汇总与 fundingShortfall 不符`, { id: m.id });
         if (p.expensePaid + p.fundingShortfall !== p.expensePlanned)
           e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」expensePaid + fundingShortfall ≠ expensePlanned`, { id: m.id });
         if (p.openingTreasury + p.revenueActual - p.expensePaid !== p.closingTreasury)
