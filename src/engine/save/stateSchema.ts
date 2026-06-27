@@ -273,6 +273,21 @@ const memorialPayloadSchema = z.union([
     category: z.literal("treasury"),
     matter: z.literal("quarterly_settlement_report"),
     season: z.string().min(1),
+    periodKey: z.string().min(1),
+    openingTreasury: z.number().int().min(0),
+    revenueBase: z.number().int().min(0),
+    revenueActual: z.number().int().min(0),
+    expensePlanned: z.number().int().min(0),
+    expensePaid: z.number().int().min(0),
+    arrears: z.number().int().min(0),
+    expenseBreakdown: z.strictObject({
+      palace: z.number().int().min(0),
+      consortAllowance: z.number().int().min(0),
+      officialSalary: z.number().int().min(0),
+      armyMaintenance: z.number().int().min(0),
+      royalChildrenEducation: z.number().int().min(0),
+    }),
+    closingTreasury: z.number().int().min(0),
     options: z.array(memorialOptionSchema).min(1),
   }),
   z.strictObject({
@@ -818,6 +833,7 @@ export const gameStateSchema = z.strictObject({
     }
   })).default([]),
   justice: justiceStateSchema,
+  settledQuarterlyPeriods: z.array(z.string()).default([]),
   rngSeed: z.number(),
 }).superRefine((data, ctx) => {
   const errs = [

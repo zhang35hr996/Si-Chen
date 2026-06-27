@@ -2,25 +2,23 @@
  * 季度财政结算（Quarterly Treasury Settlement）。
  *
  * 每年四次触发（月份 1/4/7/10 上旬）：
- *   1. 计算季度税收入库（calculateQuarterlyRevenue）
- *   2. 计算季度固定支出（calculateQuarterlyExpense）
- *   3. 原子写入两条 system 台账条目
+ *   1. 计算季度税收与各支出分项（calculateQuarterlyRevenue / calculateQuarterlyExpense）
+ *   2. 预计划完整结算：确定 expensePlanned / expensePaid / arrears
+ *   3. 原子写入两条 system 台账条目（任一失败则整体回滚至原始 state）
  *   4. 生成一条财政简录奏折（matter: "quarterly_settlement_report"）供玩家阅览
  *
+ * 幂等键存储于 state.settledQuarterlyPeriods，不依赖奏折是否存在。
  * 所有函数均为纯函数，不操作 store/React。
  */
 import type { GameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
 import type { GameState, Memorial, MemorialOption } from "../state/types";
 import { applyTreasuryTransaction } from "./treasuryLedger";
-import { hasMemorialForSource } from "./memorials";
 
 // ── 常量 ───────────────────────────────────────────────────────────────────────
 
-/** 季度基础税收（两）。实际收入 = 基数 × 各因子乘积。 */
 const BASE_QUARTERLY_REVENUE = 8000;
 
-/** 月份 → 季节标签。 */
 const MONTH_TO_SEASON: Record<number, string> = {
   1: "冬",
   4: "春",
@@ -28,7 +26,6 @@ const MONTH_TO_SEASON: Record<number, string> = {
   10: "秋",
 };
 
-/** 月份 → 奏折标题前缀。 */
 const MONTH_TO_TITLE: Record<number, string> = {
   1: "冬税入库",
   4: "春税入库",
@@ -36,10 +33,7 @@ const MONTH_TO_TITLE: Record<number, string> = {
   10: "秋税入库",
 };
 
-/** 季度固定支出：宫中基础用度。 */
 const PALACE_BASE_EXPENSE = 500;
-
-/** 每位存活皇嗣的季度教养费。 */
 const HEIR_EDUCATION_PER_CHILD = 100;
 
 // ── 辅助 ───────────────────────────────────────────────────────────────────────
@@ -48,7 +42,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-/** "mem_000001" 单调序号生成（与 memorials.ts 同逻辑，避免循环依赖）。 */
 function nextMemorialId(state: GameState): string {
   let maxSeq = 0;
   for (const id of Object.keys(state.memorials)) {
@@ -60,17 +53,21 @@ function nextMemorialId(state: GameState): string {
 
 // ── 税收计算 ───────────────────────────────────────────────────────────────────
 
+/** 税收因子对基准收入的影响量（正=增益，负=减少；用于归因文案）。 */
+export interface RevenueCause {
+  type: "productivity" | "corruption" | "public_support" | "border_pressure" | "random";
+  /** actual - actual_if_this_factor_were_neutral(1.0)。负数代表该因素拖累了税收。 */
+  impact: number;
+}
+
 export interface QuarterlyRevenueResult {
   base: number;
   actual: number;
-  /** actual / base，用于文案分级。 */
   ratio: number;
+  /** 各因子归因列表（impact=0 的因子已过滤）。 */
+  causes: RevenueCause[];
 }
 
-/**
- * 计算本季度税收实收金额。
- * @param rng 随机源（默认 Math.random，测试可注入固定值）
- */
 export function calculateQuarterlyRevenue(
   state: GameState,
   rng: () => number = Math.random,
@@ -81,7 +78,6 @@ export function calculateQuarterlyRevenue(
   const corruptionFactor = clamp(1.0 - corruption / 200, 0.5, 1.0);
   const stabilityFactor = clamp(0.8 + publicSupport / 500, 0.8, 1.1);
   const borderFactor = clamp(1.0 - borderPressure / 500, 0.8, 1.0);
-  // 小范围随机波动：±5%
   const randomFactor = 0.95 + rng() * 0.10;
 
   const base = BASE_QUARTERLY_REVENUE;
@@ -89,7 +85,24 @@ export function calculateQuarterlyRevenue(
     base * productionFactor * corruptionFactor * stabilityFactor * borderFactor * randomFactor,
   );
 
-  return { base, actual, ratio: actual / base };
+  // Each factor's impact: actual - (actual if this factor were replaced with 1.0)
+  const withoutProduction = Math.round(base * 1.0 * corruptionFactor * stabilityFactor * borderFactor * randomFactor);
+  const withoutCorruption = Math.round(base * productionFactor * 1.0 * stabilityFactor * borderFactor * randomFactor);
+  const withoutStability = Math.round(base * productionFactor * corruptionFactor * 1.0 * borderFactor * randomFactor);
+  const withoutBorder = Math.round(base * productionFactor * corruptionFactor * stabilityFactor * 1.0 * randomFactor);
+  const withoutRandom = Math.round(base * productionFactor * corruptionFactor * stabilityFactor * borderFactor * 1.0);
+
+  const causes: RevenueCause[] = (
+    [
+      { type: "productivity" as const, impact: actual - withoutProduction },
+      { type: "corruption" as const, impact: actual - withoutCorruption },
+      { type: "public_support" as const, impact: actual - withoutStability },
+      { type: "border_pressure" as const, impact: actual - withoutBorder },
+      { type: "random" as const, impact: actual - withoutRandom },
+    ] satisfies RevenueCause[]
+  ).filter((c) => c.impact !== 0);
+
+  return { base, actual, ratio: actual / base, causes };
 }
 
 // ── 支出计算 ───────────────────────────────────────────────────────────────────
@@ -107,7 +120,6 @@ export interface QuarterlyExpenseResult {
   breakdown: QuarterlyExpenseBreakdown;
 }
 
-/** 计算当季在籍侍君季度月例总额。 */
 function computeConsortQuarterlyAllowance(db: ContentDB, state: GameState): number {
   const allChars = { ...db.characters, ...state.generatedConsorts };
   let total = 0;
@@ -124,7 +136,6 @@ function computeConsortQuarterlyAllowance(db: ContentDB, state: GameState): numb
   return total;
 }
 
-/** 计算季度固定支出。 */
 export function calculateQuarterlyExpense(
   db: ContentDB,
   state: GameState,
@@ -147,34 +158,60 @@ export function calculateQuarterlyExpense(
 
 // ── 奏报文本 ───────────────────────────────────────────────────────────────────
 
-function buildRevenueText(ratio: number, actual: number): string {
+function buildRevenueText(ratio: number, actual: number, causes: RevenueCause[]): string {
   const amount = actual.toLocaleString();
+
   if (ratio >= 1.1) {
     return (
-      `启禀陛下，今年风调雨顺，百姓安居，农桑兴旺，各州赋税俱已缴清。` +
-      `今季共入库税银 **${amount} 两**。` +
-      `皆赖陛下圣德广被，四海升平。`
+      `启禀陛下，今季风调雨顺，农桑兴旺，各州赋税俱已缴清。` +
+      `今季共入库税银 **${amount} 两**。皆赖陛下圣德广被，四海升平。`
     );
   }
   if (ratio >= 0.85) {
     return `启禀陛下，各州税赋均已押解入京。今季共收税银 **${amount} 两**。`;
   }
+
+  // Below 0.85: identify dominant structural cause (exclude random noise)
+  const negativeCauses = causes
+    .filter((c) => c.impact < 0 && c.type !== "random")
+    .sort((a, b) => a.impact - b.impact);
+  const dominant = negativeCauses[0];
+
+  let causeText = "各州税赋有所减少，";
+  if (dominant) {
+    switch (dominant.type) {
+      case "corruption":
+        causeText = "部分地方官员课税不清，恐有侵吞税款之事，";
+        break;
+      case "border_pressure":
+        causeText = "边防费用繁重，各州余粮有限，";
+        break;
+      case "public_support":
+        causeText = "民间颇有怨声，部分州县百姓难以足额完税，";
+        break;
+      case "productivity":
+        causeText = "各州农桑稍欠，今年收成一般，";
+        break;
+    }
+  }
+
   if (ratio >= 0.65) {
+    return `启禀陛下，${causeText}今季赋税略减。共收税银 **${amount} 两**。`;
+  }
+  return `启禀陛下……${causeText}税赋难征。今季仅收税银 **${amount} 两**。`;
+}
+
+function buildExpenseText(expensePlanned: number, expensePaid: number, arrears: number): string {
+  if (arrears <= 0) {
     return (
-      `启禀陛下，部分州府遭逢灾害，今季赋税略减。` +
-      `共收税银 **${amount} 两**。`
+      `另，今季宫中用度、百官俸禄、边军粮饷及皇嗣教养诸项，均已按例拨付，` +
+      `共计支出 **${expensePaid.toLocaleString()} 两**。`
     );
   }
   return (
-    `启禀陛下……多地流民四起，税赋难征。` +
-    `今季仅收税银 **${amount} 两**。`
-  );
-}
-
-function buildExpenseText(expenseTotal: number): string {
-  return (
-    `另，今季宫中用度、百官俸禄、边军粮饷及皇嗣教养诸项，均已按例拨付，` +
-    `共计支出 **${expenseTotal.toLocaleString()} 两**。`
+    `另，今季各项常例支出原计划 **${expensePlanned.toLocaleString()} 两**，` +
+    `因国库不足，实际拨付 **${expensePaid.toLocaleString()} 两**，` +
+    `尚有 **${arrears.toLocaleString()} 两**欠付未清，请陛下示下。`
   );
 }
 
@@ -192,8 +229,9 @@ function buildCommentary(state: GameState): string {
 /**
  * 季度财政结算主函数。
  *
- * 幂等：同一季度（year:month 组合）已结算则直接返回原始 state。
- * 顺序：税收入库 → 支出扣除（不足时扣至余额归零）→ 生成财政简录奏折。
+ * 幂等：同一期号已在 state.settledQuarterlyPeriods 中则直接返回原始 state。
+ * 原子：预计划所有金额后再依次写入台账；任一 applyTreasuryTransaction 失败则
+ *       整体回滚（返回入参原始 state，不更新 settledQuarterlyPeriods）。
  */
 export function settleQuarterlyTreasury(
   db: ContentDB,
@@ -202,18 +240,25 @@ export function settleQuarterlyTreasury(
   rng: () => number = Math.random,
 ): GameState {
   const sourceId = `quarterly_settlement:${at.year}:${at.month}`;
-  if (hasMemorialForSource(state, sourceId)) return state;
+  if (state.settledQuarterlyPeriods.includes(sourceId)) return state;
 
   const season = MONTH_TO_SEASON[at.month] ?? String(at.month);
   const title = `${MONTH_TO_TITLE[at.month] ?? "季税入库"}·季度财政简录`;
+  const periodKey = `${at.year}:${at.month}`;
 
-  // 1. 计算税收与支出
+  // 1. Pre-plan: compute all amounts from original state
+  const openingTreasury = state.resources.nation.treasury;
   const revenue = calculateQuarterlyRevenue(state, rng);
   const expense = calculateQuarterlyExpense(db, state);
 
-  let current = state;
+  const treasuryAfterRevenue = openingTreasury + revenue.actual;
+  const expensePlanned = expense.total;
+  const expensePaid = Math.min(expensePlanned, treasuryAfterRevenue);
+  const arrears = expensePlanned - expensePaid;
+  const closingTreasury = treasuryAfterRevenue - expensePaid;
 
-  // 2. 入库（税收）
+  // 2. Apply income transaction; rollback to original state on failure
+  let current = state;
   if (revenue.actual > 0) {
     const r = applyTreasuryTransaction(current, {
       delta: revenue.actual,
@@ -221,25 +266,26 @@ export function settleQuarterlyTreasury(
       source: { kind: "system", reasonCode: `quarterly_tax_income:${at.year}:${at.month}` },
       reason: `${season}税入库（${at.year}年${at.month}月）`,
     });
-    if (r.ok) current = r.value.state;
+    if (!r.ok) return state;
+    current = r.value.state;
   }
 
-  // 3. 支出（扣至余额归零）
-  const actualExpense = Math.min(expense.total, current.resources.nation.treasury);
-  if (actualExpense > 0) {
+  // 3. Apply expense transaction; rollback to original state on failure
+  if (expensePaid > 0) {
     const r = applyTreasuryTransaction(current, {
-      delta: -actualExpense,
+      delta: -expensePaid,
       at,
       source: { kind: "system", reasonCode: `quarterly_operating_expense:${at.year}:${at.month}` },
       reason: `季度固定支出（${at.year}年${at.month}月）`,
     });
-    if (r.ok) current = r.value.state;
+    if (!r.ok) return state;
+    current = r.value.state;
   }
 
-  // 4. 生成财政简录奏折（仅供阅览，无国库变动）
-  const revenueText = buildRevenueText(revenue.ratio, revenue.actual);
-  const expenseText = buildExpenseText(actualExpense);
-  const commentary = buildCommentary(current);
+  // 4. Generate informational memorial with full financial snapshot
+  const revenueText = buildRevenueText(revenue.ratio, revenue.actual, revenue.causes);
+  const expenseText = buildExpenseText(expensePlanned, expensePaid, arrears);
+  const commentary = buildCommentary(state);
 
   const summary =
     `户部尚书奏报：\n\n` +
@@ -248,11 +294,7 @@ export function settleQuarterlyTreasury(
     expenseText +
     (commentary ? `\n\n${commentary}` : "");
 
-  const acknowledgeOption: MemorialOption = {
-    id: "acknowledge",
-    label: "已阅",
-    effects: [],
-  };
+  const acknowledgeOption: MemorialOption = { id: "acknowledge", label: "已阅", effects: [] };
 
   const memorial: Memorial = {
     id: nextMemorialId(current),
@@ -266,12 +308,23 @@ export function settleQuarterlyTreasury(
       category: "treasury",
       matter: "quarterly_settlement_report",
       season,
+      periodKey,
+      openingTreasury,
+      revenueBase: revenue.base,
+      revenueActual: revenue.actual,
+      expensePlanned,
+      expensePaid,
+      arrears,
+      expenseBreakdown: expense.breakdown,
+      closingTreasury,
       options: [acknowledgeOption],
     },
   };
 
+  // 5. Mark period settled (independent of memorial existence)
   return {
     ...current,
+    settledQuarterlyPeriods: [...current.settledQuarterlyPeriods, sourceId],
     memorials: { ...current.memorials, [memorial.id]: memorial },
   };
 }

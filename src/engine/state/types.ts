@@ -489,6 +489,23 @@ export type TreasuryMemorialPayload =
       matter: "quarterly_settlement_report";
       /** 季节标签，如"春"/"夏"/"秋"/"冬"。 */
       season: string;
+      /** "${year}:${month}" 格式，用于历史查询。 */
+      periodKey: string;
+      openingTreasury: number;
+      revenueBase: number;
+      revenueActual: number;
+      expensePlanned: number;
+      expensePaid: number;
+      /** expensePlanned - expensePaid；国库不足时 > 0。 */
+      arrears: number;
+      expenseBreakdown: {
+        palace: number;
+        consortAllowance: number;
+        officialSalary: number;
+        armyMaintenance: number;
+        royalChildrenEducation: number;
+      };
+      closingTreasury: number;
       options: MemorialOption[];
     };
 
@@ -1201,6 +1218,8 @@ export interface GameState {
   haremAdminReviews: HaremAdminReviewRecord[];
   /** 司法记录持久层（PUNISH-3B1）。 */
   justice: JusticeState;
+  /** 已完成季度财政结算的期号集合（格式 "quarterly_settlement:${year}:${month}"）。独立幂等键，与奏折存在无关。 */
+  settledQuarterlyPeriods: string[];
   rngSeed: number;
 }
 
