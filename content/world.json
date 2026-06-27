@@ -54,7 +54,8 @@
       },
       "order": 1000,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 500
     },
     {
       "id": "huangguifu",
@@ -70,7 +71,8 @@
       },
       "order": 194,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 350
     },
     {
       "id": "guifu",
@@ -86,7 +88,8 @@
       },
       "order": 188,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 250
     },
     {
       "id": "xianfu",
@@ -102,7 +105,8 @@
       },
       "order": 186,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 200
     },
     {
       "id": "liangfu",
@@ -118,7 +122,8 @@
       },
       "order": 184,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 180
     },
     {
       "id": "defu",
@@ -134,7 +139,8 @@
       },
       "order": 182,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 160
     },
     {
       "id": "fu",
@@ -150,7 +156,8 @@
       },
       "order": 176,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 140
     },
     {
       "id": "zhaoyi",
@@ -169,7 +176,8 @@
       },
       "order": 168,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 120
     },
     {
       "id": "zhaohui",
@@ -188,7 +196,8 @@
       },
       "order": 166,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 100
     },
     {
       "id": "zhaode",
@@ -207,7 +216,8 @@
       },
       "order": 164,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 90
     },
     {
       "id": "chengyi",
@@ -226,7 +236,8 @@
       },
       "order": 158,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 80
     },
     {
       "id": "chenghui",
@@ -245,7 +256,8 @@
       },
       "order": 156,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 70
     },
     {
       "id": "chengde",
@@ -264,7 +276,8 @@
       },
       "order": 154,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 60
     },
     {
       "id": "jieyu",
@@ -283,7 +296,8 @@
       },
       "order": 146,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 50
     },
     {
       "id": "shichen",
@@ -302,7 +316,8 @@
       },
       "order": 140,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 40
     },
     {
       "id": "changyu",
@@ -321,7 +336,8 @@
       },
       "order": 132,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 35
     },
     {
       "id": "shaoshi",
@@ -338,7 +354,8 @@
       },
       "order": 124,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 30
     },
     {
       "id": "guiren",
@@ -355,7 +372,8 @@
       },
       "order": 116,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 20
     },
     {
       "id": "liangren",
@@ -372,7 +390,8 @@
       },
       "order": 108,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 15
     },
     {
       "id": "meiren",
@@ -389,7 +408,8 @@
       },
       "order": 100,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 12
     },
     {
       "id": "cairen",
@@ -406,7 +426,8 @@
       },
       "order": 92,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 9
     },
     {
       "id": "changzai",
@@ -422,7 +443,8 @@
       },
       "order": 84,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 7
     },
     {
       "id": "daying",
@@ -438,7 +460,8 @@
       },
       "order": 76,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 5
     },
     {
       "id": "gengyi",
@@ -454,7 +477,8 @@
       },
       "order": 68,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 3
     },
     {
       "id": "xuanshi",
@@ -470,7 +494,8 @@
       },
       "order": 60,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 2
     },
     {
       "id": "guannanzi",
@@ -486,7 +511,8 @@
       },
       "order": 52,
       "domain": "harem",
-      "favorTerm": "恩宠"
+      "favorTerm": "恩宠",
+      "monthlyAllowance": 1
     },
     {
       "id": "sili_zhang",

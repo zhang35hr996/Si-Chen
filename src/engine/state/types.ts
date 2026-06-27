@@ -476,13 +476,21 @@ export interface MemorialOption {
 /** 向后兼容别名（第一刀的 DisasterOption 直接映射到 MemorialOption）。 */
 export type DisasterOption = MemorialOption;
 
-/** 财政奏折（户部年度岁入计划）载荷。 */
-export interface TreasuryMemorialPayload {
-  category: "treasury";
-  matter: "annual_revenue_plan";
-  urgency: "routine" | "urgent";
-  options: MemorialOption[];
-}
+/** 财政奏折载荷（年度岁入计划 / 季度财政简录）。 */
+export type TreasuryMemorialPayload =
+  | {
+      category: "treasury";
+      matter: "annual_revenue_plan";
+      urgency: "routine" | "urgent";
+      options: MemorialOption[];
+    }
+  | {
+      category: "treasury";
+      matter: "quarterly_settlement_report";
+      /** 季节标签，如"春"/"夏"/"秋"/"冬"。 */
+      season: string;
+      options: MemorialOption[];
+    };
 
 export type MilitaryMemorialMatter =
   | "annual_readiness"

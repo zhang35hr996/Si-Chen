@@ -141,7 +141,11 @@ export function memorialCard(m: Memorial, currentTreasury: number): MemorialCard
     base.severityLabel = m.payload.severity === "major" ? "大灾" : "灾情";
   }
   if (m.payload.category === "treasury") {
-    base.contextLabel = m.payload.urgency === "urgent" ? "度支 · 急奏" : "度支 · 常例";
+    if (m.payload.matter === "quarterly_settlement_report") {
+      base.contextLabel = "度支 · 季度简录";
+    } else {
+      base.contextLabel = m.payload.urgency === "urgent" ? "度支 · 急奏" : "度支 · 常例";
+    }
   }
   if (m.payload.category === "military") {
     const { matter, urgency, theaterId, pressureAtCreation, militaryAtCreation } = m.payload;

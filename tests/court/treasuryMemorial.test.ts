@@ -36,6 +36,7 @@ describe("Group C: generateTreasuryMemorial — generation", () => {
     expect(r.memorial.category).toBe("treasury");
     expect(r.memorial.status).toBe("pending");
     if (r.memorial.payload.category !== "treasury") return;
+    if (r.memorial.payload.matter !== "annual_revenue_plan") return;
     expect(r.memorial.payload.urgency).toBe("routine");
     expect(r.memorial.payload.matter).toBe("annual_revenue_plan");
   });
@@ -44,7 +45,7 @@ describe("Group C: generateTreasuryMemorial — generation", () => {
     const state = stateWithTreasury(2999);
     const r = generateTreasuryMemorial(state, AT_APRIL)!;
     expect(r).not.toBeNull();
-    if (r.memorial.payload.category !== "treasury") return;
+    if (r.memorial.payload.category !== "treasury" || r.memorial.payload.matter !== "annual_revenue_plan") return;
     expect(r.memorial.payload.urgency).toBe("urgent");
     expect(r.memorial.title).toContain("筹饷");
   });
@@ -53,7 +54,7 @@ describe("Group C: generateTreasuryMemorial — generation", () => {
     const state = stateWithTreasury(3000);
     const r = generateTreasuryMemorial(state, AT_APRIL)!;
     expect(r).not.toBeNull();
-    if (r.memorial.payload.category !== "treasury") return;
+    if (r.memorial.payload.category !== "treasury" || r.memorial.payload.matter !== "annual_revenue_plan") return;
     expect(r.memorial.payload.urgency).toBe("routine");
   });
 
@@ -237,7 +238,9 @@ describe("Group D: annual treasury seam — production-reachable", () => {
     expect(r.ok).toBe(true);
     expect(store.getState().calendar.month).toBe(4);
 
-    const pending = getPendingMemorials(store.getState()).filter((m) => m.category === "treasury");
+    const pending = getPendingMemorials(store.getState()).filter(
+      (m) => m.payload.category === "treasury" && m.payload.matter === "annual_revenue_plan",
+    );
     expect(pending).toHaveLength(1);
     expect(pending[0]!.category).toBe("treasury");
     expect(validateMemorials(store.getState())).toEqual([]);
@@ -255,7 +258,9 @@ describe("Group D: annual treasury seam — production-reachable", () => {
     const store = storeAtMonth3();
     store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
 
-    const m = getPendingMemorials(store.getState()).find((m) => m.category === "treasury")!;
+    const m = getPendingMemorials(store.getState()).find(
+      (m) => m.payload.category === "treasury" && m.payload.matter === "annual_revenue_plan",
+    )!;
     expect(m).toBeDefined();
 
     // Resolve the memorial
@@ -278,17 +283,17 @@ describe("Group D: annual treasury seam — production-reachable", () => {
     const prevCount = Object.keys(store.getState().memorials).length;
     store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
 
-    const newTreasuryMemorials = getPendingMemorials(store.getState()).filter(
-      (m) => m.category === "treasury",
+    const newAnnualMemorials = getPendingMemorials(store.getState()).filter(
+      (m) => m.payload.category === "treasury" && m.payload.matter === "annual_revenue_plan",
     );
-    expect(newTreasuryMemorials).toHaveLength(1);
+    expect(newAnnualMemorials).toHaveLength(1);
     expect(Object.keys(store.getState().memorials).length).toBeGreaterThan(prevCount);
   });
 
   it("next year if still pending: cannot generate", () => {
     const store = storeAtMonth3();
     store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
-    // Pending memorial from year 2 — do NOT resolve
+    // Pending annual memorial from year 2 — do NOT resolve
 
     // Advance to year 3, month 3→4
     const s = store.getState();
@@ -303,22 +308,22 @@ describe("Group D: annual treasury seam — production-reachable", () => {
         ap: 1,
       },
     });
-    const prevCount = Object.keys(store.getState().memorials).length;
     store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
 
-    // Still only one pending treasury memorial (the original from year 2)
-    const treasuryMemorials = Object.values(store.getState().memorials).filter(
-      (m) => m.category === "treasury",
+    // Annual treasury memorial count stays at 1 (blocked by existing pending)
+    const annualMemorials = Object.values(store.getState().memorials).filter(
+      (m) => m.payload.category === "treasury" && m.payload.matter === "annual_revenue_plan",
     );
-    expect(treasuryMemorials).toHaveLength(1);
-    expect(Object.keys(store.getState().memorials).length).toBe(prevCount);
+    expect(annualMemorials).toHaveLength(1);
   });
 
   it("resolve through store: audit option increases treasury and writes ledger", () => {
     const store = storeAtMonth3();
     store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
 
-    const m = getPendingMemorials(store.getState()).find((m) => m.category === "treasury")!;
+    const m = getPendingMemorials(store.getState()).find(
+      (m) => m.payload.category === "treasury" && m.payload.matter === "annual_revenue_plan",
+    )!;
     expect(m).toBeDefined();
 
     const before = store.getState().resources.nation.treasury;
@@ -327,8 +332,12 @@ describe("Group D: annual treasury seam — production-reachable", () => {
     if (!r.ok) return;
 
     expect(store.getState().resources.nation.treasury).toBeGreaterThan(before);
-    expect(store.getState().treasuryLedger).toHaveLength(1);
-    expect(store.getState().treasuryLedger[0]!.delta).toBeGreaterThan(0);
+    // treasury ledger includes quarterly settlement entries + the audit entry
+    const auditEntry = store.getState().treasuryLedger.find(
+      (e) => e.source.kind === "memorial",
+    );
+    expect(auditEntry).toBeDefined();
+    expect(auditEntry!.delta).toBeGreaterThan(0);
     expect(validateTreasuryLedger(store.getState())).toEqual([]);
   });
 });

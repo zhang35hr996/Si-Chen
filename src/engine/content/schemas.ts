@@ -594,6 +594,8 @@ export const characterRankSchema = z.strictObject({
   order: z.number().int().min(0),
   domain: z.enum(["harem", "official"]),
   favorTerm: nonEmpty, // 恩宠 (consort) / 圣眷 (official) — display label
+  /** 月例（单位：两；季度发放时乘以 3）。仅后宫位分设置；官职位分省略。 */
+  monthlyAllowance: z.number().int().min(0).optional(),
   /** True when the rank is no longer part of the canonical set.
    *  Kept in world.json for save-file compatibility; new content must not use it. */
   deprecated: z.boolean().default(false),

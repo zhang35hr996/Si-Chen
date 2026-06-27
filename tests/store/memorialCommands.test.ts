@@ -58,8 +58,9 @@ describe("annual disaster seam (production-reachable)", () => {
     expect(store.getState().calendar.year).toBe(2);
     expect(store.getState().calendar.month).toBe(1);
     const pending = getPendingMemorials(store.getState());
-    expect(pending.length).toBe(1); // seam 真实可达
-    expect(pending[0]!.category).toBe("disaster");
+    const disasterPending = pending.filter((m) => m.category === "disaster");
+    expect(disasterPending.length).toBe(1); // seam 真实可达
+    expect(disasterPending[0]!.category).toBe("disaster");
     expect(validateMemorials(store.getState())).toEqual([]);
 
     const countAfter = Object.keys(store.getState().memorials).length;
