@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 29;
+export const SAVE_FORMAT_VERSION = 30;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -516,6 +516,12 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   28: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     return { ...env, formatVersion: 29, checksum: checksumOf(env.state) };
+  },
+  // v29 → v30: 后宫内部惩戒（PUNISH-4G-B）。新增 haremDisciplineIncidents 字段；
+  // 旧档无此字段，schema.default([]) 负责填充，此处仅升版本号。
+  29: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    return { ...env, formatVersion: 30, checksum: checksumOf(env.state) };
   },
 };
 

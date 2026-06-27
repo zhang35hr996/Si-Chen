@@ -125,6 +125,7 @@ import { PunishmentModal } from "./components/PunishmentModal";
 import { ColdPalaceRestoreModal } from "./components/ColdPalaceModal";
 import type { ColdPalaceLiftReason } from "./components/ColdPalaceModal";
 import { ColdPalaceIncidentModal } from "./components/ColdPalaceIncidentModal";
+import { HaremDisciplineModal } from "./components/HaremDisciplineModal";
 import { ColdPalaceCriticalIncidentModal } from "./components/ColdPalaceCriticalIncidentModal";
 import { ColdPalaceInterventionModal } from "./components/ColdPalaceInterventionModal";
 import { ColdPalaceMadnessModal } from "./components/ColdPalaceMadnessModal";
@@ -1230,6 +1231,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
         coldPalaceReportDue: oldestPresentableIncident(liveState) !== undefined,
+        haremDisciplineDue: liveState.haremDisciplineIncidents.some((i) => i.status === "pending_response"),
         haremAdminReviewDue: oldestPendingHaremAdminReport(liveState) !== null,
         grandSelectionDue: liveState.pendingDaxuan !== undefined,
       });
@@ -2612,6 +2614,21 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             onAcknowledge={() => { if (store.acknowledgeIncident(incident.id)) doAutosave(); }}
             onNavigate={() => { setFreeViewId("changmengong"); setView("freeview"); }}
             onRestore={(charId) => setRestoreCharId(charId)}
+          />
+        );
+      })()}
+      {activeGlobalInterrupt === "harem_discipline" && (() => {
+        const incident = liveState.haremDisciplineIncidents.find((i) => i.status === "pending_response");
+        if (!incident) return null;
+        return (
+          <HaremDisciplineModal
+            db={db}
+            state={liveState}
+            incident={incident}
+            onResolve={(resolution) => {
+              const r = store.resolveHaremDisciplineIncident(db, { incidentId: incident.id, resolution });
+              if (r.ok) doAutosave();
+            }}
           />
         );
       })()}

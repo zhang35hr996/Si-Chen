@@ -1109,6 +1109,57 @@ export interface HaremAdminReviewRecord {
   acknowledged: boolean;
 }
 
+// ── PUNISH-4G-B: 后宫内部惩戒 ─────────────────────────────────────────────────
+
+/** 惩戒手段：抄写经文（最轻）、罚跪、掌嘴（最重）。 */
+export type HaremDisciplineKind = "copy_scripture" | "kneeling" | "slapping";
+
+/** 陛下对内部惩戒的御前裁断。 */
+export type HaremDisciplineResolution =
+  | "upheld"        // 维持处分
+  | "protected"     // 回护受罚者
+  | "rebuked_both"; // 各自申饬
+
+/** 施罚者快照（结算时冻结）。 */
+export interface HaremDisciplineActorSnapshot {
+  rankId: string;
+  favor: number;
+  peakFavor: number;
+  imperialProtectionScore: number;
+  isHaremAdministrator: boolean;
+}
+
+/** 受罚者快照（结算时冻结）。 */
+export interface HaremDisciplineTargetSnapshot {
+  rankId: string;
+  favor: number;
+  peakFavor: number;
+  imperialProtectionScore: number;
+  isCarrying: boolean;
+  healthBefore: number;
+}
+
+/**
+ * 后宫内部惩戒事件（append-only；同 coldPalaceIncidents 模式）。
+ * - status=pending_response: 已发生、尚未呈报陛下 → 构成全局中断 harem_discipline
+ * - status=resolved: 陛下已裁断
+ */
+export interface HaremDisciplineIncident {
+  id: string;
+  actorId: string;
+  targetId: string;
+  disciplineKind: HaremDisciplineKind;
+  occurredAt: GameTime;
+  actorSnapshot: HaremDisciplineActorSnapshot;
+  targetSnapshot: HaremDisciplineTargetSnapshot;
+  courtEventId: string;
+  status: "pending_response" | "resolved";
+  resolution?: HaremDisciplineResolution;
+  resolvedAt?: GameTime;
+}
+
+// ── 后宫主理权 ─────────────────────────────────────────────────────────────────
+
 /**
  * 后宫主理权运行态。
  *   empress        — 皇后正常掌宫（默认）。
@@ -1199,6 +1250,8 @@ export interface GameState {
   haremAdministration: HaremAdministrationState;
   /** 六宫年度例核记录（每年最多一条；同时作为幂等标记与未读禀报队列）。 */
   haremAdminReviews: HaremAdminReviewRecord[];
+  /** 后宫内部惩戒事件（PUNISH-4G-B）：append-only；pending_response 构成全局中断。 */
+  haremDisciplineIncidents: HaremDisciplineIncident[];
   /** 司法记录持久层（PUNISH-3B1）。 */
   justice: JusticeState;
   rngSeed: number;

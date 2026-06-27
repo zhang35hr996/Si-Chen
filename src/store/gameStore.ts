@@ -86,6 +86,12 @@ import {
   COLD_PALACE_VISIT_FAVOR_DELTA,
   COLD_PALACE_PHYSICIAN_HEALTH_DELTA,
 } from "../engine/characters/coldPalaceIncidents";
+import { planHaremDiscipline } from "../engine/characters/haremDisciplinePlanner";
+import {
+  resolveHaremDisciplineOccurrence,
+  resolveHaremDiscipline,
+  type ResolveHaremDisciplineInput,
+} from "../engine/characters/haremDisciplineResolver";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -1699,6 +1705,33 @@ export class GameStore {
       collector?.capturePhaseScheduled("annual_harem_administration_review", diffGameState(beforeHaremReview, candidate));
     }
 
+    // 5-pre) 后宫内部惩戒（月度；PUNISH-4G-B）。
+    // 若本月六宫年度例核产生了晋/降位，跳过，避免同月双重处分。
+    if (monthChanged) {
+      const { year: curYear, month: curMonth } = candidate.calendar;
+      const adminRankChangedThisMonth = candidate.haremAdminReviews.some(
+        (r) =>
+          r.outcome === "rank_changed" &&
+          r.settledAt.year === curYear &&
+          r.settledAt.month === curMonth,
+      );
+      if (!adminRankChangedThisMonth) {
+        const beforeDiscipline = candidate;
+        const plan = planHaremDiscipline(db, candidate);
+        if (plan !== null) {
+          const occResult = resolveHaremDisciplineOccurrence(db, candidate, plan);
+          if (occResult.ok) {
+            candidate = occResult.value.state;
+          }
+          // 结算失败不阻断（non-fatal）。
+        }
+        collector?.capturePhaseScheduled(
+          "harem_discipline_occurrence",
+          diffGameState(beforeDiscipline, candidate),
+        );
+      }
+    }
+
     // 5) Cold-palace incident generation (月度；replay-stable).
     if (monthChanged) {
       // 5a) Critical-illness incidents — health ≤ CRITICAL_HEALTH_THRESHOLD (PUNISH-4D).
@@ -2536,6 +2569,17 @@ export class GameStore {
   }
 
   /** 标记六宫年度例核禀报为已阅（玩家按「知道了」后调用）。 */
+  resolveHaremDisciplineIncident(
+    db: ContentDB,
+    input: ResolveHaremDisciplineInput,
+  ): Result<void, GameError[]> {
+    const result = resolveHaremDiscipline(db, this.state, input);
+    if (!result.ok) return err(result.error);
+    this.state = result.value;
+    this.emit();
+    return ok(undefined);
+  }
+
   acknowledgeHaremAdminReview(reviewId: string): boolean {
     const idx = this.state.haremAdminReviews.findIndex(
       (r) => r.id === reviewId && !r.acknowledged,

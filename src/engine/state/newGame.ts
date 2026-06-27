@@ -139,6 +139,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     statusEffects: [],
     haremAdministration: { mode: "empress" },
     haremAdminReviews: [],
+    haremDisciplineIncidents: [],
     justice: createEmptyJusticeState(),
     emotionalConditions: [],
     mentionLog: [],
