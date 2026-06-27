@@ -65,7 +65,7 @@ function makePunishment(state: GameState, caseId?: string): PunishmentRecord {
     sourceLocation: "zichendian",
     publicity: "palace",
     lifecycle: { status: "active" },
-    details: { fromRankId: "fenghou", toRankId: "gui" },
+    details: { fromRankId: "huanghou", toRankId: "gui" },
   } as PunishmentRecord;
 }
 

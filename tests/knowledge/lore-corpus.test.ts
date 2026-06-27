@@ -9,7 +9,7 @@
  *  5.  Display name rename does not change chunk ID.
  *  6.  New canonical names are retrievable.
  *  7.  Deprecated aliases are absent from production lore.
- *  8.  官男子 does not appear in formal rank results.
+ *  8.  官男子 (correct term) appears in formal rank results; typo 观南子 absent.
  *  9.  Location JSON and lore Markdown can both be ingested together.
  * 10.  visibilityCeiling: "public" never returns restricted/imperial chunks.
  * 11.  currentTime filters out expired or future-only chunks.
@@ -245,17 +245,17 @@ describe("production lore: no deprecated terms in body text", () => {
   }
 });
 
-// ── 8. 官男子 absent from harem rank results ─────────────────────────────────
+// ── 8. 官男子 in harem ranks; typo 观南子 absent ─────────────────────────────
 
-describe("official rank search: 官男子 excluded", () => {
-  it("searching for harem position list does not return guannanzi", () => {
+describe("official rank search: 官男子 correct term", () => {
+  it("searching for harem position list returns 官男子 (not typo 观南子)", () => {
     const index = new SqliteKeywordIndex(":memory:");
     index.rebuild(corpus);
     const hits = index.search({ text: "后宫正式位分顺序", limit: 20 });
-    for (const h of hits) {
-      expect(h.chunk.text).not.toContain("官男子");
-      expect(h.chunk.title).not.toContain("官男子");
-    }
+    const allText = hits.map((h) => h.chunk.text + (h.chunk.title ?? "")).join("");
+    // Correct term must appear; old typo must not
+    expect(allText).toContain("官男子");
+    expect(allText).not.toContain("观南子");
     index.close();
   });
 });

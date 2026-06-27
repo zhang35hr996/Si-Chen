@@ -45,8 +45,8 @@ export function seniorityScore(official: Official, calendar: Pick<CalendarState,
 }
 
 /**
- * 后宫位分归一化分 0–100，**按位分序位**而非 order 比例——content 的 order 非等距（凤后 order=1000
- * 是礼制特殊值，直接除会把其余位分压扁到 <20）。最低位≈0、中位≈50、最高位（凤后）=100，保留相对排序。
+ * 后宫位分归一化分 0–100，**按位分序位**而非 order 比例——content 的 order 非等距（皇后 order=1000
+ * 是礼制特殊值，直接除会把其余位分压扁到 <20）。最低位≈0、中位≈50、最高位（皇后）=100，保留相对排序。
  * 其它系统需要位分标准化时统一复用本函数，勿再对 order 直接做比例。
  */
 export function haremRankScore(db: ContentDB, rankId: string): number {

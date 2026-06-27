@@ -21,8 +21,8 @@ export const WORLD_RULES_TEXT = `
 
 1. 只生成 speaker 的本轮台词，严禁替玩家发言或叙述引擎行为。
 2. 严格遵守 currentScene.directive 指定的本轮行为目标，不得自行改变。
-3. 使用 speaker.standing.selfRefs 中适合当前场合的自称（面向皇帝用 toPlayer；正式场合用 formal）。
-4. 对皇帝称"陛下"；不得使用 etiquette 中 forbiddenTerms 所列称谓。
+3. 使用 resolvedAddress.selfRef 作为本轮自称；不得借用其他位分的自称。
+4. 称呼对方时用 resolvedAddress.targetAddress；forbiddenInContext 中的称谓在本轮一律禁止。
 5. 不得在台词中透出 JSON 字段名、规则说明或内部 ID。speaker.behavioralState 仅用于调整语气与情绪，不得说出其中的字段名或数值，不得声称角色知道这些内部值，不得据此创造事实或状态变化。
 6. 不得凭空引入 payload 未提供的事实或事件。
 7. proposedClaims 只记录台词中明确表达的事实，不填隐含信息。
@@ -42,18 +42,33 @@ export function renderEtiquetteBlock(
   etiquette: DialogueRequest["etiquette"],
   speakerSelfRefs: CharacterRank["selfRefs"],
   audienceRole: AudienceRole,
+  resolvedAddress?: DialogueRequest["resolvedAddress"],
 ): string {
-  return [
+  const lines = [
     `[礼仪约束]`,
     `允许称谓（allowedTerms）：${etiquette.allowedTerms.join("、") || "（无）"}`,
     `禁用称谓（forbiddenTerms）：${etiquette.forbiddenTerms.join("、") || "（无）"}`,
-    `称谓规则（addressRules）：`,
-    ...etiquette.addressRules.map(
-      (r) => `  - ${r.rank}：自称 ${r.selfRefs.toPlayer.join("/")}，称对方 ${r.addressedAs}`,
-    ),
-    `speaker 对皇帝自称（selfRefs.toPlayer）：${speakerSelfRefs.toPlayer.join("、")}`,
-    `受众身份（audienceRole）：${audienceRole}`,
-  ].join("\n");
+  ];
+  if (resolvedAddress) {
+    // Pre-computed pairwise result: definitive for this conversation turn.
+    lines.push(`本轮自称（selfRef）：${resolvedAddress.selfRef}`);
+    lines.push(`称呼对方（targetAddress）：${resolvedAddress.targetAddress}`);
+    if (resolvedAddress.allowedAlternates.length > 0)
+      lines.push(`可接受替换（allowedAlternates）：${resolvedAddress.allowedAlternates.join("、")}`);
+    if (resolvedAddress.forbiddenInContext.length > 0)
+      lines.push(`本轮额外禁用（forbiddenInContext）：${resolvedAddress.forbiddenInContext.join("、")}`);
+  } else {
+    // Fallback: dump the full address table and speaker self-ref.
+    lines.push(
+      `称谓规则（addressRules，格式：位分 → 该位分的自称 / 被称为）：`,
+      ...etiquette.addressRules.map(
+        (r) => `  - ${r.rank}：自称 ${r.selfRefs.toPlayer.join("/")}，被称为 ${r.addressedAs}`,
+      ),
+      `speaker 对皇帝自称（selfRefs.toPlayer）：${speakerSelfRefs.toPlayer.join("、")}`,
+    );
+  }
+  lines.push(`受众身份（audienceRole）：${audienceRole}`);
+  return lines.join("\n");
 }
 
 export interface AnthropicToolUseResponse {
@@ -95,6 +110,7 @@ export function buildAnthropicToolRequest(request: DialogueRequest, model: strin
           request.etiquette,
           payload.speaker.standing.selfRefs,
           payload.audience.targetRole,
+          request.resolvedAddress,
         ),
         cache_control: { type: "ephemeral" },
       },

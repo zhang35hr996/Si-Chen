@@ -1,11 +1,14 @@
 /**
- * Tests for PR7A deprecated rank assignment policy.
+ * Tests for deprecated rank assignment policy.
  *
  * Policy:
  *  - Characters who already hold a deprecated rank can still be read/displayed
  *  - They can be PROMOTED out of a deprecated rank
  *  - NO new assignment to a deprecated rank (via buildRankOp, funnel, UI ladder)
  *  - isAssignableRank() is the single canonical gate
+ *
+ * With the 称谓系统权威化 (address system canonicalization), guannanzi (观南子)
+ * is now an ACTIVE rank — not deprecated. This test reflects that.
  */
 import { describe, expect, it } from "vitest";
 import { isAssignableRank } from "../../src/engine/content/schemas";
@@ -18,22 +21,31 @@ import type { GameState } from "../../src/engine/state/types";
 const db = loadRealContent();
 
 describe("isAssignableRank", () => {
-  it("guannanzi is not assignable (deprecated=true)", () => {
+  it("guannanzi is now active (not deprecated) and IS assignable", () => {
     const rank = db.ranks["guannanzi"]!;
-    expect(isAssignableRank(rank)).toBe(false);
+    expect(isAssignableRank(rank)).toBe(true);
   });
 
-  it("gengyi (更衣, lowest canonical) is assignable", () => {
+  it("gengyi (更衣) is assignable", () => {
     const rank = db.ranks["gengyi"]!;
+    expect(isAssignableRank(rank)).toBe(true);
+  });
+
+  it("xuanshi (选侍) is assignable", () => {
+    const rank = db.ranks["xuanshi"]!;
     expect(isAssignableRank(rank)).toBe(true);
   });
 
   it("all ranks in world.json are either assignable or explicitly deprecated", () => {
     for (const rank of Object.values(db.ranks)) {
       expect(typeof rank.deprecated).toBe("boolean");
-      // isAssignableRank is the inverse of deprecated
       expect(isAssignableRank(rank)).toBe(!rank.deprecated);
     }
+  });
+
+  it("a synthetic rank with deprecated:true is not assignable", () => {
+    const fakeRank = { ...db.ranks["guannanzi"]!, deprecated: true };
+    expect(isAssignableRank(fakeRank)).toBe(false);
   });
 });
 
@@ -42,7 +54,6 @@ describe("buildRankOp rejects deprecated rank targets", () => {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
     const state = store.getState();
-    // Patch lu_huaijin's rank to a known starting point
     const lu = state.standing["lu_huaijin"];
     if (!lu) throw new Error("lu_huaijin not found");
     return {
@@ -54,15 +65,16 @@ describe("buildRankOp rejects deprecated rank targets", () => {
     };
   }
 
-  it("buildRankOp returns null when target is a deprecated rank", () => {
-    // Start at 更衣 (gengyi) — guannanzi (order 40) would be a demotion target but is deprecated
-    const state = makeState("gengyi");
+  it("buildRankOp allows promotion to guannanzi (now active)", () => {
+    // Start at a rank below guannanzi for demotion/promotion scenarios
+    const state = makeState("xuanshi");
     const authority = { kind: "sovereign", actorId: "player" } as const;
     const result = buildRankOp(db, state, "lu_huaijin", { kind: "set_rank", rank: "guannanzi" }, authority);
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.kind).toBe("demote");
   });
 
-  it("buildRankOp allows promotion to a non-deprecated rank", () => {
+  it("buildRankOp allows promotion to non-deprecated rank", () => {
     const state = makeState("gengyi");
     const authority = { kind: "sovereign", actorId: "player" } as const;
     const result = buildRankOp(db, state, "lu_huaijin", { kind: "set_rank", rank: "daying" }, authority);
@@ -71,45 +83,28 @@ describe("buildRankOp rejects deprecated rank targets", () => {
   });
 });
 
-describe("DECREE_RANK_FLOOR excludes deprecated rank", () => {
-  it("band ranks used by empress decree do not include guannanzi", async () => {
+describe("DECREE_RANK_FLOOR — adjacentHaremRank band", () => {
+  it("adjacentHaremRank demote from gengyi → xuanshi (new rank below gengyi)", async () => {
     const { adjacentHaremRank } = await import("../../src/store/empressDecree");
-    // Start at gengyi (order=50); adjacentHaremRank demote should return null
-    // (no lower assignable rank in the band), not guannanzi
     const result = adjacentHaremRank(db, "gengyi", "demote");
-    expect(result).toBeNull(); // guannanzi (order 40) is excluded
+    expect(result).toBe("xuanshi");
   });
 
-  it("adjacentHaremRank promote from gengyi returns daying (not null)", async () => {
+  it("adjacentHaremRank demote from xuanshi → guannanzi", async () => {
+    const { adjacentHaremRank } = await import("../../src/store/empressDecree");
+    const result = adjacentHaremRank(db, "xuanshi", "demote");
+    expect(result).toBe("guannanzi");
+  });
+
+  it("adjacentHaremRank demote from guannanzi → null (lowest in band)", async () => {
+    const { adjacentHaremRank } = await import("../../src/store/empressDecree");
+    const result = adjacentHaremRank(db, "guannanzi", "demote");
+    expect(result).toBeNull();
+  });
+
+  it("adjacentHaremRank promote from gengyi returns daying (答应)", async () => {
     const { adjacentHaremRank } = await import("../../src/store/empressDecree");
     const result = adjacentHaremRank(db, "gengyi", "promote");
-    expect(result).toBe("daying"); // 答应 is the next rank above 更衣
-  });
-});
-
-describe("canAdministratorAdjustRank rejects deprecated target rank", () => {
-  it("canAdministratorAdjustRank returns ok=false when newRankId is deprecated", async () => {
-    const { canAdministratorAdjustRank } = await import("../../src/engine/characters/haremRankAuthority");
-    const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
-    store.newGame(db);
-    // lu_huaijin needs rank ≥ 驸 (order=140) to exercise admin authority; bump to 驸
-    const base = store.getState();
-    const lu = base.standing["lu_huaijin"]!;
-    const state: GameState = {
-      ...base,
-      standing: { ...base.standing, lu_huaijin: { ...lu, rank: "fu" } },
-      haremAdministration: {
-        mode: "acting_consort",
-        charId: "lu_huaijin",
-        appointedAt: base.calendar,
-        reason: "empress_illness" as const,
-      },
-    };
-    // xu_qinghuan must have rank strictly below lu_huaijin (驸=140)
-    const xu = state.standing["xu_qinghuan"];
-    if (!xu || db.ranks[xu.rank]!.order >= 140) return; // skip if target not below actor
-    const result = canAdministratorAdjustRank(db, state, "lu_huaijin", "xu_qinghuan", "guannanzi");
-    expect(result.ok).toBe(false);
-    expect(result.ok ? "" : result.reason).toContain("废弃");
+    expect(result).toBe("daying");
   });
 });

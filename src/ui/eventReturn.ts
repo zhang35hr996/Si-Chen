@@ -202,7 +202,7 @@ export function rankAdminContinuation(
 
 /**
  * 初夜位分会话收尾动作（纯决策）。在 rankAdminContinuation 之上叠加「排队反应」考量：
- * flush_pending（初夜 close/no_op/failed）时——有排队反应（凤后懿旨等）→ `play_queue`（先播队列，末条
+ * flush_pending（初夜 close/no_op/failed）时——有排队反应（皇后懿旨等）→ `play_queue`（先播队列，末条
  * onDone 再补跑结算，绝不抢跑/遗留）；无队列 → `flush_now`（直接补跑）。reaction_created → `none`
  * （交其反应 onDone 补跑）；normal 来源 → `none`（关闭不补跑）。
  */

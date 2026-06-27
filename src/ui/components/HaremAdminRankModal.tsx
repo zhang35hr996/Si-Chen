@@ -54,22 +54,22 @@ export function HaremAdminRankModal({
   const actorRankOrder = actorRankMeta?.order ?? 0;
   const isEmpress = state.haremAdministration.mode === "empress";
 
-  // 合格处分目标：存活在宫侍君，位分 order 严格低于协理者（凤后无此限制，下同）。
+  // 合格处分目标：存活在宫侍君，位分 order 严格低于协理者（皇后无此限制，下同）。
   const allConsorts = Object.values(db.characters).filter((c) => c.kind === "consort");
   const targets = allConsorts.filter((c) => {
     if (c.id === actorId) return false;
     const st = state.standing[c.id];
     if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") return false;
-    if (st.rank === "fenghou") return false;
+    if (st.rank === "huanghou") return false;
     const rankOrder = db.ranks[st.rank]?.order ?? 0;
     return rankOrder < actorRankOrder;
   });
 
-  const adminTitle = isEmpress ? "凤后主理六宫　管理侍君位分" : "奉旨协理六宫　管理低位侍君";
+  const adminTitle = isEmpress ? "皇后主理六宫　管理侍君位分" : "奉旨协理六宫　管理低位侍君";
   const adminSubtitle = isEmpress
     ? `${actorName}主理六宫，可对以下侍君进行晋封或降位：`
     : `${actorName}奉旨协理六宫，可对以下侍君进行晋封或降位：`;
-  const adminLabel = isEmpress ? "凤后" : "协理者";
+  const adminLabel = isEmpress ? "皇后" : "协理者";
 
   // ── 目标选择 ──────────────────────────────────────────────────────────
   if (step.kind === "target_select") {
@@ -217,7 +217,7 @@ function RankSelectStep({
   const targetName = targetChar && targetSt ? resolveIdentityLabel(targetChar, targetSt, targetRankMeta) : targetId;
 
   const rankLadder = Object.values(db.ranks)
-    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "fenghou" && r.order < actorRankOrder)
+    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "huanghou" && r.order < actorRankOrder)
     .sort((a, b) => effectiveOrder(b, false) - effectiveOrder(a, false));
 
   const [selectedRank, setSelectedRank] = useState(targetSt?.rank ?? "");

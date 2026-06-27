@@ -9,12 +9,12 @@ const sovereign = { kind: "sovereign" as const, actorId: "player" as const };
 
 describe("buildRankOp", () => {
   const state = createNewGameState(db); // lu_huaijin starts at 承徽
-  it("promote to 君 emits set_rank + memory and 谢恩 lines", () => {
-    const op = buildRankOp(db, state, "lu_huaijin", { kind: "set_rank", rank: "jun" }, sovereign);
+  it("promote to 驸 emits set_rank + memory and 谢恩 lines", () => {
+    const op = buildRankOp(db, state, "lu_huaijin", { kind: "set_rank", rank: "fu" }, sovereign);
     expect(op).not.toBeNull();
     if (!op) return;
     expect(op.kind).toBe("promote");
-    expect(op.effects[0]).toEqual({ type: "set_rank", char: "lu_huaijin", rank: "jun", authority: sovereign });
+    expect(op.effects[0]).toEqual({ type: "set_rank", char: "lu_huaijin", rank: "fu", authority: sovereign });
     expect(op.effects.some((e) => e.type === "memory")).toBe(true);
     expect(op.lines[0]).toContain("臣侍");
   });

@@ -1,4 +1,4 @@
-/** 凤后自行下旨升降「贵人及以下」侍君（纯逻辑，种子化确定性）。 */
+/** 皇后自行下旨升降「贵人及以下」侍君（纯逻辑，种子化确定性）。 */
 import { gestationRoll } from "../engine/characters/gestation";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
@@ -8,7 +8,7 @@ import type { GameState } from "../engine/state/types";
 export const DECREE_CHANCE = 3; // 每行动点 3%
 export const PROMOTE_FAVOR = 65;
 export const DEMOTE_FAVOR = 35;
-export const DECREE_RANK_CEILING = 100; // 贵人
+export const DECREE_RANK_CEILING = 116; // 贵人（正五品）
 export const DECREE_RANK_FLOOR = 50; // 更衣（最低正式位分）
 
 export type { ReactionBeat as DecreeReaction } from "../engine/punishments/types";
@@ -63,7 +63,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
 
   const name = resolveDisplayName(pick, st, db.ranks[st.rank]);
   const targetName = db.ranks[targetId]!.name;
-  const summary = dir === "promote" ? `凤后下旨晋我为${targetName}` : `凤后下旨贬我为${targetName}`;
+  const summary = dir === "promote" ? `皇后下旨晋我为${targetName}` : `皇后下旨贬我为${targetName}`;
 
   const effects: EventEffect[] = [
     { type: "set_rank", char: pick.id, rank: targetId, authority: { kind: "harem_administrator", actorId: "shen_zhibai", office: "empress" as const } },
@@ -85,10 +85,10 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
   ];
   const verb = dir === "promote" ? "晋" : "贬";
   const reactions: ReactionBeat[] = [
-    { speakerId: "wei_sui", lines: [`司礼官启奏：凤后娘娘懿旨——${verb}${name}为${targetName}。`] },
+    { speakerId: "wei_sui", lines: [`司礼官启奏：皇后殿下懿旨——${verb}${name}为${targetName}。`] },
     {
       speakerId: pick.id,
-      lines: dir === "promote" ? [`${name}叩谢凤后娘娘恩典。`] : [`${name}默然领旨，不敢有怨。`],
+      lines: dir === "promote" ? [`${name}叩谢皇后殿下恩典。`] : [`${name}默然领旨，不敢有怨。`],
     },
   ];
   return { effects, reactions };

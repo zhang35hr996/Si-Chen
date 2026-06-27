@@ -58,7 +58,7 @@ function makePunishment(state: GameState, caseId?: string): PunishmentRecord {
     sourceLocation: "zichendian",
     publicity: "palace",
     lifecycle: { status: "active" },
-    details: { fromRankId: "fenghou", toRankId: "gui" },
+    details: { fromRankId: "huanghou", toRankId: "gui" },
   } as PunishmentRecord;
 }
 
@@ -472,7 +472,7 @@ describe("validateJusticeState — exhaustive invariants", () => {
       imposedAt: now,
       publicity: "palace",
       lifecycle: { status: "active" },
-      details: { fromRankId: "fenghou", toRankId: "gui" },
+      details: { fromRankId: "huanghou", toRankId: "gui" },
     } as PunishmentRecord;
     // All nextSeq at exactly the max seq (not > max) → violations on all 6
     const justice: JusticeState = {

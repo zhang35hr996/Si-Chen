@@ -49,7 +49,7 @@ export const OFFICIAL_STATUS_LABEL: Record<OfficialStatus, string> = {
 
 export const MEMBER_ROLE_LABEL: Record<FamilyMemberRole, string> = {
   matriarch: "母家长",
-  consort_in: "内卿",
+  consort_in: "夫人",
   daughter: "女",
   son: "男郎",
   sister: "姐妹",

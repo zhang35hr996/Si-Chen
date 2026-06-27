@@ -1,9 +1,9 @@
 /**
  * 紫宸殿传乘风"交付六宫主理权"命令规划器（PUNISH-3A）。
  *
- * 分类规则（以月初 / 命令执行时的凤后健康状态为准）：
- *   before=empress + 凤后 healthy → 处罚性剥夺（strip_harem_authority），创建 punishmentId
- *   before=empress + 凤后 sick/critical → 行政性因病暂代（empress_illness），不处罚
+ * 分类规则（以月初 / 命令执行时的皇后健康状态为准）：
+ *   before=empress + 皇后 healthy → 处罚性剥夺（strip_harem_authority），创建 punishmentId
+ *   before=empress + 皇后 sick/critical → 行政性因病暂代（empress_illness），不处罚
  *   acting/neiwu → empress → 归还宫权，不处罚
  *   acting A → acting B / neiwu → 重新委任（imperial_reassignment），不处罚
  *   no-op（目标与当前一致）→ 拒绝，不写史、不 emit
@@ -57,7 +57,7 @@ export type HaremAdminTransferResult =
 
 function findEmpressId(state: GameState): string | null {
   for (const [id, st] of Object.entries(state.standing)) {
-    if (st.rank === "fenghou" && st.lifecycle !== "deceased") return id;
+    if (st.rank === "huanghou" && st.lifecycle !== "deceased") return id;
   }
   return null;
 }
@@ -109,7 +109,7 @@ export function planHaremAdministrationTransfer(
 
   // ── No-op detection ──────────────────────────────────────────────────────────
   if (admin.mode === "empress" && target.kind === "empress") {
-    return { ok: false, reason: "凤后已正常掌管六宫，无需变更。" };
+    return { ok: false, reason: "皇后已正常掌管六宫，无需变更。" };
   }
   if (admin.mode === "acting_consort" && target.kind === "consort" && admin.charId === target.charId) {
     return { ok: false, reason: "该侍君已是当前六宫协理者，无需重新委任。" };
@@ -185,7 +185,7 @@ export function planHaremAdministrationTransfer(
   // Memory for empress (always)
   if (empressId) {
     const memorySummary = isPunitive
-      ? "皇帝收回凤后六宫主理权，令他人协理，臣深感失落。"
+      ? "皇帝收回皇后六宫主理权，令他人协理，臣深感失落。"
       : "臣抱恙，皇帝体恤令他人暂代宫务，以减臣之劳顿。";
     effects.push({
       type: "memory",
@@ -259,12 +259,12 @@ function buildBaseLines(
   newAdmin: HaremAdministrationState,
 ): string[] {
   if (target.kind === "empress") {
-    return ["六宫主理权归还凤后，凤后领旨。"];
+    return ["六宫主理权归还皇后，皇后领旨。"];
   }
   if (target.kind === "neiwu_proxy") {
     return isPunitive
-      ? ["内务府总管奉旨暂代六宫事务，凤后领旨谢恩。"]
-      : ["凤后抱恙，朕命内务府暂代宫务，以减凤后劳顿。"];
+      ? ["内务府总管奉旨暂代六宫事务，皇后领旨谢恩。"]
+      : ["皇后抱恙，朕命内务府暂代宫务，以减皇后劳顿。"];
   }
   // acting_consort
   if (newAdmin.mode !== "acting_consort") return [];
@@ -273,8 +273,8 @@ function buildBaseLines(
   const rank = st ? db.ranks[st.rank] : undefined;
   const name = char ? resolveDisplayName(char, st!, rank) : newAdmin.charId;
   const empressName = empressId
-    ? (db.characters[empressId]?.profile.name ?? "凤后")
-    : "凤后";
+    ? (db.characters[empressId]?.profile.name ?? "皇后")
+    : "皇后";
   if (isPunitive) {
     return [`朕命${name}协理六宫，${empressName}领旨。`];
   }

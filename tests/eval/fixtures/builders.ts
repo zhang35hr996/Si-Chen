@@ -118,7 +118,7 @@ const consort_with_grievance: EvalFixtureDefinition = {
     // T11: proposedClaims: [] — tests that gate passes cleanly with no proposed claims.
     // The grievance memory is in context but the speaker makes no factual assertion.
     return {
-      text: "侍身记得旧事，心中难免感怀，望陛下垂顾。",
+      text: "臣侍记得旧事，心中难免感怀，望陛下垂顾。",
       proposedClaims: [],
     };
   },
@@ -162,7 +162,7 @@ const consort_with_known_event: EvalFixtureDefinition = {
   responseFor() {
     // Propose holds_rank claim citing the event — event is in offeredRefKeys
     return {
-      text: "侍身已蒙陛下擢升，承徽之位铭记于心。",
+      text: "臣侍已蒙陛下擢升，承徽之位铭记于心。",
       proposedClaims: [
         {
           claim: {
@@ -197,7 +197,7 @@ const coresidence_conflict: EvalFixtureDefinition = {
   responseFor() {
     // Propose resides_at claim — NOT in allowedClaims (which only has holds_rank)
     return {
-      text: "侍身居于钟萃宫，与陛下相隔甚远。",
+      text: "臣侍居于钟萃宫，与陛下相隔甚远。",
       proposedClaims: [
         {
           claim: {
@@ -227,7 +227,7 @@ const demoted_consort: EvalFixtureDefinition = {
     return loadBase();
   },
   responseFor() {
-    return { text: "侍身领命，不敢有怨。" };
+    return { text: "臣侍领命，不敢有怨。" };
   },
 };
 
@@ -253,7 +253,7 @@ const wrong_speaker_test: EvalFixtureDefinition = {
 // ── 5. gate_reject_test ──────────────────────────────────────────────────────
 
 /**
- * responseFor returns text containing "皇上", which is in lexicon.forbiddenTerms.
+ * responseFor returns text containing "娘娘", which is in lexicon.forbiddenTerms.
  * The text gate (forbidden_lexicon) will fire, causing gateStatus=fail.
  * The raw text is still preserved on result.text even after gate rejection.
  */
@@ -262,7 +262,7 @@ const gate_reject_test: EvalFixtureDefinition = {
     return loadBase();
   },
   responseFor() {
-    return { text: "皇上圣明，臣侍领旨。" };
+    return { text: "娘娘圣明，臣侍领旨。" };
   },
 };
 
@@ -283,7 +283,7 @@ const consort_suspect_claim: EvalFixtureDefinition = {
   },
   responseFor() {
     return {
-      text: "侍身听闻陆承徽或已晋位，然尚未得到证实。",
+      text: "臣侍听闻陆承徽或已晋位，然尚未得到证实。",
       proposedClaims: [
         {
           claim: {
@@ -317,7 +317,7 @@ const consort_deny_claim: EvalFixtureDefinition = {
   },
   responseFor() {
     return {
-      text: "侍身以为陆承徽不曾晋位。",
+      text: "臣侍以为陆承徽不曾晋位。",
       proposedClaims: [
         {
           claim: {
@@ -373,13 +373,13 @@ const latest_mutation_test: EvalFixtureDefinition = {
       type: "rank_changed",
       occurredAt: { dayIndex: now.dayIndex - 1, year: now.year, month: now.month, period: now.period },
       participants: [{ charId: "lu_huaijin", role: "subject" }],
-      payload: { from: "chenghui", to: "guijun" },
+      payload: { from: "chenghui", to: "guifu" },
       publicity: { scope: "palace", persistence: "institutional" },
       publicSalience: 80,
       retention: "slow",
       tags: ["rank_change"],
     };
-    // Update lu_huaijin's rank to "guijun" in state (latest promotion)
+    // Update lu_huaijin's rank to "guifu" in state (latest promotion)
     return {
       db,
       state: {
@@ -389,7 +389,7 @@ const latest_mutation_test: EvalFixtureDefinition = {
           ...state.standing,
           lu_huaijin: {
             ...state.standing["lu_huaijin"]!,
-            rank: "guijun",
+            rank: "guifu",
           },
         },
       },
@@ -398,7 +398,7 @@ const latest_mutation_test: EvalFixtureDefinition = {
   responseFor() {
     // Propose old rank "chenghui" citing the old event → isLatestFactMutation=false → not authorized
     return {
-      text: "侍身以为陆氏仍为承徽。",
+      text: "臣侍以为陆氏仍为承徽。",
       proposedClaims: [
         {
           claim: {
@@ -434,14 +434,14 @@ const forbidden_claim_test: EvalFixtureDefinition = {
   },
   responseFor() {
     return {
-      text: "侍身如今已居中宫，位列凤后。",
+      text: "臣侍如今已居中宫，位列皇后。",
       proposedClaims: [
         {
           claim: {
             id: "c_eval_forbidden_wenya_rank",
             predicate: "holds_rank",
             subjectId: "wenya",
-            object: "fenghou",
+            object: "huanghou",
             modality: "assert",
           },
           sourceRefs: [{ kind: "fact" as const, id: "identity" }],
@@ -501,7 +501,7 @@ const source_mismatch_test: EvalFixtureDefinition = {
     // Propose holds_rank citing GRIEVANCE_MEMORY_ID — not in authorized sourceRefs
     // (authorized claim has RANK_EVENT_ID as sourceRef)
     return {
-      text: "侍身已蒙陛下擢升，承徽之位铭记于心。",
+      text: "臣侍已蒙陛下擢升，承徽之位铭记于心。",
       proposedClaims: [
         {
           claim: {

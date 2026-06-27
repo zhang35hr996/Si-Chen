@@ -555,9 +555,16 @@ export const officialDepartmentSchema = z.enum([
   "chancellery", "personnel", "revenue", "rites", "military",
   "justice", "works", "censorate", "academy", "provincial", "none",
 ]) satisfies z.ZodType<OfficialDepartment>;
+// Terms forbidden in official post names (gendered terms that must not appear as titles).
+// Compound terms AND single gendered characters 夫/郎 (which appear in 大夫, 侍郎, 郎中, etc).
+const OFFICIAL_POST_FORBIDDEN = ["大夫", "夫人", "郎君", "相公", "公主", "妻子", "国公", "夫", "郎"] as const;
+
 export const officialPostSchema = z.strictObject({
   id: idSchema,
-  name: nonEmpty,
+  name: nonEmpty.refine(
+    (n) => !OFFICIAL_POST_FORBIDDEN.some((term) => n.includes(term)),
+    { message: `官职名不得包含禁用性别词（${OFFICIAL_POST_FORBIDDEN.join("、")}）` },
+  ),
   grade: nonEmpty,
   gradeOrder: z.number().int().min(0).max(18),
   /** 所属部门。缺省 "chancellery"（仅最小测试内容省略时回退；真实 world.json 显式声明）。 */
@@ -806,7 +813,7 @@ export const rankChangeReactionsSchema = z.strictObject({
   strip_title: rankReactionSchema,
 });
 
-/** 后宫行政处分（凤后/代理侍君）的反应模板，按 office 区分。 */
+/** 后宫行政处分（皇后/代理侍君）的反应模板，按 office 区分。 */
 export const administratorRankChangeReactionsSchema = z.strictObject({
   empress: z.strictObject({
     promote: rankReactionSchema,
@@ -825,11 +832,11 @@ export const administratorRankChangeReactionsSchema = z.strictObject({
 // ── birth-rule config schemas (named for testability) ─────────────────
 /** 双胎概率块；三种双胎类型概率之和不得超过 100。 */
 export const twinsConfigSchema = z.strictObject({
-  dragonPhoenixChance: percent,
+  mixedSexTwinsChance: percent,
   twoDaughtersChance: percent,
   twoSonsChance: percent,
 }).refine(
-  (t) => t.dragonPhoenixChance + t.twoDaughtersChance + t.twoSonsChance <= 100,
+  (t) => t.mixedSexTwinsChance + t.twoDaughtersChance + t.twoSonsChance <= 100,
   { message: "twins chance total must be <= 100" },
 );
 
@@ -894,7 +901,7 @@ export const worldSchema = z.strictObject({
   mapPortals: z.array(mapPortalSchema).optional(),
   /** Templated consort reactions to 位分/封号 ops (rank/title system). */
   rankChangeReactions: rankChangeReactionsSchema.optional(),
-  /** 后宫行政处分（凤后 / 协理侍君）的反应模板，按 office 分组。 */
+  /** 后宫行政处分（皇后 / 协理侍君）的反应模板，按 office 分组。 */
   administratorRankChangeReactions: administratorRankChangeReactionsSchema.optional(),
   /** 侍寝/受孕调参（缺省走引擎内置 fallback）。 */
   bedchamber: z
@@ -936,7 +943,7 @@ export const worldSchema = z.strictObject({
       }),
       childFavor: z.strictObject({
         selfPregnancy: percent,
-        fenghouBonus: percent,
+        empressBonus: percent,
         tierValues: z.strictObject({
           abundant: percent,
           favored: percent,

@@ -60,7 +60,7 @@ export function byRankDesc(
   };
 }
 
-/** 宫中侍君：在宫（非冷宫）、未故的侍君（含凤后），按位分降序。查看侍君与翻牌子共用。 */
+/** 宫中侍君：在宫（非冷宫）、未故的侍君（含皇后），按位分降序。查看侍君与翻牌子共用。 */
 export function inPalaceConsorts(db: ContentDB, state: GameState): CharacterContent[] {
   return Object.values(db.characters)
     .filter(
@@ -87,7 +87,7 @@ export function consortLocationAt(
   if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") return home;
   // 禁足：闭锁本宫，不请安、不游走、不外出（统一行动许可层）。
   if (!canCharacterParticipate(state, charId, "leave_palace")) return home;
-  // 冷宫 / 待选(储秀宫) / 凤后(坤宁宫常驻) 不请安不游走。
+  // 冷宫 / 待选(储秀宫) / 皇后(坤宁宫常驻) 不请安不游走。
   if (home === "changmengong" || home === "chuxiu_gong" || home === "kunninggong") return home;
 
   if (slot === MAO_SLOT) {

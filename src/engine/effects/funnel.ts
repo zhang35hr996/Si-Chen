@@ -159,11 +159,11 @@ export function validateEffects(
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `set_rank needs a consort with standing: "${e.char}"`, { char: e.char });
-        } else if (state.standing[e.char]!.rank === "fenghou") {
-          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "huanghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (皇后) is not adjustable: "${e.char}"`, { char: e.char });
         } else {
           const r = db.ranks[e.rank];
-          if (!r || r.domain !== "harem" || e.rank === "fenghou") {
+          if (!r || r.domain !== "harem" || e.rank === "huanghou") {
             bad(index, "BAD_EFFECT", `set_rank to invalid rank "${e.rank}"`, { rank: e.rank });
           } else if (!isAssignableRank(r)) {
             bad(index, "BAD_EFFECT", `set_rank to deprecated rank "${e.rank}"`, { rank: e.rank });
@@ -181,12 +181,12 @@ export function validateEffects(
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `set_title needs a consort with standing: "${e.char}"`, { char: e.char });
-        } else if (state.standing[e.char]!.rank === "fenghou") {
-          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "huanghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (皇后) is not adjustable: "${e.char}"`, { char: e.char });
         } else if (db.lexicon.forbiddenTerms.some((t) => e.title.includes(t))) {
           bad(index, "BAD_EFFECT", `title "${e.title}" contains a forbidden term`, { title: e.title });
         } else if (e.authority.kind === "harem_administrator") {
-          // 封号操作不改变位分，但仍须目标严格低于协理者（empress 模式只需不是凤后）。
+          // 封号操作不改变位分，但仍须目标严格低于协理者（empress 模式只需不是皇后）。
           const curRankId = state.standing[e.char]!.rank;
           const check = e.authority.office === "empress"
             ? canEmpressAdjustRank(db, state, e.authority.actorId, e.char, curRankId)
@@ -199,8 +199,8 @@ export function validateEffects(
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `remove_title needs a consort with standing: "${e.char}"`, { char: e.char });
-        } else if (state.standing[e.char]!.rank === "fenghou") {
-          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not adjustable: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "huanghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (皇后) is not adjustable: "${e.char}"`, { char: e.char });
         } else if (e.authority.kind === "harem_administrator") {
           const curRankId = state.standing[e.char]!.rank;
           const check = e.authority.office === "empress"
@@ -382,8 +382,8 @@ export function validateEffects(
         const ch = db.characters[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `relocate needs a consort with standing: "${e.char}"`, { char: e.char });
-        } else if (state.standing[e.char]!.rank === "fenghou") {
-          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (凤后) is not relocatable: "${e.char}"`, { char: e.char });
+        } else if (state.standing[e.char]!.rank === "huanghou") {
+          bad(index, "BAD_EFFECT_TARGET", `the 正宫 (皇后) is not relocatable: "${e.char}"`, { char: e.char });
         } else if (isInColdPalace(state, e.char)) {
           bad(index, "BAD_EFFECT", `cannot relocate "${e.char}" while in cold palace`, { char: e.char });
         } else if (!hasChambers(e.location)) {
@@ -436,9 +436,9 @@ export function validateEffects(
         break;
       }
       case "set_harem_administration": {
-        // 判断凤后禁足现状（或本批中是否存在禁足/解禁凤后的效果）。
+        // 判断皇后禁足现状（或本批中是否存在禁足/解禁皇后的效果）。
         const fenghousId = Object.keys(state.standing).find(
-          (id) => state.standing[id]!.rank === "fenghou" && state.standing[id]!.lifecycle !== "deceased",
+          (id) => state.standing[id]!.rank === "huanghou" && state.standing[id]!.lifecycle !== "deceased",
         );
         const alreadyConfined = fenghousId ? isConfined(state, fenghousId) : false;
         const confinedinBatch = effects.some((be) => be.type === "confine" && (be as { char?: string }).char === fenghousId);
@@ -469,7 +469,7 @@ export function validateEffects(
             const st = state.standing[ns.charId];
             if (!c || c.kind !== "consort" || !st) {
               bad(index, "BAD_EFFECT_TARGET", `acting consort "${ns.charId}" not found`, { char: ns.charId });
-            } else if (st.rank === "fenghou") {
+            } else if (st.rank === "huanghou") {
               bad(index, "BAD_EFFECT", `acting consort cannot be fenghou: "${ns.charId}"`, { char: ns.charId });
             } else if (st.lifecycle === "deceased" || st.lifecycle === "candidate") {
               bad(index, "BAD_EFFECT_TARGET", `acting consort is deceased or candidate: "${ns.charId}"`, { char: ns.charId });
@@ -920,9 +920,9 @@ export function applyEffects(
             se.liftReason = "lifted_by_emperor";
           }
         }
-        // 凤后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
+        // 皇后禁足解除：主理权自动归还（手动解除与自动到期均走此路径）。
         // Guard: do NOT restore if the empress is currently in the cold palace.
-        if (next.standing[effect.char]?.rank === "fenghou"
+        if (next.standing[effect.char]?.rank === "huanghou"
             && next.haremAdministration.mode !== "empress"
             && !isInColdPalace(next, effect.char, next.calendar.dayIndex)) {
           next.haremAdministration = { mode: "empress" };
@@ -960,7 +960,7 @@ export function applyEffects(
         }
         // Cold palace empress cannot administer harem — transfer to acting_consort if eligible, else neiwu_proxy.
         // reason is always "imperial_deprivation": punitive removal of empress authority.
-        if (next.standing[ch]?.rank === "fenghou" && next.haremAdministration.mode === "empress") {
+        if (next.standing[ch]?.rank === "huanghou" && next.haremAdministration.mode === "empress") {
           const eligible = eligibleHaremAdministrators(db, next);
           if (eligible.length > 0) {
             next.haremAdministration = {
@@ -1031,7 +1031,7 @@ export function applyEffects(
           // Defensive recheck: a prior effect in this batch may have sent the empress to
           // cold palace or confined her. If so, redirect to a legal proxy state.
           const fenghouIdNow = Object.keys(next.standing).find(
-            (id) => next.standing[id]?.rank === "fenghou" && next.standing[id]?.lifecycle !== "deceased",
+            (id) => next.standing[id]?.rank === "huanghou" && next.standing[id]?.lifecycle !== "deceased",
           );
           const fenghouBlockedNow = fenghouIdNow &&
             (isInColdPalace(next, fenghouIdNow) ||

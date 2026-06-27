@@ -19,7 +19,7 @@ describe("consortGate 皇后例外", () => {
   it("禁足令对皇后：缺 administrator 时被拒", () => {
     const r = planImperialCommand(db, state, { type: "impose_confinement", targetId: "shen_zhibai", durationTurns: 3 });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toContain("凤后禁足须同时指定");
+    if (!r.ok) expect(r.reason).toContain("皇后禁足须同时指定");
   });
 
   it("禁足令对皇后：提供合格 administrator 时通过", () => {
@@ -35,7 +35,7 @@ describe("consortGate 皇后例外", () => {
   it("赐死令对皇后也明确拒绝", () => {
     const r = planImperialCommand(db, state, { type: "execute", targetId: "shen_zhibai" });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toContain("凤后");
+    if (!r.ok) expect(r.reason).toContain("皇后");
   });
 });
 

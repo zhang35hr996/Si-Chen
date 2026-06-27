@@ -127,7 +127,7 @@ describe("assembleDialogueRequest promptContext", () => {
     expect(rankDisplay.kind).toBe("ranked");
     if (rankDisplay.kind !== "ranked") return;
     // shen_zhibai is fenghou
-    expect(rankDisplay.id).toBe("fenghou");
+    expect(rankDisplay.id).toBe("huanghou");
     expect(rankDisplay.name).toBeDefined();
     expect(rankDisplay.grade).toBeDefined();
     expect(rankDisplay.selfRefs.toPlayer).toBeInstanceOf(Array);
@@ -360,7 +360,7 @@ function makeMinimalDB() {
       shen_zhibai: { profile: { name: "沈芝白" } },
     } as unknown as import("../../src/engine/content/loader").ContentDB["characters"],
     ranks: {
-      fenghou: { name: "后" },
+      huanghou: { name: "后" },
       meiren: { name: "美人" },
     } as unknown as import("../../src/engine/content/loader").ContentDB["ranks"],
     locations: {
@@ -454,7 +454,7 @@ function makeCourtEvent(overrides: Partial<CourtEvent> = {}): CourtEvent {
     type: "rank_changed",
     occurredAt: makeGameTime(1, 1, "early"),
     participants: [{ charId: "shen_zhibai", role: "subject" }],
-    payload: { from: "meiren", to: "fenghou", direction: "promote" },
+    payload: { from: "meiren", to: "huanghou", direction: "promote" },
     publicity: { scope: "palace", persistence: "institutional" },
     publicSalience: 70,
     retention: "slow",
@@ -477,7 +477,7 @@ describe("toPromptEvent", () => {
   it("whitelisted payload fields only per type — rank_changed: from/to display, direction", () => {
     const s = makeMinimalState();
     const d = makeMinimalDB();
-    const e = makeCourtEvent({ type: "rank_changed", payload: { from: "meiren", to: "fenghou", direction: "promote" } });
+    const e = makeCourtEvent({ type: "rank_changed", payload: { from: "meiren", to: "huanghou", direction: "promote" } });
     const pe = toPromptEvent(e, d, s);
     expect(pe.facts["from"]).toBe("美人");
     expect(pe.facts["to"]).toBe("后");
@@ -495,7 +495,7 @@ describe("toPromptEvent", () => {
   it("rank id fallback display '某位分' when rank not in db.ranks", () => {
     const s = makeMinimalState();
     const d = makeMinimalDB();
-    const e = makeCourtEvent({ type: "rank_changed", payload: { from: "unknown_rank", to: "fenghou", direction: "demote" } });
+    const e = makeCourtEvent({ type: "rank_changed", payload: { from: "unknown_rank", to: "huanghou", direction: "demote" } });
     const pe = toPromptEvent(e, d, s);
     expect(pe.facts["from"]).toBe("某位分");
     expect(pe.facts["to"]).toBe("后");

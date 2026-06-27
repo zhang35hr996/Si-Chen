@@ -29,7 +29,7 @@ describe("consortLocationAt", () => {
     expect(consortLocationAt(db, s, "lu_huaijin", 0)).toBe(home);
   });
 
-  it("凤后永远在坤宁宫，不请安不游走", () => {
+  it("皇后永远在坤宁宫，不请安不游走", () => {
     expect(consortLocationAt(db, base, "shen_zhibai", 0)).toBe("kunninggong");
     expect(consortLocationAt(db, base, "shen_zhibai", 2)).toBe("kunninggong");
   });

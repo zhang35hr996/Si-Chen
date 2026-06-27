@@ -33,14 +33,14 @@ describe("assembleDialogueRequest carries the full future-AI context", () => {
   it("profile, voice, standing+selfRefs, memories(激活), stances, etiquette, GameTime", () => {
     const request = requestFor("shen_zhibai");
     expect(request.speakerContext.profile.name).toBe("沈知白");
-    expect(request.speakerContext.standing).toMatchObject({ rank: "fenghou", favor: 25 });
-    expect(request.speakerContext.standing.selfRefs.toPlayer).toEqual(["臣后"]);
+    expect(request.speakerContext.standing).toMatchObject({ rank: "huanghou", favor: 25 });
+    expect(request.speakerContext.standing.selfRefs.toPlayer).toEqual(["臣侍"]);
     // shen_zhibai has a permanent-retention authored memory that survives the retrieval threshold
     expect(request.speakerContext.relevantMemories.length).toBeGreaterThan(0);
     expect(request.speakerContext.relevantMemories[0]!.ownerId).toBe("shen_zhibai");
     expect(request.speakerContext.stances?.[0]?.charId).toBe("lu_huaijin");
     expect(request.etiquette.forbiddenTerms).toContain("父皇");
-    expect(request.etiquette.addressRules).toHaveLength(22);
+    expect(request.etiquette.addressRules).toHaveLength(28);
     expect(request.time).toEqual({ year: 1, month: 1, period: "early", dayIndex: 0 });
     expect("ap" in request.time).toBe(false); // a speaker doesn't know the player's AP
     expect(assembleDialogueRequest(db, state, "char_ghost", "zichendian").ok).toBe(false);
@@ -117,18 +117,18 @@ describe("produceDialogueTurn text gates (PR 11)", () => {
   });
 
   it("rejects output containing a forbidden lexicon term", async () => {
-    const result = await produceLine(speaking("皇上圣明。"), requestForGen("shen_zhibai"));
+    const result = await produceLine(speaking("娘娘圣明。"), requestForGen("shen_zhibai"));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("GATE_REJECTED");
   });
 
   it("rejects a speaker borrowing another rank's selfRef", async () => {
-    // 承徽 borrowing 凤后's 臣后 (本宫 is now a shared to-lower ref, no longer foreign).
-    const result = await produceLine(speaking("臣后自有主张。"), requestForGen("lu_huaijin"));
+    // 承徽 (臣侍 tier) borrowing 少使/贵人 tier's 侍身 (侍身 is foreign to chenghui who uses 臣侍).
+    const result = await produceLine(speaking("侍身自有主张。"), requestForGen("lu_huaijin"));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("GATE_REJECTED");
-      expect(result.error.context?.findings).toContainEqual({ gate: "self_ref", matched: "臣后" });
+      expect(result.error.context?.findings).toContainEqual({ gate: "self_ref", matched: "侍身" });
     }
   });
 
@@ -149,19 +149,20 @@ describe("produceDialogueTurn text gates (PR 11)", () => {
 
   it("logs gate findings so they surface in debug diagnostics", async () => {
     const logger = new RingBufferLogger();
-    await produceDialogueTurn(db, speaking("圣上万安。"), requestForGen("shen_zhibai"), state, { logger });
+    await produceDialogueTurn(db, speaking("万岁爷圣明。"), requestForGen("shen_zhibai"), state, { logger });
     const entries = logger.entries();
-    expect(entries.some((e) => e.message.includes("AiError:GATE_RANK_TITLE"))).toBe(true);
+    expect(entries.some((e) => e.message.includes("AiError:GATE_FORBIDDEN_LEXICON"))).toBe(true);
   });
 
   it("clean generated output passes every gate", async () => {
-    const result = await produceLine(speaking("本宫累了，陛下早些歇息。"), requestForGen("shen_zhibai"));
+    // shen_zhibai (皇后) speaks to the emperor — selfRef is 臣侍, not 本宫
+    const result = await produceLine(speaking("臣侍告退，陛下早些歇息。"), requestForGen("shen_zhibai"));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.line.meta).toEqual({ generated: true, degraded: false });
   });
 
   it("speakerName recomposes from surname + 位分", async () => {
-    const result = await produceLine(speaking("……侍身知罪。"), requestForGen("lu_huaijin"));
+    const result = await produceLine(speaking("……臣侍知罪。"), requestForGen("lu_huaijin"));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.line.speakerName).toBe("陆承徽");
   });

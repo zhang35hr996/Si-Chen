@@ -20,7 +20,7 @@ export interface ShizhiPlan {
   beats: { speakerId: string; lines: string[] }[];
 }
 
-/** 在宫存活的侍君 + 凤后。 */
+/** 在宫存活的侍君 + 皇后。 */
 function attendantPool(db: ContentDB, state: GameState): string[] {
   return Object.values(db.characters)
     .filter((c) => {
@@ -32,7 +32,7 @@ function attendantPool(db: ContentDB, state: GameState): string[] {
     .map((c) => c.id);
 }
 
-/** 病中进慈宁宫遇侍君/凤后侍疾。seedKey 按旬钉死。无遭遇/无候选→null。 */
+/** 病中进慈宁宫遇侍君/皇后侍疾。seedKey 按旬钉死。无遭遇/无候选→null。 */
 export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: string): ShizhiPlan | null {
   if (state.taihou.deceased) return null; // 太后已薨：不再触发侍疾。
   if (!isIll(state.taihou.healthStatus)) return null;
@@ -53,7 +53,7 @@ export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: s
         char: attendantId,
         entry: {
           kind: "episodic",
-          summary: "太后凤体违和，臣往慈宁宫侍疾，蒙太后与陛下嘉许。",
+          summary: "太后凤体违和，往慈宁宫侍疾，蒙太后与陛下嘉许。",
           strength: 55,
           retention: "slow",
           subjectIds: ["taihou", attendantId, "player"],
@@ -67,7 +67,7 @@ export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: s
     beats: [
       { speakerId: "taihou", lines: [`哀家病中，难为${name}日日来侍奉汤药，难得这份孝心。`] },
       { speakerId: "player", lines: [`${name}侍疾辛劳，朕都看在眼里。`] },
-      { speakerId: attendantId, lines: [`侍奉太后，是臣的本分，不敢当太后与陛下夸赞。`] },
+      { speakerId: attendantId, lines: [`侍奉太后，是侍身的本分，不敢当太后与陛下夸赞。`] },
     ],
   };
 }
@@ -80,7 +80,7 @@ export interface RebukePlan {
   beats: { speakerId: string; lines: string[] }[];
 }
 
-/** 候选：在宫存活侍君，排除凤后。 */
+/** 候选：在宫存活侍君，排除皇后。 */
 function rebukePool(db: ContentDB, state: GameState): { id: string; favor: number }[] {
   return Object.values(db.characters)
     .filter((c) => {

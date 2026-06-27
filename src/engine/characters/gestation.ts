@@ -7,7 +7,7 @@ import { monthOrdinal, type GameTime } from "../calendar/time";
 
 export interface TwinsConfig {
   /** % chance of one son + one daughter (龙凤胎). */
-  dragonPhoenixChance: number;
+  mixedSexTwinsChance: number;
   /** % chance of twin daughters (双生皇子). */
   twoDaughtersChance: number;
   /** % chance of twin sons (双生皇郎). */
@@ -37,7 +37,7 @@ export interface GestationConfig {
   };
   childFavor: {
     selfPregnancy: number;
-    fenghouBonus: number;
+    empressBonus: number;
     tierValues: { abundant: number; favored: number; small: number; fallen: number; none: number };
   };
   twins?: TwinsConfig;
@@ -45,7 +45,7 @@ export interface GestationConfig {
 }
 
 export const DEFAULT_TWINS: TwinsConfig = {
-  dragonPhoenixChance: 5,
+  mixedSexTwinsChance: 5,
   twoDaughtersChance: 5,
   twoSonsChance: 5,
 };
@@ -65,9 +65,9 @@ export const DEFAULT_GESTATION: GestationConfig = {
   dystocia: { baseAtMonth3: 5, perMonthAfter: 8, outcomeSplit: { childDies: 50, bearerDies: 30, both: 20 } },
   childFavor: {
     // 出生宠爱保留后续召见/培养成长空间；100 为长期培养顶点，非出生默认值。
-    // 凤后只提供初始加成，无终身上限；clamp 统一在 0–100。
+    // 皇后只提供初始加成，无终身上限；clamp 统一在 0–100。
     selfPregnancy: 65,
-    fenghouBonus: 15,
+    empressBonus: 15,
     tierValues: { abundant: 46, favored: 38, small: 30, fallen: 22, none: 15 },
   },
   twins: DEFAULT_TWINS,

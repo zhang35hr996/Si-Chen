@@ -31,15 +31,15 @@ function firstOfferedMemoryId(req: ReturnType<typeof ctx>["req"]): string {
 describe("anthropic provider — full PR5 pipeline acceptance", () => {
   it("(a) no factual claims → passes in CLOSED mode, line produced", async () => {
     // Fresh state → allowedClaims=[] (CLOSED). Conversational text with no claims passes.
-    const { req, provider } = ctx("本宫累了，陛下早些歇息。", []);
+    const { req, provider } = ctx("臣侍告退，陛下早些歇息。", []);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(true);
   });
 
   it("(b) claim contradicts belief → CLAIM_REJECTED, state.mentionLog unchanged", async () => {
     const before = structuredClone(state.mentionLog);
-    const offered = firstOfferedMemoryId(ctx("本宫累了。", []).req);
-    const { req, provider } = ctx("本宫累了。", [rankClaim("c2", wrongRank, [offered])]);
+    const offered = firstOfferedMemoryId(ctx("臣侍知悉。", []).req);
+    const { req, provider } = ctx("臣侍知悉。", [rankClaim("c2", wrongRank, [offered])]);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("CLAIM_REJECTED");
     expect(state.mentionLog).toEqual(before);
@@ -47,7 +47,7 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
 
   it("(c) unknown source context → reject, state.mentionLog unchanged", async () => {
     const before = structuredClone(state.mentionLog);
-    const { req, provider } = ctx("本宫累了。", [rankClaim("c3", correctRank, ["not_offered_xyz"])]);
+    const { req, provider } = ctx("臣侍知悉。", [rankClaim("c3", correctRank, ["not_offered_xyz"])]);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("CLAIM_REJECTED");
     expect(state.mentionLog).toEqual(before);
@@ -56,7 +56,7 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
   it("(d) forbidden text without claims → GATE_REJECTED, state.mentionLog unchanged", async () => {
     // Fresh state → CLOSED mode. Text gate fires on the forbidden term "皇上".
     const before = structuredClone(state.mentionLog);
-    const { req, provider } = ctx("皇上圣明。", []);
+    const { req, provider } = ctx("娘娘圣明。", []);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("GATE_REJECTED");
     expect(state.mentionLog).toEqual(before);

@@ -17,7 +17,7 @@ describe("world.gestation content", () => {
     expect(g!.dystocia.perMonthAfter).toBe(8);
     expect(g!.dystocia.outcomeSplit).toEqual({ childDies: 50, bearerDies: 30, both: 20 });
     expect(g!.childFavor.selfPregnancy).toBe(65);
-    expect(g!.childFavor.fenghouBonus).toBe(15);
+    expect(g!.childFavor.empressBonus).toBe(15);
     expect(g!.childFavor.tierValues).toEqual({ abundant: 46, favored: 38, small: 30, fallen: 22, none: 15 });
   });
 
@@ -28,16 +28,16 @@ describe("world.gestation content", () => {
 
 describe("twinsConfigSchema probability validation", () => {
   it("accepts total <= 100", () => {
-    expect(twinsConfigSchema.safeParse({ dragonPhoenixChance: 5, twoDaughtersChance: 5, twoSonsChance: 5 }).success).toBe(true);
-    expect(twinsConfigSchema.safeParse({ dragonPhoenixChance: 34, twoDaughtersChance: 33, twoSonsChance: 33 }).success).toBe(true);
+    expect(twinsConfigSchema.safeParse({ mixedSexTwinsChance: 5, twoDaughtersChance: 5, twoSonsChance: 5 }).success).toBe(true);
+    expect(twinsConfigSchema.safeParse({ mixedSexTwinsChance: 34, twoDaughtersChance: 33, twoSonsChance: 33 }).success).toBe(true);
   });
 
   it("accepts total exactly 100", () => {
-    expect(twinsConfigSchema.safeParse({ dragonPhoenixChance: 40, twoDaughtersChance: 30, twoSonsChance: 30 }).success).toBe(true);
+    expect(twinsConfigSchema.safeParse({ mixedSexTwinsChance: 40, twoDaughtersChance: 30, twoSonsChance: 30 }).success).toBe(true);
   });
 
   it("rejects total > 100", () => {
-    const r = twinsConfigSchema.safeParse({ dragonPhoenixChance: 50, twoDaughtersChance: 30, twoSonsChance: 30 });
+    const r = twinsConfigSchema.safeParse({ mixedSexTwinsChance: 50, twoDaughtersChance: 30, twoSonsChance: 30 });
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues.some((i) => i.message.includes("twins chance total"))).toBe(true);
   });

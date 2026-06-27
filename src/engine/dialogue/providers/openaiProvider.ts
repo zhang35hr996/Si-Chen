@@ -65,6 +65,7 @@ export function buildOpenAIToolRequest(
     request.etiquette,
     payload.speaker.standing.selfRefs,
     payload.audience.targetRole,
+    request.resolvedAddress,
   );
   return {
     model,

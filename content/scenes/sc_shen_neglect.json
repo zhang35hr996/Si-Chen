@@ -1,14 +1,16 @@
 {
   "id": "sc_shen_neglect",
   "locationId": "yuhuayuan",
-  "participants": ["lu_huaijin"],
+  "participants": [
+    "lu_huaijin"
+  ],
   "startNodeId": "n_open",
   "nodes": [
     {
       "type": "line",
       "id": "n_open",
       "speaker": "lu_huaijin",
-      "text": "陛下万福金安。侍身在御花园赏花，竟有幸见驾临，侍身喜不自胜。",
+      "text": "陛下万福金安。臣侍在御花园赏花，竟有幸见驾临，臣侍喜不自胜。",
       "expression": "frown",
       "next": "n_choice"
     },
@@ -16,9 +18,24 @@
       "type": "choice",
       "id": "n_choice",
       "choices": [
-        { "id": "c_comfort", "text": "近来政务缠身，是朕疏忽了你。", "tone": "friendly", "next": "n_fx_comfort" },
-        { "id": "c_brush", "text": "朕路过而已，你自便。", "tone": "neutral", "next": "n_fx_brush" },
-        { "id": "c_cold", "text": "这话说的不老实，不可窥伺帝踪。", "tone": "hostile", "next": "n_fx_cold" }
+        {
+          "id": "c_comfort",
+          "text": "近来政务缠身，是朕疏忽了你。",
+          "tone": "friendly",
+          "next": "n_fx_comfort"
+        },
+        {
+          "id": "c_brush",
+          "text": "朕路过而已，你自便。",
+          "tone": "neutral",
+          "next": "n_fx_brush"
+        },
+        {
+          "id": "c_cold",
+          "text": "这话说的不老实，不可窥伺帝踪。",
+          "tone": "hostile",
+          "next": "n_fx_cold"
+        }
       ]
     },
     {
@@ -33,11 +50,20 @@
             "summary": "陛下在御花园亲口说，是政务缠身疏忽了我。这句话，我等了三旬。",
             "strength": 70,
             "retention": "permanent",
-            "subjectIds": ["player", "lu_huaijin"],
+            "subjectIds": [
+              "player",
+              "lu_huaijin"
+            ],
             "perspective": "witness",
-            "triggerTags": ["comfort", "yuhuayuan"],
+            "triggerTags": [
+              "comfort",
+              "yuhuayuan"
+            ],
             "unresolved": false,
-            "emotions": { "relief": 50, "joy": 30 }
+            "emotions": {
+              "relief": 50,
+              "joy": 30
+            }
           }
         }
       ],
@@ -47,7 +73,7 @@
       "type": "line",
       "id": "n_end_comfort",
       "speaker": "lu_huaijin",
-      "text": "……侍身失仪了。陛下既肯来，这园子的花，便不算白开。",
+      "text": "……臣侍失仪了。陛下既肯来，这园子的花，便不算白开。",
       "expression": "smile"
     },
     {
@@ -62,11 +88,19 @@
             "summary": "陛下说只是路过。三旬不见，等来一句『你自便』。",
             "strength": 65,
             "retention": "slow",
-            "subjectIds": ["player", "lu_huaijin"],
+            "subjectIds": [
+              "player",
+              "lu_huaijin"
+            ],
             "perspective": "witness",
-            "triggerTags": ["neglect", "yuhuayuan"],
+            "triggerTags": [
+              "neglect",
+              "yuhuayuan"
+            ],
             "unresolved": true,
-            "emotions": { "grief": 40 }
+            "emotions": {
+              "grief": 40
+            }
           }
         }
       ],
@@ -76,7 +110,7 @@
       "type": "line",
       "id": "n_end_brush",
       "speaker": "lu_huaijin",
-      "text": "是，陛下慢走。侍身恭送陛下。",
+      "text": "是，陛下慢走。臣侍恭送陛下。",
       "expression": "frown"
     },
     {
@@ -91,11 +125,20 @@
             "summary": "陛下说我话不老实，不可窥伺帝踪。希望陛下不会降罪。",
             "strength": 75,
             "retention": "permanent",
-            "subjectIds": ["player", "lu_huaijin"],
+            "subjectIds": [
+              "player",
+              "lu_huaijin"
+            ],
             "perspective": "witness",
-            "triggerTags": ["rebuke", "yuhuayuan"],
+            "triggerTags": [
+              "rebuke",
+              "yuhuayuan"
+            ],
             "unresolved": true,
-            "emotions": { "fear": 45, "shame": 30 }
+            "emotions": {
+              "fear": 45,
+              "shame": 30
+            }
           }
         }
       ],
@@ -105,7 +148,7 @@
       "type": "line",
       "id": "n_end_cold",
       "speaker": "lu_huaijin",
-      "text": "……侍身知罪。恭送陛下。",
+      "text": "……臣侍知罪。恭送陛下。",
       "expression": "worried"
     }
   ]

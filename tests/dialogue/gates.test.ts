@@ -7,64 +7,74 @@ import { buildTextGateContext, scanDialogueText } from "../../src/engine/dialogu
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
-const fenghouCtx = buildTextGateContext(db, "fenghou"); // selfRefs: 臣后/本宫
-const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 侍/侍身/我 (本宫 to-lower)
+const huanghouCtx = buildTextGateContext(db, "huanghou"); // selfRefs: 臣侍/本宫
+const chenghuiCtx = buildTextGateContext(db, "chenghui"); // selfRefs: 臣侍/本宫/我
 const siliCtx = buildTextGateContext(db, "sili_zhang"); // selfRefs: 臣/下官
 
 describe("buildTextGateContext", () => {
   it("foreign selfRefs exclude the speaker's own and single-char refs", () => {
-    // 凤后 may say 本宫; she may NOT borrow 臣侍 (君) or 下官 (司礼).
-    expect(fenghouCtx.foreignSelfRefs).toContain("臣侍");
-    expect(fenghouCtx.foreignSelfRefs).toContain("下官");
-    // 本宫 is shared by 凤后/君/承徽 (their to-lower ref), so it is never "foreign".
-    expect(fenghouCtx.foreignSelfRefs).not.toContain("本宫");
+    // 皇后 uses 臣侍 herself, so 臣侍 is NOT foreign for her.
+    expect(huanghouCtx.foreignSelfRefs).not.toContain("臣侍");
+    // 下官 belongs to 司礼 — that is foreign for 皇后.
+    expect(huanghouCtx.foreignSelfRefs).toContain("下官");
+    // 本宫 is shared by 皇后/驸-tier ranks (their to-lower ref), so it is never "foreign".
+    expect(huanghouCtx.foreignSelfRefs).not.toContain("本宫");
     // 「臣」 (司礼's toPlayer ref) is single-char — excluded to avoid 大臣/众臣.
-    expect(fenghouCtx.foreignSelfRefs).not.toContain("臣");
+    expect(huanghouCtx.foreignSelfRefs).not.toContain("臣");
   });
 
-  it("forbidden player honorifics drop ones already in the forbidden lexicon", () => {
-    // 皇上 is in forbiddenTerms → it fires under forbidden_lexicon, not rank_title.
-    expect(fenghouCtx.wrongPlayerHonorifics).not.toContain("皇上");
-    expect(fenghouCtx.wrongPlayerHonorifics).toContain("圣上");
+  it("wrongPlayerHonorifics is empty — 皇上/圣上/万岁/圣驾 are now context-restricted not globally wrong", () => {
+    expect(huanghouCtx.wrongPlayerHonorifics).toEqual([]);
   });
 });
 
 describe("forbidden_lexicon gate", () => {
   it("rejects forbidden terms anywhere in the text", () => {
-    const findings = scanDialogueText("你这般作态，倒像个嫔妃。", fenghouCtx);
+    const findings = scanDialogueText("你这般作态，倒像个嫔妃。", huanghouCtx);
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ gate: "forbidden_lexicon", severity: "reject", matched: "嫔妃" });
   });
 
-  it("rejects 皇上 (a forbidden player honorific)", () => {
-    const findings = scanDialogueText("皇上圣明。", fenghouCtx);
-    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "皇上")).toBe(true);
+  it("rejects 万岁爷 (a globally forbidden honorific)", () => {
+    const findings = scanDialogueText("万岁爷圣明。", huanghouCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "万岁爷")).toBe(true);
+  });
+
+  it("rejects 凤后 (forbidden — old title replaced by 皇后)", () => {
+    const findings = scanDialogueText("凤后召见。", huanghouCtx);
+    expect(findings.some((f) => f.gate === "forbidden_lexicon" && f.matched === "凤后")).toBe(true);
+  });
+
+  it("does NOT reject 皇上 (context-restricted, not globally banned)", () => {
+    const findings = scanDialogueText("皇上圣明。", huanghouCtx);
+    expect(findings.every((f) => f.matched !== "皇上")).toBe(true);
   });
 });
 
 describe("self_ref gate", () => {
   it("rejects a speaker borrowing another rank's selfRef", () => {
-    const findings = scanDialogueText("臣后自有主张。", chenghuiCtx); // 承徽 using 凤后's 臣后
+    // chenghui uses 臣侍 (长御+ tier); 侍身 belongs to 少使/贵人 mid tier
+    const findings = scanDialogueText("侍身自有主张。", chenghuiCtx);
     expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ gate: "self_ref", matched: "臣后" });
+    expect(findings[0]).toMatchObject({ gate: "self_ref", matched: "侍身" });
   });
 
   it("allows a speaker using their OWN selfRef", () => {
-    expect(scanDialogueText("侍身累了。", chenghuiCtx)).toHaveLength(0);
-    expect(scanDialogueText("本宫累了。", fenghouCtx)).toHaveLength(0);
+    expect(scanDialogueText("臣侍累了。", chenghuiCtx)).toHaveLength(0);
+    expect(scanDialogueText("本宫累了。", huanghouCtx)).toHaveLength(0);
   });
 
   it("does not false-positive on compounds of single-char refs", () => {
-    // 「臣」 is 司礼's ref but excluded; 「大臣」 must not trip the gate for 凤后.
-    expect(scanDialogueText("满朝大臣皆知。", fenghouCtx)).toHaveLength(0);
+    // 「臣」 is 司礼's ref but excluded; 「大臣」 must not trip the gate for 皇后.
+    expect(scanDialogueText("满朝大臣皆知。", huanghouCtx)).toHaveLength(0);
   });
 });
 
 describe("rank_title gate", () => {
-  it("rejects wrong honorifics for the 女帝", () => {
+  it("returns no findings since WRONG_PLAYER_HONORIFICS is empty", () => {
     const findings = scanDialogueText("圣上万安。", siliCtx);
-    expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ gate: "rank_title", matched: "圣上" });
+    const rankTitleFindings = findings.filter((f) => f.gate === "rank_title");
+    expect(rankTitleFindings).toHaveLength(0);
   });
 
   it("accepts the canonical 陛下 address", () => {
@@ -81,23 +91,23 @@ describe("template_leak gate", () => {
     ["<expression>陛下。", "<expression>"],
     ["臣回禀 %s 之事。", "%s"],
   ])("rejects leaked token in %s", (text, matched) => {
-    const findings = scanDialogueText(text, fenghouCtx);
+    const findings = scanDialogueText(text, huanghouCtx);
     expect(findings.some((f) => f.gate === "template_leak" && f.matched === matched)).toBe(true);
   });
 
   it("does not flag normal punctuation/CJK text", () => {
-    expect(scanDialogueText("陛下驾临，臣后有一事启奏。", fenghouCtx)).toHaveLength(0);
+    expect(scanDialogueText("陛下驾临，臣侍有一事启奏。", huanghouCtx)).toHaveLength(0);
   });
 });
 
 describe("choice text uses content gates only (skipIdentityGates)", () => {
   it("a player choice may name another rank's selfRef without tripping self_ref", () => {
     // The 女帝 quoting 「本宫」 in a choice is not impersonation.
-    expect(scanDialogueText("你莫要再说本宫如何如何。", fenghouCtx, { skipIdentityGates: true })).toHaveLength(0);
+    expect(scanDialogueText("你莫要再说本宫如何如何。", huanghouCtx, { skipIdentityGates: true })).toHaveLength(0);
   });
 
   it("but forbidden terms and template leaks still apply to choices", () => {
-    const findings = scanDialogueText("传旨给那嫔妃。", fenghouCtx, { skipIdentityGates: true });
+    const findings = scanDialogueText("传旨给那嫔妃。", huanghouCtx, { skipIdentityGates: true });
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ gate: "forbidden_lexicon", matched: "嫔妃" });
   });
@@ -114,9 +124,7 @@ describe("authored content passes every gate (mock output is clean)", () => {
         }
         if (node.type === "choice") {
           for (const choice of node.choices) {
-            // Choices are scanned with the participants' contexts; any is fine
-            // since identity gates are skipped for choices.
-            const ctx = buildTextGateContext(db, "fenghou");
+            const ctx = buildTextGateContext(db, "huanghou");
             expect(scanDialogueText(choice.text, ctx, { skipIdentityGates: true })).toEqual([]);
           }
         }

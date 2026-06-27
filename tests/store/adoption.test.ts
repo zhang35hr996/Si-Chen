@@ -15,7 +15,7 @@ const heir = (over: Partial<Heir>): Heir => ({
 });
 
 describe("eligibleAdoptiveFathers", () => {
-  it("includes in-palace consorts + 凤后, excludes 冷宫 + deceased + officials", () => {
+  it("includes in-palace consorts + 皇后, excludes 冷宫 + deceased + officials", () => {
     const s = createNewGameState(db);
     const ids = eligibleAdoptiveFathers(db, s).map((c) => c.id);
     expect(ids).toContain("shen_zhibai");

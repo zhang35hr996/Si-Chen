@@ -3,8 +3,8 @@
  * 帝王自孕（carrier="sovereign"）永不难产。宠爱按生产当月承载侍君的受宠程度派生。
  * 双胎各自独立判定生辰天象（吉兆/凶兆）；宠爱已包含天象加成。
  *
- * 皇嗣宠爱与侍君恩宠统一使用 0–100 区间。凤后加成仅为出生初始值 bonus，
- * 不存在凤后皇嗣 80 的终身上限；最终统一 clamp 至 0–100。
+ * 皇嗣宠爱与侍君恩宠统一使用 0–100 区间。皇后加成仅为出生初始值 bonus，
+ * 不存在皇后皇嗣 80 的终身上限；最终统一 clamp 至 0–100。
  */
 import { monthOrdinal, type GameTime } from "../calendar/time";
 import { computeFavorStats, type BedchamberThresholds, type FavorTier } from "./favorTier";
@@ -43,7 +43,7 @@ export interface BirthInput {
   carrier: "sovereign" | string;
   fatherId: string | null;
   transferredAtMonth: number | undefined;
-  bearerIsFenghou: boolean;
+  bearerIsEmpress: boolean;
   /** 承载侍君的侍寝日志（自孕传 undefined）。 */
   carrierRecord: BedchamberRecord | undefined;
   thresholds: BedchamberThresholds;
@@ -85,14 +85,14 @@ function pickOutcome(roll: number, cfg: GestationConfig): Exclude<BearerOutcome,
   return "both";
 }
 
-type TwinType = "dragonPhoenix" | "twoDaughters" | "twoSons";
+type TwinType = "mixedSexTwins" | "twoDaughters" | "twoSons";
 
 function rollTwinType(rngSeed: number, bm: number, carrier: string, cfg: TwinsConfig): TwinType | null {
   const roll = gestationRoll(`twins:${rngSeed}:${bm}:${carrier}`);
-  const dp = cfg.dragonPhoenixChance;
+  const dp = cfg.mixedSexTwinsChance;
   const td = cfg.twoDaughtersChance;
   const ts = cfg.twoSonsChance;
-  if (roll < dp) return "dragonPhoenix";
+  if (roll < dp) return "mixedSexTwins";
   if (roll < dp + td) return "twoDaughters";
   if (roll < dp + td + ts) return "twoSons";
   return null;
@@ -123,7 +123,7 @@ function applyOmenToFavor(base: number, omen: BirthOmen | null, cfg: BirthOmenCo
 }
 
 export function resolveBirth(input: BirthInput): BirthVerdict {
-  const { rngSeed, now, carrier, fatherId, transferredAtMonth, bearerIsFenghou } = input;
+  const { rngSeed, now, carrier, fatherId, transferredAtMonth, bearerIsEmpress } = input;
   const bm = monthOrdinal(now);
   const twinsConfig = input.cfg.twins ?? DEFAULT_TWINS;
   const omenConfig = input.cfg.birthOmen ?? DEFAULT_BIRTH_OMEN;
@@ -134,7 +134,7 @@ export function resolveBirth(input: BirthInput): BirthVerdict {
   // Sex assignment
   let sex: HeirSex;
   let twinSex: HeirSex | undefined;
-  if (twinType === "dragonPhoenix") {
+  if (twinType === "mixedSexTwins") {
     sex = "son";
     twinSex = "daughter";
   } else if (twinType === "twoDaughters") {
@@ -147,7 +147,7 @@ export function resolveBirth(input: BirthInput): BirthVerdict {
     sex = gestationRoll(`sex:${rngSeed}:${bm}:${carrier}`) % 2 === 0 ? "daughter" : "son";
   }
 
-  const legitimate = bearerIsFenghou || carrier === "sovereign";
+  const legitimate = bearerIsEmpress || carrier === "sovereign";
 
   // Base favor
   let baseFavor: number;
@@ -156,7 +156,7 @@ export function resolveBirth(input: BirthInput): BirthVerdict {
   } else {
     const stats = computeFavorStats(input.carrierRecord, now, input.thresholds);
     baseFavor = tierValue(stats.tier, input.cfg);
-    if (bearerIsFenghou) baseFavor += input.cfg.childFavor.fenghouBonus;
+    if (bearerIsEmpress) baseFavor += input.cfg.childFavor.empressBonus;
   }
 
   // Dystocia (self-pregnancy never dystocia)

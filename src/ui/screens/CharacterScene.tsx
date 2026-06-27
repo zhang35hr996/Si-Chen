@@ -21,7 +21,7 @@ import { reportingAttendant } from "../../engine/characters/gongli";
 import { getGreetingLocation } from "../../engine/characters/haremAdministration";
 
 /** 恪守礼数的问候集；按 charId 确定性选取，避免僭越或失礼。 */
-const GREETINGS = ["恭迎陛下圣驾。", "陛下万福金安。", "臣侍恭候陛下多时了。", "见过陛下，陛下圣安。"];
+const GREETINGS = ["恭迎陛下圣驾。", "陛下万福金安。", "恭候陛下多时了。", "见过陛下，陛下圣安。"];
 function greetingFor(charId: string): string {
   let h = 0;
   for (const ch of charId) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -99,7 +99,7 @@ export function CharacterScene({
   const admin = state.haremAdministration;
   const isActingAdmin = character && (
     (admin.mode === "acting_consort" && admin.charId === character.id) ||
-    (admin.mode === "empress" && state.standing[character.id]?.rank === "fenghou")
+    (admin.mode === "empress" && state.standing[character.id]?.rank === "huanghou")
   );
 
   const awayTo = character ? absence?.[character.id] : undefined;

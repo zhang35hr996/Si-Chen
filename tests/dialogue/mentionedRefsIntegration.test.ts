@@ -48,7 +48,7 @@ function refOnlyProvider(): DialogueProvider {
     generate: async (req) =>
       ok<DialogueProviderResult>({
         speaker: req.speakerId,
-        text: "本宫累了，陛下早些歇息。",
+        text: "臣侍告退，陛下早些歇息。",
         choices: [],
         proposedClaims: [],
         mentionedContextRefs: [{ kind: "memory", id: MEM_ID }],

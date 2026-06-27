@@ -13,7 +13,7 @@ function nameOf(db: ContentDB, state: GameState, charId: string): string {
   return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
 }
 
-/** 养父候选：在宫(非冷宫)、非已故的侍君（含凤后）及尊长（太后）。 */
+/** 养父候选：在宫(非冷宫)、非已故的侍君（含皇后）及尊长（太后）。 */
 export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): CharacterContent[] {
   return Object.values(db.characters).filter((c) => {
     if (c.kind !== "consort" && c.kind !== "elder") return false;
@@ -63,7 +63,7 @@ export function buildAdoptionReaction(
     speakerId: fatherId,
     lines: [
       `${adoptive}闻陛下择其抚育皇嗣，趋前叩谢天恩。`,
-      `${adoptive}哽咽叩首：臣定当视如己出，倾心教养这${child}，不负陛下托付。`,
+      `${adoptive}哽咽叩首：定当视如己出，倾心教养这${child}，不负陛下托付。`,
     ],
   };
   if (bioFatherAvailable(db, state, heir)) {

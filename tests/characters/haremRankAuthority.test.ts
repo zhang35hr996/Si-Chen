@@ -5,8 +5,8 @@
  * 以及 funnel 层对 set_rank authority 的校验。
  *
  * 测试环境角色：
- *   shen_zhibai — 凤后（fenghou，kunninggong）
- *   xu_qinghuan — 君（jun, order 160，xianfugong）  ← 代理侍君
+ *   shen_zhibai — 皇后（fenghou，kunninggong）
+ *   xu_qinghuan — 驸（fu, order 176，xianfugong）  ← 代理侍君
  *   wenya       — 承徽（chenghui, order 134，changmengong）← 目标
  *   lu_huaijin  — 承徽（chenghui, order 134，zhongcui_gong）← 目标
  */
@@ -27,7 +27,7 @@ function baseState(): GameState {
   return createNewGameState(db);
 }
 
-/** 凤后禁足状态效果 */
+/** 皇后禁足状态效果 */
 function confineFenghouState(state: GameState): GameState {
   const now = toGameTime(state.calendar);
   return {
@@ -47,7 +47,7 @@ function confineFenghouState(state: GameState): GameState {
   };
 }
 
-/** 凤后禁足 + haremAdministration 设为 xu_qinghuan 代理 */
+/** 皇后禁足 + haremAdministration 设为 xu_qinghuan 代理 */
 function withActingConsort(state: GameState, charId = "xu_qinghuan"): GameState {
   const confined = confineFenghouState(state);
   return {
@@ -64,14 +64,14 @@ function withActingConsort(state: GameState, charId = "xu_qinghuan"): GameState 
 // ─── I. getHaremRankAuthority ─────────────────────────────────────────────────
 
 describe("getHaremRankAuthority", () => {
-  it("RA-01b: empress 模式 → harem_administrator/<凤后charId>，maxTargetOrder = fenghou.order - 1", () => {
+  it("RA-01b: empress 模式 → harem_administrator/<皇后charId>，maxTargetOrder = fenghou.order - 1", () => {
     const state = baseState(); // haremAdmin.mode = "empress"
     const auth = getHaremRankAuthority(db, state);
     expect(auth.kind).toBe("harem_administrator");
     if (auth.kind === "harem_administrator") {
-      // 凤后 charId 应为 shen_zhibai（新游戏默认凤后）
+      // 皇后 charId 应为 shen_zhibai（新游戏默认皇后）
       expect(auth.actorId).toBe("shen_zhibai");
-      expect(auth.maxTargetOrder).toBe((db.ranks["fenghou"]?.order ?? 1000) - 1);
+      expect(auth.maxTargetOrder).toBe((db.ranks["huanghou"]?.order ?? 1000) - 1);
     }
   });
 
@@ -81,8 +81,8 @@ describe("getHaremRankAuthority", () => {
     expect(auth.kind).toBe("harem_administrator");
     if (auth.kind === "harem_administrator") {
       expect(auth.actorId).toBe("xu_qinghuan");
-      const junOrder = db.ranks["jun"]?.order ?? 160;
-      expect(auth.maxTargetOrder).toBe(junOrder - 1);
+      const fuOrder = db.ranks["fu"]?.order ?? 176;
+      expect(auth.maxTargetOrder).toBe(fuOrder - 1);
     }
   });
 
@@ -138,9 +138,9 @@ describe("canAdministratorAdjustRank — 前置条件校验", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("RA-08: acting_consort 模式不要求凤后禁足（PUNISH-3A imperial_deprivation 路径）→ 允许", () => {
-    // PUNISH-3A 后：权威判据为 haremAdministration.mode，不再要求凤后禁足。
-    // imperial_deprivation/empress_illness 委任均不伴随凤后禁足。
+  it("RA-08: acting_consort 模式不要求皇后禁足（PUNISH-3A imperial_deprivation 路径）→ 允许", () => {
+    // PUNISH-3A 后：权威判据为 haremAdministration.mode，不再要求皇后禁足。
+    // imperial_deprivation/empress_illness 委任均不伴随皇后禁足。
     const state: GameState = {
       ...baseState(),
       haremAdministration: {
@@ -150,7 +150,7 @@ describe("canAdministratorAdjustRank — 前置条件校验", () => {
         reason: "imperial_deprivation",
       },
     };
-    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "fu");
+    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "zhaoyi");
     expect(result.ok).toBe(true);
   });
 
@@ -218,9 +218,9 @@ describe("canAdministratorAdjustRank — 目标校验", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("RA-13: 目标为凤后 → 拒绝", () => {
+  it("RA-13: 目标为皇后 → 拒绝", () => {
     const state = withActingConsort(baseState());
-    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "shen_zhibai", "guijun");
+    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "shen_zhibai", "guifu");
     expect(result.ok).toBe(false);
   });
 
@@ -231,7 +231,7 @@ describe("canAdministratorAdjustRank — 目标校验", () => {
       ...base,
       standing: {
         ...base.standing,
-        wenya: { ...base.standing.wenya!, rank: "jun" },
+        wenya: { ...base.standing.wenya!, rank: "fu" },
       },
     };
     const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "fu");
@@ -244,26 +244,26 @@ describe("canAdministratorAdjustRank — 目标校验", () => {
 describe("canAdministratorAdjustRank — 新位分校验", () => {
   it("RA-15: newRankId = fenghou → 拒绝", () => {
     const state = withActingConsort(baseState());
-    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "fenghou");
+    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "huanghou");
     expect(result.ok).toBe(false);
   });
 
   it("RA-16: newRank.order >= 协理者 order → 拒绝（不能晋升到与自己同级）", () => {
-    const state = withActingConsort(baseState()); // xu_qinghuan = jun(160)
-    // fu(140) 低于 jun(160)，但 jun(160) == actor order，拒绝。
-    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "jun");
+    const state = withActingConsort(baseState()); // xu_qinghuan = fu(176)
+    // fu(176) == actor order，拒绝同级。
+    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "fu");
     expect(result.ok).toBe(false);
   });
 
-  it("RA-17: 合法降位 —— 承徽→更衣，协理者 jun(160) → 通过", () => {
-    const state = withActingConsort(baseState()); // wenya = chenghui(134), actor = jun(160)
+  it("RA-17: 合法降位 —— 承仪→更衣，协理者 fu(176) → 通过", () => {
+    const state = withActingConsort(baseState()); // wenya = chenghui(156), actor = fu(176)
     const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "gengyi"); // gengyi(50)
     expect(result.ok).toBe(true);
   });
 
-  it("RA-18: 合法晋位 —— 承徽→驸，协理者 jun(160) → 通过", () => {
-    const state = withActingConsort(baseState()); // wenya = chenghui(134), actor = jun(160)
-    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "fu"); // fu(140) < jun(160)
+  it("RA-18: 合法晋位 —— 承仪→昭仪，协理者 fu(176) → 通过", () => {
+    const state = withActingConsort(baseState()); // wenya = chenghui(156), actor = fu(176)
+    const result = canAdministratorAdjustRank(db, state, "xu_qinghuan", "wenya", "zhaoyi"); // zhaoyi(168) < fu(176)
     expect(result.ok).toBe(true);
   });
 });
@@ -290,7 +290,7 @@ describe("funnel — authority 校验", () => {
       {
         type: "set_rank",
         char: "wenya",
-        rank: "fu",
+        rank: "zhaoyi",
         authority: { kind: "harem_administrator", actorId: "xu_qinghuan", office: "acting_consort" as const },
       },
     ]);
@@ -300,13 +300,13 @@ describe("funnel — authority 校验", () => {
       {
         type: "set_rank",
         char: "wenya",
-        rank: "fu",
+        rank: "zhaoyi",
         authority: { kind: "harem_administrator", actorId: "xu_qinghuan", office: "acting_consort" as const },
       },
     ]);
     expect(applied.ok).toBe(true);
     if (applied.ok) {
-      expect(applied.value.standing["wenya"]?.rank).toBe("fu");
+      expect(applied.value.standing["wenya"]?.rank).toBe("zhaoyi");
     }
   });
 });
@@ -320,14 +320,14 @@ describe("canEmpressAdjustRank", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("RA-22: actorId 不是当前凤后 → 拒绝", () => {
+  it("RA-22: actorId 不是当前皇后 → 拒绝", () => {
     const state = baseState(); // mode = empress
     const result = canEmpressAdjustRank(db, state, "xu_qinghuan", "wenya", "fu");
     expect(result.ok).toBe(false);
   });
 
-  it("RA-23: 凤后合法调整 chenghui→fu → 通过", () => {
-    const state = baseState(); // mode = empress, shen_zhibai = 凤后
+  it("RA-23: 皇后合法调整 chenghui→fu → 通过", () => {
+    const state = baseState(); // mode = empress, shen_zhibai = 皇后
     const result = canEmpressAdjustRank(db, state, "shen_zhibai", "wenya", "fu");
     expect(result.ok).toBe(true);
   });
@@ -391,7 +391,7 @@ describe("GameStore — chronicle persistence（Blocking 1）", () => {
       type: "harem_admin_rank_change",
       actorId: "xu_qinghuan",
       targetId: "wenya",
-      request: { kind: "set_rank", rank: "fu" },
+      request: { kind: "set_rank", rank: "zhaoyi" },
     });
     expect(result.ok).toBe(true);
     const after = store.getState();
@@ -407,7 +407,7 @@ describe("GameStore — chronicle persistence（Blocking 1）", () => {
       type: "harem_admin_rank_change",
       actorId: "xu_qinghuan",
       targetId: "wenya",
-      request: { kind: "set_rank", rank: "fu" },
+      request: { kind: "set_rank", rank: "zhaoyi" },
     });
     expect(result.ok).toBe(true);
     const after = store.getState();
@@ -442,7 +442,7 @@ describe("GameStore — single emit per command", () => {
       type: "harem_admin_rank_change",
       actorId: "xu_qinghuan",
       targetId: "wenya",
-      request: { kind: "set_rank", rank: "fu" },
+      request: { kind: "set_rank", rank: "zhaoyi" },
     });
     expect(emitCount).toBe(1);
   });

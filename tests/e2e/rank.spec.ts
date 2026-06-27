@@ -18,15 +18,15 @@ test("promote a consort from the 乘风·调整位分 list and return to her det
   await page.getByRole("button", { name: "陆怀瑾 承徽" }).click();
   await page.getByRole("button", { name: "封号管理" }).click();
 
-  // 选 君（value "jun"）→ 确认（修复前此处被列表叠层拦截而点不动）
-  await page.locator(".rank-modal select").selectOption("jun");
+  // 选 驸（value "fu"，旧 jun → 新 fu 重命名后的从一品位分）→ 确认（修复前此处被列表叠层拦截而点不动）
+  await page.locator(".rank-modal select").selectOption("fu");
   await page.getByRole("button", { name: "确认调整" }).click();
 
-  // 反应以新称呼「陆君」开口
-  await expect(page.locator(".dialogue-screen__speaker", { hasText: "陆君" })).toBeVisible();
+  // 反应以新称呼「陆驸」开口
+  await expect(page.locator(".dialogue-screen__speaker", { hasText: "陆驸" })).toBeVisible();
   await page.getByRole("button", { name: "（继续）" }).click();
 
-  // 反应结束后自动回到「查看侍君」并定位回陆怀瑾详情，位分已更新为 君
-  await expect(page.getByText("位分：君")).toBeVisible();
+  // 反应结束后自动回到「查看侍君」并定位回陆怀瑾详情，位分已更新为 驸
+  await expect(page.getByText("位分：驸")).toBeVisible();
   await expect(page.getByRole("button", { name: "封号管理" })).toBeVisible();
 });

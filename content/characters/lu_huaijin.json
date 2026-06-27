@@ -51,7 +51,7 @@
   "voice": {
     "register": "poetic",
     "quirks": [
-      "自称『侍身』",
+      "自称『臣侍』",
       "称玩家『陛下』",
       "失落时偶尔会脱口而出『曾经』"
     ],
@@ -88,7 +88,7 @@
     {
       "charId": "shen_zhibai",
       "stance": "competitive",
-      "attitude": "敬畏凤后掌印之威，又暗怨其规矩繁苛"
+      "attitude": "敬畏皇后掌印之威，又暗怨其规矩繁苛"
     }
   ],
   "maternalClan": {

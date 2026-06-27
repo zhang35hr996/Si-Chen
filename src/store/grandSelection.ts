@@ -142,16 +142,16 @@ export function recommendRank(grade: number | "commoner"): string {
   return "gengyi";                    // 八品以下
 }
 
-/** 初始恩宠随位分缩放：更衣(50)→10，皇贵君(180)→20，线性，夹在 10–20。 */
+/** 初始恩宠随位分缩放：观南子(52)→10，皇贵驸(194)→20，线性，夹在 10–20。 */
 export function initialFavorForRank(order: number): number {
-  const raw = 10 + Math.round((10 * (order - 50)) / 130);
+  const raw = 10 + Math.round((10 * (order - 52)) / 142);
   return Math.max(10, Math.min(20, raw));
 }
 
-/** 玩家可选位分：order 50（更衣）–180（皇贵君），排除凤后和已废弃位分；降序。 */
+/** 玩家可选位分：order 50（观南子以上）–200（皇贵驸以下），排除皇后和已废弃位分；降序。 */
 export function pickableRanks(db: ContentDB): CharacterRank[] {
   return Object.values(db.ranks)
-    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "fenghou" && r.order >= 50 && r.order <= 180)
+    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "huanghou" && r.order >= 50 && r.order <= 200)
     .sort((a, b) => b.order - a.order);
 }
 
@@ -402,7 +402,7 @@ export function daxuanAnnounceBeats(): DecreeReaction[] {
     {
       speakerId: "cheng_feng",
       lines: [
-        "陛下，凤后娘娘遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
+        "陛下，皇后遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
       ],
     },
   ];
@@ -412,7 +412,7 @@ export function daxuanAnnounceBeats(): DecreeReaction[] {
 export function daxuanDianxuanPromptFor(year: number): ChengFengPrompt {
   return {
     speakerId: "cheng_feng",
-    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
+    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后与皇太后都已到了。",
     choices: [
       { label: "前往体元殿", action: { type: "daxuanEnter", year } },
       { label: "让太后皇后决定", action: { type: "daxuanDelegate", year } },
@@ -421,7 +421,7 @@ export function daxuanDianxuanPromptFor(year: number): ChengFengPrompt {
 }
 
 /**
- * 大选年、未报过、且已到/已过「二月上旬辰时」→ 凤后遣人禀告大选已备妥（设 flag + 节拍）。
+ * 大选年、未报过、且已到/已过「二月上旬辰时」→ 皇后遣人禀告大选已备妥（设 flag + 节拍）。
  * 仅供纯到期判定测试 / 旧调用方使用；实机消费走 store.consumeDaxuanAnnounce（按 pending.year）。
  */
 export function buildDaxuanAnnounce(

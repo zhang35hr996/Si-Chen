@@ -49,7 +49,7 @@ describe("subjectivity (acceptance §13 #8)", () => {
     expect(shen).toHaveLength(2);
     expect(shen[1]?.summary).toContain("不可窥伺帝踪");
 
-    // 凤后 and 司礼女官 were absent: still only their authored seed
+    // 皇后 and 司礼女官 were absent: still only their authored seed
     expect(listMemories(state, "shen_zhibai")).toHaveLength(1);
     expect(listMemories(state, "shen_zhibai")[0]?.ownerId).toBe("shen_zhibai");
     expect(listMemories(state, "wei_sui")).toHaveLength(1);

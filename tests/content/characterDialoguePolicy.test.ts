@@ -39,7 +39,7 @@ describe("characterSchema dialoguePolicy", () => {
             id: "forbid_test_rank",
             predicate: "holds_rank",
             subjectId: "wenya",
-            object: "fenghou",
+            object: "huanghou",
             modality: "assert",
           },
         ],
@@ -119,16 +119,16 @@ describe("characterSchema dialoguePolicy", () => {
     const db = loadRealContent();
     expect(db.characters["wenya"]?.dialoguePolicy).toBeDefined();
     expect(db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims.length).toBe(1);
-    expect(db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims[0]?.id).toBe("forbid_wenya_rank_fenghou");
+    expect(db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims[0]?.id).toBe("forbid_wenya_rank_huanghou");
   });
 
-  it("wenya forbidden claim is fenghou not zhaoyi — promotion to zhaoyi must not fire claim_explicitly_forbidden", () => {
+  it("wenya forbidden claim is huanghou not zhaoyi — promotion to zhaoyi must not fire claim_explicitly_forbidden", () => {
     const db = loadRealContent();
     const claims = db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims ?? [];
     // Regression: holds_rank(wenya, zhaoyi) is not in the forbidden list.
     // If the player legitimately promotes wenya to zhaoyi, the gate must not fire.
     expect(claims.some((c) => c.object === "zhaoyi")).toBe(false);
-    // fenghou (empress) is the permanent constraint.
-    expect(claims.some((c) => c.object === "fenghou")).toBe(true);
+    // huanghou (empress) is the permanent constraint.
+    expect(claims.some((c) => c.object === "huanghou")).toBe(true);
   });
 });

@@ -76,7 +76,7 @@ describe("co-residents are not marked present", () => {
 
 describe("scripted / fallback path is unchanged", () => {
   it("a scripted request (no scene context) still produces a scripted line", async () => {
-    const text = "本宫累了，陛下早些歇息。";
+    const text = "臣侍告退，陛下早些歇息。";
     const r = assembleDialogueRequest(db, state, SPEAKER, LOC, { scripted: { text } });
     expect(r.ok).toBe(true);
     if (!r.ok) return;

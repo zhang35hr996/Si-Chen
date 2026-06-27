@@ -10,7 +10,7 @@
 | 官职 `OfficialPost` | content（world.json） | 朝廷稳定席位：名称/品级 `gradeOrder`/部门 `department`/席位数 `seatCount` | 永久存在，人去职后席位空缺、官职仍在 |
 | 官员 `Official` | `state.officials` | 占据官职的具体女性人物：`postId\|null`、`age`、`familyId`、`loyalty`、`status`、`appointedAt?` | 运行态，可空缺 `postId` |
 | 家族 `OfficialFamily` | `state.officialFamilies` | 母系政治/亲缘实体：`surname`、`influence` 门第、`imperialFavor` 圣眷（**不存 memberIds**，成员一律派生） | 长期存在 |
-| 家族成员 `FamilyMember` | `state.familyMembers` | 非官员、非在宫侍君的近亲（母亲/内卿/女儿/男郎/姐妹） | 运行态 |
+| 家族成员 `FamilyMember` | `state.familyMembers` | 非官员、非在宫侍君的近亲（母亲/夫人/女儿/男郎/姐妹） | 运行态 |
 | 亲缘边 `KinshipRelation` | `state.kinship` | 正式有向关系边（含对称反向边） | 随档持久 |
 
 权势三分离：官员个人 `loyalty`、家族 `influence/imperialFavor`、官职品级（`power(post,id)` 派生）
@@ -18,9 +18,9 @@
 
 ## 二、世界观硬约束（已落实）
 
-- 官员恒为女性（`Official` 无 sex 字段即女性）；男性 `FamilyMember`（内卿/男郎）绝不挂 `postId`，校验器强制。
+- 官员恒为女性（`Official` 无 sex 字段即女性）；男性 `FamilyMember`（夫人/男郎）绝不挂 `postId`，校验器强制。
 - 母系结构：子女归母族（同姓）；侍君为帝王男性侍御，出身官员家族即官员之「子」。
-- 内卿（官员正室，男性，赘入）可异姓——数据结构不阻碍未来「男子赘入女方家」。
+- 夫人（官员正室，男性，赘入）可异姓——数据结构不阻碍未来「男子赘入女方家」。
 - 不按姓名推断亲缘：一切走稳定 id + 亲缘边。
 
 ## 三、人物 id 命名空间（全局唯一、与显示名解耦、读档不重生成）
@@ -38,7 +38,7 @@
 
 1. 收集 authored 侍君母族，**按 `maternalClan.familyId` 分组**（按 charId 稳定排序后按 familyId 聚合）。
 2. 每组建家族（runtime id = 该 familyId）：头官（取 `maternalClan.postId`）→ 核心成员
-   （母亲/内卿/女儿/男郎/姐妹）→ 侍君连为官员之子（`birthFamilyId` + 亲缘边）。
+   （母亲/夫人/女儿/男郎/姐妹）→ 侍君连为官员之子（`birthFamilyId` + 亲缘边）。
 3. 再生成 `UNLINKED_FAMILY_COUNT` 个无关联家族（`fam_gen_*`）填充朝堂，席位按 `seatCount` 不超额。
 4. 建亲缘索引（母↔子女/子、配偶、同胞，对称关系两向落库）。
 5. `newGame` 写入 state；`standing.birthFamilyId` 落于对应侍君。
@@ -65,7 +65,7 @@
 成员归属唯一真相 = 各人物 `familyId`/`birthFamilyId`（无 memberIds）。校验覆盖：record key 与对象
 `id` 一致、全局人物 id 唯一（authored characters / generatedConsorts / officials / familyMembers
 四命名空间）、官职/家族引用存在、席位不超额、`isValidOfficialAge`、家族成员引用有效、sex↔role 一致、
-家族 surname 一致（内卿可异姓）、亲缘两端存在、无重复边、无矛盾生母、**mother 反向边类型须与
+家族 surname 一致（夫人可异姓）、亲缘两端存在、无重复边、无矛盾生母、**mother 反向边类型须与
 child 实际性别严格匹配（male→son、female→daughter）**、sibling/spouse 对称、母女/配偶年龄、
 **母子 canonical familyId 一致（KIN_FAMILY_MISMATCH）**、侍君 `birthFamilyId` 与 `maternalClan.familyId`
 一致且有对应母亲边、**非 active 官员不得占职（OFFICIAL_INACTIVE_SEATED）**。

@@ -11,7 +11,7 @@ import { characterRankSchema } from "../../src/engine/content/schemas";
 describe("CharacterRank schema extensions", () => {
   it("round-trips a rank with aliases and deprecatedAliases", () => {
     const raw = {
-      id: "huangguijun",
+      id: "huangguifu",
       name: "皇贵君",
       aliases: ["皇贵"],
       deprecatedAliases: ["皇宠君"],
@@ -87,12 +87,12 @@ describe("CharacterRank schema extensions", () => {
   });
 });
 
-describe("guannanzi is deprecated in world.json", () => {
-  it("guannanzi rank has deprecated: true", () => {
+describe("guannanzi is an active rank in world.json", () => {
+  it("guannanzi rank is defined and not deprecated", () => {
     const db = loadRealContent();
     const guannanzi = db.ranks["guannanzi"];
     expect(guannanzi).toBeDefined();
-    expect(guannanzi!.deprecated).toBe(true);
+    expect(guannanzi!.deprecated).toBe(false);
   });
 
   it("non-deprecated ranks do not have deprecated: true", () => {

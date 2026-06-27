@@ -36,23 +36,23 @@ describe("recommendRank 家世→位分", () => {
 });
 
 describe("initialFavorForRank", () => {
-  it("更衣 10、皇贵君 20、中间线性、夹在 10–20", () => {
+  it("观南子 10、皇贵驸 20、中间线性、夹在 10–20", () => {
     expect(initialFavorForRank(50)).toBe(10);   // 更衣
-    expect(initialFavorForRank(180)).toBe(20);  // 皇贵君
-    expect(initialFavorForRank(115)).toBe(15);  // 中点附近
-    const v = initialFavorForRank(1000);        // 越界（凤后）仍夹住
+    expect(initialFavorForRank(194)).toBe(20)  // 皇贵驸
+    expect(initialFavorForRank(123)).toBe(15);  // 中点附近
+    const v = initialFavorForRank(1000);        // 越界（皇后）仍夹住
     expect(v).toBeLessThanOrEqual(20);
     expect(v).toBeGreaterThanOrEqual(10);
   });
 });
 
 describe("pickableRanks", () => {
-  it("含更衣与皇贵君、不含凤后，降序", () => {
+  it("含观南子与皇贵驸、不含皇后，降序", () => {
     const ranks = pickableRanks(db);
     const ids = ranks.map((r) => r.id);
     expect(ids).toContain("gengyi");
-    expect(ids).toContain("huangguijun");
-    expect(ids).not.toContain("fenghou");
+    expect(ids).toContain("huangguifu");
+    expect(ids).not.toContain("huanghou");
     const orders = ranks.map((r) => r.order);
     expect(orders).toEqual([...orders].sort((a, b) => b - a));
   });

@@ -15,7 +15,7 @@ import { CHAMBERED_PALACE_ORDER } from "../../engine/characters/chambers";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import type { HaremAdministrationState } from "../../engine/state/types";
 
-const EMPRESS_PALACE = "kunninggong"; // 坤宁宫 · 皇后（凤后）居所，置顶
+const EMPRESS_PALACE = "kunninggong"; // 坤宁宫 · 皇后（皇后）居所，置顶
 const COLD_PALACE = "changmengong"; // 长门宫 · 冷宫
 const CANDIDATE_PALACE = "chuxiu_gong"; // 储秀宫 · 待选秀男
 /** 设宫室的居所排序（与 chambers.ts 同一来源）。 */

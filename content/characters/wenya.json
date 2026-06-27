@@ -89,10 +89,10 @@
   "dialoguePolicy": {
     "forbiddenClaims": [
       {
-        "id": "forbid_wenya_rank_fenghou",
+        "id": "forbid_wenya_rank_huanghou",
         "predicate": "holds_rank",
         "subjectId": "wenya",
-        "object": "fenghou",
+        "object": "huanghou",
         "modality": "assert"
       }
     ]

@@ -241,10 +241,11 @@ describe("validateLoreBodyForDeprecatedTerms", () => {
     expect(findings).toHaveLength(0);
   });
 
-  it("deprecated rank name (官男子) is included in deprecated terms", () => {
+  it("no deprecated ranks in current world.json → collectDeprecatedTerms returns empty array", () => {
     const db = loadRealContent();
     const terms = collectDeprecatedTerms(Object.values(db.ranks));
-    expect(terms).toContain("官男子");
+    // All ranks are now active; guannanzi is active not deprecated
+    expect(terms).not.toContain("官男子");
   });
 });
 

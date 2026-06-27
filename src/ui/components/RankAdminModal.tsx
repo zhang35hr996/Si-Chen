@@ -25,7 +25,7 @@ export function RankAdminModal({
   const [target, setTarget] = useState(standing.rank);
   const [title, setTitle] = useState("");
   const ladder = Object.values(db.ranks)
-    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "fenghou")
+    .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "huanghou")
     .sort((a, b) => effectiveOrder(b, false) - effectiveOrder(a, false));
   const titleValid = /^[一-龥]{1,4}$/.test(title);
 

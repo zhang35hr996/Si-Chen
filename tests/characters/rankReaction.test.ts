@@ -6,9 +6,9 @@ const db = loadRealContent();
 
 describe("renderRankReaction — sovereign (emperor)", () => {
   it("promote substitutes the NEW rank's selfRef and name", () => {
-    const r = renderRankReaction(db, "promote", db.ranks.jun!, undefined);
+    const r = renderRankReaction(db, "promote", db.ranks.fu!, undefined);
     expect(r.lines[0]).toContain("臣侍"); // 君's toPlayer[0]
-    expect(r.memory).toContain("君");
+    expect(r.memory).toContain("驸");
   });
   it("grant_title substitutes the 封号", () => {
     const r = renderRankReaction(db, "grant_title", db.ranks.chenghui!, "婉");
@@ -32,11 +32,11 @@ describe("renderRankReaction — empress (harem_administrator/empress)", () => {
     });
     expect(r.lines.join("")).not.toContain("陛下");
   });
-  it("empress promote memory mentions 凤后, not 陛下", () => {
+  it("empress promote memory mentions 皇后, not 陛下", () => {
     const r = renderRankReaction(db, "promote", db.ranks.fu!, undefined, {
       kind: "harem_administrator", office: "empress",
     });
-    expect(r.memory).toContain("凤后");
+    expect(r.memory).toContain("皇后");
     expect(r.memory).not.toContain("陛下");
   });
   it("empress demote line does NOT contain 陛下", () => {

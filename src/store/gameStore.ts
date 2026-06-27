@@ -1318,7 +1318,7 @@ export class GameStore {
         (p) =>
           p.kind === "strip_harem_authority" &&
           p.lifecycle.status === "active" &&
-          this.state.standing[p.targetId]?.rank === "fenghou",
+          this.state.standing[p.targetId]?.rank === "huanghou",
       );
       if (activePun) {
         const restoreAlloc = allocateJusticeIds(this.state.justice, {});
@@ -1847,8 +1847,8 @@ export class GameStore {
       const ap = appendCourtEvent(cur, draft);
       if (!ap.ok) return err(ap.error);
       cur = ap.value.state;
-      // 凤后禁足到期：附加「复掌六宫」编年史（主理权已由漏斗 lift_confinement 自动归还）。
-      if (cur.standing[e.characterId]?.rank === "fenghou") {
+      // 皇后禁足到期：附加「复掌六宫」编年史（主理权已由漏斗 lift_confinement 自动归还）。
+      if (cur.standing[e.characterId]?.rank === "huanghou") {
         const restoredDraft: Omit<CourtEvent, "id"> = {
           type: "punished",
           occurredAt: expiryAt,

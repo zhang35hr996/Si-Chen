@@ -61,7 +61,7 @@ describe("punishment ID allocation", () => {
     const standing = store.getState().standing[TARGET]!;
     const curRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[curRankId]!.order && id !== curRankId && !r.deprecated);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[curRankId]!.order && id !== curRankId && !r.deprecated && r.domain === "harem");
     if (!lowerRank) return; // skip if no lower rank available
     const result = store.applyPunitiveRankChangeWithConsequences(db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, {});
     expect(result.ok).toBe(true);
@@ -136,7 +136,7 @@ describe("PunishmentRecord created for each kind", () => {
     const standing = store.getState().standing[TARGET]!;
     const fromRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated && r.domain === "harem");
     if (!lowerRank) return;
     store.applyPunitiveRankChangeWithConsequences(db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, {});
     const pun = store.getState().justice.punishments["pun_000001"]!;
@@ -372,7 +372,7 @@ describe("case linkage", () => {
     const standing = store.getState().standing[TARGET]!;
     const fromRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated && r.domain === "harem");
     if (!lowerRank) return;
     const result = store.applyPunitiveRankChangeWithConsequences(
       db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, { caseId: "case_000001" },
@@ -404,7 +404,7 @@ describe("chronicle links provenance", () => {
     const standing = store.getState().standing[TARGET]!;
     const fromRankId = standing.rank;
     const rankOrder = Object.entries(db.ranks).sort(([, a], [, b]) => a.order - b.order);
-    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated);
+    const lowerRank = rankOrder.find(([id, r]) => r.order < db.ranks[fromRankId]!.order && id !== fromRankId && !r.deprecated && r.domain === "harem");
     if (!lowerRank) return;
     store.applyPunitiveRankChangeWithConsequences(db, TARGET, { kind: "set_rank", rank: lowerRank[0] }, {});
     const chronicle = store.getState().chronicle;
@@ -428,7 +428,7 @@ describe("chronicle links provenance", () => {
     const store = makeStore();
     const state = store.getState();
     // Need to find an eligible harem administrator for empress confinement.
-    const empress = Object.entries(state.standing).find(([, s]) => s?.rank === "fenghou")?.[0];
+    const empress = Object.entries(state.standing).find(([, s]) => s?.rank === "huanghou")?.[0];
     if (!empress) return;
     const eligible = Object.entries(state.standing).find(
       ([id, s]) => id !== empress && s?.rank && (db.ranks[s.rank]?.order ?? 0) >= 3,

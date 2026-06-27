@@ -139,7 +139,7 @@ describe("renderEtiquetteBlock", () => {
     allowedTerms: ["陛下", "圣上"],
     forbiddenTerms: ["皇上", "老爷"],
     addressRules: [
-      { rank: "fenghou", selfRefs: { toPlayer: ["本宫"], formal: ["臣妾"] }, addressedAs: "陛下" },
+      { rank: "huanghou", selfRefs: { toPlayer: ["本宫"], formal: ["臣妾"] }, addressedAs: "陛下" },
     ],
   };
   const speakerSelfRefs: import("../../src/engine/content/schemas").CharacterRank["selfRefs"] = {
@@ -162,7 +162,7 @@ describe("renderEtiquetteBlock", () => {
 
   it("includes addressRules content", () => {
     const block = renderEtiquetteBlock(etiquette, speakerSelfRefs, audienceRole);
-    expect(block).toContain("fenghou");
+    expect(block).toContain("huanghou");
   });
 
   it("includes speaker selfRefs.toPlayer", () => {

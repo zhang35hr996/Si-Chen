@@ -265,12 +265,12 @@ describe("GameStore trace integration", () => {
     const store = makeStarted("strict");
     // set_rank requires a consort-kind character with standing.
     const consortId = Object.keys(store.getState().standing).find(
-      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou",
     );
     if (!consortId) return; // no eligible consort in fixture
 
     const currentRank = store.getState().standing[consortId]!.rank;
-    const targetRank = Object.keys(db.ranks).find((r) => r !== currentRank && r !== "fenghou");
+    const targetRank = Object.keys(db.ranks).find((r) => r !== currentRank && r !== "huanghou");
     if (!targetRank) return;
 
     const result = store.applyEffects(db, [
@@ -355,7 +355,7 @@ describe("GameStore trace integration", () => {
     const store = makeStarted("strict");
     // confine requires a consort-kind character (not an official).
     const consortId = Object.keys(store.getState().standing).find(
-      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou",
     );
     if (!consortId) return; // no eligible consort in fixture
 
@@ -396,7 +396,7 @@ describe("GameStore trace integration", () => {
     const store = makeStarted("strict");
     // confine an eligible non-empress consort so the command produces chronicle entries.
     const consortId = Object.keys(store.getState().standing).find(
-      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou",
     );
     expect(consortId, "fixture must have a non-empress consort").toBeDefined();
     if (!consortId) throw new Error("no eligible consort in fixture");
@@ -461,7 +461,7 @@ describe("GameStore trace integration", () => {
     const consort = chars.find((id) => {
       const st = store.getState().standing[id];
       if (!st || db.characters[id]?.kind !== "consort") return false;
-      if (st.lifecycle === "deceased" || st.rank === "fenghou") return false;
+      if (st.lifecycle === "deceased" || st.rank === "huanghou") return false;
       const rankMeta = db.ranks[st.rank];
       if (!rankMeta || rankMeta.order < fuRankOrder) return false;
       const home = st.residence ?? db.characters[id]?.defaultLocation;
@@ -471,7 +471,7 @@ describe("GameStore trace integration", () => {
     if (!consort) throw new Error("no eligible consort in fixture");
 
     // Empress must be confined before acting_consort mode is valid.
-    const empress = chars.find((id) => store.getState().standing[id]?.rank === "fenghou");
+    const empress = chars.find((id) => store.getState().standing[id]?.rank === "huanghou");
     expect(empress, "fixture must have an empress (fenghou)").toBeDefined();
     if (!empress) throw new Error("no empress in fixture");
 
@@ -542,7 +542,7 @@ describe("GameStore trace integration", () => {
     const store = createGameStore({ traceMode: "strict" });
     store.newGame(db);
     const consortId = Object.keys(store.getState().standing).find(
-      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "fenghou",
+      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou",
     );
     expect(consortId, "fixture must have a non-empress consort").toBeDefined();
     if (!consortId) throw new Error("no eligible consort in fixture");

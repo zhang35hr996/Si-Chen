@@ -1048,9 +1048,9 @@ export interface CourtEvent {
 
 /**
  * 后宫主理权变动原因。
- *   empress_confined      — 凤后被禁足，交由侍君或内务府代理。
- *   empress_illness       — 凤后抱恙（sick/critical），暂交代理（行政性，非处罚）。
- *   imperial_deprivation  — 凤后健康，皇帝主动收回主理权（处罚性）。
+ *   empress_confined      — 皇后被禁足，交由侍君或内务府代理。
+ *   empress_illness       — 皇后抱恙（sick/critical），暂交代理（行政性，非处罚）。
+ *   imperial_deprivation  — 皇后健康，皇帝主动收回主理权（处罚性）。
  *   no_eligible_consort   — 无合格候选侍君，转内务府代理（常与上述原因共存）。
  *   imperial_reassignment — 已有代理时，皇帝改派另一代理者（行政性重新委任）。
  */
@@ -1063,7 +1063,7 @@ export type HaremAdministrationReason =
 
 /**
  * 后宫主理权运行态。
- *   empress        — 凤后正常掌宫（默认）。
+ *   empress        — 皇后正常掌宫（默认）。
  *   acting_consort — 由某位侍君奉旨协理。
  *   neiwu_proxy    — 无合格侍君，内务府暂代宫务。
  */
@@ -1147,7 +1147,7 @@ export interface GameState {
   pendingDaxuan?: PendingDaxuan;
   /** 终局：皇帝崩逝由时间事务在同批写入；置位后 title「继续」禁用（Task 5/8）。 */
   gameOver?: { cause: "sovereign_death"; at: GameTime };
-  /** 后宫主理权运行态（六宫主理）。凤后正常时为 empress；禁足期间由侍君/内务府代理。 */
+  /** 后宫主理权运行态（六宫主理）。皇后正常时为 empress；禁足期间由侍君/内务府代理。 */
   haremAdministration: HaremAdministrationState;
   /** 司法记录持久层（PUNISH-3B1）。 */
   justice: JusticeState;

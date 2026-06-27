@@ -36,6 +36,7 @@ import {
   type DialoguePromptContext,
 } from "./promptPayload";
 import { buildReactionPlan } from "./reactionAssembler";
+import { resolveAddress } from "./addressResolver";
 import {
   contextRefKey,
   type DialogueAssemblyOptions,
@@ -196,6 +197,7 @@ export function assembleDialogueRequest(
       forbiddenTerms: db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
+    resolvedAddress: resolveAddress(db, state, speakerId, targetId),
     sceneDirective,
     transcript: transcript ?? [],
     topicTags,
@@ -224,6 +226,7 @@ function finalizeLine(
 
   // ── text gates (plan §8) ────────────────────────────────────────────
   const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
     ...scanDialogueText(response.text, gateCtx),
     // Choices are the player's words, not the speaker's — content gates only.
@@ -411,6 +414,7 @@ export function validateDialogueProviderResult(
 
   // ── 3. Text gate + expression normalize + line build ─────────────
   const gateCtx = buildTextGateContext(db, request.speakerContext.standing.rank);
+  gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
   const findings: GateFinding[] = [
     ...scanDialogueText(response.text, gateCtx),
     ...response.choices.flatMap((c) => scanDialogueText(c.text, gateCtx, { skipIdentityGates: true })),

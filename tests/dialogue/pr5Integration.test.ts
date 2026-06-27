@@ -29,7 +29,7 @@ import type { DialogueClaim, ProposedClaim } from "../../src/engine/dialogue/cla
 const db = loadRealContent();
 const state = createNewGameState(db);
 const SPEAKER = "shen_zhibai";
-const VALID_TEXT = "本宫累了，陛下早些歇息。";
+const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
 function makeRequest() {
   const r = assembleDialogueRequest(db, state, SPEAKER, "zichendian");
@@ -129,7 +129,7 @@ describe("produceDialogueTurn — chain (a): CLOSED mode — no factual claims a
     expect(request.promptContext.allowedClaims).toHaveLength(0);
     const firstMemoryId = request.promptContext.relevantMemories[0]!.id;
     const factualClaim: ProposedClaim = {
-      claim: { id: "c_closed", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      claim: { id: "c_closed", predicate: "holds_rank", subjectId: SPEAKER, object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: firstMemoryId }],
       modality: "assert",
       certainty: 80,
@@ -198,12 +198,12 @@ describe("validateDialogueClaims — chain (d): authorized fact, unauthorized so
     const beliefs = new GroundTruthBeliefProjection(state);
 
     const authorized: AuthorizedClaim = {
-      claim: { id: "auth_d", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      claim: { id: "auth_d", predicate: "holds_rank", subjectId: SPEAKER, object: "huanghou", modality: "assert" },
       // Only realMemoryId is authorized; fakeSourceId is NOT
       sourceRefs: [{ kind: "memory" as const, id: realMemoryId }],
     };
     const wrongSrcClaim: ProposedClaim = {
-      claim: { id: "c3", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      claim: { id: "c3", predicate: "holds_rank", subjectId: SPEAKER, object: "huanghou", modality: "assert" },
       // Claims the wrong source — not in authorized.sourceRefs
       sourceRefs: [{ kind: "memory" as const, id: fakeSourceId }],
       modality: "assert",
@@ -240,7 +240,7 @@ describe("validateDialogueClaims — claim_explicitly_forbidden: source-independ
 
     // Authorize the fact so it passes the CLOSED gate
     const authorized: AuthorizedClaim = {
-      claim: { id: "auth_src_indep", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      claim: { id: "auth_src_indep", predicate: "holds_rank", subjectId: SPEAKER, object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: differentSourceId }],
     };
 
@@ -249,13 +249,13 @@ describe("validateDialogueClaims — claim_explicitly_forbidden: source-independ
       id: "forbid_src_indep",
       predicate: "holds_rank",
       subjectId: SPEAKER,
-      object: "fenghou",
+      object: "huanghou",
       modality: "assert",
     };
 
     // Proposed claim cites a DIFFERENT valid sourceRef
     const proposedClaim: ProposedClaim = {
-      claim: { id: "c_src_indep", predicate: "holds_rank", subjectId: SPEAKER, object: "fenghou", modality: "assert" },
+      claim: { id: "c_src_indep", predicate: "holds_rank", subjectId: SPEAKER, object: "huanghou", modality: "assert" },
       sourceRefs: [{ kind: "memory" as const, id: differentSourceId }],
       modality: "assert",
       certainty: 80,
@@ -280,8 +280,8 @@ describe("produceDialogueTurn — gate ordering", () => {
   it("text gate failure still fails the line even with valid claims", async () => {
     const request = makeRequest();
 
-    // forbidden text: 皇上 is a forbidden term
-    const provider = makeProvider([], "皇上圣明。");
+    // forbidden text: 娘娘 is a forbidden term
+    const provider = makeProvider([], "娘娘圣明。");
 
     const result = await produceDialogueTurn(db, provider, request, state);
     expect(result.ok).toBe(false);

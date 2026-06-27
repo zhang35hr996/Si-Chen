@@ -2,9 +2,9 @@
  * 六宫主理权逻辑（后宫行政）。
  *
  * 主理权三态：
- *   empress        — 凤后正常掌宫（默认）。
- *   acting_consort — 凤后禁足期间由某位侍君奉旨协理。
- *   neiwu_proxy    — 凤后禁足且无合格侍君，内务府暂代宫务。
+ *   empress        — 皇后正常掌宫（默认）。
+ *   acting_consort — 皇后禁足期间由某位侍君奉旨协理。
+ *   neiwu_proxy    — 皇后禁足且无合格侍君，内务府暂代宫务。
  *
  * 此模块不依赖 presence.ts / greeting.ts，避免循环引用。
  */
@@ -15,7 +15,7 @@ import { isConfined } from "./confinement";
 import { isInColdPalace } from "./coldPalace";
 import { resolveDisplayName } from "./standing";
 
-/** 凤后驸级门槛：rank.order 须 >= fu 的 order。 */
+/** 皇后驸级门槛：rank.order 须 >= fu 的 order。 */
 function fuOrder(db: ContentDB): number {
   return db.ranks["fu"]?.order ?? 140;
 }
@@ -23,7 +23,7 @@ function fuOrder(db: ContentDB): number {
 /**
  * 合格六宫协理候选：
  *   - 种类为 consort
- *   - 非凤后本人（rank !== "fenghou"）
+ *   - 非皇后本人（rank !== "huanghou"）
  *   - 有 standing 且未故
  *   - 未禁足
  *   - 不在长门宫（冷宫）
@@ -45,7 +45,7 @@ export function eligibleHaremAdministrators(db: ContentDB, state: GameState): Ch
       if (c.kind !== "consort") return false;
       const st = state.standing[c.id];
       if (!st) return false;
-      if (st.rank === "fenghou") return false;
+      if (st.rank === "huanghou") return false;
       if (st.lifecycle === "deceased" || st.lifecycle === "candidate") return false;
       const rankMeta = db.ranks[st.rank];
       if (!rankMeta || rankMeta.order < minOrder) return false;
@@ -72,7 +72,7 @@ export function getHaremAdministrationState(state: GameState): HaremAdministrati
 
 /**
  * 返回请安地点 locationId，或 null（内务府代理时暂停正式请安）。
- *   empress mode        → 凤后当前寝殿（residence ?? defaultLocation ?? "kunninggong"）
+ *   empress mode        → 皇后当前寝殿（residence ?? defaultLocation ?? "kunninggong"）
  *   acting_consort mode → 协理者当前寝殿
  *   neiwu_proxy mode    → null
  */
@@ -81,9 +81,9 @@ export function getGreetingLocation(db: ContentDB, state: GameState): string | n
   if (admin.mode === "neiwu_proxy") return null;
 
   if (admin.mode === "empress") {
-    // 凤后寝殿：找当前 rank===fenghou 的角色
+    // 皇后寝殿：找当前 rank===fenghou 的角色
     for (const [id, st] of Object.entries(state.standing)) {
-      if (st.rank === "fenghou" && st.lifecycle !== "deceased") {
+      if (st.rank === "huanghou" && st.lifecycle !== "deceased") {
         const char = db.characters[id];
         return st.residence ?? char?.defaultLocation ?? "kunninggong";
       }
@@ -98,8 +98,8 @@ export function getGreetingLocation(db: ContentDB, state: GameState): string | n
 }
 
 /**
- * 归还主理权给凤后后的后宫主理权状态（用于帮助确定归还后的礼安地点）。
- * 当凤后禁足解除时使用。
+ * 归还主理权给皇后后的后宫主理权状态（用于帮助确定归还后的礼安地点）。
+ * 当皇后禁足解除时使用。
  */
 export function empressRestoredAdministration(): HaremAdministrationState {
   return { mode: "empress" };
@@ -118,7 +118,7 @@ export interface GreetingHostView {
 
 /**
  * 当前请安主持者视图。
- *   empress mode        → 凤后及其寝殿
+ *   empress mode        → 皇后及其寝殿
  *   acting_consort mode → 协理者及其寝殿
  *   neiwu_proxy mode    → null（无正式请安）
  */
@@ -128,7 +128,7 @@ export function getGreetingHostView(db: ContentDB, state: GameState): GreetingHo
 
   if (admin.mode === "empress") {
     for (const [id, st] of Object.entries(state.standing)) {
-      if (st.rank === "fenghou" && st.lifecycle !== "deceased") {
+      if (st.rank === "huanghou" && st.lifecycle !== "deceased") {
         const char = db.characters[id];
         const locationId = st.residence ?? char?.defaultLocation ?? "kunninggong";
         const location = db.locations[locationId];
