@@ -155,7 +155,8 @@ describe("produceDialogueTurn text gates (PR 11)", () => {
   });
 
   it("clean generated output passes every gate", async () => {
-    const result = await produceLine(speaking("本宫累了，陛下早些歇息。"), requestForGen("shen_zhibai"));
+    // shen_zhibai (皇后) speaks to the emperor — selfRef is 臣侍, not 本宫
+    const result = await produceLine(speaking("臣侍告退，陛下早些歇息。"), requestForGen("shen_zhibai"));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.line.meta).toEqual({ generated: true, degraded: false });
   });

@@ -28,7 +28,7 @@ import { toGameTime } from "../../src/engine/calendar/time";
 const db = loadRealContent();
 const SPEAKER = "shen_zhibai";
 const LOCATION = "zichendian";
-const VALID_TEXT = "本宫累了，陛下早些歇息。";
+const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
 /** Build a realm-scoped rank_changed event eligible for reaction at dayIndex 0. */
 function makeEligibleEvent(id: string, dayIndex = 0): CourtEvent {

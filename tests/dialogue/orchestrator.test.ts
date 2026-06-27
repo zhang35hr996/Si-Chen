@@ -43,7 +43,7 @@ import type { KnowledgeHybridResult } from "../../src/engine/knowledge/retrieval
 const db = loadRealContent();
 const state = createNewGameState(db);
 const SPEAKER = "shen_zhibai";
-const VALID_TEXT = "本宫累了，陛下早些歇息。";
+const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
 function makeRequest() {
   const r = assembleDialogueRequest(db, state, SPEAKER, "zichendian");
@@ -473,7 +473,7 @@ describe("assembleDialogueRequest — promptContext", () => {
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 
 const TURN_SPEAKER = "shen_zhibai";
-const TURN_VALID_TEXT = "本宫累了，陛下早些歇息。";
+const TURN_VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
 function makeScriptedRequest(text = TURN_VALID_TEXT) {
   const r = assembleDialogueRequest(db, state, TURN_SPEAKER, "zichendian", { scripted: { text } });

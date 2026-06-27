@@ -402,7 +402,7 @@ export function daxuanAnnounceBeats(): DecreeReaction[] {
     {
       speakerId: "cheng_feng",
       lines: [
-        "陛下，皇后娘娘遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
+        "陛下，皇后遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
       ],
     },
   ];
@@ -412,7 +412,7 @@ export function daxuanAnnounceBeats(): DecreeReaction[] {
 export function daxuanDianxuanPromptFor(year: number): ChengFengPrompt {
   return {
     speakerId: "cheng_feng",
-    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后娘娘与太后娘娘都已到了。",
+    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后与皇太后都已到了。",
     choices: [
       { label: "前往体元殿", action: { type: "daxuanEnter", year } },
       { label: "让太后皇后决定", action: { type: "daxuanDelegate", year } },

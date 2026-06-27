@@ -39,8 +39,21 @@ export function resolveAddress(
   const speakerRank = standing ? db.ranks[standing.rank] : undefined;
   const speakerSelfRefs = speakerRank?.selfRefs ?? char?.selfRefs;
 
+  const speakerOrder = speakerRank?.order ?? 0;
   const isTargetPlayer = targetId === "player";
-  const selfRef = isTargetPlayer
+
+  // Resolve target rank order to determine if speaker is speaking UP or DOWN.
+  const targetStanding = isTargetPlayer ? undefined : (state.standing[targetId] ?? db.characters[targetId]?.initialStanding);
+  const targetRankId = targetStanding?.rank;
+  const targetRank = targetRankId ? db.ranks[targetRankId] : undefined;
+  const targetOrder = isTargetPlayer
+    ? Number.MAX_SAFE_INTEGER // player (emperor) is always the highest
+    : (targetRank?.order ?? 0);
+
+  // Speaking UP (to someone of equal or higher rank): use the deferential toPlayer form.
+  // Speaking DOWN (to someone of strictly lower rank): use the formal/titular form (本宫 allowed).
+  const speakingUp = targetOrder >= speakerOrder;
+  const selfRef = speakingUp
     ? (speakerSelfRefs?.toPlayer[0] ?? speakerSelfRefs?.formal[0] ?? "侍身")
     : (speakerSelfRefs?.formal[0] ?? speakerSelfRefs?.toPlayer[0] ?? "侍身");
 
@@ -52,27 +65,14 @@ export function resolveAddress(
     targetAddress = EMPEROR_ADDRESS;
     allowedAlternates = EMPEROR_ALTERNATES;
   } else {
-    const targetStanding = state.standing[targetId] ?? db.characters[targetId]?.initialStanding;
-    const targetRankId = targetStanding?.rank;
     const targetRule = db.lexicon.rankAddressRules.find((r) => r.rank === targetRankId);
-    const targetRank = targetRankId ? db.ranks[targetRankId] : undefined;
     targetAddress = targetRule?.addressedAs ?? targetRank?.name ?? targetId;
     allowedAlternates = [];
-
-    // 本宫 is only appropriate when addressing someone of LOWER rank.
-    // If target rank order >= speaker rank order, forbid 本宫.
-    const speakerOrder = speakerRank?.order ?? 0;
-    const targetOrder = targetRank?.order ?? 0;
-    if (
-      speakerSelfRefs?.formal.includes(BEN_GONG) &&
-      targetOrder >= speakerOrder
-    ) {
-      forbiddenInContext.push(BEN_GONG);
-    }
   }
 
-  // 本宫 is never appropriate when addressing the emperor.
-  if (isTargetPlayer && speakerSelfRefs?.formal.includes(BEN_GONG)) {
+  // 本宫 is only appropriate when addressing someone of LOWER rank.
+  // Add it to forbiddenInContext whenever the speaker is speaking UP (including to emperor).
+  if (speakingUp && speakerSelfRefs?.formal.includes(BEN_GONG)) {
     forbiddenInContext.push(BEN_GONG);
   }
 

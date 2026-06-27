@@ -47,6 +47,12 @@ export interface TextGateContext {
    * Terms also in forbiddenTerms are dropped so they fire under forbidden_lexicon.
    */
   wrongPlayerHonorifics: string[];
+  /**
+   * Terms forbidden in THIS SPECIFIC conversational context due to the speaker–target
+   * pairing (e.g. 本宫 when addressing someone of equal or higher rank).
+   * Populated from resolvedAddress.forbiddenInContext at call time.
+   */
+  contextForbiddenRefs: string[];
 }
 
 const MIN_SELF_REF_LEN = 2;
@@ -84,6 +90,7 @@ export function buildTextGateContext(db: ContentDB, speakerRankId: string): Text
     forbiddenTerms: forbidden,
     foreignSelfRefs: [...foreign],
     wrongPlayerHonorifics: WRONG_PLAYER_HONORIFICS.filter((t) => !forbidden.includes(t)),
+    contextForbiddenRefs: [],
   };
 }
 
@@ -133,6 +140,16 @@ export function scanDialogueText(
           gate: "self_ref",
           severity: "reject",
           message: `self-reference 「${ref}」 belongs to another rank`,
+          matched: ref,
+        });
+      }
+    }
+    for (const ref of ctx.contextForbiddenRefs) {
+      if (ref.length >= MIN_SELF_REF_LEN && text.includes(ref)) {
+        findings.push({
+          gate: "self_ref",
+          severity: "reject",
+          message: `self-reference 「${ref}」 is forbidden in this conversational context`,
           matched: ref,
         });
       }

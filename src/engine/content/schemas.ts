@@ -555,8 +555,9 @@ export const officialDepartmentSchema = z.enum([
   "chancellery", "personnel", "revenue", "rites", "military",
   "justice", "works", "censorate", "academy", "provincial", "none",
 ]) satisfies z.ZodType<OfficialDepartment>;
-// Terms forbidden in official post names (gendered terms that must not appear as titles)
-const OFFICIAL_POST_FORBIDDEN = ["大夫", "夫人", "郎君", "相公", "公主", "妻子", "国公"] as const;
+// Terms forbidden in official post names (gendered terms that must not appear as titles).
+// Compound terms AND single gendered characters 夫/郎 (which appear in 大夫, 侍郎, 郎中, etc).
+const OFFICIAL_POST_FORBIDDEN = ["大夫", "夫人", "郎君", "相公", "公主", "妻子", "国公", "夫", "郎"] as const;
 
 export const officialPostSchema = z.strictObject({
   id: idSchema,

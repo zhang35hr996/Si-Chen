@@ -35,7 +35,7 @@ const state = createNewGameState(db);
 
 const SPEAKER = "shen_zhibai";
 const LOCATION = "zichendian";
-const VALID_TEXT = "本宫累了，陛下早些歇息。";
+const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 // "娘娘" is a forbidden term (triggers text gate reject)
 const GATE_REJECT_TEXT = "娘娘圣明。";
 
@@ -279,7 +279,7 @@ describe("runEvalScenario", () => {
   it("expectationStatus=fail when forbiddenText found in result.text", async () => {
     // forbiddenTexts check is case-sensitive string inclusion in result.text
     // Use a text that passes the gate but contains a string we mark as forbidden in expectations
-    const EXPECTED_FORBIDDEN = "累了";
+    const EXPECTED_FORBIDDEN = "告退";
     const scenario = makeScenario({
       expectations: { forbiddenTexts: [EXPECTED_FORBIDDEN] },
     });

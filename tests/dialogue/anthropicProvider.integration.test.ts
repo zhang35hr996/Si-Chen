@@ -31,7 +31,7 @@ function firstOfferedMemoryId(req: ReturnType<typeof ctx>["req"]): string {
 describe("anthropic provider — full PR5 pipeline acceptance", () => {
   it("(a) no factual claims → passes in CLOSED mode, line produced", async () => {
     // Fresh state → allowedClaims=[] (CLOSED). Conversational text with no claims passes.
-    const { req, provider } = ctx("本宫累了，陛下早些歇息。", []);
+    const { req, provider } = ctx("臣侍告退，陛下早些歇息。", []);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(true);
   });

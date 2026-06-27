@@ -29,7 +29,7 @@ import type { DialogueClaim, ProposedClaim } from "../../src/engine/dialogue/cla
 const db = loadRealContent();
 const state = createNewGameState(db);
 const SPEAKER = "shen_zhibai";
-const VALID_TEXT = "本宫累了，陛下早些歇息。";
+const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
 function makeRequest() {
   const r = assembleDialogueRequest(db, state, SPEAKER, "zichendian");

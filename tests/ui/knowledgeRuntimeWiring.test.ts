@@ -32,7 +32,7 @@ import { createGameStore } from "../../src/store/gameStore";
 const db = loadRealContent();
 const state = createNewGameState(db);
 const SPEAKER = "shen_zhibai";
-const VALID_TEXT = "本宫累了，陛下早些歇息。";
+const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
 function makeRequest() {
   const r = assembleDialogueRequest(db, state, SPEAKER, "zichendian");
@@ -206,7 +206,7 @@ describe("Case 4: scripted provider with retriever wired — retriever not calle
     };
     const scriptedRequest = assembleDialogueRequest(
       db, state, SPEAKER, "zichendian",
-      { scripted: { text: "本宫有些乏了。" } },
+      { scripted: { text: "臣侍有些乏了。" } },
     );
     if (!scriptedRequest.ok) throw new Error("assembly failed");
     const opts = toDialogueTurnOptions(deps);

@@ -23,7 +23,7 @@ const db = loadRealContent();
 
 const SPEAKER = "shen_zhibai";
 const LOCATION = "zichendian";
-const VALID_TEXT = "本宫累了，陛下早些歇息。";
+const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
 /** Build a generative provider that returns the given text. */
 function makeGenerativeProvider(text = VALID_TEXT): DialogueProvider {
