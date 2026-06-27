@@ -762,9 +762,23 @@ export function validateMemorials(state: GameState): GameError[] {
       }
 
       if (m.payload.matter === "quarterly_settlement_report") {
+        const p = m.payload;
         // 季度简录只允许 "acknowledge" 单选项，无国库变动。
-        if (m.payload.options.length !== 1 || m.payload.options[0]?.id !== "acknowledge")
+        if (p.options.length !== 1 || p.options[0]?.id !== "acknowledge")
           e("MEMORIAL_BAD_OPTIONS", `季度财政简录奏折「${m.id}」须有且仅有 acknowledge 选项`, { id: m.id });
+
+        // 内部等式不变量（防止损坏的存档通过 schema 检查）
+        const allocSum = (bd: typeof p.expenseAllocation.planned) =>
+          bd.palace + bd.consortAllowance + bd.officialSalary + bd.armyMaintenance + bd.royalChildrenEducation;
+
+        if (allocSum(p.expenseAllocation.planned) !== p.expensePlanned)
+          e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」expenseAllocation.planned 汇总与 expensePlanned 不符`, { id: m.id });
+        if (allocSum(p.expenseAllocation.paid) !== p.expensePaid)
+          e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」expenseAllocation.paid 汇总与 expensePaid 不符`, { id: m.id });
+        if (p.expensePaid + p.fundingShortfall !== p.expensePlanned)
+          e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」expensePaid + fundingShortfall ≠ expensePlanned`, { id: m.id });
+        if (p.openingTreasury + p.revenueActual - p.expensePaid !== p.closingTreasury)
+          e("MEMORIAL_INVALID_SNAPSHOT", `季度奏折「${m.id}」财政等式不成立 (opening+revenue-paid ≠ closing)`, { id: m.id });
       }
     }
 

@@ -11,6 +11,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { dayIndexOf } from "../../src/engine/calendar/time";
 import { loadRealContent } from "../helpers/contentFixture";
+import { validateMemorials } from "../../src/engine/court/memorials";
 
 const db = loadRealContent();
 const AT_Q1 = { year: 2, month: 1, period: "early" as const, dayIndex: dayIndexOf(2, 1, "early") };
@@ -165,6 +166,11 @@ describe("settleQuarterlyTreasury", () => {
     expect(lastEntry.balanceAfter).toBe(after.resources.nation.treasury);
   });
 
+  it("generated state passes validateMemorials", () => {
+    const after = settleQuarterlyTreasury(db, baseState(), AT_Q1, () => 0.5);
+    expect(validateMemorials(after)).toEqual([]);
+  });
+
   // ── Idempotency via settledQuarterlyPeriods ──────────────────────────────────
 
   it("idempotent: second call with same month returns same state", () => {
@@ -186,10 +192,8 @@ describe("settleQuarterlyTreasury", () => {
 
   it("idempotency works even if memorial is deleted from state", () => {
     const after1 = settleQuarterlyTreasury(db, baseState(), AT_Q1, () => 0.5);
-    // Simulate memorial deletion (e.g., cleanup) — idempotency must not rely on it
     const withoutMemorials = { ...after1, memorials: {} };
     const after2 = settleQuarterlyTreasury(db, withoutMemorials, AT_Q1, () => 0.5);
-    // Period is in settledQuarterlyPeriods so settlement does not re-run
     expect(after2.resources.nation.treasury).toBe(withoutMemorials.resources.nation.treasury);
     expect(after2.settledQuarterlyPeriods).toEqual(after1.settledQuarterlyPeriods);
   });
@@ -218,10 +222,11 @@ describe("settleQuarterlyTreasury", () => {
     expect(m.payload.openingTreasury).toBe(s.resources.nation.treasury);
     expect(m.payload.revenueBase).toBeGreaterThan(0);
     expect(m.payload.revenueActual).toBeGreaterThan(0);
+    expect(m.payload.revenueCauses).toBeInstanceOf(Array);
     expect(m.payload.expensePlanned).toBeGreaterThan(0);
     expect(m.payload.expensePaid).toBeGreaterThanOrEqual(0);
-    expect(m.payload.arrears).toBeGreaterThanOrEqual(0);
-    expect(m.payload.expensePaid + m.payload.arrears).toBe(m.payload.expensePlanned);
+    expect(m.payload.fundingShortfall).toBeGreaterThanOrEqual(0);
+    expect(m.payload.expensePaid + m.payload.fundingShortfall).toBe(m.payload.expensePlanned);
     expect(m.payload.closingTreasury).toBe(after.resources.nation.treasury);
   });
 
@@ -234,31 +239,49 @@ describe("settleQuarterlyTreasury", () => {
     expect(m.payload.closingTreasury).toBe(expected);
   });
 
-  it("expenseBreakdown parts sum to expensePlanned", () => {
-    const s = baseState();
-    const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 0.5);
+  it("expenseAllocation.planned parts sum to expensePlanned", () => {
+    const after = settleQuarterlyTreasury(db, baseState(), AT_Q1, () => 0.5);
     const m = findQuarterlyMemorial(after)!;
     if (m.payload.category !== "treasury" || m.payload.matter !== "quarterly_settlement_report") return;
-    const { expenseBreakdown: bd } = m.payload;
-    const sum = bd.palace + bd.consortAllowance + bd.officialSalary + bd.armyMaintenance + bd.royalChildrenEducation;
+    const { planned } = m.payload.expenseAllocation;
+    const sum = planned.palace + planned.consortAllowance + planned.officialSalary + planned.armyMaintenance + planned.royalChildrenEducation;
     expect(sum).toBe(m.payload.expensePlanned);
   });
 
-  // ── Honest shortfall reporting ───────────────────────────────────────────────
+  it("expenseAllocation.paid + shortfall = planned for each category", () => {
+    const after = settleQuarterlyTreasury(db, baseState(), AT_Q1, () => 0.5);
+    const m = findQuarterlyMemorial(after)!;
+    if (m.payload.category !== "treasury" || m.payload.matter !== "quarterly_settlement_report") return;
+    const { planned, paid, shortfall } = m.payload.expenseAllocation;
+    const keys = ["palace", "consortAllowance", "officialSalary", "armyMaintenance", "royalChildrenEducation"] as const;
+    for (const k of keys) {
+      expect(paid[k] + shortfall[k]).toBe(planned[k]);
+    }
+  });
 
-  it("arrears > 0 when treasury cannot cover full expense", () => {
-    // Set treasury to 0 — all expense is arrears
-    const s = { ...baseState(), resources: { ...baseState().resources, nation: { ...baseState().resources.nation, treasury: 0 } } };
+  it("revenueCauses are stored in payload", () => {
+    const s = stateWith({ corruption: 80 }); // high corruption creates a measurable cause
     const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 0.5);
     const m = findQuarterlyMemorial(after)!;
     if (m.payload.category !== "treasury" || m.payload.matter !== "quarterly_settlement_report") return;
-    // Revenue arrives first; if revenue > expense then arrears may still be 0
-    // The important thing is that the math is correct
-    expect(m.payload.expensePaid + m.payload.arrears).toBe(m.payload.expensePlanned);
+    const corruptionCause = m.payload.revenueCauses.find((c) => c.type === "corruption");
+    expect(corruptionCause).toBeDefined();
+    expect(corruptionCause!.impact).toBeLessThan(0);
   });
 
-  it("summary does NOT say 按例拨付 when there are arrears", () => {
-    // Force near-zero treasury so expense outpaces revenue
+  // ── Priority-based expense allocation ────────────────────────────────────────
+
+  it("expenseAllocation.paid total matches expensePaid", () => {
+    const after = settleQuarterlyTreasury(db, baseState(), AT_Q1, () => 0.5);
+    const m = findQuarterlyMemorial(after)!;
+    if (m.payload.category !== "treasury" || m.payload.matter !== "quarterly_settlement_report") return;
+    const { paid } = m.payload.expenseAllocation;
+    const totalPaid = paid.palace + paid.consortAllowance + paid.officialSalary + paid.armyMaintenance + paid.royalChildrenEducation;
+    expect(totalPaid).toBe(m.payload.expensePaid);
+  });
+
+  it("expenseAllocation.shortfall total matches fundingShortfall", () => {
+    // Very low budget to force a shortfall
     const s = {
       ...baseState(),
       resources: {
@@ -269,9 +292,43 @@ describe("settleQuarterlyTreasury", () => {
     const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 0);
     const m = findQuarterlyMemorial(after)!;
     if (m.payload.category !== "treasury" || m.payload.matter !== "quarterly_settlement_report") return;
-    if (m.payload.arrears > 0) {
+    const { shortfall } = m.payload.expenseAllocation;
+    const totalShortfall = shortfall.palace + shortfall.consortAllowance + shortfall.officialSalary + shortfall.armyMaintenance + shortfall.royalChildrenEducation;
+    expect(totalShortfall).toBe(m.payload.fundingShortfall);
+  });
+
+  // ── Honest shortfall reporting ───────────────────────────────────────────────
+
+  it("fundingShortfall > 0 when treasury cannot cover expense after revenue", () => {
+    const s = {
+      ...baseState(),
+      resources: {
+        ...baseState().resources,
+        nation: { ...baseState().resources.nation, treasury: 0, productivity: 0, publicSupport: 0 },
+      },
+    };
+    const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 0);
+    const m = findQuarterlyMemorial(after)!;
+    if (m.payload.category !== "treasury" || m.payload.matter !== "quarterly_settlement_report") return;
+    // With zero opening treasury and minimal revenue, expense may not be fully covered
+    expect(m.payload.expensePaid + m.payload.fundingShortfall).toBe(m.payload.expensePlanned);
+  });
+
+  it("summary does NOT say 按例拨付 when there is a funding shortfall", () => {
+    const s = {
+      ...baseState(),
+      resources: {
+        ...baseState().resources,
+        nation: { ...baseState().resources.nation, treasury: 0, productivity: 0, publicSupport: 0 },
+      },
+    };
+    const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 0);
+    const m = findQuarterlyMemorial(after)!;
+    if (m.payload.category !== "treasury" || m.payload.matter !== "quarterly_settlement_report") return;
+    if (m.payload.fundingShortfall > 0) {
       expect(m.summary).not.toContain("按例拨付");
-      expect(m.summary).toContain("欠付未清");
+      expect(m.summary).not.toContain("欠付未清");
+      expect(m.summary).not.toContain("请陛下示下");
     }
   });
 
@@ -288,16 +345,22 @@ describe("settleQuarterlyTreasury", () => {
     const s = stateWith({ corruption: 100, productivity: 50, publicSupport: 50, borderPressure: 0 });
     const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 0.5);
     const m = findQuarterlyMemorial(after)!;
-    // Low revenue due to corruption → should mention corruption, NOT 灾害
     expect(m.summary).not.toContain("灾害");
   });
 
-  it("summary mentions 边防 when dominant cause is borderPressure", () => {
+  it("summary does NOT mention 灾害 when dominant cause is borderPressure", () => {
     const s = stateWith({ borderPressure: 100, corruption: 0, productivity: 50, publicSupport: 80 });
     const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 0.5);
     const m = findQuarterlyMemorial(after)!;
-    // borderPressure is dominant — should mention 边防 or equivalent
     expect(m.summary).not.toContain("灾害");
+  });
+
+  it("high revenue summary does NOT mention 风调雨顺", () => {
+    const s = stateWith({ productivity: 100, corruption: 0, publicSupport: 100, borderPressure: 0, treasury: 100000 });
+    const after = settleQuarterlyTreasury(db, s, AT_Q1, () => 1);
+    const m = findQuarterlyMemorial(after)!;
+    expect(m.summary).not.toContain("风调雨顺");
+    expect(m.summary).toContain("农桑兴旺");
   });
 
   // ── Season / title labels ────────────────────────────────────────────────────
