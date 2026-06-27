@@ -42,7 +42,6 @@ export function CharacterScene({
   onManage,
   onPunish,
   onRelocate,
-  onHaremAdminManage,
   onSummonPhysician,
   onRestoreFromColdPalace,
 }: {
@@ -60,8 +59,6 @@ export function CharacterScene({
   onManage?: (charId: string) => void;
   onPunish?: (charId: string) => void;
   onRelocate?: (charId: string) => void;
-  /** 协理六宫：当前场景侍君是协理者时，开放位分管理权限入口。 */
-  onHaremAdminManage?: (actorId: string) => void;
   /** 禁足宫门专用：奉旨传太医入内诊治。 */
   onSummonPhysician?: () => void;
   /** 冷宫专用：召回幽居侍君。 */
@@ -284,7 +281,7 @@ export function CharacterScene({
                     <button type="button" className="action-btn" onClick={() => onViewProfile(character.id)}>
                       查看详情
                     </button>
-                    {(onManage || onRelocate || onPunish || (isActingAdmin && onHaremAdminManage)) && (
+                    {(onManage || onRelocate || onPunish) && (
                       <div className="action-more">
                         <button
                           type="button"
@@ -296,17 +293,6 @@ export function CharacterScene({
                         </button>
                         {moreOpen && (
                           <div className="action-more__menu">
-                            {isActingAdmin && onHaremAdminManage && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMoreOpen(false);
-                                  onHaremAdminManage(character.id);
-                                }}
-                              >
-                                管理低位侍君
-                              </button>
-                            )}
                             {onManage && (
                               <button
                                 type="button"
