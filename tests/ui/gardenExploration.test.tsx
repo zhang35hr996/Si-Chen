@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { gardenSubLocationForCharacter } from "../../src/engine/map/subLocations";
 import { GardenOverviewScreen, type GardenSubAreaView } from "../../src/ui/screens/GardenOverviewScreen";
 
 const subAreas: GardenSubAreaView[] = [
@@ -9,6 +10,15 @@ const subAreas: GardenSubAreaView[] = [
   { id: "fubiting", name: "浮碧亭", description: "亭立水心。", background: "/bg/fb.png", hasEvent: false },
   { id: "tuixiushan", name: "堆秀山", description: "叠石为山。", background: "/bg/tx.png", hasEvent: false },
 ];
+const subAreaIds = subAreas.map((area) => area.id);
+
+function characterIdAssignedTo(areaId: string, prefix: string): string {
+  for (let i = 0; i < 1_000; i += 1) {
+    const id = `${prefix}_${i}`;
+    if (gardenSubLocationForCharacter(id, subAreaIds) === areaId) return id;
+  }
+  throw new Error(`No deterministic test character found for ${areaId}`);
+}
 
 const base = {
   background: "/bg/garden.png",
@@ -20,6 +30,27 @@ const base = {
   onBack: () => {},
   onViewProfile: () => {},
 };
+
+describe("gardenSubLocationForCharacter", () => {
+  it("assigns every character to exactly one configured sub-location and permits multiple occupants", () => {
+    const characterIds = Array.from({ length: 20 }, (_, index) => `garden_guest_${index}`);
+    const assignments = characterIds.map((id) => gardenSubLocationForCharacter(id, subAreaIds));
+
+    expect(assignments.every((id) => id !== null && subAreaIds.includes(id))).toBe(true);
+    for (const characterId of characterIds) {
+      const matchingAreas = subAreaIds.filter(
+        (areaId) => gardenSubLocationForCharacter(characterId, subAreaIds) === areaId,
+      );
+      expect(matchingAreas).toHaveLength(1);
+    }
+    // 20 人分配到 4 处，必然至少有一处容纳多人；没有“一地一人”的错误容量限制。
+    expect(new Set(assignments).size).toBeLessThan(characterIds.length);
+  });
+
+  it("returns null when the garden has no configured sub-locations", () => {
+    expect(gardenSubLocationForCharacter("guest", [])).toBeNull();
+  });
+});
 
 describe("GardenOverviewScreen — overview", () => {
   it("1. shows all four real sub-areas with static descriptions", () => {
@@ -104,22 +135,61 @@ describe("GardenOverviewScreen — sub-area", () => {
     expect(screen.queryByText(/孤影|人影|动静/)).toBeNull();
   });
 
-  it("Blocker: a sub-area still lets you interact with present garden people (无事件≠无人)", () => {
+  it("shows only the people assigned to the active sub-location", () => {
+    const hereId = characterIdAssignedTo("taiyechi", "taiye_guest");
+    const elsewhereId = characterIdAssignedTo("jiangxuexuan", "jiangxue_guest");
+    render(
+      <GardenOverviewScreen
+        {...base}
+        activeSubArea={subAreas[1]}
+        presentBar={[
+          { id: hereId, name: "池畔侍君", role: "才人" },
+          { id: elsewhereId, name: "轩中侍君", role: "美人" },
+        ]}
+        selectedId={hereId}
+        focusedCharacter={{ id: hereId, name: "池畔侍君", role: "才人", isConsort: true, actionable: true, portraitSrc: "/p.png" }}
+      />,
+    );
+
+    expect(screen.getByRole("group", { name: "太液池之人" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "池畔侍君 · 才人" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "轩中侍君 · 美人" })).toBeNull();
+    expect(screen.getByRole("img", { name: "池畔侍君" })).toBeInTheDocument();
+  });
+
+  it("a sub-area still lets you interact with people who are actually assigned there", () => {
+    const characterId = characterIdAssignedTo("jiangxuexuan", "interactive_guest");
     render(
       <GardenOverviewScreen
         {...base}
         activeSubArea={subAreas[0]}
-        presentBar={[{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔" }]}
-        selectedId="lu_huaijin"
-        focusedCharacter={{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔", isConsort: true, actionable: true, portraitSrc: "/p.png" }}
+        presentBar={[{ id: characterId, name: "陆怀瑾", role: "嫔" }]}
+        selectedId={characterId}
+        focusedCharacter={{ id: characterId, name: "陆怀瑾", role: "嫔", isConsort: true, actionable: true, portraitSrc: "/p.png" }}
         onConverse={() => {}}
         onViewProfile={() => {}}
       />,
     );
-    // bar present in the sub-area, focused portrait + 叙话 reachable
-    expect(screen.getByRole("group", { name: "园中之人" })).toBeInTheDocument();
+    // bar present in the assigned sub-area, focused portrait + 叙话 reachable
+    expect(screen.getByRole("group", { name: "绛雪轩之人" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "陆怀瑾" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "叙话" })).toBeInTheDocument();
+  });
+
+  it("hides a stale focused portrait when the selected person belongs to another sub-location", () => {
+    const elsewhereId = characterIdAssignedTo("fubiting", "stale_guest");
+    render(
+      <GardenOverviewScreen
+        {...base}
+        activeSubArea={subAreas[0]}
+        presentBar={[{ id: elsewhereId, name: "别处侍君", role: "常在" }]}
+        selectedId={elsewhereId}
+        focusedCharacter={{ id: elsewhereId, name: "别处侍君", role: "常在", isConsort: true, actionable: true, portraitSrc: "/p.png" }}
+      />,
+    );
+
+    expect(screen.queryByRole("group", { name: "绛雪轩之人" })).toBeNull();
+    expect(screen.queryByRole("img", { name: "别处侍君" })).toBeNull();
   });
 
   it("Blocker: a sub-area with an UNAFFORDABLE event shows the real reason, not 普通游览 silence", () => {
