@@ -13,6 +13,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import { isAssignableRank } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import type { HaremAdminRankCommand } from "../../store/haremAdminCommands";
+import { EpithetPicker } from "./EpithetPicker";
 
 type Step =
   | { kind: "target_select" }
@@ -222,6 +223,7 @@ function RankSelectStep({
 
   const [selectedRank, setSelectedRank] = useState(targetSt?.rank ?? "");
   const [title, setTitle] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
   const titleValid = /^[一-龥]{1,4}$/.test(title);
 
   if (!targetChar || !targetSt) return null;
@@ -251,7 +253,10 @@ function RankSelectStep({
 
       <section className="rank-modal__section">
         <label>封号：</label>
-        <input value={title} maxLength={4} placeholder="1–4 字" onChange={(e) => setTitle(e.target.value)} />
+        <input value={title} maxLength={4} placeholder="1–4 字" onChange={(e) => { setTitle(e.target.value); setShowPicker(false); }} />
+        <button type="button" className={showPicker ? "rank-modal__picker-toggle rank-modal__picker-toggle--active" : "rank-modal__picker-toggle"} onClick={() => setShowPicker((v) => !v)} title="从封号字库选择">
+          字库
+        </button>
         <button type="button" disabled={!titleValid} onClick={() => onConfirm({ kind: "set_title", title })}>
           {targetSt.title ? "改封" : "加封"}
         </button>
@@ -259,6 +264,9 @@ function RankSelectStep({
           褫夺封号
         </button>
       </section>
+      {showPicker && (
+        <EpithetPicker onSelect={(char) => { setTitle(char); setShowPicker(false); }} />
+      )}
 
       <button type="button" className="punish-btn punish-btn--minor" onClick={onBack}>
         返回

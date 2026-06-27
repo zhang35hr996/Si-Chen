@@ -8,6 +8,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import { isAssignableRank, type CharacterContent } from "../../engine/content/schemas";
 import type { CharacterStanding } from "../../engine/state/types";
 import type { RankOpRequest } from "../../store/rankOps";
+import { EpithetPicker } from "./EpithetPicker";
 
 export function RankAdminModal({
   db,
@@ -24,6 +25,7 @@ export function RankAdminModal({
 }) {
   const [target, setTarget] = useState(standing.rank);
   const [title, setTitle] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
   const ladder = Object.values(db.ranks)
     .filter((r) => isAssignableRank(r) && r.domain === "harem" && r.id !== "huanghou")
     .sort((a, b) => effectiveOrder(b, false) - effectiveOrder(a, false));
@@ -54,7 +56,10 @@ export function RankAdminModal({
 
         <section className="rank-modal__section">
           <label>封号：</label>
-          <input value={title} maxLength={4} placeholder="1–4 字" onChange={(e) => setTitle(e.target.value)} />
+          <input value={title} maxLength={4} placeholder="1–4 字" onChange={(e) => { setTitle(e.target.value); setShowPicker(false); }} />
+          <button type="button" className={showPicker ? "rank-modal__picker-toggle rank-modal__picker-toggle--active" : "rank-modal__picker-toggle"} onClick={() => setShowPicker((v) => !v)} title="从封号字库选择">
+            字库
+          </button>
           <button type="button" disabled={!titleValid} onClick={() => onApply({ kind: "set_title", title })}>
             {standing.title ? "改封" : "加封"}
           </button>
@@ -62,6 +67,9 @@ export function RankAdminModal({
             褫夺封号
           </button>
         </section>
+        {showPicker && (
+          <EpithetPicker onSelect={(char) => { setTitle(char); setShowPicker(false); }} />
+        )}
 
         <button type="button" className="rank-modal__close" onClick={onClose}>
           关闭
