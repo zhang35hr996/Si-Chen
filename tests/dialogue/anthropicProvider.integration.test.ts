@@ -38,8 +38,8 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
 
   it("(b) claim contradicts belief → CLAIM_REJECTED, state.mentionLog unchanged", async () => {
     const before = structuredClone(state.mentionLog);
-    const offered = firstOfferedMemoryId(ctx("本宫累了。", []).req);
-    const { req, provider } = ctx("本宫累了。", [rankClaim("c2", wrongRank, [offered])]);
+    const offered = firstOfferedMemoryId(ctx("臣侍知悉。", []).req);
+    const { req, provider } = ctx("臣侍知悉。", [rankClaim("c2", wrongRank, [offered])]);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("CLAIM_REJECTED");
     expect(state.mentionLog).toEqual(before);
@@ -47,7 +47,7 @@ describe("anthropic provider — full PR5 pipeline acceptance", () => {
 
   it("(c) unknown source context → reject, state.mentionLog unchanged", async () => {
     const before = structuredClone(state.mentionLog);
-    const { req, provider } = ctx("本宫累了。", [rankClaim("c3", correctRank, ["not_offered_xyz"])]);
+    const { req, provider } = ctx("臣侍知悉。", [rankClaim("c3", correctRank, ["not_offered_xyz"])]);
     const r = await produceDialogueTurn(db, provider, req, state);
     expect(r.ok).toBe(false); if (!r.ok) expect(r.error.code).toBe("CLAIM_REJECTED");
     expect(state.mentionLog).toEqual(before);

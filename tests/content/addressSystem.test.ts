@@ -130,31 +130,31 @@ describe("gates WRONG_PLAYER_HONORIFICS", () => {
   });
 });
 
-describe("save migration v25→v26 rank remapping", () => {
-  function makeV25Save(rankOverrides: Record<string, string>): string {
+describe("save migration v26→v27 rank remapping", () => {
+  function makeV26Save(rankOverrides: Record<string, string>): string {
     const s = createNewGameState(db);
-    const stateV25 = structuredClone(s) as GameState;
+    const stateV26 = structuredClone(s) as GameState;
     for (const [charId, rankId] of Object.entries(rankOverrides)) {
-      if (stateV25.standing[charId]) {
-        stateV25.standing[charId]!.rank = rankId;
+      if (stateV26.standing[charId]) {
+        stateV26.standing[charId]!.rank = rankId;
       }
     }
     const current = createSaveData(db, s, "slot1");
     return JSON.stringify({
       ...current,
-      formatVersion: 25,
-      state: stateV25,
-      checksum: checksumOf(stateV25),
+      formatVersion: 26,
+      state: stateV26,
+      checksum: checksumOf(stateV26),
     });
   }
 
-  it("SAVE_FORMAT_VERSION is 26", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(26);
+  it("SAVE_FORMAT_VERSION is 27", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(27);
   });
 
   it("fenghou → huanghou in standing.rank", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ shen_zhibai: "fenghou" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV26Save({ shen_zhibai: "fenghou" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -163,7 +163,7 @@ describe("save migration v25→v26 rank remapping", () => {
 
   it("huangguijun → huangguifu", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ shen_zhibai: "huangguijun" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV26Save({ shen_zhibai: "huangguijun" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -172,7 +172,7 @@ describe("save migration v25→v26 rank remapping", () => {
 
   it("guijun → guifu", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ lu_huaijin: "guijun" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV26Save({ lu_huaijin: "guijun" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -181,7 +181,7 @@ describe("save migration v25→v26 rank remapping", () => {
 
   it("jun → fu", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "jun" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV26Save({ xu_qinghuan: "jun" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -190,7 +190,7 @@ describe("save migration v25→v26 rank remapping", () => {
 
   it("guifu (old 正二品 贵驸) → zhaoyi", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "guifu" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV26Save({ xu_qinghuan: "guifu" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -199,7 +199,7 @@ describe("save migration v25→v26 rank remapping", () => {
 
   it("zhaorong → zhaode", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "zhaorong" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV26Save({ xu_qinghuan: "zhaorong" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -208,7 +208,7 @@ describe("save migration v25→v26 rank remapping", () => {
 
   it("ranks not in remap are unchanged", () => {
     const storage = createMemoryStorage();
-    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV25Save({ xu_qinghuan: "meiren" }));
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV26Save({ xu_qinghuan: "meiren" }));
     const result = readSlot(storage, db, "slot1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -229,7 +229,7 @@ describe("save migration v25→v26 rank remapping", () => {
     const current = createSaveData(db, s, "slot1");
     const raw = JSON.stringify({
       ...current,
-      formatVersion: 25,
+      formatVersion: 26,
       state: stateV25,
       checksum: checksumOf(stateV25),
     });
