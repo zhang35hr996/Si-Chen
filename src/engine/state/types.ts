@@ -644,6 +644,25 @@ export type ConsortLifecycle = "normal" | "candidate" | "carrying" | "delivered"
 /** 后宫居所内的宫室槽位（每殿至多 5 间，各住一名侍君）；缺省视作 "main"(主殿)。 */
 export type ChamberId = "main" | "east_side" | "west_side" | "east_annex" | "west_annex";
 
+/** 侍君人格特质（八维，藏匿，稳定）。范围 0–100。 */
+export interface ConsortPersonality {
+  intelligence: number;       // 谋略推理
+  scheming: number;           // 心机算计
+  sociability: number;        // 交际亲和
+  compassion: number;         // 慈悲同理
+  courage: number;            // 胆识敢为
+  jealousy: number;           // 嫉妒竞争
+  emotionalStability: number; // 情绪调节
+  pride: number;              // 自尊尊严
+}
+
+/** 侍君宫室状况（藏匿；运行时可调）。范围 0–100。 */
+export interface ConsortHousehold {
+  servantOpinion: number;    // 宫人集体观感
+  livingStandard: number;    // 实际生活水平（非位分官方标准）
+  privateWealthLevel: number; // 私家经济能力等级（非精确货币；代表嫁妆/家援/贵重品/场外资源综合）
+}
+
 export interface CharacterStanding {
   /** Rank id from world.json's 位分 table. */
   rank: string;
@@ -687,6 +706,10 @@ export interface CharacterStanding {
   deathRecord?: DeathRecord;
   /** 母族（官员家族）id；出身平民/良家子则 undefined。开局生成流程统一写入。 */
   birthFamilyId?: string;
+  /** 人格特质（藏匿；稳定；新游戏从 hidden.personality 或默认值实化）。 */
+  personality?: ConsortPersonality;
+  /** 宫室状况（藏匿；运行时可调；始终从默认值实化）。 */
+  household?: ConsortHousehold;
 }
 
 // ── Memory (PR2: 活人感形状) ──────────────────────────────────────────
