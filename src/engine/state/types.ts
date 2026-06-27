@@ -1078,21 +1078,33 @@ export type HaremAdminReviewOutcome =
   | "no_candidate"     // 无合格候选（已在窗口期，但决策引擎返回 null）
   | "no_administrator"; // 当前无有效主理人（neiwu_proxy 模式）
 
+/** rank_changed 时保存的决策快照（来自 PR #75 HaremAdminDecision）。 */
+export interface HaremAdminDecisionSnapshot {
+  targetId: string;
+  direction: "promote" | "demote";
+  fromRankId: string;
+  toRankId: string;
+  /** 原因（不再从 score 倒推；在候选生成时确定）。 */
+  reason: "service_merit" | "household_order" | "disloyalty" | "household_disorder";
+  score: number;
+}
+
 /**
  * 六宫年度例核记录。
  * - 每年至多一条（hasHaremAdminReviewForYear 保证幂等）。
- * - acknowledged=false 时乘风禀报尚未呈报，构成全局中断。
+ * - rank_changed && acknowledged=false 时乘风禀报尚未呈报，构成全局中断。
+ * - no_candidate / no_administrator 仅作幂等标记，直接 acknowledged=true。
  */
 export interface HaremAdminReviewRecord {
   id: string;
   year: number;
   outcome: HaremAdminReviewOutcome;
-  /** rank_changed 时记录受影响侍君 charId。 */
-  targetId?: string;
-  /** rank_changed 时记录变动前位分。 */
-  fromRankId?: string;
-  /** rank_changed 时记录变动后位分。 */
-  toRankId?: string;
+  /** rank_changed 时记录执行者 charId。 */
+  administratorId?: string;
+  /** rank_changed 时记录执行者职务。 */
+  office?: "empress" | "acting_consort";
+  /** rank_changed 时保存完整决策快照。 */
+  decision?: HaremAdminDecisionSnapshot;
   settledAt: GameTime;
   acknowledged: boolean;
 }

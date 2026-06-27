@@ -1690,15 +1690,13 @@ export class GameStore {
     }
 
     // 六月下旬后（catch-up 亦安全）→ 六宫年度例核：自主位分决策一次 + 追加禀报记录。
-    // 不依赖 monthChanged；hasHaremAdminReviewForYear 保证本年幂等。
+    // settleAnnualHaremAdminReview 自检窗口与幂等，外层守卫可省略但保留以减少调用。
     if (isHaremAdminReviewWindow(candidate.calendar) && !hasHaremAdminReviewForYear(candidate, candidate.calendar.year)) {
       const beforeHaremReview = candidate;
       const reviewResult = settleAnnualHaremAdminReview(db, candidate);
-      if (reviewResult.ok) {
-        candidate = reviewResult.value;
-        collector?.capturePhaseScheduled("annual_harem_administration_review", diffGameState(beforeHaremReview, candidate));
-      }
-      // 失败时静默跳过（不阻断结算；下一旬 catch-up 不会再触发，因幂等守卫已在 rank_changed 执行前检查）。
+      if (!reviewResult.ok) return err(reviewResult.error);
+      candidate = reviewResult.value;
+      collector?.capturePhaseScheduled("annual_harem_administration_review", diffGameState(beforeHaremReview, candidate));
     }
 
     // 5) Cold-palace incident generation (月度；replay-stable).

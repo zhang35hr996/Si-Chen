@@ -132,22 +132,29 @@ describe("oldestPendingHaremAdminReport", () => {
     expect(oldestPendingHaremAdminReport(createNewGameState(db))).toBeNull();
   });
 
-  it("AR-08: returns oldest unacknowledged by year", () => {
+  it("AR-08: 只返回 rank_changed 未读，oldest by year", () => {
     const state = createNewGameState(db);
+    const rankChangedDecision: HaremAdminReviewRecord["decision"] = {
+      targetId: "wenya", direction: "promote", fromRankId: "changzai", toRankId: "cairen",
+      reason: "service_merit", score: 5,
+    };
     const r1: HaremAdminReviewRecord = {
       id: "harem_admin_review_2",
       year: 2,
-      outcome: "no_candidate",
+      outcome: "rank_changed",
+      decision: rankChangedDecision,
       settledAt: makeGameTime(2, 7, "early"),
       acknowledged: false,
     };
     const r2: HaremAdminReviewRecord = {
       id: "harem_admin_review_1",
       year: 1,
-      outcome: "no_candidate",
+      outcome: "rank_changed",
+      decision: rankChangedDecision,
       settledAt: makeGameTime(1, 7, "early"),
       acknowledged: false,
     };
+    // no_candidate 不进入 pending 队列
     const r3: HaremAdminReviewRecord = {
       id: "harem_admin_review_3",
       year: 3,
@@ -159,7 +166,7 @@ describe("oldestPendingHaremAdminReport", () => {
     expect(oldestPendingHaremAdminReport(s)?.id).toBe("harem_admin_review_1");
   });
 
-  it("AR-08b: all acknowledged → null", () => {
+  it("AR-08b: no_candidate（acknowledged=true）不出现在 pending 队列", () => {
     const state = createNewGameState(db);
     const r: HaremAdminReviewRecord = {
       id: "harem_admin_review_1",
@@ -191,7 +198,7 @@ describe("settleAnnualHaremAdminReview — no_administrator", () => {
     const review = result.value.haremAdminReviews[0]!;
     expect(review.outcome).toBe("no_administrator");
     expect(review.year).toBe(1);
-    expect(review.acknowledged).toBe(false);
+    expect(review.acknowledged).toBe(true); // no_administrator 直接幂等，不打断玩家
     expect(review.id).toBe("harem_admin_review_1");
   });
 });
@@ -199,17 +206,21 @@ describe("settleAnnualHaremAdminReview — no_administrator", () => {
 // ─── AR-11..12: no_candidate ─────────────────────────────────────────────────
 
 describe("settleAnnualHaremAdminReview — no_candidate", () => {
-  it("AR-11: 无合格候选（favor 过低）→ no_candidate", () => {
-    // wenya favor=10, loyalty=10: 不符合晋位（favor<45）且 loyalty>25 → 无降位
+  it("AR-11: 无合格候选 → no_candidate，acknowledged=true（不打断玩家）", () => {
+    // wenya favor=10, loyalty=60, servantOpinion=60: 不符合晋位（favor<45），也不符合降位
     const state = withCalendar(wenyaFixture({ favor: 10, loyalty: 60, servantOpinion: 60 }), 7, "early");
     const result = settleAnnualHaremAdminReview(db, state);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.haremAdminReviews[0]!.outcome).toBe("no_candidate");
+    const r = result.value.haremAdminReviews[0]!;
+    expect(r.outcome).toBe("no_candidate");
+    expect(r.acknowledged).toBe(true);
+    expect(oldestPendingHaremAdminReport(result.value)).toBeNull(); // 不进中断队列
   });
 
-  it("AR-12: acting_consort 也走决策引擎，无候选 → no_candidate", () => {
-    // wenya 置为皇后，xu_qinghuan 为代理，其余无合格候选
+  it("AR-12: acting_consort 主理、无低位候选 → no_candidate 精确断言", () => {
+    // wenya=皇后，xu_qinghuan=acting_consort 且 rank=fu（176>116 不可被降位）
+    // lu_huaijin=chenghui（156>116）→ 全部高于贵人边界，无候选
     const state = createNewGameState(db);
     const wenyaSt = state.standing["wenya"]!;
     const xuSt = state.standing["xu_qinghuan"]!;
@@ -231,15 +242,14 @@ describe("settleAnnualHaremAdminReview — no_candidate", () => {
     const result = settleAnnualHaremAdminReview(db, s);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // 不限制 no_candidate vs rank_changed；但 no_administrator 不应出现
-    expect(result.value.haremAdminReviews[0]!.outcome).not.toBe("no_administrator");
+    expect(result.value.haremAdminReviews[0]!.outcome).toBe("no_candidate");
   });
 });
 
 // ─── AR-13..16: rank_changed ─────────────────────────────────────────────────
 
 describe("settleAnnualHaremAdminReview — rank_changed", () => {
-  it("AR-13: 符合晋位条件 → rank_changed，记录 targetId/fromRankId/toRankId", () => {
+  it("AR-13: 符合晋位条件 → rank_changed，保存完整 decision 快照", () => {
     // wenya: favor=60, loyalty=60, servantOpinion=60 → 晋位
     const state = withCalendar(wenyaFixture({ favor: 60, loyalty: 60, servantOpinion: 60 }), 7, "early");
     const result = settleAnnualHaremAdminReview(db, state);
@@ -247,13 +257,19 @@ describe("settleAnnualHaremAdminReview — rank_changed", () => {
     if (!result.ok) return;
     const review = result.value.haremAdminReviews[0]!;
     expect(review.outcome).toBe("rank_changed");
-    expect(review.targetId).toBe("wenya");
-    expect(review.fromRankId).toBeTruthy();
-    expect(review.toRankId).toBeTruthy();
-    expect(review.fromRankId).not.toBe(review.toRankId);
+    expect(review.administratorId).toBeTruthy();
+    expect(review.office).toBe("empress");
+    expect(review.decision).toBeDefined();
+    expect(review.decision?.targetId).toBe("wenya");
+    expect(review.decision?.direction).toBe("promote");
+    expect(review.decision?.fromRankId).toBeTruthy();
+    expect(review.decision?.toRankId).toBeTruthy();
+    expect(review.decision?.fromRankId).not.toBe(review.decision?.toRankId);
+    expect(review.decision?.reason).toBeTruthy();
+    expect(typeof review.decision?.score).toBe("number");
   });
 
-  it("AR-14: 符合降位条件 → rank_changed（降位）", () => {
+  it("AR-14: 符合降位条件 → rank_changed（降位），decision.direction=demote", () => {
     // wenya: favor=20, loyalty=10, servantOpinion=10 → 降位
     const state = withCalendar(wenyaFixture({ favor: 20, loyalty: 10, servantOpinion: 10 }), 7, "early");
     const result = settleAnnualHaremAdminReview(db, state);
@@ -261,7 +277,8 @@ describe("settleAnnualHaremAdminReview — rank_changed", () => {
     if (!result.ok) return;
     const review = result.value.haremAdminReviews[0]!;
     expect(review.outcome).toBe("rank_changed");
-    expect(review.targetId).toBe("wenya");
+    expect(review.decision?.targetId).toBe("wenya");
+    expect(review.decision?.direction).toBe("demote");
   });
 
   it("AR-15: rank_changed 时 state.standing 实际改变", () => {
@@ -418,15 +435,22 @@ it("AR-25: SAVE_FORMAT_VERSION = 29", () => {
 
 // ─── AR-26: round-trip save/load ─────────────────────────────────────────────
 
-it("AR-26: haremAdminReviews 随存档 round-trip", () => {
+it("AR-26: haremAdminReviews 随存档 round-trip（含完整 decision 快照）", () => {
   const state = createNewGameState(db);
   const r: HaremAdminReviewRecord = {
     id: "harem_admin_review_1",
     year: 1,
     outcome: "rank_changed",
-    targetId: "wenya",
-    fromRankId: "changzai",
-    toRankId: "cairen",
+    administratorId: "wenya",
+    office: "empress",
+    decision: {
+      targetId: "lu_huaijin",
+      direction: "promote",
+      fromRankId: "changzai",
+      toRankId: "cairen",
+      reason: "service_merit",
+      score: 5.2,
+    },
     settledAt: makeGameTime(1, 7, "early"),
     acknowledged: false,
   };
@@ -438,8 +462,14 @@ it("AR-26: haremAdminReviews 随存档 round-trip", () => {
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) return;
   expect(loaded.value.state.haremAdminReviews).toHaveLength(1);
-  expect(loaded.value.state.haremAdminReviews[0]!.targetId).toBe("wenya");
-  expect(loaded.value.state.haremAdminReviews[0]!.acknowledged).toBe(false);
+  const loaded0 = loaded.value.state.haremAdminReviews[0]!;
+  expect(loaded0.outcome).toBe("rank_changed");
+  expect(loaded0.administratorId).toBe("wenya");
+  expect(loaded0.office).toBe("empress");
+  expect(loaded0.decision?.targetId).toBe("lu_huaijin");
+  expect(loaded0.decision?.reason).toBe("service_merit");
+  expect(loaded0.decision?.score).toBe(5.2);
+  expect(loaded0.acknowledged).toBe(false);
 });
 
 // ─── AR-27: migration v29 回填 ───────────────────────────────────────────────

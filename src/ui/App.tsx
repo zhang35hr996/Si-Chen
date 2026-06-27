@@ -209,6 +209,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [restoreCharId, setRestoreCharId] = useState<string | null>(null);
   const [coldPalaceInterventionTarget, setColdPalaceInterventionTarget] = useState<string | null>(null);
   const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
+  /** 当前展示的乘风年度例核禀报 id（瞬时，不持久化）；onDone 时才 acknowledge。 */
+  const [pendingHaremAdminReviewId, setPendingHaremAdminReviewId] = useState<string | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
   // 过场（对话/反应/初夜提示）若耗尽行动点导致换旬，待过场关闭后再补跑 time_advance checkpoint。
   // 原 reactionRollover + reactionStayOnBoardId 合并为单一原子待处理上下文：null=无；非空={boardId}
@@ -1255,30 +1257,29 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     }
   }, [activeGlobalInterrupt]);
 
-  // 六宫年度例核禀报（PR #76）：最旧未读 → 乘风被动禀报 + 立即标记已阅；无选择，只有「知道了」(onDone)。
+  // 六宫年度例核禀报（PR #76）：rank_changed 未读记录 → 乘风被动禀报；
+  // acknowledge 推迟至 onDone（玩家按「知道了」后）才执行，防止崩溃/刷新后报告丢失。
   useEffect(() => {
     if (!content.ok) return;
     if (activeGlobalInterrupt !== "harem_admin_review") return;
     if (reaction !== null) return; // 已有台词在播，等播完后重选
     const st = store.getState();
-    const review = st.haremAdminReviews.find((r) => !r.acknowledged) ?? null;
-    if (!review) return;
+    const review = st.haremAdminReviews.find((r) => r.outcome === "rank_changed" && !r.acknowledged) ?? null;
+    if (!review || !review.decision) return;
     const db_ = { ...content.value, characters: { ...content.value.characters, ...st.generatedConsorts } };
-    let line: string;
-    if (review.outcome === "rank_changed" && review.targetId && review.toRankId) {
-      const char = db_.characters[review.targetId];
-      const charSt = st.standing[review.targetId];
-      const rankMeta = db_.ranks[review.toRankId];
-      const displayName = char ? resolveDisplayName(char, charSt, rankMeta) : review.targetId;
-      const dir = (db_.ranks[review.fromRankId ?? ""]?.order ?? 0) < (rankMeta?.order ?? 0) ? "晋位" : "降位";
-      line = `陛下，${displayName}已奉六宫主理之命${dir}，位列${rankMeta?.name ?? review.toRankId}。`;
-    } else if (review.outcome === "no_candidate") {
-      line = "陛下，本年宫中侍君暂无合适人选行赏罚之事，例核押后。";
-    } else {
-      line = "陛下，内务府暂代六宫，本年例核未行。";
-    }
-    store.acknowledgeHaremAdminReview(review.id);
-    doAutosave();
+    const { targetId, direction, toRankId, reason } = review.decision;
+    const char = db_.characters[targetId];
+    const charSt = st.standing[targetId];
+    const toRankMeta = db_.ranks[toRankId];
+    const displayName = char ? resolveDisplayName(char, charSt, toRankMeta) : targetId;
+    const dirChinese = direction === "promote" ? "晋位" : "降位";
+    const reasonChinese =
+      reason === "service_merit" ? "恩宠有加、宫务恭谨"
+      : reason === "household_order" ? "宫室秩序优良"
+      : reason === "disloyalty" ? "忠诚有亏"
+      : "宫室失于秩序";
+    const line = `陛下，${displayName}${dirChinese}，位列${toRankMeta?.name ?? toRankId}。（${reasonChinese}）`;
+    setPendingHaremAdminReviewId(review.id);
     setReaction({ speakerId: "cheng_feng", lines: [line] });
   }, [activeGlobalInterrupt, reaction]);
 
@@ -2345,6 +2346,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           choicePending={choicePendingToken !== null}
           onDone={() => {
             setReaction(null);
+            // 例核禀报：玩家点「知道了」后才持久化 acknowledge，防止崩溃/刷新时丢失报告。
+            if (pendingHaremAdminReviewId !== null) {
+              store.acknowledgeHaremAdminReview(pendingHaremAdminReviewId);
+              setPendingHaremAdminReviewId(null);
+              doAutosave();
+            }
             if (reactionQueue.length > 0) {
               const [nextLine, ...rest] = reactionQueue;
               setReactionQueue(rest);
@@ -2752,7 +2759,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           storage={storage}
           logger={logger}
           registry={registry}
-          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
+          onLoaded={() => { resetRollGuards(); navDispatch({ type: "clear" }); pendingReactionDispatch({ type: "clear" }); setRankAdmin(null); setPendingHaremAdminReviewId(null); timeSettlementDispatch({ type: "clear" }); invalidateDialogue(); setSettingsOpen(false); enterCurrentLocation(); }}
           onReturnTitle={() => { doAutosave(); invalidateDialogue(); setSettingsOpen(false); setView("title"); }}
           onClose={() => setSettingsOpen(false)}
         />
