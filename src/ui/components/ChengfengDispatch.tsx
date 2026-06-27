@@ -20,7 +20,6 @@ export interface ChengfengDispatchProps {
   disabledReason?: string;
   onSummonConsort: () => void;
   onManageRank: () => void;
-  onRelocate: () => void;
   onBestow: () => void;
   onPhysician: () => void;
   onTransferHaremAdministration?: () => void;
@@ -37,7 +36,6 @@ export function ChengfengDispatch({
   disabledReason,
   onSummonConsort,
   onManageRank,
-  onRelocate,
   onBestow,
   onPhysician,
   onTransferHaremAdministration,
@@ -77,9 +75,8 @@ export function ChengfengDispatch({
   closeCallbackRef.current = close;
 
   const decrees: Decree[] = [
-    { label: "召见妃嫔", run: onSummonConsort },
-    { label: "调整位分", run: onManageRank },
-    { label: "安排迁居", run: onRelocate },
+    { label: "召见侍君", run: onSummonConsort },
+    { label: "管理侍君", run: onManageRank },
     { label: "赏赐", run: onBestow },
     { label: "传太医", run: onPhysician },
     ...(onTransferHaremAdministration ? [{ label: "交付六宫主理权", run: onTransferHaremAdministration }] : []),

@@ -75,7 +75,6 @@ function wire(
     onRest: vi.fn(),
     onLeave: vi.fn(),
     onManageRank: vi.fn(),
-    onRelocate: vi.fn(),
     onBestow: vi.fn(),
     onPhysician: vi.fn(),
     ...overrides,

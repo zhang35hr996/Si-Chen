@@ -72,8 +72,10 @@ export interface ZichendianScreenProps {
   onRest: () => void;
   onLeave: () => void;
 
+  /** 被召见侍君的「侍寝」入口（可选；提供时渲染侍寝按钮）。 */
+  onBedchamberSummonedConsort?: () => void;
+
   onManageRank: () => void;
-  onRelocate: () => void;
   onBestow: () => void;
   onPhysician: () => void;
   onTransferHaremAdministration?: () => void;
@@ -97,6 +99,7 @@ export function ZichendianScreen({
   onConverseSummonedConsort,
   summonedConverseDisabledReason,
   onDismissSummonedConsort,
+  onBedchamberSummonedConsort,
   interruptible,
   interruptDisabledReason,
   busy = false,
@@ -112,7 +115,6 @@ export function ZichendianScreen({
   onRest,
   onLeave,
   onManageRank,
-  onRelocate,
   onBestow,
   onPhysician,
   onTransferHaremAdministration,
@@ -179,6 +181,16 @@ export function ZichendianScreen({
                   叙话
                 </button>
               )}
+              {onBedchamberSummonedConsort && (
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={onBedchamberSummonedConsort}
+                  disabled={summonedActionsLocked}
+                >
+                  侍寝
+                </button>
+              )}
               {onDismissSummonedConsort && (
                 <button type="button" className="action-btn" onClick={onDismissSummonedConsort} disabled={summonedActionsLocked}>
                   告退
@@ -230,9 +242,6 @@ export function ZichendianScreen({
           前朝奏折{courtMemorialCount > 0 ? ` · ${courtMemorialCount}` : ""}
         </button>
       )}
-      <button type="button" className="action-btn" onClick={onSummonConsort} disabled={sceneActionsLocked}>
-        召见侍君
-      </button>
       <button
         type="button"
         className="action-btn"
@@ -284,7 +293,6 @@ export function ZichendianScreen({
           disabledReason={interruptDisabledReason}
           onSummonConsort={() => handoff(onSummonConsort)}
           onManageRank={() => handoff(onManageRank)}
-          onRelocate={() => handoff(onRelocate)}
           onBestow={() => handoff(onBestow)}
           onPhysician={() => handoff(onPhysician)}
           onTransferHaremAdministration={onTransferHaremAdministration ? () => handoff(onTransferHaremAdministration) : undefined}

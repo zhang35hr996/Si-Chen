@@ -7,14 +7,13 @@ const noop = () => {};
 const handlers = {
   onSummonConsort: noop,
   onManageRank: noop,
-  onRelocate: noop,
   onBestow: noop,
   onPhysician: noop,
   onClose: noop,
 };
 
-// The five decree actions, each with a distinct accessible name (no positional indexing).
-const decrees = ["召见妃嫔", "调整位分", "安排迁居", "赏赐", "传太医"];
+// The four decree actions, each with a distinct accessible name (no positional indexing).
+const decrees = ["召见侍君", "管理侍君", "赏赐", "传太医"];
 const decreeButtons = () => decrees.map((name) => screen.getByRole("button", { name }));
 
 describe("ChengfengDispatch", () => {
@@ -36,16 +35,15 @@ describe("ChengfengDispatch", () => {
     expect(within(screen.getByRole("dialog")).queryByRole("dialog")).toBeNull(); // no nested dialog
   });
 
-  it("exposes all five decree actions plus close, each by a distinct accessible name", () => {
+  it("exposes all four decree actions plus close, each by a distinct accessible name", () => {
     render(<ChengfengDispatch interruptible {...handlers} />);
     for (const name of decrees) expect(screen.getByRole("button", { name })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "作罢" })).toBeInTheDocument();
   });
 
   it.each([
-    ["召见妃嫔", "onSummonConsort"],
-    ["调整位分", "onManageRank"],
-    ["安排迁居", "onRelocate"],
+    ["召见侍君", "onSummonConsort"],
+    ["管理侍君", "onManageRank"],
     ["赏赐", "onBestow"],
     ["传太医", "onPhysician"],
   ] as const)("clicking %s invokes only %s", async (name, key) => {
@@ -53,7 +51,6 @@ describe("ChengfengDispatch", () => {
     const spies = {
       onSummonConsort: vi.fn(),
       onManageRank: vi.fn(),
-      onRelocate: vi.fn(),
       onBestow: vi.fn(),
       onPhysician: vi.fn(),
       onClose: vi.fn(),
@@ -71,7 +68,7 @@ describe("ChengfengDispatch", () => {
     const onSummonConsort = vi.fn();
     const onBestow = vi.fn();
     render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} onBestow={onBestow} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     await user.click(screen.getByRole("button", { name: "赏赐" }));
     expect(onSummonConsort).toHaveBeenCalledTimes(1);
     expect(onBestow).not.toHaveBeenCalled();
@@ -79,10 +76,10 @@ describe("ChengfengDispatch", () => {
 
   it("rapid double-click dispatches a decree only once", async () => {
     const user = userEvent.setup();
-    const onRelocate = vi.fn();
-    render(<ChengfengDispatch interruptible {...handlers} onRelocate={onRelocate} />);
-    await user.dblClick(screen.getByRole("button", { name: "安排迁居" }));
-    expect(onRelocate).toHaveBeenCalledTimes(1);
+    const onManageRank = vi.fn();
+    render(<ChengfengDispatch interruptible {...handlers} onManageRank={onManageRank} />);
+    await user.dblClick(screen.getByRole("button", { name: "管理侍君" }));
+    expect(onManageRank).toHaveBeenCalledTimes(1);
   });
 
   it("interruptible=false: every decree is disabled with the reason shown; close still works", async () => {
@@ -100,7 +97,7 @@ describe("ChengfengDispatch", () => {
     );
     for (const b of decreeButtons()) expect(b).toBeDisabled();
     expect(screen.getByRole("note")).toHaveTextContent("陛下正料理要务");
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     expect(onSummonConsort).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "作罢" }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -128,7 +125,7 @@ describe("ChengfengDispatch", () => {
     const onSummonConsort = vi.fn();
     const onClose = vi.fn();
     render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} onClose={onClose} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     await user.keyboard("{Escape}");
     expect(onSummonConsort).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled(); // terminal claim already spent
@@ -138,7 +135,6 @@ describe("ChengfengDispatch", () => {
     const spies = {
       onSummonConsort: vi.fn(),
       onManageRank: vi.fn(),
-      onRelocate: vi.fn(),
       onBestow: vi.fn(),
       onPhysician: vi.fn(),
       onClose: vi.fn(),
@@ -149,7 +145,7 @@ describe("ChengfengDispatch", () => {
 
   it("initial focus lands on the first decree when interruptible", () => {
     render(<ChengfengDispatch interruptible {...handlers} />);
-    expect(screen.getByRole("button", { name: "召见妃嫔" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "召见侍君" })).toHaveFocus();
   });
 
   it("initial focus falls back to close when interruptible=false (decrees disabled)", () => {
@@ -159,18 +155,18 @@ describe("ChengfengDispatch", () => {
 
   it("interruptible true → false moves focus from a decree to close; false → true restores it", () => {
     const { rerender } = render(<ChengfengDispatch interruptible {...handlers} />);
-    expect(screen.getByRole("button", { name: "召见妃嫔" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "召见侍君" })).toHaveFocus();
     rerender(<ChengfengDispatch interruptible={false} disabledReason="不便分身" {...handlers} />);
     expect(screen.getByRole("button", { name: "作罢" })).toHaveFocus();
     rerender(<ChengfengDispatch interruptible {...handlers} />);
-    expect(screen.getByRole("button", { name: "召见妃嫔" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "召见侍君" })).toHaveFocus();
   });
 
   it("after a decree is claimed but the menu stays mounted, focus moves to the dialog and all decrees disable", async () => {
     const user = userEvent.setup();
     const onSummonConsort = vi.fn();
     render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     expect(onSummonConsort).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("dialog")).toHaveFocus(); // not stranded on the now-disabled button
     for (const b of decreeButtons()) expect(b).toBeDisabled();
@@ -182,7 +178,7 @@ describe("ChengfengDispatch", () => {
     const onSummonConsort = vi.fn();
     const onClose = vi.fn();
     render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} onClose={onClose} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     const closeBtn = screen.getByRole("button", { name: "作罢" });
     expect(closeBtn).toBeDisabled();
     await user.click(closeBtn);
@@ -195,7 +191,7 @@ describe("ChengfengDispatch", () => {
     const onManageRank = vi.fn();
     // onClose 内（菜单尚未卸载时）再尝试派发谕令：close 已先于回调同步 claim，应被挡下。
     const onClose = vi.fn(() => {
-      screen.getByRole("button", { name: "调整位分" }).click();
+      screen.getByRole("button", { name: "管理侍君" }).click();
     });
     render(<ChengfengDispatch interruptible {...handlers} onManageRank={onManageRank} onClose={onClose} />);
     await user.click(screen.getByRole("button", { name: "作罢" }));
@@ -207,11 +203,11 @@ describe("ChengfengDispatch", () => {
     const user = userEvent.setup();
     const onSummonConsort = vi.fn();
     const { rerender } = render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     rerender(<ChengfengDispatch interruptible={false} disabledReason="x" {...handlers} onSummonConsort={onSummonConsort} />);
     rerender(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} />);
     for (const b of decreeButtons()) expect(b).toBeDisabled(); // still spent
-    await user.click(screen.getByRole("button", { name: "调整位分" }));
+    await user.click(screen.getByRole("button", { name: "管理侍君" }));
     expect(onSummonConsort).toHaveBeenCalledTimes(1); // no further dispatch
   });
 
@@ -254,7 +250,7 @@ describe("ChengfengDispatch", () => {
     const opener = screen.getByTestId("opener");
     opener.focus();
     const { unmount } = render(<ChengfengDispatch interruptible {...handlers} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     unmount();
     expect(opener).not.toHaveFocus(); // business surface owns focus now
   });
@@ -265,7 +261,7 @@ describe("ChengfengDispatch", () => {
     screen.getByTestId("opener").focus();
     const onSummonConsort = vi.fn();
     const { unmount } = render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     expect(onSummonConsort).toHaveBeenCalledTimes(1);
     // real handoff: the parent unmounts Chengfeng (foreground → none) BEFORE the business modal opens.
     unmount();
@@ -283,10 +279,10 @@ describe("ChengfengDispatch", () => {
     const onManageRank = vi.fn();
     // 回调内（菜单尚未卸载时）再次尝试派发另一道谕令：claim 已先于本回调同步置位，应被挡下。
     const onSummonConsort = vi.fn(() => {
-      screen.getByRole("button", { name: "调整位分" }).click();
+      screen.getByRole("button", { name: "管理侍君" }).click();
     });
     render(<ChengfengDispatch interruptible {...handlers} onSummonConsort={onSummonConsort} onManageRank={onManageRank} />);
-    await user.click(screen.getByRole("button", { name: "召见妃嫔" }));
+    await user.click(screen.getByRole("button", { name: "召见侍君" }));
     expect(onSummonConsort).toHaveBeenCalledTimes(1);
     expect(onManageRank).not.toHaveBeenCalled(); // re-entrant attempt blocked by the already-spent claim
   });
