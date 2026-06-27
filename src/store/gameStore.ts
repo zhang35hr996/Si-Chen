@@ -1647,7 +1647,9 @@ export class GameStore {
 
     // 跨入七月 → 年度边情评估 + 军务奏折（Phase 4C）。同源去重保证幂等。
     if (monthChanged && candidate.calendar.month === 7) {
+      const beforeMilitary = candidate;
       candidate = maybeGenerateAnnualMilitaryAssessment(candidate, db, toGameTime(candidate.calendar));
+      collector?.capturePhaseScheduled("annual_military_assessment", diffGameState(beforeMilitary, candidate));
     }
 
     // 二月（或其后首次推进，含本月内首次推进的 catch-up）→ 候补池增龄/退出 + 生成本年科举。
