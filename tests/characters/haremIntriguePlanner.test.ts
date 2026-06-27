@@ -6,6 +6,7 @@ import {
   buildIntrigueSourceKey,
   enumerateIntrigueCandidates,
 } from "../../src/engine/characters/haremIntrigue/planner";
+import { buildUnresolvedGrievanceIndex } from "../../src/engine/characters/haremIntrigue/grievance";
 import type { GameState } from "../../src/engine/state/types";
 import type { GameTime } from "../../src/engine/calendar/time";
 import { makeGameTime } from "../../src/engine/calendar/time";
@@ -351,5 +352,89 @@ describe("stress test: 100 consorts", () => {
     const result = planMonthlyHaremIntrigue(db, state, { at: AT });
     // At these settings propensity should exceed 45
     expect(result).not.toBeNull();
+  });
+});
+
+// ── P2-D: buildUnresolvedGrievanceIndex ────────────────────────────────────
+
+describe("buildUnresolvedGrievanceIndex (P2-D)", () => {
+  function makeGrievanceEntry(overrides: { subjectIds: string[]; strength: number; unresolved: boolean }, idx: number) {
+    return {
+      id: `mem_${idx}`,
+      ownerId: "actor_a",
+      kind: "grievance" as const,
+      subjectIds: overrides.subjectIds,
+      perspective: "actor" as const,
+      summary: "test grievance",
+      strength: overrides.strength,
+      retention: "fast" as const,
+      emotions: {},
+      triggerTags: [],
+      unresolved: overrides.unresolved,
+      createdAt: AT,
+    };
+  }
+
+  function makeStateWithGrievances(): GameState {
+    return {
+      ...base,
+      memories: {
+        ...base.memories,
+        "actor_a": {
+          entries: [
+            makeGrievanceEntry({ subjectIds: ["target_b"], strength: 70, unresolved: true }, 1),
+            makeGrievanceEntry({ subjectIds: ["target_b"], strength: 40, unresolved: true }, 2),
+            makeGrievanceEntry({ subjectIds: ["target_b"], strength: 90, unresolved: false }, 3),
+            makeGrievanceEntry({ subjectIds: ["target_c"], strength: 55, unresolved: true }, 4),
+          ],
+          nextSeq: 5,
+        },
+        "actor_b": {
+          entries: [],
+          nextSeq: 1,
+        },
+      },
+    };
+  }
+
+  it("returns max strength across unresolved entries (not resolved)", () => {
+    const state = makeStateWithGrievances();
+    const idx = buildUnresolvedGrievanceIndex(state, ["actor_a"]);
+    // 70 vs 40 unresolved; 90 is resolved (excluded)
+    expect(idx.get("actor_a")?.get("target_b")).toBe(70);
+  });
+
+  it("includes all targets from unresolved entries", () => {
+    const state = makeStateWithGrievances();
+    const idx = buildUnresolvedGrievanceIndex(state, ["actor_a"]);
+    expect(idx.get("actor_a")?.get("target_c")).toBe(55);
+  });
+
+  it("excludes resolved grievances", () => {
+    const state = makeStateWithGrievances();
+    const idx = buildUnresolvedGrievanceIndex(state, ["actor_a"]);
+    // strength 90 entry is resolved; should not count
+    expect(idx.get("actor_a")?.get("target_b")).toBe(70);  // not 90
+  });
+
+  it("returns empty map for actor with no grievances", () => {
+    const state = makeStateWithGrievances();
+    const idx = buildUnresolvedGrievanceIndex(state, ["actor_b"]);
+    expect(idx.get("actor_b")?.size).toBe(0);
+  });
+
+  it("creates entry for every consortId passed, even if no memory exists", () => {
+    const state = makeStateWithGrievances();
+    const idx = buildUnresolvedGrievanceIndex(state, ["no_memory_id"]);
+    expect(idx.has("no_memory_id")).toBe(true);
+    expect(idx.get("no_memory_id")?.size).toBe(0);
+  });
+
+  it("is deterministic", () => {
+    const state = makeStateWithGrievances();
+    const a = buildUnresolvedGrievanceIndex(state, ["actor_a", "actor_b"]);
+    const b = buildUnresolvedGrievanceIndex(state, ["actor_a", "actor_b"]);
+    expect(a.get("actor_a")?.get("target_b")).toBe(b.get("actor_a")?.get("target_b"));
+    expect(a.get("actor_a")?.get("target_c")).toBe(b.get("actor_a")?.get("target_c"));
   });
 });

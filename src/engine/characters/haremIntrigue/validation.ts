@@ -1,3 +1,5 @@
+import type { GameTime } from "../../calendar/time";
+import { compareGameTime } from "../../calendar/time";
 import type {
   HaremIntriguePlan,
   HaremIntrigueOutcome,
@@ -6,9 +8,10 @@ import type {
   HaremIntrigueKind,
   HaremIntrigueMotive,
   HaremIntrigueRationaleCode,
+  IntrigueParticipantSnapshot,
 } from "./types";
 import { RATIONALE_CANONICAL_ORDER } from "./types";
-import { buildIntrigueConsequences } from "./outcome";
+import { buildIntrigueConsequences } from "./consequences";
 
 const VALID_KINDS = new Set<HaremIntrigueKind>([
   "slander", "false_accusation", "steal_credit", "faction_pressure", "servant_subversion",
@@ -20,6 +23,8 @@ const VALID_MOTIVES = new Set<HaremIntrigueMotive>([
 
 const VALID_RATIONALE = new Set<HaremIntrigueRationaleCode>(RATIONALE_CANONICAL_ORDER);
 
+const VALID_PERIODS = new Set(["early", "mid", "late"]);
+
 function finding(
   code: HaremIntrigueValidationCode,
   message: string,
@@ -29,6 +34,91 @@ function finding(
 
 function isIntegerInRange(v: unknown, lo: number, hi: number): boolean {
   return typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
+}
+
+/**
+ * Validate a GameTime object for structural correctness.
+ * year >= 1, month 1-12, period in {early,mid,late}, dayIndex >= 0.
+ */
+export function validateIntrigueGameTime(
+  time: GameTime,
+  label: string,
+): HaremIntrigueValidationFinding[] {
+  const results: HaremIntrigueValidationFinding[] = [];
+  if (!Number.isInteger(time.year) || time.year < 1) {
+    results.push(finding("INTRIGUE_BAD_TIME", `${label}.year=${time.year} must be integer >= 1`));
+  }
+  if (!Number.isInteger(time.month) || time.month < 1 || time.month > 12) {
+    results.push(finding("INTRIGUE_BAD_TIME", `${label}.month=${time.month} must be integer 1-12`));
+  }
+  if (!VALID_PERIODS.has(time.period)) {
+    results.push(finding("INTRIGUE_BAD_TIME", `${label}.period="${time.period}" must be early|mid|late`));
+  }
+  if (!Number.isInteger(time.dayIndex) || time.dayIndex < 0) {
+    results.push(finding("INTRIGUE_BAD_TIME", `${label}.dayIndex=${time.dayIndex} must be integer >= 0`));
+  }
+  return results;
+}
+
+/**
+ * Validate a participant snapshot for structural completeness.
+ * Used for both actor and target snapshots.
+ */
+export function validateParticipantSnapshot(
+  label: "actor" | "target",
+  snap: IntrigueParticipantSnapshot,
+  expectedId: string,
+): HaremIntrigueValidationFinding[] {
+  const results: HaremIntrigueValidationFinding[] = [];
+  const prefix = `${label}Snapshot`;
+
+  // characterId
+  if (!snap.characterId) {
+    results.push(finding("INTRIGUE_SNAPSHOT_ID_MISMATCH", `${prefix}.characterId is empty`));
+  } else if (snap.characterId !== expectedId) {
+    results.push(finding("INTRIGUE_SNAPSHOT_ID_MISMATCH", `${prefix}.characterId="${snap.characterId}" !== "${expectedId}"`));
+  }
+
+  // rankId non-empty
+  if (!snap.rankId || typeof snap.rankId !== "string") {
+    results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}.rankId is empty or missing`));
+  }
+
+  // rankOrder: finite integer >= 0
+  if (!Number.isFinite(snap.rankOrder) || !Number.isInteger(snap.rankOrder) || snap.rankOrder < 0) {
+    results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}.rankOrder=${snap.rankOrder} must be finite integer >= 0`));
+  }
+
+  // Numeric fields 0-100
+  const numericFields: [string, unknown][] = [
+    ["favor", snap.favor], ["peakFavor", snap.peakFavor], ["affection", snap.affection],
+    ["fear", snap.fear], ["ambition", snap.ambition], ["loyalty", snap.loyalty],
+    ["scheming", snap.personality.scheming], ["sociability", snap.personality.sociability],
+    ["compassion", snap.personality.compassion], ["courage", snap.personality.courage],
+    ["jealousy", snap.personality.jealousy], ["emotionalStability", snap.personality.emotionalStability],
+    ["pride", snap.personality.pride], ["intelligence", snap.personality.intelligence],
+    ["servantOpinion", snap.household.servantOpinion], ["livingStandard", snap.household.livingStandard],
+    ["privateWealthLevel", snap.household.privateWealthLevel],
+  ];
+  for (const [name, val] of numericFields) {
+    if (!isIntegerInRange(val, 0, 100)) {
+      results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}.${name}=${val} must be integer 0-100`));
+    }
+  }
+
+  // peakFavor >= favor
+  if (isIntegerInRange(snap.peakFavor, 0, 100) && isIntegerInRange(snap.favor, 0, 100)) {
+    if (snap.peakFavor < snap.favor) {
+      results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}.peakFavor < favor`));
+    }
+  }
+
+  // factionId: if present, must be non-empty string
+  if (snap.factionId !== undefined && (typeof snap.factionId !== "string" || !snap.factionId)) {
+    results.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `${prefix}.factionId must be non-empty string if present`));
+  }
+
+  return results;
 }
 
 /**
@@ -58,6 +148,9 @@ export function validateHaremIntriguePlan(
     }
   }
 
+  // 3b. GameTime structural validation for plannedAt
+  findings.push(...validateIntrigueGameTime(plan.plannedAt, "plannedAt"));
+
   // 4. actor !== target
   if (!plan.actorId || !plan.targetId) {
     findings.push(finding("INTRIGUE_BAD_SCORE", "actorId or targetId is empty"));
@@ -65,12 +158,16 @@ export function validateHaremIntriguePlan(
     findings.push(finding("INTRIGUE_SELF_TARGET", "actorId equals targetId"));
   }
 
-  // 5. snapshot IDs
-  if (plan.actorSnapshot?.characterId !== plan.actorId) {
-    findings.push(finding("INTRIGUE_SNAPSHOT_ID_MISMATCH", "actorSnapshot.characterId !== actorId"));
+  // 5. Participant snapshots — unified validator
+  if (plan.actorSnapshot) {
+    findings.push(...validateParticipantSnapshot("actor", plan.actorSnapshot, plan.actorId));
+  } else {
+    findings.push(finding("INTRIGUE_SNAPSHOT_ID_MISMATCH", "actorSnapshot missing"));
   }
-  if (plan.targetSnapshot?.characterId !== plan.targetId) {
-    findings.push(finding("INTRIGUE_SNAPSHOT_ID_MISMATCH", "targetSnapshot.characterId !== targetId"));
+  if (plan.targetSnapshot) {
+    findings.push(...validateParticipantSnapshot("target", plan.targetSnapshot, plan.targetId));
+  } else {
+    findings.push(finding("INTRIGUE_SNAPSHOT_ID_MISMATCH", "targetSnapshot missing"));
   }
 
   // 6. kind valid
@@ -107,48 +204,6 @@ export function validateHaremIntriguePlan(
   // 11. secrecy 10-90
   if (!isIntegerInRange(plan.secrecy, 10, 90)) {
     findings.push(finding("INTRIGUE_BAD_SECRECY", `secrecy=${plan.secrecy}`));
-  }
-
-  // 12. Snapshot values 0-100
-  if (plan.actorSnapshot) {
-    const snap = plan.actorSnapshot;
-    const fields = [
-      ["favor", snap.favor], ["peakFavor", snap.peakFavor], ["affection", snap.affection],
-      ["fear", snap.fear], ["ambition", snap.ambition], ["loyalty", snap.loyalty],
-      ["scheming", snap.personality.scheming], ["sociability", snap.personality.sociability],
-      ["compassion", snap.personality.compassion], ["courage", snap.personality.courage],
-      ["jealousy", snap.personality.jealousy], ["emotionalStability", snap.personality.emotionalStability],
-      ["pride", snap.personality.pride],
-      ["servantOpinion", snap.household.servantOpinion], ["livingStandard", snap.household.livingStandard],
-      ["privateWealthLevel", snap.household.privateWealthLevel],
-    ] as [string, number][];
-    for (const [name, val] of fields) {
-      if (!isIntegerInRange(val, 0, 100)) {
-        findings.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `actorSnapshot.${name}=${val}`));
-      }
-    }
-    if (snap.peakFavor < snap.favor) {
-      findings.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `actorSnapshot.peakFavor < favor`));
-    }
-    if (!Number.isFinite(snap.rankOrder) || !Number.isInteger(snap.rankOrder)) {
-      findings.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `actorSnapshot.rankOrder not finite integer`));
-    }
-  }
-
-  if (plan.targetSnapshot) {
-    const snap = plan.targetSnapshot;
-    const fields = [
-      ["favor", snap.favor], ["peakFavor", snap.peakFavor], ["affection", snap.affection],
-      ["fear", snap.fear], ["ambition", snap.ambition], ["loyalty", snap.loyalty],
-    ] as [string, number][];
-    for (const [name, val] of fields) {
-      if (!isIntegerInRange(val, 0, 100)) {
-        findings.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `targetSnapshot.${name}=${val}`));
-      }
-    }
-    if (snap.peakFavor < snap.favor) {
-      findings.push(finding("INTRIGUE_BAD_SNAPSHOT_VALUE", `targetSnapshot.peakFavor < favor`));
-    }
   }
 
   // 13. Rationale
@@ -200,6 +255,14 @@ export function validateHaremIntrigueOutcome(
   outcome: HaremIntrigueOutcome,
 ): HaremIntrigueValidationFinding[] {
   const findings: HaremIntrigueValidationFinding[] = [];
+
+  // Validate resolvedAt GameTime
+  findings.push(...validateIntrigueGameTime(outcome.resolvedAt, "resolvedAt"));
+
+  // resolvedAt >= plannedAt
+  if (findings.length === 0 && compareGameTime(outcome.resolvedAt, plan.plannedAt) < 0) {
+    findings.push(finding("INTRIGUE_BAD_TIME", "resolvedAt is before plannedAt"));
+  }
 
   if (outcome.status === "cancelled") {
     const validReasons = new Set(["actor_unavailable", "target_unavailable", "actor_target_same", "plan_invalid"]);

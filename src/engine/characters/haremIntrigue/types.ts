@@ -54,7 +54,7 @@ export interface IntrigueParticipantSnapshot {
     jealousy: number;
     emotionalStability: number;
     pride: number;
-    intelligence?: number;
+    intelligence: number;
   };
   household: {
     servantOpinion: number;

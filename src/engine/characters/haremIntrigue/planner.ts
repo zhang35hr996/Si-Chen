@@ -2,6 +2,7 @@ import type { ContentDB } from "../../content/loader";
 import type { GameState } from "../../state/types";
 import { resolveConsortRuntimeAttrs } from "../consortAttrs";
 import { fnv1a64Hex } from "../../save/canonical";
+import { buildUnresolvedGrievanceIndex } from "./grievance";
 import {
   runtimeConsortIds,
   checkIntrigueActorEligibility,
@@ -15,6 +16,7 @@ import {
   computeIntriguePotency,
   computeIntrigueSecrecy,
   buildRationale,
+  buildHaremRankLadder,
   INTRIGUE_PROPENSITY_THRESHOLD,
   INTRIGUE_PAIR_THRESHOLD,
   chooseIntrigueKindAndMotive,
@@ -79,22 +81,6 @@ function buildParticipantSnapshot(
 }
 
 /**
- * Get harem rank bounds (min/max order) for rank rivalry calculation.
- */
-function getHaremRankBounds(db: ContentDB): { minOrder: number; maxOrder: number } {
-  const haremOrders = Object.values(db.ranks)
-    .filter((r) => r.domain === "harem")
-    .map((r) => r.order);
-
-  if (haremOrders.length === 0) return { minOrder: 0, maxOrder: 100 };
-
-  return {
-    minOrder: Math.min(...haremOrders),
-    maxOrder: Math.max(...haremOrders),
-  };
-}
-
-/**
  * Enumerate all viable intrigue candidates (actor-target pairs).
  */
 export function enumerateIntrigueCandidates(
@@ -104,28 +90,10 @@ export function enumerateIntrigueCandidates(
 ): readonly HaremIntrigueCandidate[] {
   const { at } = context;
   const consortIds = runtimeConsortIds(state);
-  const { minOrder, maxOrder } = getHaremRankBounds(db);
+  const ladder = buildHaremRankLadder(db);
 
-  // Build grievance index: actorId -> Map<targetId, strength>
-  // to avoid O(n²×m) grievance lookups
-  const grievanceIndex = new Map<string, Map<string, number>>();
-  for (const actorId of consortIds) {
-    const targetMap = new Map<string, number>();
-    grievanceIndex.set(actorId, targetMap);
-    const store = state.memories[actorId];
-    if (store) {
-      for (const entry of store.entries) {
-        if (entry.kind === "grievance" && entry.unresolved) {
-          for (const subjectId of entry.subjectIds) {
-            const curr = targetMap.get(subjectId) ?? 0;
-            if (entry.strength > curr) {
-              targetMap.set(subjectId, entry.strength);
-            }
-          }
-        }
-      }
-    }
-  }
+  // Build grievance index once: actorId → targetId → maxGrievanceStrength
+  const grievanceIndex = buildUnresolvedGrievanceIndex(state, consortIds);
 
   // Cache snapshots
   const snapshotCache = new Map<string, IntrigueParticipantSnapshot | null>();
@@ -170,11 +138,11 @@ export function enumerateIntrigueCandidates(
 
       // Score threat
       const threatResult = scoreTargetThreat(
-        actorSnap, targetSnap, grievanceStrength, minOrder, maxOrder,
+        actorSnap, targetSnap, grievanceStrength, ladder,
       );
 
       // Score pair priority
-      const tieJitter = pairTieJitter(at.year, at.month, actorId, targetId);
+      const tieJitter = pairTieJitter(at.year, at.month, actorId, targetId, state.rngSeed);
       const priority = scoreIntriguePair(propensity, threatResult.score, tieJitter);
 
       if (priority < INTRIGUE_PAIR_THRESHOLD) continue;
@@ -199,7 +167,7 @@ export function enumerateIntrigueCandidates(
         motive,
         potency,
         secrecy,
-        tieBreak: parseInt(fnv1a64Hex(`harem_intrigue:tie:${actorId}:${targetId}`).slice(0, 8), 16),
+        tieBreak: parseInt(fnv1a64Hex(`harem_intrigue:tie:${state.rngSeed}:${at.year}:${String(at.month).padStart(2, "0")}:${actorId}:${targetId}`).slice(0, 8), 16),
       });
     }
   }
@@ -236,26 +204,16 @@ export function planMonthlyHaremIntrigue(
 
   const best = sorted[0]!;
 
-  // 4. Build full plan
-  const { minOrder, maxOrder } = getHaremRankBounds(db);
+  // 4. Build full plan — reuse single index, no second scan
+  const ladder = buildHaremRankLadder(db);
   const actorSnap = buildParticipantSnapshot(db, state, best.actorId)!;
   const targetSnap = buildParticipantSnapshot(db, state, best.targetId)!;
 
-  const actorGrievanceMap = new Map<string, number>();
-  const store = state.memories[best.actorId];
-  if (store) {
-    for (const entry of store.entries) {
-      if (entry.kind === "grievance" && entry.unresolved) {
-        for (const subjectId of entry.subjectIds) {
-          const curr = actorGrievanceMap.get(subjectId) ?? 0;
-          if (entry.strength > curr) actorGrievanceMap.set(subjectId, entry.strength);
-        }
-      }
-    }
-  }
-  const grievanceStrength = actorGrievanceMap.get(best.targetId) ?? 0;
+  // Re-use the grievance index already built in enumerateIntrigueCandidates
+  const fullGrievanceIndex = buildUnresolvedGrievanceIndex(state, runtimeConsortIds(state));
+  const grievanceStrength = fullGrievanceIndex.get(best.actorId)?.get(best.targetId) ?? 0;
 
-  const threatResult = scoreTargetThreat(actorSnap, targetSnap, grievanceStrength, minOrder, maxOrder);
+  const threatResult = scoreTargetThreat(actorSnap, targetSnap, grievanceStrength, ladder);
   const { kind, motive } = chooseIntrigueKindAndMotive(
     actorSnap, targetSnap,
     { grievanceStrength, factionConflict: threatResult.factionConflict },
@@ -270,7 +228,7 @@ export function planMonthlyHaremIntrigue(
     rankRivalry: threatResult.rankRivalry,
   });
 
-  const tieJitter = pairTieJitter(at.year, at.month, best.actorId, best.targetId);
+  const tieJitter = pairTieJitter(at.year, at.month, best.actorId, best.targetId, state.rngSeed);
   const propensity = best.actorPropensity;
   const priority = scoreIntriguePair(propensity, threatResult.score, tieJitter);
   const potency = computeIntriguePotency(actorSnap, kind, grievanceStrength, threatResult.score);

@@ -249,6 +249,40 @@ describe("checkIntrigueActorEligibility - postpartum fails", () => {
     // Should pass (recovery ended)
     expect(result.reasons).not.toContain("is_postpartum");
   });
+
+  // P2-A: strict < boundary test — currentOrdinal === recoverUntilMonth means ELIGIBLE
+  it("P2-A: actor is eligible when currentOrdinal === recoverUntilMonth (strict <, not <=)", () => {
+    const actorId = baseActorId();
+    if (!actorId) return;
+    // AT = year:1, month:3 → currentOrdinal = (1-1)*12 + 3 = 3
+    // recoverUntilMonth = 3 → currentOrdinal (3) < 3 is FALSE → eligible (not postpartum)
+    const state: GameState = {
+      ...base,
+      standing: {
+        ...base.standing,
+        [actorId]: { ...base.standing[actorId]!, recoverUntilMonth: 3 },
+      },
+    };
+    const result = checkIntrigueActorEligibility(db, state, actorId, AT);
+    expect(result.reasons).not.toContain("is_postpartum");
+  });
+
+  it("P2-A: actor is NOT eligible when currentOrdinal < recoverUntilMonth", () => {
+    const actorId = baseActorId();
+    if (!actorId) return;
+    // AT = year:1, month:3 → currentOrdinal = 3
+    // recoverUntilMonth = 4 → 3 < 4 is TRUE → not eligible
+    const state: GameState = {
+      ...base,
+      standing: {
+        ...base.standing,
+        [actorId]: { ...base.standing[actorId]!, recoverUntilMonth: 4 },
+      },
+    };
+    const result = checkIntrigueActorEligibility(db, state, actorId, AT);
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toContain("is_postpartum");
+  });
 });
 
 describe("checkIntrigueActorEligibility - non-harem rank fails", () => {

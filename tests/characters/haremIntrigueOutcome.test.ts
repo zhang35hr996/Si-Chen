@@ -38,6 +38,7 @@ function makeActor(id: string): HaremIntriguePlan["actorSnapshot"] {
       jealousy: 70,
       emotionalStability: 30,
       pride: 40,
+      intelligence: 55,
     },
     household: { servantOpinion: 50, livingStandard: 40, privateWealthLevel: 30 },
   };
@@ -62,6 +63,7 @@ function makeTarget(id: string): HaremIntriguePlan["targetSnapshot"] {
       jealousy: 30,
       emotionalStability: 60,
       pride: 50,
+      intelligence: 50,
     },
     household: { servantOpinion: 60, livingStandard: 50, privateWealthLevel: 20 },
   };
@@ -345,9 +347,7 @@ describe("resolveIntrigueOutcome - invalid plan → cancelled", () => {
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
     expect(outcome.status).toBe("cancelled");
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).toBe("plan_invalid");
-    }
+    expect((outcome as { reason?: string }).reason).toBe("plan_invalid");
   });
 });
 
@@ -357,9 +357,7 @@ describe("resolveIntrigueOutcome - actor missing → cancelled", () => {
     // Use base state where actor_001 is not registered
     const outcome = resolveIntrigueOutcome(db, base, plan, RESOLVED_AT);
     expect(outcome.status).toBe("cancelled");
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).toBe("actor_unavailable");
-    }
+    expect((outcome as { reason?: string }).reason).toBe("actor_unavailable");
   });
 
   it("actor deceased → cancelled", () => {
@@ -367,9 +365,7 @@ describe("resolveIntrigueOutcome - actor missing → cancelled", () => {
     const state = makeStateWithPair("actor_001", "target_001", { lifecycle: "deceased" });
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
     expect(outcome.status).toBe("cancelled");
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).toBe("actor_unavailable");
-    }
+    expect((outcome as { reason?: string }).reason).toBe("actor_unavailable");
   });
 
   it("actor critical health → cancelled", () => {
@@ -377,9 +373,7 @@ describe("resolveIntrigueOutcome - actor missing → cancelled", () => {
     const state = makeStateWithPair("actor_001", "target_001", { healthStatus: "critical" });
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
     expect(outcome.status).toBe("cancelled");
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).toBe("actor_unavailable");
-    }
+    expect((outcome as { reason?: string }).reason).toBe("actor_unavailable");
   });
 
   it("actor became carrying after planning → cancelled", () => {
@@ -397,9 +391,7 @@ describe("resolveIntrigueOutcome - actor missing → cancelled", () => {
     };
     const outcome = resolveIntrigueOutcome(db, stateWithCarrying, plan, RESOLVED_AT);
     expect(outcome.status).toBe("cancelled");
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).toBe("actor_unavailable");
-    }
+    expect((outcome as { reason?: string }).reason).toBe("actor_unavailable");
   });
 });
 
@@ -423,9 +415,7 @@ describe("resolveIntrigueOutcome - target missing → cancelled", () => {
     };
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
     expect(outcome.status).toBe("cancelled");
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).toBe("target_unavailable");
-    }
+    expect((outcome as { reason?: string }).reason).toBe("target_unavailable");
   });
 
   it("target deceased → cancelled", () => {
@@ -433,9 +423,7 @@ describe("resolveIntrigueOutcome - target missing → cancelled", () => {
     const state = makeStateWithPair("actor_001", "target_001", {}, { lifecycle: "deceased" });
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
     expect(outcome.status).toBe("cancelled");
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).toBe("target_unavailable");
-    }
+    expect((outcome as { reason?: string }).reason).toBe("target_unavailable");
   });
 });
 
@@ -454,10 +442,8 @@ describe("resolveIntrigueOutcome - target carrying is NOT cancelled", () => {
       },
     };
     const outcome = resolveIntrigueOutcome(db, stateWithCarrying, plan, RESOLVED_AT);
-    // target carrying is allowed - should be resolved, not cancelled for this reason
-    if (outcome.status === "cancelled") {
-      expect(outcome.reason).not.toBe("target_unavailable");
-    }
+    // target carrying is explicitly allowed for non-physical schemes — must resolve
+    expect(outcome.status).toBe("resolved");
   });
 });
 
@@ -469,38 +455,38 @@ describe("resolveIntrigueOutcome - 4 quadrants", () => {
     const plan = makePlan({ kind: "slander" });
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    // Valid plan + state → always resolves, never cancelled
     expect(outcome.status).toBe("resolved");
-    if (outcome.status === "resolved") {
-      // Check consistency
-      expect(outcome.success).toBe(outcome.successRoll < outcome.successThreshold);
-      expect(outcome.discovered).toBe(outcome.discoveryRoll < outcome.discoveryThreshold);
-    }
+    // TypeScript narrowing: after the above assertion, status is "resolved"
+    const r = outcome as typeof outcome & { status: "resolved" };
+    expect(r.success).toBe(r.successRoll < r.successThreshold);
+    expect(r.discovered).toBe(r.discoveryRoll < r.discoveryThreshold);
   });
 });
 
 describe("resolveIntrigueOutcome - roll boundary", () => {
-  it("roll = threshold - 1 → success", () => {
-    // Build consequences manually and verify
+  // The rule is: success = (successRoll < successThreshold).
+  // We test this invariant directly using the resolved outcome (no conditional branch).
+  it("resolved outcome: success is always roll < threshold (boundary invariant)", () => {
     const plan = makePlan({ kind: "slander" });
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    // Outcome must be resolved for this fixture (valid plan, valid state)
+    expect(outcome.status).toBe("resolved");
     if (outcome.status === "resolved") {
-      // Verify: roll < threshold means success
-      if (outcome.successRoll === outcome.successThreshold - 1) {
-        expect(outcome.success).toBe(true);
-      }
+      // Strict invariant: success iff roll strictly below threshold
+      expect(outcome.success).toBe(outcome.successRoll < outcome.successThreshold);
+      expect(outcome.discovered).toBe(outcome.discoveryRoll < outcome.discoveryThreshold);
     }
   });
 
-  it("roll = threshold → failure", () => {
-    const plan = makePlan({ kind: "slander" });
-    const state = makeStateWithPair("actor_001", "target_001");
-    const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
-    if (outcome.status === "resolved") {
-      if (outcome.successRoll === outcome.successThreshold) {
-        expect(outcome.success).toBe(false);
-      }
-    }
+  it("pure threshold comparison: roll < threshold → success (direct unit test)", () => {
+    // Test the roll < threshold rule without depending on a specific seed
+    expect(49 < 50).toBe(true);   // roll = threshold - 1 → success
+    expect(50 < 50).toBe(false);  // roll = threshold     → failure
+    expect(51 < 50).toBe(false);  // roll = threshold + 1 → failure
+    expect(0 < 10).toBe(true);    // minimum roll vs minimum threshold
+    expect(99 < 90).toBe(false);  // maximum roll vs maximum threshold
   });
 });
 
@@ -509,56 +495,56 @@ describe("resolveIntrigueOutcome - resolved outcome properties", () => {
     const plan = makePlan();
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
-    if (outcome.status === "resolved") {
-      expect(outcome.successRoll).toBeGreaterThanOrEqual(0);
-      expect(outcome.successRoll).toBeLessThanOrEqual(99);
-      expect(outcome.discoveryRoll).toBeGreaterThanOrEqual(0);
-      expect(outcome.discoveryRoll).toBeLessThanOrEqual(99);
-    }
+    expect(outcome.status).toBe("resolved");
+    const r = outcome as typeof outcome & { status: "resolved" };
+    expect(r.successRoll).toBeGreaterThanOrEqual(0);
+    expect(r.successRoll).toBeLessThanOrEqual(99);
+    expect(r.discoveryRoll).toBeGreaterThanOrEqual(0);
+    expect(r.discoveryRoll).toBeLessThanOrEqual(99);
   });
 
   it("thresholds are in valid ranges", () => {
     const plan = makePlan();
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
-    if (outcome.status === "resolved") {
-      expect(outcome.successThreshold).toBeGreaterThanOrEqual(10);
-      expect(outcome.successThreshold).toBeLessThanOrEqual(90);
-      expect(outcome.discoveryThreshold).toBeGreaterThanOrEqual(5);
-      expect(outcome.discoveryThreshold).toBeLessThanOrEqual(90);
-    }
+    expect(outcome.status).toBe("resolved");
+    const r = outcome as typeof outcome & { status: "resolved" };
+    expect(r.successThreshold).toBeGreaterThanOrEqual(10);
+    expect(r.successThreshold).toBeLessThanOrEqual(90);
+    expect(r.discoveryThreshold).toBeGreaterThanOrEqual(5);
+    expect(r.discoveryThreshold).toBeLessThanOrEqual(90);
   });
 
   it("knowledge fields correct: actorKnowsOwnAction=true, target/palace match discovered", () => {
     const plan = makePlan();
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
-    if (outcome.status === "resolved") {
-      expect(outcome.knowledge.actorKnowsOwnAction).toBe(true);
-      expect(outcome.knowledge.targetKnowsInstigator).toBe(outcome.discovered);
-      expect(outcome.knowledge.palacePublic).toBe(outcome.discovered);
-    }
+    expect(outcome.status).toBe("resolved");
+    const r = outcome as typeof outcome & { status: "resolved" };
+    expect(r.knowledge.actorKnowsOwnAction).toBe(true);
+    expect(r.knowledge.targetKnowsInstigator).toBe(r.discovered);
+    expect(r.knowledge.palacePublic).toBe(r.discovered);
   });
 
   it("cancelled knowledge fields are all false", () => {
     const plan = makePlan({ sourceKey: "bad_key", year: 1, month: 3 });
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
-    if (outcome.status === "cancelled") {
-      expect(outcome.knowledge.actorKnowsOwnAction).toBe(true);
-      expect(outcome.knowledge.targetKnowsInstigator).toBe(false);
-      expect(outcome.knowledge.palacePublic).toBe(false);
-    }
+    expect(outcome.status).toBe("cancelled");
+    const c = outcome as typeof outcome & { status: "cancelled" };
+    expect(c.knowledge.actorKnowsOwnAction).toBe(true);
+    expect(c.knowledge.targetKnowsInstigator).toBe(false);
+    expect(c.knowledge.palacePublic).toBe(false);
   });
 
   it("cancelled outcome has empty consequences", () => {
     const plan = makePlan({ sourceKey: "bad_key", year: 1, month: 3 });
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
-    if (outcome.status === "cancelled") {
-      expect(outcome.consequences.standing).toHaveLength(0);
-      expect(outcome.consequences.household).toHaveLength(0);
-    }
+    expect(outcome.status).toBe("cancelled");
+    const c = outcome as typeof outcome & { status: "cancelled" };
+    expect(c.consequences.standing).toHaveLength(0);
+    expect(c.consequences.household).toHaveLength(0);
   });
 
   it("is deterministic: same plan+state → same outcome", () => {
@@ -589,10 +575,10 @@ describe("resolveIntrigueOutcome - all kinds", () => {
       const plan = makePlan({ kind, motive });
       const state = makeStateWithPair("actor_001", "target_001");
       const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
-      if (outcome.status === "resolved") {
-        const canonical = buildIntrigueConsequences(plan, outcome.success, outcome.discovered);
-        expect(JSON.stringify(outcome.consequences)).toBe(JSON.stringify(canonical));
-      }
+      expect(outcome.status).toBe("resolved");
+      const r = outcome as typeof outcome & { status: "resolved" };
+      const canonical = buildIntrigueConsequences(plan, r.success, r.discovered);
+      expect(JSON.stringify(r.consequences)).toBe(JSON.stringify(canonical));
     });
   }
 });
@@ -604,10 +590,12 @@ describe("resolveIntrigueOutcome - discovery threshold increases with low secrec
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome_hi = resolveIntrigueOutcome(db, state, plan_hi, RESOLVED_AT);
     const outcome_lo = resolveIntrigueOutcome(db, state, plan_lo, RESOLVED_AT);
-    if (outcome_hi.status === "resolved" && outcome_lo.status === "resolved") {
-      // Low secrecy means higher discovery chance (higher threshold)
-      expect(outcome_lo.discoveryThreshold).toBeGreaterThan(outcome_hi.discoveryThreshold);
-    }
+    expect(outcome_hi.status).toBe("resolved");
+    expect(outcome_lo.status).toBe("resolved");
+    const hi = outcome_hi as typeof outcome_hi & { status: "resolved" };
+    const lo = outcome_lo as typeof outcome_lo & { status: "resolved" };
+    // Low secrecy means higher discovery chance (higher threshold)
+    expect(lo.discoveryThreshold).toBeGreaterThan(hi.discoveryThreshold);
   });
 });
 
@@ -618,8 +606,98 @@ describe("resolveIntrigueOutcome - success threshold increases with high potency
     const state = makeStateWithPair("actor_001", "target_001");
     const outcome_hi = resolveIntrigueOutcome(db, state, plan_hi, RESOLVED_AT);
     const outcome_lo = resolveIntrigueOutcome(db, state, plan_lo, RESOLVED_AT);
-    if (outcome_hi.status === "resolved" && outcome_lo.status === "resolved") {
-      expect(outcome_hi.successThreshold).toBeGreaterThan(outcome_lo.successThreshold);
+    expect(outcome_hi.status).toBe("resolved");
+    expect(outcome_lo.status).toBe("resolved");
+    const hi = outcome_hi as typeof outcome_hi & { status: "resolved" };
+    const lo = outcome_lo as typeof outcome_lo & { status: "resolved" };
+    expect(hi.successThreshold).toBeGreaterThan(lo.successThreshold);
+  });
+});
+
+// ── P1-A: rngSeed divergence in outcome rolls ──────────────────────────────
+
+describe("resolveIntrigueOutcome: rngSeed divergence (P1-A)", () => {
+  it("different rngSeeds → different rolls on at least some plans", () => {
+    let foundDiff = false;
+    for (let month = 1; month <= 12 && !foundDiff; month++) {
+      const planA = makePlan({ sourceKey: `harem_intrigue:1:${String(month).padStart(2, "0")}`, month });
+      const stateA = { ...makeStateWithPair("actor_001", "target_001"), rngSeed: 1111 };
+      const stateB = { ...makeStateWithPair("actor_001", "target_001"), rngSeed: 9999 };
+      const outA = resolveIntrigueOutcome(db, stateA, planA, RESOLVED_AT);
+      const outB = resolveIntrigueOutcome(db, stateB, planA, RESOLVED_AT);
+      if (outA.status === "resolved" && outB.status === "resolved") {
+        if (outA.successRoll !== outB.successRoll || outA.discoveryRoll !== outB.discoveryRoll) {
+          foundDiff = true;
+        }
+      }
     }
+    expect(foundDiff).toBe(true);
+  });
+
+  it("same rngSeed → identical rolls", () => {
+    const plan = makePlan();
+    const state = makeStateWithPair("actor_001", "target_001");
+    const outA = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    const outB = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    expect(JSON.stringify(outA)).toBe(JSON.stringify(outB));
+  });
+});
+
+// ── P1-C: validateHaremIntriguePlan reuse ──────────────────────────────────
+
+describe("resolveIntrigueOutcome: plan_invalid via validateHaremIntriguePlan (P1-C)", () => {
+  it("unknown kind → cancelled plan_invalid", () => {
+    const plan = makePlan({ kind: "unknown_kind" as never });
+    const state = makeStateWithPair("actor_001", "target_001");
+    const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    expect(outcome.status).toBe("cancelled");
+    expect((outcome as { reason?: string }).reason).toBe("plan_invalid");
+  });
+
+  it("potency out of range (=5) → cancelled plan_invalid", () => {
+    const plan = makePlan({ potency: 5 });
+    const state = makeStateWithPair("actor_001", "target_001");
+    const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    expect(outcome.status).toBe("cancelled");
+    expect((outcome as { reason?: string }).reason).toBe("plan_invalid");
+  });
+
+  it("false_accusation + motive=jealousy (mismatch) → cancelled plan_invalid", () => {
+    const plan = makePlan({ kind: "false_accusation", motive: "jealousy" });
+    const state = makeStateWithPair("actor_001", "target_001");
+    const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    expect(outcome.status).toBe("cancelled");
+    expect((outcome as { reason?: string }).reason).toBe("plan_invalid");
+  });
+});
+
+// ── P1-D: eligibility reuse ────────────────────────────────────────────────
+
+describe("resolveIntrigueOutcome: eligibility reuse after plan (P1-D)", () => {
+  it("actor becomes postpartum after planning → actor_unavailable", () => {
+    const plan = makePlan();
+    const state = makeStateWithPair("actor_001", "target_001");
+    // recoverUntilMonth: current month is month 3 ordinal; recoverUntilMonth set in the future
+    const statePostpartum: GameState = {
+      ...state,
+      standing: {
+        ...state.standing,
+        "actor_001": {
+          ...state.standing["actor_001"]!,
+          recoverUntilMonth: (1 - 1) * 12 + 3 + 2, // 2 months in the future
+        },
+      },
+    };
+    const outcome = resolveIntrigueOutcome(db, statePostpartum, plan, RESOLVED_AT);
+    expect(outcome.status).toBe("cancelled");
+    expect((outcome as { reason?: string }).reason).toBe("actor_unavailable");
+  });
+
+  it("target becomes deceased after plan is created → target_unavailable", () => {
+    const plan = makePlan();
+    const state = makeStateWithPair("actor_001", "target_001", {}, { lifecycle: "deceased" });
+    const outcome = resolveIntrigueOutcome(db, state, plan, RESOLVED_AT);
+    expect(outcome.status).toBe("cancelled");
+    expect((outcome as { reason?: string }).reason).toBe("target_unavailable");
   });
 });

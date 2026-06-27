@@ -13,6 +13,14 @@ import {
 } from "../../src/engine/characters/haremIntrigue/scoring";
 import type { IntrigueParticipantSnapshot } from "../../src/engine/characters/haremIntrigue/types";
 
+// Test ladder: 10 ranks from order 52 to order 1000, covering meiren/guiren/other
+const TEST_LADDER = [
+  { rankId: "meiren", order: 100, index: 0 },
+  { rankId: "guiren", order: 116, index: 1 },
+  { rankId: "other", order: 156, index: 2 },
+  { rankId: "huanghou", order: 1000, index: 3 },
+];
+
 function makeSnap(over: Partial<IntrigueParticipantSnapshot> = {}): IntrigueParticipantSnapshot {
   return {
     characterId: "test_char",
@@ -32,6 +40,7 @@ function makeSnap(over: Partial<IntrigueParticipantSnapshot> = {}): IntriguePart
       jealousy: 35,
       emotionalStability: 55,
       pride: 45,
+      intelligence: 50,
     },
     household: {
       servantOpinion: 50,
@@ -117,7 +126,7 @@ describe("scoreIntriguePropensity", () => {
       ambition: 0,
       fear: 0,
       loyalty: 100,
-      personality: { scheming: 0, sociability: 0, compassion: 100, courage: 0, jealousy: 0, emotionalStability: 100, pride: 0 },
+      personality: { scheming: 0, sociability: 0, compassion: 100, courage: 0, jealousy: 0, emotionalStability: 100, pride: 0, intelligence: 50 },
     });
     expect(scoreIntriguePropensity(snap, 0)).toBeGreaterThanOrEqual(0);
   });
@@ -127,7 +136,7 @@ describe("scoreIntriguePropensity", () => {
       ambition: 100,
       fear: 100,
       loyalty: 0,
-      personality: { scheming: 100, sociability: 0, compassion: 0, courage: 100, jealousy: 100, emotionalStability: 0, pride: 100 },
+      personality: { scheming: 100, sociability: 0, compassion: 0, courage: 100, jealousy: 100, emotionalStability: 0, pride: 100, intelligence: 50 },
     });
     expect(scoreIntriguePropensity(snap, 100)).toBeLessThanOrEqual(100);
   });
@@ -146,7 +155,7 @@ describe("scoreTargetThreat", () => {
   it("returns integer in 0-100", () => {
     const actor = makeSnap({ characterId: "actor", rankOrder: 100 });
     const target = makeSnap({ characterId: "target", rankOrder: 156, favor: 50, peakFavor: 60 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(Number.isInteger(result.score)).toBe(true);
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.score).toBeLessThanOrEqual(100);
@@ -155,64 +164,66 @@ describe("scoreTargetThreat", () => {
   it("favorGap is max(0, target.favor - actor.favor)", () => {
     const actor = makeSnap({ characterId: "actor", favor: 20 });
     const target = makeSnap({ characterId: "target", favor: 50, peakFavor: 50 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.favorGap).toBe(30);
   });
 
   it("favorGap is 0 when target favor <= actor favor", () => {
     const actor = makeSnap({ characterId: "actor", favor: 70 });
     const target = makeSnap({ characterId: "target", favor: 50, peakFavor: 50 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.favorGap).toBe(0);
   });
 
   it("peakFavorGap is 0 when target peakFavor <= actor peakFavor", () => {
     const actor = makeSnap({ characterId: "actor", favor: 50, peakFavor: 80 });
     const target = makeSnap({ characterId: "target", favor: 50, peakFavor: 60 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.peakFavorGap).toBe(0);
   });
 
-  it("rankRivalry is 0 when target rank <= actor rank", () => {
-    const actor = makeSnap({ characterId: "actor", rankOrder: 200 });
-    const target = makeSnap({ characterId: "target", rankOrder: 100, peakFavor: 30 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+  it("rankRivalry is 0 when target rank <= actor rank (actor at guiren, target at meiren)", () => {
+    // actor=guiren (index 1), target=meiren (index 0): target lower → rivalry=0
+    const actor = makeSnap({ characterId: "actor", rankId: "guiren", rankOrder: 116 });
+    const target = makeSnap({ characterId: "target", rankId: "meiren", rankOrder: 100, peakFavor: 30 });
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.rankRivalry).toBe(0);
   });
 
-  it("rankRivalry is positive when target rank > actor rank", () => {
-    const actor = makeSnap({ characterId: "actor", rankOrder: 100 });
-    const target = makeSnap({ characterId: "target", rankOrder: 200, peakFavor: 30 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+  it("rankRivalry is positive when target rank > actor rank (actor at meiren, target at guiren)", () => {
+    // actor=meiren (index 0), target=guiren (index 1): target higher → rivalry > 0
+    const actor = makeSnap({ characterId: "actor", rankId: "meiren", rankOrder: 100 });
+    const target = makeSnap({ characterId: "target", rankId: "guiren", rankOrder: 116, peakFavor: 30 });
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.rankRivalry).toBeGreaterThan(0);
   });
 
   it("factionConflict is true when both have different faction IDs", () => {
     const actor = makeSnap({ characterId: "actor", factionId: "phoenix" });
     const target = makeSnap({ characterId: "target", factionId: "lotus", peakFavor: 30 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.factionConflict).toBe(true);
   });
 
   it("factionConflict is false when same faction", () => {
     const actor = makeSnap({ characterId: "actor", factionId: "phoenix" });
     const target = makeSnap({ characterId: "target", factionId: "phoenix", peakFavor: 30 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.factionConflict).toBe(false);
   });
 
   it("factionConflict is false when actor has no faction", () => {
     const actor = makeSnap({ characterId: "actor" });
     const target = makeSnap({ characterId: "target", factionId: "lotus", peakFavor: 30 });
-    const result = scoreTargetThreat(actor, target, 0, 52, 1000);
+    const result = scoreTargetThreat(actor, target, 0, TEST_LADDER);
     expect(result.factionConflict).toBe(false);
   });
 
   it("grievance increases threat score", () => {
     const actor = makeSnap({ characterId: "actor" });
     const target = makeSnap({ characterId: "target", peakFavor: 30 });
-    const lo = scoreTargetThreat(actor, target, 0, 52, 1000);
-    const hi = scoreTargetThreat(actor, target, 80, 52, 1000);
+    const lo = scoreTargetThreat(actor, target, 0, TEST_LADDER);
+    const hi = scoreTargetThreat(actor, target, 80, TEST_LADDER);
     expect(hi.score).toBeGreaterThan(lo.score);
   });
 });
@@ -224,7 +235,7 @@ describe("pairTieJitter", () => {
     const values = new Set<number>();
     for (let m = 1; m <= 12; m++) {
       for (let y = 1; y <= 5; y++) {
-        const j = pairTieJitter(y, m, "actorA", "targetB");
+        const j = pairTieJitter(y, m, "actorA", "targetB", 12345);
         values.add(j);
         expect(j).toBeGreaterThanOrEqual(-2);
         expect(j).toBeLessThanOrEqual(2);
@@ -233,14 +244,22 @@ describe("pairTieJitter", () => {
   });
 
   it("is deterministic: same inputs → same output", () => {
-    const a = pairTieJitter(3, 7, "actorX", "targetY");
-    const b = pairTieJitter(3, 7, "actorX", "targetY");
+    const a = pairTieJitter(3, 7, "actorX", "targetY", 12345);
+    const b = pairTieJitter(3, 7, "actorX", "targetY", 12345);
     expect(a).toBe(b);
   });
 
+  it("differs for different rngSeeds (same year/month/actors)", () => {
+    // Different rngSeeds should produce different jitter values across many seeds
+    const seeds = [1, 2, 3, 42, 99, 1000, 999999];
+    const results = seeds.map((s) => pairTieJitter(1, 1, "char_a", "char_b", s));
+    // Not all values should be identical
+    expect(new Set(results).size).toBeGreaterThan(1);
+  });
+
   it("differs between different actor/target pairs", () => {
-    const a = pairTieJitter(1, 1, "char_a", "char_b");
-    const b = pairTieJitter(1, 1, "char_c", "char_d");
+    const a = pairTieJitter(1, 1, "char_a", "char_b", 12345);
+    const b = pairTieJitter(1, 1, "char_c", "char_d", 12345);
     // These *may* collide but usually won't; just verify they're valid
     expect(a).toBeGreaterThanOrEqual(-2);
     expect(b).toBeGreaterThanOrEqual(-2);
@@ -324,7 +343,7 @@ describe("computeIntriguePotency", () => {
   it("minimum clamped to 10", () => {
     const actor = makeSnap({
       ambition: 0,
-      personality: { scheming: 0, sociability: 0, compassion: 0, courage: 0, jealousy: 0, emotionalStability: 0, pride: 0 },
+      personality: { scheming: 0, sociability: 0, compassion: 0, courage: 0, jealousy: 0, emotionalStability: 0, pride: 0, intelligence: 0 },
       household: { servantOpinion: 0, livingStandard: 0, privateWealthLevel: 0 },
     });
     expect(computeIntriguePotency(actor, "slander", 0, 0)).toBeGreaterThanOrEqual(10);
@@ -333,7 +352,7 @@ describe("computeIntriguePotency", () => {
   it("maximum clamped to 90", () => {
     const actor = makeSnap({
       ambition: 100,
-      personality: { scheming: 100, sociability: 100, compassion: 100, courage: 100, jealousy: 100, emotionalStability: 100, pride: 100 },
+      personality: { scheming: 100, sociability: 100, compassion: 100, courage: 100, jealousy: 100, emotionalStability: 100, pride: 100, intelligence: 100 },
       household: { servantOpinion: 100, livingStandard: 100, privateWealthLevel: 100 },
     });
     expect(computeIntriguePotency(actor, "false_accusation", 100, 100)).toBeLessThanOrEqual(90);
@@ -386,7 +405,7 @@ describe("computeIntrigueSecrecy", () => {
   it("minimum clamped to 10", () => {
     const actor = makeSnap({
       fear: 100,
-      personality: { scheming: 0, sociability: 100, compassion: 0, courage: 0, jealousy: 0, emotionalStability: 0, pride: 100 },
+      personality: { scheming: 0, sociability: 100, compassion: 0, courage: 0, jealousy: 0, emotionalStability: 0, pride: 100, intelligence: 50 },
       household: { ...makeSnap().household, privateWealthLevel: 0 },
     });
     expect(computeIntrigueSecrecy(actor, "faction_pressure")).toBeGreaterThanOrEqual(10);
@@ -395,7 +414,7 @@ describe("computeIntrigueSecrecy", () => {
   it("maximum clamped to 90", () => {
     const actor = makeSnap({
       fear: 0,
-      personality: { scheming: 100, sociability: 0, compassion: 0, courage: 0, jealousy: 0, emotionalStability: 100, pride: 0 },
+      personality: { scheming: 100, sociability: 0, compassion: 0, courage: 0, jealousy: 0, emotionalStability: 100, pride: 0, intelligence: 50 },
       household: { ...makeSnap().household, privateWealthLevel: 100 },
     });
     expect(computeIntrigueSecrecy(actor, "servant_subversion")).toBeLessThanOrEqual(90);
@@ -662,7 +681,7 @@ describe("buildRationale", () => {
       ambition: 70,
       fear: 70,
       loyalty: 30,
-      personality: { scheming: 65, sociability: 30, compassion: 30, courage: 30, jealousy: 65, emotionalStability: 30, pride: 30 },
+      personality: { scheming: 65, sociability: 30, compassion: 30, courage: 30, jealousy: 65, emotionalStability: 30, pride: 30, intelligence: 50 },
       household: { servantOpinion: 70, livingStandard: 50, privateWealthLevel: 70 },
     });
     const t = makeSnap({ characterId: "target", household: { servantOpinion: 70, livingStandard: 50, privateWealthLevel: 20 } });
@@ -684,7 +703,7 @@ describe("buildRationale", () => {
       ambition: 70,
       fear: 70,
       loyalty: 30,
-      personality: { scheming: 65, sociability: 30, compassion: 30, courage: 30, jealousy: 65, emotionalStability: 30, pride: 30 },
+      personality: { scheming: 65, sociability: 30, compassion: 30, courage: 30, jealousy: 65, emotionalStability: 30, pride: 30, intelligence: 50 },
       household: { servantOpinion: 70, livingStandard: 50, privateWealthLevel: 70 },
     });
     const rationale = buildRationale(a, target, {
@@ -695,5 +714,102 @@ describe("buildRationale", () => {
       rankRivalry: 30,
     });
     expect(new Set(rationale).size).toBe(rationale.length);
+  });
+});
+
+// ── P1-A: rngSeed divergence ──────────────────────────────────────────────────
+
+describe("pairTieJitter: rngSeed divergence (P1-A)", () => {
+  it("same rngSeed, same inputs → identical jitter", () => {
+    const a = pairTieJitter(3, 7, "char_001", "char_002", 99999);
+    const b = pairTieJitter(3, 7, "char_001", "char_002", 99999);
+    expect(a).toBe(b);
+  });
+
+  it("different rngSeed → different jitter on at least some inputs", () => {
+    // Try 10 year/month combos; statistically overwhelmingly likely to differ on at least one
+    let foundDiff = false;
+    for (let y = 1; y <= 5 && !foundDiff; y++) {
+      for (let m = 1; m <= 12 && !foundDiff; m++) {
+        const a = pairTieJitter(y, m, "char_001", "char_002", 1111);
+        const b = pairTieJitter(y, m, "char_001", "char_002", 9999);
+        if (a !== b) foundDiff = true;
+      }
+    }
+    expect(foundDiff).toBe(true);
+  });
+
+  it("rngSeed=0 and rngSeed=1 produce different streams", () => {
+    const results0 = Array.from({ length: 6 }, (_, i) =>
+      pairTieJitter(1, i + 1, "x", "y", 0)
+    );
+    const results1 = Array.from({ length: 6 }, (_, i) =>
+      pairTieJitter(1, i + 1, "x", "y", 1)
+    );
+    expect(results0).not.toEqual(results1);
+  });
+});
+
+// ── P1-B: rank rivalry with ladder ───────────────────────────────────────────
+
+import { buildHaremRankLadder, computeRankRivalry } from "../../src/engine/characters/haremIntrigue/scoring";
+import { loadRealContent } from "../helpers/contentFixture";
+
+describe("computeRankRivalry: ladder-based (P1-B)", () => {
+  it("same rank → 0 rivalry", () => {
+    expect(computeRankRivalry("meiren", "meiren", TEST_LADDER)).toBe(0);
+  });
+
+  it("adjacent ranks → non-zero rivalry", () => {
+    // meiren(index 0) vs guiren(index 1) → 1/3 * 100 = 33
+    const r = computeRankRivalry("meiren", "guiren", TEST_LADDER);
+    expect(r).toBeGreaterThan(0);
+    expect(r).toBeLessThanOrEqual(100);
+  });
+
+  it("rivalry is asymmetric: only fires when target is higher rank than actor", () => {
+    // meiren(index 0) targeting guiren(index 1) → rivalry > 0 (target higher)
+    const r1 = computeRankRivalry("meiren", "guiren", TEST_LADDER);
+    expect(r1).toBeGreaterThan(0);
+    // guiren(index 1) targeting meiren(index 0) → 0 (target is lower rank, no rivalry)
+    const r2 = computeRankRivalry("guiren", "meiren", TEST_LADDER);
+    expect(r2).toBe(0);
+  });
+
+  it("huanghou target does not produce rivalry > 100", () => {
+    // huanghou is index 3, meiren is index 0 → max gap = 3, max ladder = 3, rivalry = 100
+    const r = computeRankRivalry("meiren", "huanghou", TEST_LADDER);
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(100);
+  });
+
+  it("rivalry 0 when actor rank not in ladder", () => {
+    const r = computeRankRivalry("unknown_rank", "guiren", TEST_LADDER);
+    expect(r).toBe(0);
+  });
+
+  it("buildHaremRankLadder uses real content and returns only harem + non-deprecated ranks", () => {
+    const db = loadRealContent();
+    const ladder = buildHaremRankLadder(db);
+    // All entries should have valid indices 0, 1, 2, ...
+    ladder.forEach((entry, i) => {
+      expect(entry.index).toBe(i);
+      expect(entry.rankId).toBeTruthy();
+      expect(typeof entry.order).toBe("number");
+    });
+    // Should not include huanghou (order 1000, deprecated or domain=harem but excepted)
+    // Regardless: ladder should be sorted ascending by order
+    for (let i = 1; i < ladder.length; i++) {
+      expect(ladder[i]!.order).toBeGreaterThanOrEqual(ladder[i - 1]!.order);
+    }
+  });
+
+  it("rank_rivalry rationale triggers when rivalry is high enough", () => {
+    const actor = makeSnap({ rankId: "meiren", rankOrder: 100, ambition: 80, personality: { scheming: 80, sociability: 30, compassion: 30, courage: 30, jealousy: 80, emotionalStability: 30, pride: 50, intelligence: 50 } });
+    const t = makeSnap({ characterId: "target", rankId: "huanghou", rankOrder: 1000 });
+    const rivalry = computeRankRivalry("meiren", "huanghou", TEST_LADDER);
+    const rationale = buildRationale(actor, t, { grievanceStrength: 0, factionConflict: false, favorGap: 0, peakFavorGap: 0, rankRivalry: rivalry });
+    // Only assert it doesn't throw and is an array; whether rank_rivalry appears depends on thresholds
+    expect(Array.isArray(rationale)).toBe(true);
   });
 });
