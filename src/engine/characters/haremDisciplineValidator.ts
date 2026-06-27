@@ -102,12 +102,22 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
       }
       pendingTargets.add(inc.targetId);
 
-      // 5. pending must NOT have resolvedAt.
+        // 5a. pending must NOT have resolvedAt.
       if (inc.resolvedAt !== undefined) {
         errors.push(
           stateError(
             "HDI_PENDING_HAS_RESOLVED_AT",
             `haremDisciplineIncidents[id=${inc.id}]: pending_response incident has resolvedAt`,
+          ),
+        );
+      }
+
+      // 5b. pending must NOT have resolutionEventId.
+      if (inc.resolutionEventId !== undefined) {
+        errors.push(
+          stateError(
+            "HDI_PENDING_HAS_RESOLUTION_EVENT",
+            `haremDisciplineIncidents[id=${inc.id}]: pending_response incident has resolutionEventId`,
           ),
         );
       }
@@ -262,6 +272,16 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
             ),
           );
         } else {
+          // type must be "conflict".
+          if (resEvt.type !== "conflict") {
+            errors.push(
+              stateError(
+                "HDI_BAD_RESOLUTION_EVENT",
+                `haremDisciplineIncidents[id=${inc.id}]: resolution event type "${resEvt.type}" expected "conflict"`,
+              ),
+            );
+          }
+
           if (resEvt.payload?.subtype !== "harem_discipline_resolution") {
             errors.push(
               stateError(
@@ -270,11 +290,49 @@ export function validateHaremDisciplineLinks(data: StateSlice): GameError[] {
               ),
             );
           }
+
           if (resEvt.payload?.incidentId !== inc.id) {
             errors.push(
               stateError(
                 "HDI_RESOLUTION_INCIDENT_MISMATCH",
                 `haremDisciplineIncidents[id=${inc.id}]: resolution event payload.incidentId "${resEvt.payload?.incidentId}" !== "${inc.id}"`,
+              ),
+            );
+          }
+
+          // resolution value must match incident.
+          if (resEvt.payload?.resolution !== inc.resolution) {
+            errors.push(
+              stateError(
+                "HDI_RESOLUTION_VALUE_MISMATCH",
+                `haremDisciplineIncidents[id=${inc.id}]: resolution event payload.resolution "${resEvt.payload?.resolution}" !== incident.resolution "${inc.resolution}"`,
+              ),
+            );
+          }
+
+          // participants must include player/arbitrator, actor/discipliner, target/disciplined.
+          const resParts = resEvt.participants ?? [];
+          if (!resParts.some((p) => p.charId === "player" && p.role === "arbitrator")) {
+            errors.push(
+              stateError(
+                "HDI_RESOLUTION_PARTICIPANT_MISMATCH",
+                `haremDisciplineIncidents[id=${inc.id}]: resolution event missing player/arbitrator participant`,
+              ),
+            );
+          }
+          if (!resParts.some((p) => p.charId === inc.actorId && p.role === "discipliner")) {
+            errors.push(
+              stateError(
+                "HDI_RESOLUTION_PARTICIPANT_MISMATCH",
+                `haremDisciplineIncidents[id=${inc.id}]: resolution event missing ${inc.actorId}/discipliner participant`,
+              ),
+            );
+          }
+          if (!resParts.some((p) => p.charId === inc.targetId && p.role === "disciplined")) {
+            errors.push(
+              stateError(
+                "HDI_RESOLUTION_PARTICIPANT_MISMATCH",
+                `haremDisciplineIncidents[id=${inc.id}]: resolution event missing ${inc.targetId}/disciplined participant`,
               ),
             );
           }

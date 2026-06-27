@@ -364,4 +364,97 @@ describe("validateHaremDisciplineLinks", () => {
     const errs = validateHaremDisciplineLinks(s);
     expect(errs.some((e) => e.code === "HDI_RESOLUTION_EVENT_REUSED")).toBe(true);
   });
+
+  it("HDV-27: pending_response with resolutionEventId → HDI_PENDING_HAS_RESOLUTION_EVENT", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"));
+    s.haremDisciplineIncidents.push({
+      ...makeIncident("hdi_1_01", "pending_response"),
+      resolutionEventId: "res_evt_hdi_1_01",
+    });
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_PENDING_HAS_RESOLUTION_EVENT")).toBe(true);
+  });
+
+  it("HDV-28: resolution event type not 'conflict' → HDI_BAD_RESOLUTION_EVENT", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), {
+      id: "res_evt_hdi_1_01",
+      type: "ceremony" as "conflict",
+      payload: { subtype: "harem_discipline_resolution", incidentId: "hdi_1_01", resolution: "upheld" },
+      participants: [
+        { charId: "player", role: "arbitrator" },
+        { charId: actorId, role: "discipliner" },
+        { charId: targetId, role: "disciplined" },
+      ],
+    });
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved"));
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_BAD_RESOLUTION_EVENT")).toBe(true);
+  });
+
+  it("HDV-29: resolution event payload.resolution mismatch → HDI_RESOLUTION_VALUE_MISMATCH", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), {
+      id: "res_evt_hdi_1_01",
+      type: "conflict" as const,
+      payload: { subtype: "harem_discipline_resolution", incidentId: "hdi_1_01", resolution: "protected" },
+      participants: [
+        { charId: "player", role: "arbitrator" },
+        { charId: actorId, role: "discipliner" },
+        { charId: targetId, role: "disciplined" },
+      ],
+    });
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved")); // resolution: "upheld"
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_RESOLUTION_VALUE_MISMATCH")).toBe(true);
+  });
+
+  it("HDV-30: resolution event missing player/arbitrator → HDI_RESOLUTION_PARTICIPANT_MISMATCH", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), {
+      id: "res_evt_hdi_1_01",
+      type: "conflict" as const,
+      payload: { subtype: "harem_discipline_resolution", incidentId: "hdi_1_01", resolution: "upheld" },
+      participants: [
+        { charId: actorId, role: "discipliner" },
+        { charId: targetId, role: "disciplined" },
+      ],
+    });
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved"));
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_RESOLUTION_PARTICIPANT_MISMATCH")).toBe(true);
+  });
+
+  it("HDV-31: resolution event missing actor/discipliner → HDI_RESOLUTION_PARTICIPANT_MISMATCH", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), {
+      id: "res_evt_hdi_1_01",
+      type: "conflict" as const,
+      payload: { subtype: "harem_discipline_resolution", incidentId: "hdi_1_01", resolution: "upheld" },
+      participants: [
+        { charId: "player", role: "arbitrator" },
+        { charId: targetId, role: "disciplined" },
+      ],
+    });
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved"));
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_RESOLUTION_PARTICIPANT_MISMATCH")).toBe(true);
+  });
+
+  it("HDV-32: resolution event missing target/disciplined → HDI_RESOLUTION_PARTICIPANT_MISMATCH", () => {
+    const s = makeSlice();
+    s.chronicle.push(makeEvent("evt_hdi_1_01", "hdi_1_01"), {
+      id: "res_evt_hdi_1_01",
+      type: "conflict" as const,
+      payload: { subtype: "harem_discipline_resolution", incidentId: "hdi_1_01", resolution: "upheld" },
+      participants: [
+        { charId: "player", role: "arbitrator" },
+        { charId: actorId, role: "discipliner" },
+      ],
+    });
+    s.haremDisciplineIncidents.push(makeIncident("hdi_1_01", "resolved"));
+    const errs = validateHaremDisciplineLinks(s);
+    expect(errs.some((e) => e.code === "HDI_RESOLUTION_PARTICIPANT_MISMATCH")).toBe(true);
+  });
 });

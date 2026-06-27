@@ -879,6 +879,12 @@ export const gameStateSchema = z.strictObject({
     if (inc.status === "pending_response" && inc.resolution !== undefined) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: pending_response 不可有 resolution` });
     }
+    if (inc.status === "pending_response" && inc.resolvedAt !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: pending_response 不可有 resolvedAt` });
+    }
+    if (inc.status === "pending_response" && inc.resolutionEventId !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `haremDisciplineIncidents[id=${inc.id}]: pending_response 不可有 resolutionEventId` });
+    }
   })).default([]),
   haremAdminReviews: z.array(z.strictObject({
     id: idSchema,
