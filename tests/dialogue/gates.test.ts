@@ -3,7 +3,7 @@
  * is rejected/flagged exactly as specced; authored content trivially passes.
  */
 import { describe, expect, it } from "vitest";
-import { buildTextGateContext, getRankPrivateExemptions, scanDialogueText } from "../../src/engine/dialogue/gates";
+import { buildTextGateContext, scanDialogueText } from "../../src/engine/dialogue/gates";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -124,19 +124,11 @@ describe("凤君 conditional permission gate — full register × speaker matrix
   const zhaoyiPrivate  = buildTextGateContext(db, "zhaoyi", [], "private");
   const zhaoyiIntimate = buildTextGateContext(db, "zhaoyi", [], "intimate");
 
-  // Authorized 侍君/大臣: character-level permission passed as speakerAllowedTerms
-  const authConsortPrivate = buildTextGateContext(db, "fu",         ["凤君"], "private");
-  const authConsortCourt   = buildTextGateContext(db, "fu",         ["凤君"], "court");
-  const authOfficialPrivate = buildTextGateContext(db, "sili_zhang",["凤君"], "private");
-  const authOfficialCourt   = buildTextGateContext(db, "sili_zhang",["凤君"], "court");
-
-  // ── exemption API ────────────────────────────────────────────────────
-  it("getRankPrivateExemptions(huanghou) 包含凤君", () => {
-    expect(getRankPrivateExemptions("huanghou")).toContain("凤君");
-  });
-  it("getRankPrivateExemptions(zhaoyi) 为空", () => {
-    expect(getRankPrivateExemptions("zhaoyi")).toHaveLength(0);
-  });
+  // Authorized 侍君/大臣: character-level permission via typed addressPermissions key
+  const authConsortPrivate  = buildTextGateContext(db, "fu",          ["fengjun"], "private");
+  const authConsortCourt    = buildTextGateContext(db, "fu",          ["fengjun"], "court");
+  const authOfficialPrivate = buildTextGateContext(db, "sili_zhang",  ["fengjun"], "private");
+  const authOfficialCourt   = buildTextGateContext(db, "sili_zhang",  ["fengjun"], "court");
   it("凤君 在 lexicon.forbiddenTerms 中（全局禁用）", () => {
     expect(db.lexicon.forbiddenTerms).toContain("凤君");
   });

@@ -58,6 +58,7 @@ async function main() {
       addressRules: [],
     },
     register: "private",
+    addressPermissions: [],
     transcript: [],
     topicTags: [],
     promptContext: {

@@ -5,7 +5,7 @@
 > 官员 is already understood to be female (the term 「女帝」 is likewise dropped: the
 > 皇帝 is a woman).
 
-High power is held almost entirely by women: the 皇帝, 公主 and kinswomen,
+High power is held almost entirely by women: the 皇帝, 凤主 and kinswomen,
 官员, generals, priests, regional governors, and senior court ministers. Men may
 influence power through household, 承养, marriage, and service, but do not enter
 the formal political system.

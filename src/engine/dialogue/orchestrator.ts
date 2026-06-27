@@ -16,7 +16,7 @@ import type { CharacterStanding, EventReactionRecord, GameState } from "../state
 import { buildAudienceContext } from "./audience";
 import { assembleClaims } from "./claimAssembler";
 import { validateDialogueClaims } from "./claimGate";
-import { buildTextGateContext, getRankPrivateExemptions, scanDialogueText, type GateFinding } from "./gates";
+import { buildTextGateContext, scanDialogueText, type GateFinding } from "./gates";
 import {
   buildDialogueKnowledgeQuery,
   extractProvenance,
@@ -193,13 +193,13 @@ export function assembleDialogueRequest(
       stances: character.stances ?? [],
     },
     etiquette: {
-      // Include rank-level private exemptions so the LLM prompt knows 皇后 may use 凤君.
-      allowedTerms: [...db.lexicon.approvedTerms, ...getRankPrivateExemptions(contextStanding.rank)],
+      allowedTerms: db.lexicon.approvedTerms,
       forbiddenTerms: db.lexicon.forbiddenTerms,
       addressRules: db.lexicon.rankAddressRules,
     },
     resolvedAddress: resolveAddress(db, state, speakerId, targetId),
-    register: options.register ?? "private",
+    register: options.register ?? "public",
+    addressPermissions: character.dialoguePolicy?.addressPermissions ?? [],
     sceneDirective,
     transcript: transcript ?? [],
     topicTags,
@@ -230,7 +230,7 @@ function finalizeLine(
   const gateCtx = buildTextGateContext(
     db,
     request.speakerContext.standing.rank,
-    request.etiquette.allowedTerms,
+    request.addressPermissions,
     request.register,
   );
   gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];
@@ -423,7 +423,7 @@ export function validateDialogueProviderResult(
   const gateCtx = buildTextGateContext(
     db,
     request.speakerContext.standing.rank,
-    request.etiquette.allowedTerms,
+    request.addressPermissions,
     request.register,
   );
   gateCtx.contextForbiddenRefs = request.resolvedAddress?.forbiddenInContext ?? [];

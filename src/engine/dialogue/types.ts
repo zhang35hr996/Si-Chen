@@ -101,9 +101,11 @@ export interface DialogueRequest {
   time: GameTime; // never CalendarState — a speaker doesn't know the player's AP
   /**
    * Scene register: formality + privacy level. Drives conditional-term gate.
-   * Defaults to "private" in assembleDialogueRequest when not explicitly provided.
+   * Defaults to "public" (fail-closed) when not explicitly provided.
    */
   register: SceneRegister;
+  /** Typed address permission keys from character's dialoguePolicy.addressPermissions. */
+  addressPermissions: string[];
   speakerContext: {
     profile: CharacterContent["profile"];
     voice: CharacterContent["voice"];

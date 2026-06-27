@@ -79,14 +79,16 @@ const WRONG_PLAYER_HONORIFICS: string[] = [];
 
 /**
  * Rank-level private-term exemptions: terms in forbiddenTerms that a given rank
- * may use in private / intimate registers. Character-level permissions are passed
- * in as speakerAllowedTerms at call time.
- *
- * 凤君 — 皇后 may privately address the emperor this way.
- * Authorized 侍君 / ministers use character-level dialoguePolicy allowedTerms.
+ * may use in private / intimate registers.
+ * 凤君 — 皇后 may privately address the emperor this way (by rank, not individual permission).
  */
 const RANK_PRIVATE_EXEMPTIONS: Record<string, string[]> = {
   huanghou: ["凤君"],
+};
+
+/** Maps typed addressPermission keys to the actual forbidden term strings they unlock. */
+const ADDRESS_PERMISSION_TERMS: Record<string, string> = {
+  fengjun: "凤君",
 };
 
 /** Raw prompt-template tokens that must never survive into player-facing text. */
@@ -105,25 +107,29 @@ function allSelfRefs(refs: CharacterRank["selfRefs"]): string[] {
 /**
  * Assemble the gate context for one speaker from the loaded content.
  *
- * @param speakerRankId   The speaker's current harem rank ID (or "__elder__").
- * @param speakerAllowedTerms  Character-level allowedTerms from etiquette
- *   (includes both global approvedTerms and any rank exemptions already merged
- *   by the orchestrator). The gate uses this to populate privateAllowedTerms.
- * @param register  Scene register. Defaults to "private".
+ * @param speakerRankId        The speaker's current harem rank ID (or "__elder__").
+ * @param addressPermissions   Typed permission keys from character's dialoguePolicy
+ *   (e.g. ["fengjun"]). Each key maps via ADDRESS_PERMISSION_TERMS to a forbidden
+ *   term that is lifted in private/intimate registers. This is deliberately typed
+ *   (not an arbitrary string list) to prevent bypassing arbitrary global bans.
+ * @param register  Scene register. Defaults to "public" (fail-closed).
  */
 export function buildTextGateContext(
   db: ContentDB,
   speakerRankId: string,
-  speakerAllowedTerms: string[] = [],
-  register: SceneRegister = "private",
+  addressPermissions: string[] = [],
+  register: SceneRegister = "public",
 ): TextGateContext {
   const forbidden = db.lexicon.forbiddenTerms;
   const forbiddenSet = new Set(forbidden);
 
-  // Private-allowed = union of rank exemptions + character-level allowedTerms,
-  // intersected with forbiddenTerms (only relevant if they're actually forbidden).
+  // Private-allowed = rank exemptions ∪ character addressPermissions (mapped to terms),
+  // intersected with forbiddenTerms so we only lift actually-banned terms.
   const rankExemptions = RANK_PRIVATE_EXEMPTIONS[speakerRankId] ?? [];
-  const privateAllowed = [...new Set([...rankExemptions, ...speakerAllowedTerms])].filter((t) =>
+  const permissionTerms = addressPermissions.flatMap((p) =>
+    ADDRESS_PERMISSION_TERMS[p] !== undefined ? [ADDRESS_PERMISSION_TERMS[p]!] : [],
+  );
+  const privateAllowed = [...new Set([...rankExemptions, ...permissionTerms])].filter((t) =>
     forbiddenSet.has(t),
   );
 
@@ -146,10 +152,6 @@ export function buildTextGateContext(
   };
 }
 
-/** Terms that a given rank is allowed to use in private / intimate registers. */
-export function getRankPrivateExemptions(rankId: string): string[] {
-  return RANK_PRIVATE_EXEMPTIONS[rankId] ?? [];
-}
 
 export interface ScanOptions {
   /**
