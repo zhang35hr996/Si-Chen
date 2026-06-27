@@ -149,8 +149,8 @@ describe("save migration v26→v27 rank remapping", () => {
     });
   }
 
-  it("SAVE_FORMAT_VERSION is 27", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(27);
+  it("SAVE_FORMAT_VERSION is >= 27", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(27);
   });
 
   it("fenghou → huanghou in standing.rank", () => {

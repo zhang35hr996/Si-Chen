@@ -124,24 +124,24 @@ describe("peakFavor — A1", () => {
 // ────────────────────────────────────────────────────────────────────────────
 describe("rankDistance — A2", () => {
   it("same rank returns 0", () => {
-    expect(rankDistance(db, "fenghou", "fenghou")).toBe(0);
-    expect(rankDistance(db, "jun", "jun")).toBe(0);
+    expect(rankDistance(db, "huanghou", "huanghou")).toBe(0);
+    expect(rankDistance(db, "fu", "fu")).toBe(0);
   });
 
-  it("fenghou is higher than huangguijun (positive)", () => {
-    const d = rankDistance(db, "fenghou", "huangguijun");
+  it("huanghou is higher than huangguifu (positive)", () => {
+    const d = rankDistance(db, "huanghou", "huangguifu");
     expect(d).not.toBeNull();
     expect(d!).toBeGreaterThan(0);
   });
 
-  it("huangguijun is higher than jun (positive)", () => {
-    const d = rankDistance(db, "huangguijun", "jun");
+  it("huangguifu is higher than fu (positive)", () => {
+    const d = rankDistance(db, "huangguifu", "fu");
     expect(d).not.toBeNull();
     expect(d!).toBeGreaterThan(0);
   });
 
-  it("jun is higher than fu (positive)", () => {
-    const d = rankDistance(db, "jun", "fu");
+  it("fu is higher than chenghui (positive)", () => {
+    const d = rankDistance(db, "fu", "chenghui");
     expect(d).not.toBeNull();
     expect(d!).toBeGreaterThan(0);
   });
@@ -159,8 +159,8 @@ describe("rankDistance — A2", () => {
   });
 
   it("unknown rank returns null", () => {
-    expect(rankDistance(db, "rank_ghost", "fenghou")).toBeNull();
-    expect(rankDistance(db, "fenghou", "rank_ghost")).toBeNull();
+    expect(rankDistance(db, "rank_ghost", "huanghou")).toBeNull();
+    expect(rankDistance(db, "huanghou", "rank_ghost")).toBeNull();
   });
 });
 
