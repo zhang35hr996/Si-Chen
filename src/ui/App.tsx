@@ -39,7 +39,7 @@ import { assetError, stateError } from "../engine/infra/errors";
 
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
-import { greetingAttendees } from "../engine/characters/greeting";
+import { greetingAttendees, gardenSubLocationFor } from "../engine/characters/greeting";
 import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
@@ -1898,9 +1898,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         const loc = db.locations["yuhuayuan"]!;
         const bg = registry.resolveVariant(loc.backgroundKey, timeOfDay(liveState.calendar), "background");
         const presentItems = presentBarItems(db, liveState, "yuhuayuan");
-        const presentIds = presentItems.map((i) => i.id);
-        const effSel = gardenSelectedId == null ? null : reconcileSelection(presentIds, gardenSelectedId);
-        const focused = effSel ? focusedCharacterView(db, liveState, registry, effSel) : undefined;
         const subAreas: GardenSubAreaView[] = (loc.subLocations ?? []).map((sa) => {
           const ev = pickSubLocationEvent(db, liveState, "yuhuayuan", sa.id);
           const sbg = registry.resolveVariant(sa.backgroundKey, timeOfDay(liveState.calendar), "background");
@@ -1920,6 +1917,16 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           };
         });
         const activeSub = gardenSubLocationId ? subAreas.find((s) => s.id === gardenSubLocationId) ?? null : null;
+        // 子地点视图：只显示分配到该子地点的侍君；总览：显示园中全部在场人物。
+        const subLocationIds = (loc.subLocations ?? []).map((sa) => sa.id);
+        const subPresentItems = activeSub
+          ? presentItems.filter((i) =>
+              gardenSubLocationFor(liveState.rngSeed, liveState.calendar.dayIndex, i.id, subLocationIds) === activeSub.id,
+            )
+          : presentItems;
+        const subPresentIds = subPresentItems.map((i) => i.id);
+        const effSel2 = gardenSelectedId == null ? null : reconcileSelection(subPresentIds, gardenSelectedId);
+        const focused2 = effSel2 ? focusedCharacterView(db, liveState, registry, effSel2) : undefined;
         const leaveGarden = () => { setGardenSelectedId(null); setGardenSubLocationId(null); setMapAtRoot(false); setView("map"); };
         const enterGardenSubArea = (subId: string) => {
           // 子地点有可探索事件且可承担 → 进入即开始（返回上下文精确到该子地点）；
@@ -1949,9 +1956,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               backgroundPosition={loc.backgroundPosition}
               subAreas={subAreas}
               activeSubArea={activeSub}
-              presentBar={presentItems}
-              selectedId={effSel}
-              focusedCharacter={focused}
+              presentBar={subPresentItems}
+              selectedId={effSel2}
+              focusedCharacter={focused2}
               onSelectCharacter={setGardenSelectedId}
               onEnterSubArea={enterGardenSubArea}
               onExitSubArea={() => setGardenSubLocationId(null)}

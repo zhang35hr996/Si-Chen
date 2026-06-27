@@ -80,5 +80,20 @@ export function greetingAttendees(db: ContentDB, state: GameState): CharacterCon
   );
 }
 
+/**
+ * 确定性子地点分配：御花园中的侍君每旬固定落在某一子地点，与游走判定独立。
+ * 同一 rngSeed + dayIndex + charId 恒定返回同一子地点。
+ */
+export function gardenSubLocationFor(
+  rngSeed: number,
+  dayIndex: number,
+  charId: string,
+  subLocationIds: readonly string[],
+): string | null {
+  if (subLocationIds.length === 0) return null;
+  const roll = parseInt(fnv1a64Hex(`${rngSeed}:${dayIndex}:gsl:${charId}`).slice(0, 8), 16);
+  return subLocationIds[roll % subLocationIds.length]!;
+}
+
 /** 重新导出 getGreetingLocation 供外部（LocationScreen 等）直接使用。 */
 export { getGreetingLocation };
