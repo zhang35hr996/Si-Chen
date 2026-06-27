@@ -40,3 +40,28 @@ export function pickSubLocationEvent(
 export function subLocationEventAffordable(state: GameState, event: GameEventContent): boolean {
   return event.apCost <= state.calendar.ap;
 }
+
+/**
+ * 从当前可触发的 exploration 事件中，提取"场景参与者 → 子地点"固定映射。
+ * 若某子地点有可触发事件，其场景 participants 优先固定到该子地点，
+ * 覆盖 gardenSubLocationFor 的哈希分配。
+ * 用于：御花园子地点展示时，有剧情的侍君不被哈希分配到错误位置。
+ */
+export function eventPinnedSubLocations(
+  db: ContentDB,
+  state: GameState,
+  locationId: string,
+  subLocationIds: readonly string[],
+): Map<string, string> {
+  const pinned = new Map<string, string>();
+  for (const subId of subLocationIds) {
+    const ev = pickSubLocationEvent(db, state, locationId, subId);
+    if (!ev || !ev.sceneId) continue;
+    const scene = db.scenes[ev.sceneId];
+    if (!scene) continue;
+    for (const charId of scene.participants) {
+      pinned.set(charId, subId);
+    }
+  }
+  return pinned;
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContentDB } from "../../src/engine/content/loader";
 import type { GameEventContent } from "../../src/engine/content/schemas";
-import { pickSubLocationEvent, subLocationEventAffordable } from "../../src/engine/map/subLocations";
+import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations } from "../../src/engine/map/subLocations";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
@@ -111,5 +111,31 @@ describe("pickSubLocationEvent", () => {
     const s = at("yuhuayuan");
     expect(subLocationEventAffordable({ ...s, calendar: { ...s.calendar, ap: 1 } }, ev)).toBe(true);
     expect(subLocationEventAffordable({ ...s, calendar: { ...s.calendar, ap: 0 } }, ev)).toBe(false);
+  });
+});
+
+describe("eventPinnedSubLocations", () => {
+  const SUB_IDS = ["taiyechi", "duixiushan", "jiangxuexuan"] as const;
+
+  it("eligible event 的 scene participants 固定到其子地点", () => {
+    // ev_shen_neglect 绑定 taiyechi，scene sc_shen_neglect participants=[lu_huaijin]
+    const pinned = eventPinnedSubLocations(db, at("yuhuayuan"), "yuhuayuan", SUB_IDS);
+    expect(pinned.get("lu_huaijin")).toBe("taiyechi");
+  });
+
+  it("已触发（一次性）事件不再产生固定映射", () => {
+    // ev_shen_neglect 是 once=true；写入 eventLog 后 getEligibleEvents 会排除它
+    const base = at("yuhuayuan");
+    const fired = {
+      ...base,
+      eventLog: [{ eventId: "ev_shen_neglect", dayIndex: 0, time: 0 }],
+    };
+    const pinned = eventPinnedSubLocations(db, fired as Parameters<typeof eventPinnedSubLocations>[1], "yuhuayuan", SUB_IDS);
+    expect(pinned.has("lu_huaijin")).toBe(false);
+  });
+
+  it("无 exploration 事件的子地点不产生固定映射", () => {
+    const pinned = eventPinnedSubLocations(db, at("yuhuayuan"), "yuhuayuan", ["duixiushan"]);
+    expect(pinned.size).toBe(0);
   });
 });

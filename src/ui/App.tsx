@@ -157,7 +157,7 @@ import { MemorialsScreen } from "./court/MemorialsScreen";
 import { getPendingMemorials } from "../engine/court/memorials";
 import { getHighVacancyPosts } from "../engine/officials/selectors";
 import { getUnacknowledgedExaminationResults } from "../engine/officials/examination";
-import { pickSubLocationEvent, subLocationEventAffordable } from "../engine/map/subLocations";
+import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations } from "../engine/map/subLocations";
 import { presentBarItems, focusedCharacterView, reconcileSelection } from "./sceneView";
 import { courtAgendaPreview, snapshotCourtMetrics, diffCourtMetrics, type CourtMetrics, type CourtMetricsDiff } from "../engine/court/agenda";
 import { buildCourtSummary, courtHoldGate } from "./xuanzhengView";
@@ -1927,10 +1927,14 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         const activeSub = gardenSubLocationId ? subAreas.find((s) => s.id === gardenSubLocationId) ?? null : null;
         // 子地点视图：只显示分配到该子地点的侍君；总览：显示园中全部在场人物。
         const subLocationIds = (loc.subLocations ?? []).map((sa) => sa.id);
+        // 有剧情事件的参与者优先固定到事件子地点，其他侍君走哈希分配。
+        const pinnedMap = eventPinnedSubLocations(db, liveState, loc.id, subLocationIds);
         const subPresentItems = activeSub
-          ? presentItems.filter((i) =>
-              gardenSubLocationFor(liveState.rngSeed, liveState.calendar.dayIndex, i.id, subLocationIds) === activeSub.id,
-            )
+          ? presentItems.filter((i) => {
+              const pin = pinnedMap.get(i.id);
+              if (pin !== undefined) return pin === activeSub.id;
+              return gardenSubLocationFor(liveState.rngSeed, liveState.calendar.dayIndex, i.id, subLocationIds) === activeSub.id;
+            })
           : presentItems;
         const subPresentIds = subPresentItems.map((i) => i.id);
         const effSel2 = gardenSelectedId == null ? null : reconcileSelection(subPresentIds, gardenSelectedId);
