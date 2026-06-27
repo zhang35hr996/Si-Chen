@@ -15,8 +15,8 @@ describe("buildSpeakerProfiles", () => {
     expect(lu).toBeDefined();
     expect(lu!.register).toBe("poetic");
     expect(lu!.addressTerm).toBe("陛下");
-    // lu_huaijin voice.quirks include 自称『侍身』 → lexeme 侍身
-    expect(lu!.quirkLexemes).toContain("侍身");
+    // lu_huaijin voice.quirks include 自称『臣侍』 → lexeme 臣侍
+    expect(lu!.quirkLexemes).toContain("臣侍");
     expect(lu!.selfRefs.length).toBeGreaterThan(0);
   });
 });

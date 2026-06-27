@@ -19,10 +19,11 @@ function oneConsortAt(rank: string, favor: number): GameState {
 
 describe("adjacentHaremRank", () => {
   it("promote = next higher band rank; demote = next lower; edges null", () => {
-    // DECREE_RANK_CEILING=100 (meiren), FLOOR=50 (includes guannanzi at 52)
+    // DECREE_RANK_CEILING=116 (guiren), FLOOR=50 (includes guannanzi at 52)
     expect(adjacentHaremRank(db, "cairen", "promote")).toBe("meiren"); // 92 → 100
     expect(adjacentHaremRank(db, "cairen", "demote")).toBe("changzai"); // 92 → 84
-    expect(adjacentHaremRank(db, "meiren", "promote")).toBeNull(); // 100 = ceiling
+    expect(adjacentHaremRank(db, "meiren", "promote")).toBe("liangren"); // 100 → 108
+    expect(adjacentHaremRank(db, "guiren", "promote")).toBeNull(); // 116 = ceiling
     expect(adjacentHaremRank(db, "guannanzi", "demote")).toBeNull(); // 52 = floor
   });
 });
@@ -50,8 +51,8 @@ describe("decideDecree", () => {
     expect(decideDecree(db, oneConsortAt("cairen", 50), "seed-A")).toBeNull();
   });
 
-  it("ceiling: 美人 + high favor → null", () => {
-    expect(decideDecree(db, oneConsortAt("meiren", 90), "seed-A")).toBeNull();
+  it("ceiling: 贵人 + high favor → null", () => {
+    expect(decideDecree(db, oneConsortAt("guiren", 90), "seed-A")).toBeNull();
   });
 
   it("floor: 官男子 + low favor → null", () => {

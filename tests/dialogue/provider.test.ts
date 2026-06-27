@@ -123,12 +123,12 @@ describe("produceDialogueTurn text gates (PR 11)", () => {
   });
 
   it("rejects a speaker borrowing another rank's selfRef", async () => {
-    // 承徽 borrowing 驸-tier's 臣侍 (臣侍 is foreign to chenghui who uses 侍/侍身).
-    const result = await produceLine(speaking("臣侍自有主张。"), requestForGen("lu_huaijin"));
+    // 承徽 (臣侍 tier) borrowing 少使/贵人 tier's 侍身 (侍身 is foreign to chenghui who uses 臣侍).
+    const result = await produceLine(speaking("侍身自有主张。"), requestForGen("lu_huaijin"));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("GATE_REJECTED");
-      expect(result.error.context?.findings).toContainEqual({ gate: "self_ref", matched: "臣侍" });
+      expect(result.error.context?.findings).toContainEqual({ gate: "self_ref", matched: "侍身" });
     }
   });
 
@@ -161,7 +161,7 @@ describe("produceDialogueTurn text gates (PR 11)", () => {
   });
 
   it("speakerName recomposes from surname + 位分", async () => {
-    const result = await produceLine(speaking("……侍身知罪。"), requestForGen("lu_huaijin"));
+    const result = await produceLine(speaking("……臣侍知罪。"), requestForGen("lu_huaijin"));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.line.speakerName).toBe("陆承徽");
   });

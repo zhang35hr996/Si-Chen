@@ -121,7 +121,7 @@ describe("golden scenarios smoke", () => {
 
     expect(result.schemaStatus).toBe("pass");
     expect(result.gateStatus).toBe("pass");
-    expect(result.text).toBe("侍身领命，不敢有怨。");
+    expect(result.text).toBe("臣侍领命，不敢有怨。");
     expect(result.expectationStatus).toBe("pass");
   });
 });
