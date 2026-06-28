@@ -15,7 +15,6 @@ describe("bestow 赏赐", () => {
       const c = db.characters[id] ?? state.generatedConsorts[id];
       return c?.kind === "consort" && state.standing[id]?.rank !== "huanghou";
     })!;
-    const consort = db.characters[consortId] ?? state.generatedConsorts[consortId]!;
     // 用一件 common(base=2) 物品
     const common = Object.values(db.items).find((i) => i.tier === "common")!;
     state.resources.storehouse.items[common.id] = 1;

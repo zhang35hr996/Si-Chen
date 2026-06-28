@@ -27,7 +27,6 @@ import { loadRealContent } from "../helpers/contentFixture";
 const db = loadRealContent();
 const COLD_PALACE_ID = "changmengong";
 const STORY_CONSORT_IDS = ["lu_huaijin", "xu_qinghuan", "wenya"];
-const TIER1_RANKS = new Set(["guifu"]);
 const TIER2_RANKS = new Set(["xianfu", "liangfu", "defu", "fu"]);
 const VALID_RANK_IDS = new Set(db.world.ranks.map((r) => r.id));
 
@@ -207,10 +206,7 @@ describe("R9: 贵驸封号约束", () => {
 
   it.each(seeds)("seed=%i: 贵驸最多 1 位", (seed) => {
     const s = createNewGameState(db, seed);
-    const tier1Count = Object.values(s.generatedConsorts).filter(
-      (_, idx) => TIER1_RANKS.has(s.standing[Object.keys(s.generatedConsorts)[idx]!]?.rank ?? ""),
-    ).length;
-    // Alternative: directly count from standing
+    // Directly count from standing
     const guifuCount = Object.keys(s.generatedConsorts).filter(
       (id) => s.standing[id]?.rank === "guifu",
     ).length;

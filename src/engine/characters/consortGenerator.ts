@@ -7,8 +7,9 @@
 import { fnv1a64Hex } from "../save/canonical";
 import { OFFICIAL_SURNAME_POOL } from "../officials/namePool";
 import { materializePersonality, createDefaultHousehold } from "./consortAttrs";
+import { CHAMBERED_PALACE_ORDER } from "./chambers";
 import type { CharacterContent } from "../content/schemas";
-import type { CharacterStanding, ConsortPersonality } from "../state/types";
+import type { CharacterStanding, ChamberId, ConsortPersonality } from "../state/types";
 import type { GameTime } from "../calendar/time";
 
 // ── Seeded RNG helpers ────────────────────────────────────────────────────────
@@ -226,22 +227,10 @@ function pickRank(seed: string, tier1Used: number, tier2Used: number): string {
   return eligible[eligible.length - 1]!.rank;
 }
 
-// ── Harem palace pool (excluding empress & cold palace) ───────────────────────
+// ── Chamber assignment by rank order ─────────────────────────────────────────
+// 位分高（order≥176，即驸及以上）住主殿；中位（100–175）住侧殿；低位（<100）住偏殿。
+// 同等级内按入宫顺序交替左右，保证初始分配合理，且不依赖运行时槽位检查。
 
-const CONSORT_PALACES: readonly string[] = [
-  "zhongcui_gong",
-  "yikun_gong",
-  "chenghui_gong",
-  "jiyue_gong",
-  "jingren_gong",
-  "yanhe_gong",
-  "chengqian_gong",
-  "wenzhaodian",
-  "zhaoning_gong",
-  "chuxiu_gong",
-  "xianfugong",
-  "yongshou_gong",
-];
 
 // ── Portrait pool ─────────────────────────────────────────────────────────────
 // 侍君立绘统一编号（consort1–consort33，跳过 consort31 因文件名含特殊字符）。
@@ -285,11 +274,18 @@ export function generateInitialConsorts(
 
   const count = 1 + seededRoll(`${prefix}:count`, 5);
 
-  // Deterministic shuffle of palace pool
-  const palaces = [...CONSORT_PALACES];
+  // Deterministic shuffle of palace pool (CHAMBERED_PALACE_ORDER = 正式侍君寝宫，不含坤宁/冷宫/储秀)
+  const palaces = [...CHAMBERED_PALACE_ORDER];
   for (let i = palaces.length - 1; i > 0; i--) {
     const j = seededRoll(`${prefix}:palaces:${i}`, i + 1);
     [palaces[i], palaces[j]] = [palaces[j]!, palaces[i]!];
+  }
+
+  // Deterministic shuffle of portrait pool: 同批侍君不复用同一张立绘。
+  const portraits = [...PORTRAIT_POOL];
+  for (let i = portraits.length - 1; i > 0; i--) {
+    const j = seededRoll(`${prefix}:portshuf:${i}`, i + 1);
+    [portraits[i], portraits[j]] = [portraits[j]!, portraits[i]!];
   }
 
   const usedFullNames = new Set<string>();
@@ -370,7 +366,11 @@ export function generateInitialConsorts(
 
     // Favor & residence
     const favor    = seededRange(`${p}:favor`, 5, 35);
-    const residence = palaces[i] ?? CONSORT_PALACES[i % CONSORT_PALACES.length]!;
+    const residence = palaces[i] ?? CHAMBERED_PALACE_ORDER[i % CHAMBERED_PALACE_ORDER.length]!;
+    const rankEntry = RANK_POOL.find((r) => r.rank === rank)!;
+    const chamber: ChamberId = (rankEntry?.tier1 || rankEntry?.tier2)
+      ? "main"
+      : i % 2 === 0 ? "east_side" : "west_side";
 
     // Personality traits (2–3)
     const traitPool = archetype.personalityTraits;
@@ -389,7 +389,7 @@ export function generateInitialConsorts(
       attributes: { appearance, health, nurture, specialty, likes },
       hidden: { affection, fear, ambition, loyalty, personality },
       profile: {
-        name: givenName,
+        name: `${surname}${givenName}`,
         surname,
         age,
         role: archetype.role,
@@ -401,7 +401,7 @@ export function generateInitialConsorts(
         speechStyle: archetype.speechStyle,
       },
       defaultLocation: residence,
-      portraitSet: PORTRAIT_POOL[seededRoll(`${p}:portrait`, PORTRAIT_POOL.length)]!,
+      portraitSet: portraits[i] ?? PORTRAIT_POOL[0]!,
       expressions: ["neutral"],
       voice: {
         register: seededRoll(`${p}:voice`, 2) === 0 ? "formal" : "casual",
@@ -418,6 +418,7 @@ export function generateInitialConsorts(
       favor,
       peakFavor: favor,
       residence,
+      chamber,
       affection,
       fear,
       ambition,
