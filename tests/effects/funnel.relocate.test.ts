@@ -4,14 +4,18 @@ import { applyEffects } from "../../src/engine/effects/funnel";
 import { getCharacterLocation } from "../../src/engine/characters/presence";
 import { chamberOf } from "../../src/engine/characters/chambers";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
+const mkState = () =>
+  withConsort(withConsort(createNewGameState(db), db, "lu_huaijin"), db, "xu_qinghuan");
+
 describe("funnel: relocate", () => {
   it("moves a consort to an empty chamber of another palace", () => {
-    const s0 = createNewGameState(db);
+    const s0 = mkState();
     // lu_huaijin 初始住钟粹宫主殿。
     expect(getCharacterLocation(db, s0, "lu_huaijin")).toBe("zhongcui_gong");
     const r = applyEffects(db, s0, [
@@ -24,7 +28,7 @@ describe("funnel: relocate", () => {
   });
 
   it("rejects relocating the 皇后 (empress)", () => {
-    const s0 = createNewGameState(db);
+    const s0 = mkState();
     const r = applyEffects(db, s0, [
       { type: "relocate", char: "shen_zhibai", location: "chengqian_gong", chamber: "main" },
     ]);
@@ -32,7 +36,7 @@ describe("funnel: relocate", () => {
   });
 
   it("rejects a non-设宫室 target location", () => {
-    const s0 = createNewGameState(db);
+    const s0 = mkState();
     const r = applyEffects(db, s0, [
       { type: "relocate", char: "lu_huaijin", location: "kunninggong", chamber: "main" },
     ]);
@@ -40,7 +44,7 @@ describe("funnel: relocate", () => {
   });
 
   it("rejects a chamber already occupied by another consort", () => {
-    const s0 = createNewGameState(db);
+    const s0 = mkState();
     // xu_qinghuan 初始住咸福宫主殿；把 lu_huaijin 迁入同一格应被拒。
     expect(getCharacterLocation(db, s0, "xu_qinghuan")).toBe("xianfugong");
     const r = applyEffects(db, s0, [
@@ -50,7 +54,7 @@ describe("funnel: relocate", () => {
   });
 
   it("allows moving within the same palace to a different chamber", () => {
-    const s0 = createNewGameState(db);
+    const s0 = mkState();
     const r = applyEffects(db, s0, [
       { type: "relocate", char: "lu_huaijin", location: "zhongcui_gong", chamber: "west_annex" },
     ]);

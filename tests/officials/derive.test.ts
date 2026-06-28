@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { familyText, maternalHead, maternalLoyalty, maternalPower } from "../../src/engine/officials/derive";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+const state = withConsort(createNewGameState(db), db, "xu_qinghuan");
 const xu = db.characters["xu_qinghuan"]!; // surname 徐, maternalClan{bingbu_shangshu, 嫡, 次}
 
 describe("maternal derivations", () => {

@@ -39,6 +39,7 @@ import { consortPersonalitySeedSchema, consortPersonalitySchema, consortHousehol
 import { consortStandingExtras, createNewGameState } from "../../src/engine/state/newGame";
 import { generateCandidates, addGeneratedConsort } from "../../src/store/grandSelection";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import type { ConsortPersonality, ConsortHousehold } from "../../src/engine/state/types";
 
 const db = loadRealContent();
@@ -176,7 +177,7 @@ describe("consortStandingExtras — personality + household", () => {
 // ── 10. createNewGameState: authored consorts ─────────────────────────────────
 
 describe("createNewGameState — social simulation fields", () => {
-  const state = createNewGameState(db);
+  const state = withConsort(createNewGameState(db), db, "lu_huaijin");
 
   it("authored consort standing includes personality", () => {
     expect(state.standing["lu_huaijin"]?.personality).toEqual(PERSONALITY_DEFAULTS);

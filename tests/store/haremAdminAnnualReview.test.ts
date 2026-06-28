@@ -23,6 +23,7 @@ import { makeGameTime, dayIndexOf } from "../../src/engine/calendar/time";
 import type { CalendarState } from "../../src/engine/calendar/time";
 import type { GameState, HaremAdminReviewRecord } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import {
   SAVE_FORMAT_VERSION,
   createSaveData,
@@ -53,7 +54,7 @@ function wenyaFixture(opts: {
   servantOpinion?: number;
   rank?: string;
 } = {}): GameState {
-  const state = createNewGameState(db);
+  const state = withConsort(createNewGameState(db), db, "wenya");
   const existing = state.standing["wenya"]!;
   return {
     ...state,

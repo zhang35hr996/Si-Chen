@@ -17,14 +17,31 @@ import type { GameState } from "../../src/engine/state/types";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { SAVE_FORMAT_VERSION } from "../../src/engine/save/saveSystem";
 import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 // ─── 共用工具 ────────────────────────────────────────────────────────────────
 
+/**
+ * 基础游戏状态：注入 xu_qinghuan 和 lu_huaijin（event_only 侍君），
+ * 并将生成侍君降为才人（cairen）以避免干扰协理资格判断。
+ */
+function mkState(): GameState {
+  const base = createNewGameState(db);
+  const s = withConsort(withConsort(base, db, "xu_qinghuan"), db, "lu_huaijin");
+  const updatedStanding = { ...s.standing };
+  for (const id of Object.keys(s.generatedConsorts)) {
+    if (updatedStanding[id]) {
+      updatedStanding[id] = { ...updatedStanding[id]!, rank: "cairen" as const };
+    }
+  }
+  return { ...s, standing: updatedStanding };
+}
+
 function freshStore() {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(mkState());
   return store;
 }
 
@@ -47,7 +64,7 @@ describe("eligibleHaremAdministrators — 候选资格", () => {
   // T13: 驸（order 140）恰好满足门槛
   it("T13: 驸（order 140）的侍君满足候选门槛", () => {
     // 构造一个 standing.rank === "fu" 的侍君，验证恰好满足门槛。
-    const base = createNewGameState(db);
+    const base = mkState();
     // 借用 xu_qinghuan 的 character content，临时把她的 standing.rank 降为 fu。
     const state: GameState = {
       ...base,
@@ -62,7 +79,7 @@ describe("eligibleHaremAdministrators — 候选资格", () => {
 
   // T13b: 承徽（order 134）恰好低于门槛
   it("T13b: 承徽（order 134）低于驸门槛，不满足候选资格", () => {
-    const base = createNewGameState(db);
+    const base = mkState();
     const state: GameState = {
       ...base,
       standing: {
@@ -76,7 +93,7 @@ describe("eligibleHaremAdministrators — 候选资格", () => {
 
   // T14: 承徽（order 134）不满足门槛
   it("T14: 承徽（order 134）不满足候选门槛", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const eligible = eligibleHaremAdministrators(db, state);
     const charIds = eligible.map((c) => c.id);
     expect(charIds).not.toContain("lu_huaijin"); // chenghui(134) < fu(140)
@@ -84,7 +101,7 @@ describe("eligibleHaremAdministrators — 候选资格", () => {
 
   // T15: jun（160）满足位分门槛
   it("T15: 君（order 160）满足位分门槛", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const eligible = eligibleHaremAdministrators(db, state);
     expect(eligible.some((c) => c.id === "xu_qinghuan")).toBe(true);
   });
@@ -105,7 +122,7 @@ describe("eligibleHaremAdministrators — 候选资格", () => {
   });
 
   it("T16c: 冷宫侍君不可协理", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const cold = {
       ...state,
       standing: {
@@ -123,7 +140,7 @@ describe("eligibleHaremAdministrators — 候选资格", () => {
 describe("planImperialCommand — 皇后禁足命令校验", () => {
   // T10: 皇后可以被禁足（有合格候选时携带候选）
   it("T10: 皇后可以被禁足", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const r = planImperialCommand(db, state, {
       type: "impose_confinement",
       targetId: "shen_zhibai",
@@ -153,7 +170,7 @@ describe("planImperialCommand — 皇后禁足命令校验", () => {
 
   // T12: 普通侍君禁足不触发协理选择（无 set_harem_administration 效果）
   it("T12: 普通侍君禁足不包含 set_harem_administration 效果", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const r = planImperialCommand(db, state, {
       type: "impose_confinement",
       targetId: "lu_huaijin",
@@ -166,7 +183,7 @@ describe("planImperialCommand — 皇后禁足命令校验", () => {
 
   // T17: 有候选时 command 缺少 administrator 被拒
   it("T17: 有候选时缺 administrator 被拒", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const r = planImperialCommand(db, state, {
       type: "impose_confinement",
       targetId: "shen_zhibai",
@@ -178,7 +195,7 @@ describe("planImperialCommand — 皇后禁足命令校验", () => {
 
   // T18: 有候选时选择 neiwu_proxy 被拒
   it("T18: 有候选时选择 neiwu_proxy 被拒", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const r = planImperialCommand(db, state, {
       type: "impose_confinement",
       targetId: "shen_zhibai",
@@ -221,7 +238,7 @@ describe("planImperialCommand — 皇后禁足命令校验", () => {
 describe("请安地点 — getGreetingLocation", () => {
   // T20: 协理者寝殿成为请安地点
   it("T20: acting_consort 模式下，协理者寝殿为请安地点", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     // xu_qinghuan 住处 = content 的 defaultLocation
     const adminState = withActingConsort(state, "xu_qinghuan");
     const loc = getGreetingLocation(db, adminState);
@@ -233,7 +250,7 @@ describe("请安地点 — getGreetingLocation", () => {
 
   // T23: 坤宁宫不再触发请安（acting_consort 模式）
   it("T23: acting_consort 模式下，getGreetingLocation 不返回 kunninggong（当协理者不住坤宁宫时）", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const adminState = withActingConsort(state, "xu_qinghuan");
     const loc = getGreetingLocation(db, adminState);
     // xu_qinghuan 不住坤宁宫
@@ -243,10 +260,10 @@ describe("请安地点 — getGreetingLocation", () => {
   // T24: 内务府代理期间无正式请安
   it("T24: neiwu_proxy 模式下，getGreetingLocation 返回 null", () => {
     const state: GameState = {
-      ...createNewGameState(db),
+      ...mkState(),
       haremAdministration: {
         mode: "neiwu_proxy",
-        appointedAt: toGameTime(createNewGameState(db).calendar),
+        appointedAt: toGameTime(mkState().calendar),
         reason: "no_eligible_consort",
       },
     };
@@ -258,7 +275,7 @@ describe("请安地点 — getGreetingLocation", () => {
 describe("greetingAttendees — 出席者过滤", () => {
   // T21: 协理者本人不参加请安（不在 greetingAttendees 返回列表中）
   it("T21: acting_consort 模式下，协理者本人不在 greetingAttendees 列表中", () => {
-    const base = createNewGameState(db);
+    const base = mkState();
     // 设置为卯时（MAO_SLOT）
     const state: GameState = {
       ...withActingConsort(base, "xu_qinghuan"),
@@ -270,7 +287,7 @@ describe("greetingAttendees — 出席者过滤", () => {
 
   // T22: 与协理者同宫的其他侍君仍参加请安
   it("T22: 与协理者同宫的其他侍君仍参加请安（不因住处相同被排除）", () => {
-    const base = createNewGameState(db);
+    const base = mkState();
     // 把 lu_huaijin 搬到与 xu_qinghuan 相同的宫
     const xqHome = base.standing.xu_qinghuan?.residence ?? db.characters.xu_qinghuan!.defaultLocation;
     const state: GameState = {
@@ -290,7 +307,7 @@ describe("greetingAttendees — 出席者过滤", () => {
 
 describe("consortLocationAt — 卯时路由", () => {
   it("T23b: 普通侍君卯时前往协理者寝殿，而非坤宁宫", () => {
-    const base = createNewGameState(db);
+    const base = mkState();
     const state: GameState = {
       ...withActingConsort(base, "xu_qinghuan"),
       calendar: { ...base.calendar, dayIndex: MAO_SLOT },
@@ -303,7 +320,7 @@ describe("consortLocationAt — 卯时路由", () => {
   });
 
   it("neiwu_proxy 时，侍君卯时留家（无请安地点）", () => {
-    const base = createNewGameState(db);
+    const base = mkState();
     const state: GameState = {
       ...base,
       haremAdministration: {
@@ -522,7 +539,7 @@ describe("协理者失格时玩家选择接任者", () => {
 
 describe("set_harem_administration 效果语义校验", () => {
   it("T34a: 在皇后未禁足时，set empress 模式合法", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     // 皇后未禁足，设 empress 模式合法
     const r = applyEffects(db, state, [
       { type: "set_harem_administration", state: { mode: "empress" } },
@@ -531,7 +548,7 @@ describe("set_harem_administration 效果语义校验", () => {
   });
 
   it("T34b: 皇后被禁足时，设 acting_consort 模式合法（同批禁足+协理选择）", () => {
-    const baseState = createNewGameState(db);
+    const baseState = mkState();
     const now = toGameTime(baseState.calendar);
     const fenghousId = Object.keys(baseState.standing).find(
       (id) => baseState.standing[id]!.rank === "huanghou",
@@ -547,7 +564,7 @@ describe("set_harem_administration 效果语义校验", () => {
   });
 
   it("T34c: 皇后未禁足时，设 acting_consort 模式被拒", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const now = toGameTime(state.calendar);
     const errors = validateEffects(db, state, [
       {
@@ -560,7 +577,7 @@ describe("set_harem_administration 效果语义校验", () => {
   });
 
   it("T34d: 皇后未禁足时，设 neiwu_proxy 模式被拒", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const now = toGameTime(state.calendar);
     const errors = validateEffects(db, state, [
       {

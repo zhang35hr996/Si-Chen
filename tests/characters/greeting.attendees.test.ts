@@ -4,10 +4,11 @@ import { consortLocationAt } from "../../src/engine/characters/presence";
 import { MAO_SLOT } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import type { GameState } from "../../src/engine/state/types";
 
 const db = loadRealContent();
-const base = createNewGameState(db);
+const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const atSlot = (s: GameState, slot: number): GameState => ({ ...s, calendar: { ...s.calendar, ap: s.calendar.apMax - slot } });
 
 describe("greetingAttendees", () => {

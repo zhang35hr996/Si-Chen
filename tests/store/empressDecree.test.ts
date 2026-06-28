@@ -3,6 +3,7 @@ import { loadGameContent } from "../../src/engine/content/viteSource";
 import { decideDecree, adjacentHaremRank } from "../../src/store/empressDecree";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -10,7 +11,7 @@ const db = content.value;
 
 /** Put lu_huaijin at a given rank+favor; push other in-band consorts above the band. */
 function oneConsortAt(rank: string, favor: number): GameState {
-  const s = createNewGameState(db);
+  const s = withConsort(createNewGameState(db), db, "lu_huaijin");
   s.standing.lu_huaijin!.rank = rank;
   s.standing.lu_huaijin!.favor = favor;
   if (s.standing.xu_qinghuan) s.standing.xu_qinghuan.rank = "shichen"; // order 140 > 100, excluded
@@ -60,7 +61,8 @@ describe("decideDecree", () => {
   });
 
   it("excludes 冷宫 / official / 皇后 / above-band", () => {
-    const s = createNewGameState(db);
+    let s = withConsort(createNewGameState(db), db, "lu_huaijin");
+    s = withConsort(s, db, "wenya");
     s.standing.lu_huaijin!.rank = "shichen"; // 140, excluded from band
     if (s.standing.xu_qinghuan) s.standing.xu_qinghuan.rank = "shichen";
     s.standing.wenya!.rank = "meiren"; // in band BUT 冷宫 → excluded

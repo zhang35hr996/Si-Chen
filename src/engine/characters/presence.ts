@@ -25,23 +25,31 @@ export function getCharacterLocation(
   return state.standing[charId]?.residence ?? character.defaultLocation ?? null;
 }
 
+/** Deduplicated union of state.generatedConsorts and db.characters, keyed by id.
+ *  db.characters wins on collision: in App.tsx's runtime db it already contains the
+ *  merged generated consorts, so the spread is a no-op; in raw-db tests it ensures
+ *  the full CharacterContent from db prevails over any partial state.generatedConsorts
+ *  entry that a test may have set up. */
+function allCharacters(db: ContentDB, state: GameState): CharacterContent[] {
+  return Object.values({ ...state.generatedConsorts, ...db.characters });
+}
+
 /** Characters present at a location, sorted by rank order (highest first). */
 export function getPresentAt(
   db: ContentDB,
   state: GameState,
   locationId: string,
 ): CharacterContent[] {
-  return Object.values(db.characters)
-    .filter(
-      (character) =>
+  return allCharacters(db, state)
+    .filter((character) => {
+      // event_only consorts without standing are not yet active in this playthrough.
+      if (character.kind === "consort" && !state.standing[character.id]) return false;
+      return (
         state.standing[character.id]?.lifecycle !== "deceased" &&
-        getCharacterLocation(db, state, character.id) === locationId,
-    )
-    .sort(
-      (a, b) =>
-        (db.ranks[b.initialStanding?.rank ?? ""]?.order ?? 0) -
-        (db.ranks[a.initialStanding?.rank ?? ""]?.order ?? 0),
-    );
+        getCharacterLocation(db, state, character.id) === locationId
+      );
+    })
+    .sort((a, b) => byRankDesc(db, state)(a, b));
 }
 
 /** 位分降序比较子（封号计入有效序）：侍君各列表统一排序入口。无 standing 视为中性。 */
@@ -62,10 +70,11 @@ export function byRankDesc(
 
 /** 宫中侍君：在宫（非冷宫）、未故的侍君（含皇后），按位分降序。查看侍君与翻牌子共用。 */
 export function inPalaceConsorts(db: ContentDB, state: GameState): CharacterContent[] {
-  return Object.values(db.characters)
+  return allCharacters(db, state)
     .filter(
       (c) =>
         c.kind === "consort" &&
+        state.standing[c.id] !== undefined &&
         state.standing[c.id]?.lifecycle !== "deceased" &&
         !isInColdPalace(state, c.id) &&
         (state.standing[c.id]?.residence ?? c.defaultLocation) !== "changmengong",
@@ -81,7 +90,7 @@ export function consortLocationAt(
   slot: number,
 ): string {
   const home = getCharacterLocation(db, state, charId) ?? "";
-  const char = db.characters[charId];
+  const char = db.characters[charId] ?? state.generatedConsorts[charId];
   if (!char || char.kind !== "consort") return home;
   const st = state.standing[charId];
   if (!st || st.lifecycle === "deceased" || st.lifecycle === "candidate") return home;
@@ -111,17 +120,15 @@ export function consortLocationAt(
 /** 此刻（当前 slot）实际在 locationId 的角色，按位分降序。LocationScreen 用「此处此刻有谁」。 */
 export function presentAt(db: ContentDB, state: GameState, locationId: string): CharacterContent[] {
   const slot = shichenSlot(state.calendar);
-  return Object.values(db.characters)
-    .filter(
-      (character) =>
+  return allCharacters(db, state)
+    .filter((character) => {
+      if (character.kind === "consort" && !state.standing[character.id]) return false;
+      return (
         state.standing[character.id]?.lifecycle !== "deceased" &&
-        consortLocationAt(db, state, character.id, slot) === locationId,
-    )
-    .sort(
-      (a, b) =>
-        (db.ranks[b.initialStanding?.rank ?? ""]?.order ?? 0) -
-        (db.ranks[a.initialStanding?.rank ?? ""]?.order ?? 0),
-    );
+        consortLocationAt(db, state, character.id, slot) === locationId
+      );
+    })
+    .sort((a, b) => byRankDesc(db, state)(a, b));
 }
 
 /** 住客（住处花名册）中此刻不在 locationId 者 → 其当前所在。供缺席禀报用。 */

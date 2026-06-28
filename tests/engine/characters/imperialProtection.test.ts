@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../../src/engine/state/newGame";
 import { loadRealContent } from "../../helpers/contentFixture";
+import { withConsort } from "../../helpers/consortFixture";
 import {
   rankDistance,
   livingHeirCountForConsort,
@@ -17,7 +18,7 @@ import { gameStateSchema } from "../../../src/engine/save/stateSchema";
 const db = loadRealContent();
 
 function baseState(): GameState {
-  return createNewGameState(db);
+  return withConsort(createNewGameState(db), db, TARGET);
 }
 
 const TARGET = "lu_huaijin";

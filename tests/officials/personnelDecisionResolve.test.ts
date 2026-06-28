@@ -13,6 +13,7 @@ import type { GameState, Official } from "../../src/engine/state/types";
 import type { PunishmentRecord } from "../../src/engine/justice/types";
 import type { PunishmentSeverity } from "../../src/engine/punishments/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 // 决策裁断必经正式 API（punishOfficial 会写 CourtEvent，occurredAt 须 ≤ now）；用开局真实时刻作裁断/生成时刻，
@@ -40,7 +41,7 @@ function tune(s: GameState, officialId: string, patch: Partial<Official["reviewS
 
 describe("petition resolution — administrative promotion (no PUNISH)", () => {
   it("approve promotes via administrative API: no PunishmentRecord, no punishmentId on history, consort gains", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     const before = g.state;
     const favorBefore = before.standing[LU_CONSORT]!.favor;
     const r = resolvePersonnelDecision(before, db, g.decision.id, "approve", at(3));
@@ -60,7 +61,7 @@ describe("petition resolution — administrative promotion (no PUNISH)", () => {
   });
 
   it("reject leaves the post unchanged, creates no PunishmentRecord, costs the consort", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     const favorBefore = g.state.standing[LU_CONSORT]!.favor;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "reject", at(3));
     expect(r.ok).toBe(true);
@@ -74,7 +75,7 @@ describe("petition resolution — administrative promotion (no PUNISH)", () => {
   });
 
   it("a petitioner who died before resolution gets no relationship/memory change (decision still resolves)", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     const dead = { ...g.state, standing: { ...g.state.standing, [LU_CONSORT]: { ...g.state.standing[LU_CONSORT]!, lifecycle: "deceased" as const } } };
     const memBefore = dead.memories[LU_CONSORT]!.entries.length;
     const standingBefore = JSON.stringify(dead.standing[LU_CONSORT]);
@@ -88,7 +89,7 @@ describe("petition resolution — administrative promotion (no PUNISH)", () => {
   });
 
   it("writes a private memory to the petitioning consort (not broadcast)", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     const memBefore = g.state.memories[LU_CONSORT]!.entries.length;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "reject", at(3));
     expect(r.ok).toBe(true);
@@ -99,7 +100,7 @@ describe("petition resolution — administrative promotion (no PUNISH)", () => {
 
 describe("family implication resolution — PUNISH branch", () => {
   it("spare leaves the official untouched and creates no PunishmentRecord", () => {
-    const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "severe");
+    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "severe");
     const g = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "spare", at(3));
     expect(r.ok).toBe(true);
@@ -111,7 +112,7 @@ describe("family implication resolution — PUNISH branch", () => {
   });
 
   it("demote routes through punishOfficial: a new official PunishmentRecord + history punishmentId", () => {
-    const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "severe");
+    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "severe");
     const g = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "demote", at(3));
     expect(r.ok).toBe(true);
@@ -128,7 +129,7 @@ describe("family implication resolution — PUNISH branch", () => {
   });
 
   it("dismiss routes through punishOfficial (official_dismissal); not auto-reinstated next review", () => {
-    const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "terminal");
+    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "terminal");
     const g = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "dismiss", at(3));
     expect(r.ok).toBe(true);
@@ -147,7 +148,7 @@ describe("family implication resolution — PUNISH branch", () => {
       id: "case_000001", status: "open" as const, subjectIds: [LU_CONSORT], openedAt: NOW, openedBy: "player",
       source: { kind: "imperial" as const }, publicity: "palace" as const, charges: [], evidence: [], confessions: [], punishmentIds: ["pun_000001"],
     };
-    const seed = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "severe");
+    const seed = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "severe");
     const punWithCase: PunishmentRecord = { ...seed.justice.punishments.pun_000001!, caseId: "case_000001" };
     const withCase = { ...seed, justice: { ...seed.justice, cases: { case_000001: caseRec }, punishments: { pun_000001: punWithCase }, nextSeq: { ...seed.justice.nextSeq, case: 2 } } };
     const g = generateFamilyImplication(withCase, db, "pun_000001", NOW)!;
@@ -164,7 +165,7 @@ describe("family implication resolution — PUNISH branch", () => {
   });
 
   it("punished consort forms a private trauma memory linked to the new punishment", () => {
-    const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "severe");
+    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "severe");
     const g = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "dismiss", at(3));
     expect(r.ok).toBe(true);
@@ -225,14 +226,14 @@ describe("atomic failure & lifecycle", () => {
   });
 
   it("rejects an illegal resolution for the kind (state byte-identical)", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     const snap = JSON.stringify(g.state);
     expect(resolvePersonnelDecision(g.state, db, g.decision.id, "demote", at(3)).ok).toBe(false); // demote 非 petition 合法裁断
     expect(JSON.stringify(g.state)).toBe(snap);
   });
 
   it("cannot resolve a decision twice", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     const first = resolvePersonnelDecision(g.state, db, g.decision.id, "approve", at(3));
     expect(first.ok).toBe(true);
     if (!first.ok) return;
@@ -241,7 +242,7 @@ describe("atomic failure & lifecycle", () => {
   });
 
   it("promotion approve fails atomically when the recommended seat is no longer vacant", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     // 把建议席位塞满（seatCount=1 的 g15 官职）→ 升迁 API 失败 → 整体不变。
     const target = g.decision.recommendedPostId!;
     const blocked = { ...g.state, officials: { ...g.state.officials, [WEN_OFFICIAL]: { ...g.state.officials[WEN_OFFICIAL]!, postId: target } } };
@@ -252,7 +253,7 @@ describe("atomic failure & lifecycle", () => {
   });
 
   it("survives a save/load round-trip and remains resolvable while pending", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, at(3))!;
+    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
     const roundTripped = JSON.parse(JSON.stringify(g.state)) as GameState;
     expect(roundTripped.personnelDecisions[g.decision.id]!.status).toBe("pending");
     const r = resolvePersonnelDecision(roundTripped, db, g.decision.id, "approve", at(3));

@@ -12,12 +12,13 @@ import { createGameStore } from "../../src/store/gameStore";
 import { isConfined, activeConfinement } from "../../src/engine/characters/confinement";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 function storeWith(setup: (s: ReturnType<typeof createGameStore>) => void) {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(withConsort(createNewGameState(db), db, "lu_huaijin"));
   setup(store);
   return store;
 }

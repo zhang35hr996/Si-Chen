@@ -3,6 +3,7 @@ import { recordCourtEvent } from "../../src/engine/chronicle/commit";
 import { makeGameTime, toGameTime } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { firstNonEmpressConsortId } from "../helpers/consortFixture";
 import type { CourtEvent } from "../../src/engine/state/types";
 
 function rankDraft(state: ReturnType<typeof createNewGameState>, subject: string, from: string, to: string, over: Partial<Omit<CourtEvent,"id">> = {}): Omit<CourtEvent,"id"> {
@@ -18,8 +19,8 @@ function rankDraft(state: ReturnType<typeof createNewGameState>, subject: string
 function setup() {
   const db = loadRealContent();
   const before = createNewGameState(db);
-  const c = Object.values(db.characters).find((x) => x.kind === "consort" && x.initialStanding && x.initialStanding.rank !== "huanghou")!;
-  return { db, before, id: c.id, from: before.standing[c.id]!.rank };
+  const id = firstNonEmpressConsortId(db, before);
+  return { db, before, id, from: before.standing[id]!.rank };
 }
 
 describe("recordCourtEvent + rank_changed（record_after，前后态验证）", () => {

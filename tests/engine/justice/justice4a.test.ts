@@ -27,12 +27,21 @@ import { validateJusticeLinks } from "../../../src/engine/justice/crossLink";
 import { applyEffects as funnelApplyEffects } from "../../../src/engine/effects/funnel";
 import { gameStateSchema } from "../../../src/engine/save/stateSchema";
 import type { PunishmentRecord } from "../../../src/engine/justice/types";
+import { withConsort } from "../../helpers/consortFixture";
 
 const db = loadRealContent();
 
 function makeStore() {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(
+    withConsort(
+      withConsort(
+        withConsort(createNewGameState(db), db, "lu_huaijin"),
+        db, "wenya",
+      ),
+      db, "xu_qinghuan",
+    ),
+  );
   return store;
 }
 

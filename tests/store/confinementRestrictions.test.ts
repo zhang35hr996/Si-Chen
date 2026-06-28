@@ -9,10 +9,11 @@ import { buildShizhiEncounter, buildTaihouRebuke } from "../../src/store/taihou"
 import { planPhysicianVisit } from "../../src/store/physician";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import type { GameState } from "../../src/engine/state/types";
 
 const db = loadRealContent();
-const base = createNewGameState(db);
+const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const now = toGameTime(base.calendar);
 const HOME = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
 

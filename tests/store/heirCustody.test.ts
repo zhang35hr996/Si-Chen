@@ -64,7 +64,7 @@ function addHeirToState(state: GameState, heir: Heir): GameState {
 /** Find or promote first available consort to given rank (mutates state). */
 function promoteToRank(state: GameState, rank: string): string {
   for (const [id, st] of Object.entries(state.standing)) {
-    const c = db.characters[id];
+    const c = db.characters[id] ?? state.generatedConsorts[id];
     if (c?.kind !== "consort") continue;
     if (st.lifecycle === "deceased" || st.lifecycle === "candidate") continue;
     if (st.rank === "huanghou") continue;
@@ -183,7 +183,7 @@ describe("B. eligibleCustodiansForHeir", () => {
     addHeirToState(state, heir);
     // Kill all consorts, check pool only has taihou
     for (const [id, st] of Object.entries(state.standing)) {
-      if (db.characters[id]?.kind === "consort" && st.rank !== "huanghou") {
+      if ((db.characters[id] ?? state.generatedConsorts[id])?.kind === "consort" && st.rank !== "huanghou") {
         (state.standing[id] as { lifecycle: string }).lifecycle = "deceased";
       }
     }

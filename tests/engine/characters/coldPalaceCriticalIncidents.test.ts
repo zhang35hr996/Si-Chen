@@ -28,6 +28,7 @@ import {
 import { validateColdPalaceIncidentLinks } from "../../../src/engine/characters/coldPalaceValidator";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+import { withConsort } from "../../helpers/consortFixture";
 
 const db = loadRealContent();
 const BASE_TIME: GameTime = { year: 1, month: 1, period: "early", dayIndex: 0 };
@@ -36,7 +37,7 @@ const BASE_TIME: GameTime = { year: 1, month: 1, period: "early", dayIndex: 0 };
 const REAL_TARGET_ID = "lu_huaijin";
 
 function baseState(): GameState {
-  return createNewGameState(db);
+  return withConsort(createNewGameState(db), db, REAL_TARGET_ID);
 }
 
 function stateWithColdPalaceResident(charId: string, health = 10): GameState {
@@ -587,7 +588,7 @@ describe("stale drain: pending critical_illness not acknowledged by settlement t
   it("settle tick does not set pending critical_illness to acknowledged=true (validator would reject)", () => {
     // Scenario: resident dies, has pending critical_illness, settlement tick runs
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const sr = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(sr.ok).toBe(true);
     const s = store.getState();
@@ -627,7 +628,7 @@ describe("stale drain: pending critical_illness not acknowledged by settlement t
 
   it("stale petition IS acknowledged by settlement tick (only critical_illness is excluded)", () => {
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const sr = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(sr.ok).toBe(true);
     const s = store.getState();

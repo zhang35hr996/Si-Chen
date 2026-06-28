@@ -16,6 +16,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { dayIndexOf, toGameTime } from "../../src/engine/calendar/time";
 import type { CaseRecord } from "../../src/engine/justice/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const LU_CONSORT = "lu_huaijin"; // 有母族 fam_lu_main + 在任官员 official_fam_lu_main(g14)
@@ -24,7 +25,7 @@ const punCount = (s: ReturnType<GameStore["getState"]>) => Object.keys(s.justice
 
 describe("annual settlement seam — 人事奏折 + 侍君请托", () => {
   it("crossing into 十一月 generates pending personnel decisions, resolvable, world valid", () => {
-    const s = settleAnnualExamination(createNewGameState(db, 7), db, 1, { year: 1, month: 2, period: "early", dayIndex: 0 });
+    const s = settleAnnualExamination(withConsort(createNewGameState(db, 7), db, "lu_huaijin"), db, 1, { year: 1, month: 2, period: "early", dayIndex: 0 });
     const store = new GameStore();
     store.loadState({ ...s, calendar: { ...s.calendar, year: 1, month: 10, period: "late", dayIndex: dayIndexOf(1, 10, "late"), ap: 1 } });
     expect(getPendingPersonnelDecisions(store.getState())).toHaveLength(0);
@@ -79,7 +80,7 @@ describe("annual settlement seam — 人事奏折 + 侍君请托", () => {
 describe("family-implication seam — 侍君获罪即时生成", () => {
   it("sending a consort to the cold palace spawns a family-implication decision (single transaction)", () => {
     const store = new GameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, "lu_huaijin"));
     let emits = 0;
     store.subscribe(() => { emits += 1; });
     const r = store.sendConsortToColdPalace(db, LU_CONSORT, {});
@@ -97,7 +98,7 @@ describe("family-implication seam — 侍君获罪即时生成", () => {
 
   it("does not spawn for a non-qualifying (moderate) punishment", () => {
     const store = new GameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, "lu_huaijin"));
     // 禁足（finite_confinement, moderate）不应触发牵连。
     const r = store.applyImperialPunishmentWithConsequences(db, { type: "impose_confinement", targetId: LU_CONSORT, durationTurns: 6 }, {});
     expect(r.ok).toBe(true);
@@ -106,7 +107,7 @@ describe("family-implication seam — 侍君获罪即时生成", () => {
 
   it("execution spawns implication; resolving it does NOT add memory/relationship to the dead consort", () => {
     const store = new GameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, "lu_huaijin"));
     const r = store.applyImperialCommand(db, { type: "execute", targetId: LU_CONSORT });
     expect(r.ok).toBe(true);
     expect(store.getState().standing[LU_CONSORT]!.lifecycle).toBe("deceased");
@@ -129,7 +130,7 @@ describe("family-implication seam — 侍君获罪即时生成", () => {
 describe("family-implication regression — caseId not propagated to official punishment", () => {
   it("a cold-palace punishment WITH a caseId still lets demote/dismiss succeed", () => {
     const store = new GameStore();
-    const base = createNewGameState(db);
+    const base = withConsort(createNewGameState(db), db, "lu_huaijin");
     const now = toGameTime(base.calendar);
     const caseRecord: CaseRecord = {
       id: "case_000001", status: "open", subjectIds: [LU_CONSORT], openedAt: now, openedBy: "player",

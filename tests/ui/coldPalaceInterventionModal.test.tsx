@@ -15,6 +15,7 @@ import { ColdPalaceInterventionModal } from "../../src/ui/components/ColdPalaceI
 import type { GameState } from "../../src/engine/state/types";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import { createGameStore } from "../../src/store/gameStore";
 import {
   coldPalaceInterventionId,
@@ -27,7 +28,7 @@ const REAL_TARGET_ID = "lu_huaijin";
 
 function stateWithColdPalaceResident(health = 80): GameState {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
   const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
   expect(r.ok).toBe(true);
   const state = store.getState();

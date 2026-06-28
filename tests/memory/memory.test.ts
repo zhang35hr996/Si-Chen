@@ -100,7 +100,9 @@ describe("inspection helpers", () => {
   it("per-character isolation, overview counts, and permanentCount", () => {
     const state = createNewGameState(db);
     expect(listMemories(state, "char_ghost")).toEqual([]);
-    const overview = memoryOverview(state).sort((a, b) => a.charId.localeCompare(b.charId));
+    const overview = memoryOverview(state)
+      .filter((o) => !o.charId.startsWith("generated_consort"))
+      .sort((a, b) => a.charId.localeCompare(b.charId));
     expect(overview).toEqual([
       { charId: "cheng_feng", count: 0, permanentCount: 0 },
       { charId: "lu_huaijin", count: 1, permanentCount: 1 },

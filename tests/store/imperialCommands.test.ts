@@ -4,17 +4,18 @@ import { planImperialCommand } from "../../src/store/imperialCommands";
 import { isConfined } from "../../src/engine/characters/confinement";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 function freshStore() {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(withConsort(createNewGameState(db), db, "lu_huaijin"));
   return store;
 }
 
 describe("consortGate 皇后例外", () => {
-  const state = createNewGameState(db);
+  const state = withConsort(createNewGameState(db), db, "xu_qinghuan");
 
   it("禁足令对皇后：缺 administrator 时被拒", () => {
     const r = planImperialCommand(db, state, { type: "impose_confinement", targetId: "shen_zhibai", durationTurns: 3 });
@@ -40,7 +41,7 @@ describe("consortGate 皇后例外", () => {
 });
 
 describe("planImperialCommand 校验与组装", () => {
-  const state = createNewGameState(db);
+  const state = withConsort(createNewGameState(db), db, "lu_huaijin");
 
   it("禁足组装 confine + memory + 编年史草稿（startTurn=当前旬）", () => {
     const r = planImperialCommand(db, state, { type: "impose_confinement", targetId: "lu_huaijin", durationTurns: 3 });

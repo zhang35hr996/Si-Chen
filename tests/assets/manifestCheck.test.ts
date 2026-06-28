@@ -38,7 +38,7 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(82); // 76 + 选秀随机 consort1–consort6 立绘键
+    expect(result.entryCount).toBe(109); // updated: consort1–33 + official9 + child paths
     expect(result.placeholderCount).toBe(0); // all consort portraits now have real art
   });
 
@@ -56,18 +56,18 @@ describe("checkManifest", () => {
   it("manifest path missing on disk is an error", () => {
     const manifest = realManifest();
     const disk = allPaths(manifest);
-    disk.delete("backgrounds/yuhuayuan_morning.png");
+    disk.delete("map/yuhuayuan_morning.png");
     const result = checkManifest(manifest, disk, db);
     expect(result.errors.some((e) => e.code === "ASSET_FILE_MISSING")).toBe(true);
   });
 
   it("content-referenced key absent from manifest is an error", () => {
     const manifest = realManifest();
-    delete manifest.entries["portrait.shen_zhibai.neutral"]; // 皇后's portrait
+    delete manifest.entries["portrait.consort24.neutral"]; // 皇后's portrait (portraitSet="consort24")
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(
       result.errors.some(
-        (e) => e.code === "MISSING_ASSET_KEY" && e.message.includes("portrait.shen_zhibai.neutral"),
+        (e) => e.code === "MISSING_ASSET_KEY" && e.message.includes("portrait.consort24.neutral"),
       ),
     ).toBe(true);
   });

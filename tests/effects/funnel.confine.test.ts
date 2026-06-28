@@ -4,10 +4,11 @@ import { activeConfinement, isConfined, confinementsOf } from "../../src/engine/
 import { toGameTime } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import type { EventEffect } from "../../src/engine/content/schemas";
 
 const db = loadRealContent();
-const base = createNewGameState(db);
+const base = withConsort(withConsort(createNewGameState(db), db, "lu_huaijin"), db, "xu_qinghuan");
 const now = toGameTime(base.calendar);
 const start = base.calendar.dayIndex;
 
@@ -122,15 +123,17 @@ describe("批内禁足去重（同一 batch 原子拒绝）", () => {
   });
 
   it("不同角色各自 confine 在同一批 → 互不干扰，全部通过", () => {
-    const otherChar = Object.values(db.characters).find(
-      (c) => c.kind === "consort" && c.id !== "lu_huaijin" && c.id !== "shen_zhibai",
-    );
-    if (!otherChar) return; // 无其他侍君则跳过
+    // Find a consort in base.standing that's not lu_huaijin or shen_zhibai
+    const otherCharId = Object.keys(base.standing).find((id) => {
+      const c = db.characters[id] ?? base.generatedConsorts[id];
+      return c?.kind === "consort" && id !== "lu_huaijin" && id !== "shen_zhibai";
+    });
+    if (!otherCharId) return; // 无其他侍君则跳过
     const r = applyEffects(db, base, [
       confine(3),
       {
         type: "confine",
-        char: otherChar.id,
+        char: otherCharId,
         startTurn: start,
         endTurnExclusive: start + 3,
         imposedAt: now,
@@ -139,7 +142,7 @@ describe("批内禁足去重（同一 batch 原子拒绝）", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(isConfined(r.value, "lu_huaijin")).toBe(true);
-    expect(isConfined(r.value, otherChar.id)).toBe(true);
+    expect(isConfined(r.value, otherCharId)).toBe(true);
   });
 });
 

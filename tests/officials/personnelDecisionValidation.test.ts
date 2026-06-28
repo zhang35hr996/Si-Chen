@@ -5,6 +5,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState, PersonnelDecision } from "../../src/engine/state/types";
 import type { PunishmentRecord } from "../../src/engine/justice/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const at = (y: number) => ({ year: y, month: 5, period: "early" as const, dayIndex: y * 100 });
@@ -39,12 +40,12 @@ function withDecisions(s: GameState, ...ds: PersonnelDecision[]): GameState {
 
 describe("personnel decision validator — clean baseline", () => {
   it("a structurally valid pending decision passes", () => {
-    const s = createNewGameState(db, 1);
+    const s = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     expect(codes(withDecisions(s, basePetition(s)))).toEqual([]);
   });
 
   it("a valid resolved decision passes", () => {
-    const s = createNewGameState(db, 1);
+    const s = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     const d: PersonnelDecision = { ...basePetition(s), status: "resolved", resolvedAt: at(3), resolution: "approve" };
     expect(codes(withDecisions(s, d))).toEqual([]);
   });

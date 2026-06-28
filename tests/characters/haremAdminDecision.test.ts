@@ -26,13 +26,14 @@ import { loadRealContent } from "../helpers/contentFixture";
 import { makeGameTime, toGameTime } from "../../src/engine/calendar/time";
 import type { GameState, ConsortPersonality } from "../../src/engine/state/types";
 import { HOUSEHOLD_DEFAULTS, PERSONALITY_DEFAULTS } from "../../src/engine/characters/consortAttrs";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 // ─── 共用工具 ────────────────────────────────────────────────────────────────
 
 function baseState(): GameState {
-  return createNewGameState(db);
+  return withConsort(createNewGameState(db), db, "wenya");
 }
 
 /**

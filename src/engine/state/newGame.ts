@@ -11,6 +11,8 @@ import { assertGeneratedOfficialWorld } from "../officials/validation";
 import type { BedchamberRecord, CharacterMemoryStore, GameState, CharacterStanding, ConsortPersonality } from "./types";
 import { materializePersonality, createDefaultHousehold } from "../characters/consortAttrs";
 import { createEmptyJusticeState } from "../justice/types";
+import { generateInitialConsorts } from "../characters/consortGenerator";
+import type { CharacterContent } from "../content/schemas";
 
 /** 新游戏私库种子（id 须存在于 content/items.json）。 */
 const STOREHOUSE_SEED: Record<string, number> = {
@@ -70,7 +72,8 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   const officialWorld = generateOfficialWorld(db, rngSeed, startTime);
 
   for (const character of Object.values(db.characters)) {
-    if (character.initialStanding) {
+    // spawnMode === "event_only"：剧情专属，不加入开局后宫 standing。
+    if (character.initialStanding && character.spawnMode !== "event_only") {
       const birthFamilyId = officialWorld.consortBirthFamily[character.id];
       standing[character.id] = {
         ...character.initialStanding,
@@ -101,6 +104,17 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     }
   }
 
+  // 开局随机侍君（确定性，由 rngSeed 派生）
+  const validRankIds = new Set(db.world.ranks.map((r) => r.id));
+  const consortEntries = generateInitialConsorts(rngSeed, startTime, validRankIds);
+  const generatedConsorts: Record<string, CharacterContent> = {};
+  for (const { content, standing: cs } of consortEntries) {
+    generatedConsorts[content.id] = content;
+    standing[content.id] = cs;
+    memories[content.id] = { entries: [], nextSeq: 1 };
+    bedchamber[content.id] = { encounters: [] };
+  }
+
   const newState: GameState = {
     calendar,
     playerLocation: db.world.startingLocation,
@@ -118,7 +132,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     },
     flags: {},
     standing,
-    generatedConsorts: {},
+    generatedConsorts,
     officials: officialWorld.officials,
     officialFamilies: officialWorld.officialFamilies,
     familyMembers: officialWorld.familyMembers,

@@ -4,9 +4,10 @@ import { applyEffects, validateEffects, AXIS_CAP } from "../../src/engine/effect
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const fresh = (): GameState => createNewGameState(db);
+const fresh = (): GameState => withConsort(createNewGameState(db), db, "lu_huaijin");
 // slice starting values: shen_zhibai favor 25; lu_huaijin favor 30; sovereign prestige 50.
 
 const expectApplied = (state: GameState, effects: EventEffect[]): GameState => {

@@ -9,12 +9,13 @@ import { shichenSlot, MAO_SLOT } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 /** Build a state at a given dayIndex/slot, with the sovereign somewhere that is NOT the test consort's home. */
 const stateAt = (dayIndex: number, slot: number, playerLocation = "zichendian"): GameState => {
-  const base = createNewGameState(db);
+  const base = withConsort(createNewGameState(db), db, "lu_huaijin");
   return {
     ...base,
     playerLocation,

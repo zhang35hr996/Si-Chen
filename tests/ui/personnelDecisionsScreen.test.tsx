@@ -14,11 +14,17 @@ import { toGameTime } from "../../src/engine/calendar/time";
 import type { GameState, Official } from "../../src/engine/state/types";
 import type { PunishmentRecord } from "../../src/engine/justice/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const LU_CONSORT = "lu_huaijin";
 const WEN_OFFICIAL = "official_fam_wen_main";
 const NOW = toGameTime(createNewGameState(db, 1).calendar);
+
+/** Base state that includes lu_huaijin in standing (required for consort-related decisions). */
+function freshWithLu() {
+  return withConsort(createNewGameState(db, 1), db, LU_CONSORT);
+}
 
 function withConsortPun(s: GameState): GameState {
   const rec: PunishmentRecord = {
@@ -43,12 +49,12 @@ function mount(state: GameState) {
 
 describe("PersonnelDecisionsScreen — rendering", () => {
   it("shows an explicit empty state when there are no pending decisions", () => {
-    mount(createNewGameState(db, 1));
+    mount(freshWithLu());
     expect(screen.getByText(/暂无待裁人事奏折/)).toBeInTheDocument();
   });
 
   it("renders a petition card with administrative tag and approve/reject options", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, NOW)!;
+    const g = generateConsortPetition(freshWithLu(), db, LU_CONSORT, NOW)!;
     mount(g.state);
     expect(screen.getByText(/侍君请托·擢拔亲族/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /准其所请·擢拔/ })).toBeEnabled();
@@ -57,7 +63,7 @@ describe("PersonnelDecisionsScreen — rendering", () => {
   });
 
   it("renders implication card with punishment tag on demote/dismiss", () => {
-    const s = withConsortPun(createNewGameState(db, 1));
+    const s = withConsortPun(freshWithLu());
     const g = generateFamilyImplication(s, db, "pun_000001", NOW)!;
     mount(g.state);
     expect(screen.getByText(/获罪牵连/)).toBeInTheDocument();
@@ -68,7 +74,7 @@ describe("PersonnelDecisionsScreen — rendering", () => {
 
   it("disables demote with a reason when no lower seat is available", () => {
     // 牵连决策但无低品空缺 → demote 选项禁用。
-    const s = withConsortPun(createNewGameState(db, 1));
+    const s = withConsortPun(freshWithLu());
     const g = generateFamilyImplication(s, db, "pun_000001", NOW)!;
     // 把建议席位塞满（占用 recommendedPostId）。
     const blocked = { ...g.state, officials: { ...g.state.officials, [WEN_OFFICIAL]: { ...g.state.officials[WEN_OFFICIAL]!, postId: g.decision.recommendedPostId! } } };
@@ -80,7 +86,7 @@ describe("PersonnelDecisionsScreen — rendering", () => {
 
 describe("PersonnelDecisionsScreen — resolution", () => {
   it("approving a petition resolves it, calls onCommitted, and removes the card", async () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, NOW)!;
+    const g = generateConsortPetition(freshWithLu(), db, LU_CONSORT, NOW)!;
     const { store, onCommitted } = mount(g.state);
     await userEvent.click(screen.getByRole("button", { name: /准其所请·擢拔/ }));
     expect(onCommitted).toHaveBeenCalledTimes(1);
@@ -90,7 +96,7 @@ describe("PersonnelDecisionsScreen — resolution", () => {
   });
 
   it("approving a dismissal memorial routes through PUNISH (creates a record)", async () => {
-    const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { underperformanceYears: 2 });
+    const s = tune(freshWithLu(), WEN_OFFICIAL, { underperformanceYears: 2 });
     const g = generateMemorial(s, db, WEN_OFFICIAL, "memorial_dismissal", NOW)!;
     const { store } = mount(g.state);
     await userEvent.click(screen.getByRole("button", { name: /准奏·免官/ }));
@@ -101,13 +107,13 @@ describe("PersonnelDecisionsScreen — resolution", () => {
 
 describe("personnelDecisionCard — view model", () => {
   it("derives administrative tone for petition approve, punishment tone for demote", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, NOW)!;
+    const g = generateConsortPetition(freshWithLu(), db, LU_CONSORT, NOW)!;
     const card = personnelDecisionCard(db, g.state, g.decision);
     expect(card.options.find((o) => o.resolution === "approve")!.tone).toBe("administrative");
     expect(card.officialName).toContain("陆");
     expect(card.recommendedPostLabel).toBeDefined();
 
-    const s = withConsortPun(createNewGameState(db, 1));
+    const s = withConsortPun(freshWithLu());
     const imp = generateFamilyImplication(s, db, "pun_000001", NOW)!;
     const impCard = personnelDecisionCard(db, imp.state, imp.decision);
     expect(impCard.options.find((o) => o.resolution === "demote")!.tone).toBe("punishment");
@@ -118,7 +124,7 @@ describe("personnelDecisionCard — view model", () => {
 
 describe("regression — no free appointment UI", () => {
   it("the personnel screen never renders raw promote/demote/transfer/dismiss roster buttons", () => {
-    const g = generateConsortPetition(createNewGameState(db, 1), db, LU_CONSORT, NOW)!;
+    const g = generateConsortPetition(freshWithLu(), db, LU_CONSORT, NOW)!;
     const { container } = (() => {
       const store = new GameStore();
       store.loadState(g.state);

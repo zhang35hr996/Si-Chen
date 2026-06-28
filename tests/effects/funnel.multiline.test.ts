@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import type { EventEffect } from "../../src/engine/content/schemas";
 import type { GameState } from "../../src/engine/state/types";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
+
+const mkState = () =>
+  withConsort(withConsort(createNewGameState(db), db, "lu_huaijin"), db, "xu_qinghuan");
 
 function apply(s: GameState, effects: EventEffect[]): GameState {
   const r = applyEffects(db, s, effects);
@@ -21,7 +25,7 @@ function selfCarrying(s: GameState): GameState {
 
 describe("multi-line gestation coexistence", () => {
   it("sovereign can re-conceive after a transfer → both consort and sovereign gestations coexist", () => {
-    let s = selfCarrying(createNewGameState(db));
+    let s = selfCarrying(mkState());
     s = apply(s, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]);
     // After transfer: pregnancy back to none, consort carrying.
     expect(s.resources.bloodline.pregnancy.status).toBe("none");
@@ -37,7 +41,7 @@ describe("multi-line gestation coexistence", () => {
   });
 
   it("birth of a consort removes only that gestation and leaves the sovereign's own pregnancy intact", () => {
-    let s = selfCarrying(createNewGameState(db));
+    let s = selfCarrying(mkState());
     s = apply(s, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]);
     s = selfCarrying(s); // sovereign carrying again, consort still carrying
     s = apply(s, [
@@ -61,7 +65,7 @@ describe("multi-line gestation coexistence", () => {
 
 describe("candidate annotation lifecycle", () => {
   it("transfer clears every candidate annotation except the final carrier", () => {
-    let s = selfCarrying(createNewGameState(db));
+    let s = selfCarrying(mkState());
     s = apply(s, [{ type: "heir_designate", charIds: ["lu_huaijin", "xu_qinghuan"] }]);
     expect(s.standing.lu_huaijin!.lifecycle).toBe("candidate");
     expect(s.standing.xu_qinghuan!.lifecycle).toBe("candidate");
@@ -73,7 +77,7 @@ describe("candidate annotation lifecycle", () => {
   });
 
   it("abort clears every candidate annotation", () => {
-    let s = selfCarrying(createNewGameState(db));
+    let s = selfCarrying(mkState());
     s = apply(s, [{ type: "heir_designate", charIds: ["lu_huaijin"] }]);
     s = apply(s, [{ type: "pregnancy_abort" }]);
     expect(s.standing.lu_huaijin!.lifecycle).toBe("normal");
@@ -82,7 +86,7 @@ describe("candidate annotation lifecycle", () => {
   });
 
   it("heir_candidate add is single-at-a-time and remove clears it", () => {
-    let s = apply(createNewGameState(db), [{ type: "pregnancy", op: "begin" }]); // pending self-pregnancy
+    let s = apply(mkState(), [{ type: "pregnancy", op: "begin" }]); // pending self-pregnancy
     s = apply(s, [{ type: "heir_candidate", op: "add", char: "lu_huaijin" }]);
     expect(s.resources.bloodline.pregnancy.candidateIds).toEqual(["lu_huaijin"]);
 
@@ -105,7 +109,7 @@ describe("candidate annotation lifecycle", () => {
   });
 
   it("heir_candidate cannot mark a carrying consort", () => {
-    let s = selfCarrying(createNewGameState(db));
+    let s = selfCarrying(mkState());
     s = apply(s, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }]);
     s = selfCarrying(s); // sovereign pregnant again so the add-gate passes
     expect(

@@ -4,6 +4,7 @@ import { applyEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { makeGameTime, monthOrdinal } from "../../src/engine/calendar/time";
 import { gestationConfig, buildBirth, plannedBirth, birthDue, birthPhrase, collectNewbornIds } from "../../src/store/gestation";
+import { withConsort } from "../helpers/consortFixture";
 import type { GameState } from "../../src/engine/state/types";
 
 const content = loadGameContent();
@@ -167,7 +168,7 @@ describe("twin naming queue — funnel integration", () => {
   };
 
   function consortCarrying(): ReturnType<typeof createNewGameState> {
-    const s0 = createNewGameState(db);
+    const s0 = withConsort(createNewGameState(db), db, "lu_huaijin");
     const a = applyEffects(db, s0, [{ type: "pregnancy", op: "begin" }]);
     if (!a.ok) throw new Error();
     const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "carry" }]);

@@ -50,6 +50,7 @@ import { gameStateSchema } from "../../../src/engine/save/stateSchema";
 import { dayIndexOf, makeGameTime, createCalendar } from "../../../src/engine/calendar/time";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+import { withConsort } from "../../helpers/consortFixture";
 import {
   createSaveData,
   readSlot,
@@ -62,7 +63,7 @@ const db = loadRealContent();
 const REAL_TARGET_ID = "lu_huaijin";
 
 function baseState(): GameState {
-  return createNewGameState(db);
+  return withConsort(createNewGameState(db), db, REAL_TARGET_ID);
 }
 
 /** Create a cold-palace resident state at the initial calendar (year 1, month 1). */

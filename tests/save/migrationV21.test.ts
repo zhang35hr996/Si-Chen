@@ -30,6 +30,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 import { createGameStore } from "../../src/store/gameStore";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const REAL_TARGET_ID = "lu_huaijin";
@@ -173,7 +174,7 @@ describe("schema validation: critical_illness discriminated union", () => {
 describe("round-trip: critical_illness in real GameState", () => {
   it("resolved critical_illness incident survives save/load round-trip", () => {
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(r.ok).toBe(true);
     const s = store.getState();
@@ -217,7 +218,7 @@ describe("round-trip: critical_illness in real GameState", () => {
 
   it("pending critical_illness incident survives save/load round-trip", () => {
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(r.ok).toBe(true);
     const s = store.getState();

@@ -30,6 +30,7 @@ import type {
 import { loadRealContent } from "../helpers/contentFixture";
 import { createGameStore } from "../../src/store/gameStore";
 import { activeColdPalaceEffectFor } from "../../src/engine/characters/coldPalace";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const REAL_TARGET_ID = "lu_huaijin";
@@ -67,7 +68,7 @@ function makeV23Save(stateOverrides?: (s: Record<string, unknown>) => void): str
 /** Use the store to build a properly-structured cold-palace state. */
 function stateWithColdPalaceResident(): GameState {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
   const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
   expect(r.ok).toBe(true);
   return store.getState();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import type { GameState } from "../../src/engine/state/types";
 
 const content = loadGameContent();
@@ -9,7 +10,7 @@ if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
 function consortCarrying(): GameState {
-  const s0 = createNewGameState(db);
+  const s0 = withConsort(withConsort(createNewGameState(db), db, "lu_huaijin"), db, "xu_qinghuan");
   const a = applyEffects(db, s0, [{ type: "pregnancy", op: "begin" }]);
   if (!a.ok) throw new Error();
   const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "carry" }]);

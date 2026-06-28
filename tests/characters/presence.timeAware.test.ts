@@ -4,9 +4,10 @@ import { greetingAttendees } from "../../src/engine/characters/greeting";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 import type { GameState, HealthStatus } from "../../src/engine/state/types";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const base = createNewGameState(db);
+const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const home = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
 
 /** 把日历调到指定 slot（apMax-ap=slot）。 */

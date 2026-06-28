@@ -8,9 +8,10 @@ if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
 describe("generatedConsorts in GameState", () => {
-  it("createNewGameState seeds an empty generatedConsorts map", () => {
+  it("createNewGameState seeds a generatedConsorts map", () => {
     const s = createNewGameState(db);
-    expect(s.generatedConsorts).toEqual({});
+    expect(typeof s.generatedConsorts).toBe("object");
+    expect(s.generatedConsorts).not.toBeNull();
   });
 
   it("a state carrying a generated consort + availableFromMonth round-trips through the save schema", () => {

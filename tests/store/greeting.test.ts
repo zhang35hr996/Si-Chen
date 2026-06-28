@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { excuseFromGreeting, dismissOvernight, recordOvernight } from "../../src/store/greeting";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const base = createNewGameState(db);
+const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const home = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
 
 describe("excuseFromGreeting", () => {
@@ -53,7 +54,7 @@ import { GameStore } from "../../src/store/gameStore";
 describe("GameStore 请安方法", () => {
   it("applyExcuseGreeting 改 state 并保留 dayIndex", () => {
     const store = new GameStore();
-    store.newGame(db);
+    store.loadState(withConsort(createNewGameState(db), db, "lu_huaijin"));
     const di = store.getState().calendar.dayIndex;
     store.applyExcuseGreeting(db, "lu_huaijin");
     expect(store.getState().excusedFromGreeting).toEqual({ dayIndex: di, charIds: ["lu_huaijin"] });

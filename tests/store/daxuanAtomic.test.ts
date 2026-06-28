@@ -41,6 +41,7 @@ function storeWithDianxuanPending(year: number): { store: GameStore; emits: () =
 describe("commitDaxuanSelections — 玩家多选原子", () => {
   it("第二人冲突 → 三人均不落库、不 emit", () => {
     const s = createNewGameState(db, 1);
+    const initialConsortCount = Object.keys(s.generatedConsorts).length;
     const store = new GameStore();
     store.loadState(s);
     let emits = 0;
@@ -55,7 +56,7 @@ describe("commitDaxuanSelections — 玩家多选原子", () => {
     ];
     const r = store.commitDaxuanSelections(db, kept);
     expect(r.ok).toBe(false);
-    expect(Object.keys(store.getState().generatedConsorts)).toHaveLength(0);
+    expect(Object.keys(store.getState().generatedConsorts)).toHaveLength(initialConsortCount);
     expect(emits).toBe(0);
   });
 
@@ -92,6 +93,7 @@ describe("resolveDaxuanByDelegate — 委托原子事务", () => {
   it("第二人冲突 → pending/flag/侍君集合全部不变、不 emit", () => {
     const year = 1;
     const { store, emits } = storeWithDianxuanPending(year);
+    const initialConsortCount = Object.keys(store.getState().generatedConsorts).length;
     const c1 = liangjiazi(store.getState());
     const kept = [
       { candidate: c1, rank: "guiren" },
@@ -102,7 +104,7 @@ describe("resolveDaxuanByDelegate — 委托原子事务", () => {
     const st = store.getState();
     expect(st.pendingDaxuan).toEqual({ kind: "dianxuan", year });
     expect(st.flags[daxuanDianxuanFlagKey(year)]).toBeUndefined();
-    expect(Object.keys(st.generatedConsorts)).toHaveLength(0);
+    expect(Object.keys(st.generatedConsorts)).toHaveLength(initialConsortCount);
     expect(emits()).toBe(0);
   });
 
