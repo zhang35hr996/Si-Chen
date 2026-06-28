@@ -62,10 +62,6 @@ export interface ZichendianScreenProps {
   onReviewMemorials: () => void;
   /** 待批奏折总数（批阅奏折 badge = 内政 + 前朝合并）。 */
   memorialTotalCount?: number;
-  /** 人事奏折与请托裁决入口（PR3C-3b）；提供时渲染入口，badge 显待裁数。 */
-  onReviewPersonnel?: () => void;
-  /** 待裁人事决策数（badge）。 */
-  personnelDecisionCount?: number;
   onSummonConsort: () => void;
   /** 召见皇嗣（可选；提供时在乘风菜单中显示入口）。 */
   onSummonHeir?: () => void;
@@ -108,8 +104,6 @@ export function ZichendianScreen({
   onAdmitPendingAudience,
   onReviewMemorials,
   memorialTotalCount = 0,
-  onReviewPersonnel,
-  personnelDecisionCount = 0,
   onSummonConsort,
   onSummonHeir,
   onRest,
@@ -232,11 +226,6 @@ export function ZichendianScreen({
       <button type="button" className="action-btn action-btn--key" onClick={onReviewMemorials} disabled={sceneActionsLocked}>
         批阅奏折{memorialTotalCount > 0 ? ` · ${memorialTotalCount}` : ""}
       </button>
-      {onReviewPersonnel && (
-        <button type="button" className="action-btn" onClick={onReviewPersonnel} disabled={sceneActionsLocked}>
-          人事奏折{personnelDecisionCount > 0 ? ` · ${personnelDecisionCount}` : ""}
-        </button>
-      )}
       <button
         type="button"
         className="action-btn"
