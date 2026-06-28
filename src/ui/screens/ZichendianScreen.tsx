@@ -143,6 +143,10 @@ export interface ZichendianScreenProps {
   intrigueHistoryItems?: readonly IntrigueHistoryItem[];
   /** 宫斗调查案件列表（Phase 5B-1B）。 */
   investigationCases?: readonly HaremInvestigationCaseView[];
+  /** 当前行动力（用于调查行动 AP 检查）。 */
+  playerAp?: number;
+  /** 调查行动回调（Phase 5B-3）。 */
+  investigationCallbacks?: import("../components/HaremInvestigationDrawer").HaremInvestigationDrawerCallbacks;
 }
 
 /** 宫中情报历史列表条目（App 层预计算，ZichendianScreen 只渲染）。 */
@@ -202,6 +206,8 @@ export function ZichendianScreen({
   onTransferHaremAdministration,
   intrigueHistoryItems = [],
   investigationCases = [],
+  playerAp = 0,
+  investigationCallbacks,
 }: ZichendianScreenProps) {
   const [foreground, setForeground] = useState<ZichendianForeground>({ kind: "none" });
   const reasonId = useId();
@@ -488,8 +494,13 @@ export function ZichendianScreen({
       {internalSurfacesAllowed && foreground.kind === "intrigue-history" && (
         <IntrigueHistoryDrawer items={intrigueHistoryItems} onClose={closeForeground} />
       )}
-      {internalSurfacesAllowed && foreground.kind === "investigation-cases" && (
-        <HaremInvestigationDrawer cases={investigationCases} onClose={closeForeground} />
+      {internalSurfacesAllowed && foreground.kind === "investigation-cases" && investigationCallbacks && (
+        <HaremInvestigationDrawer
+          cases={investigationCases}
+          playerAp={playerAp}
+          onClose={closeForeground}
+          callbacks={investigationCallbacks}
+        />
       )}
     </>
   );

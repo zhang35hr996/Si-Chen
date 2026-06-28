@@ -89,6 +89,54 @@ function anomalyBody(summaryCode: string, targetLabel: string): string[] {
   }
 }
 
+const INVESTIGATION_UPDATE_SUMMARY_CODES: Record<string, string[]> = {
+  inquiry_limited_findings: [
+    "奉命查办之事已有回报。",
+    "经暗中查访，宫人所述含糊，尚无足以定论之证据。",
+  ],
+  inquiry_found_suspicious_pattern: [
+    "奉命查办之事已有回报。",
+    "经暗中查访，已发现若干可疑之处，仍需进一步核实。",
+  ],
+  suspect_inconclusive_account: [
+    "奉命查办之事已有回报。",
+    "经问询当事人，所述前后不一，尚不足以定论。",
+  ],
+  suspect_contradicted_account: [
+    "奉命查办之事已有回报。",
+    "经审问，当事人供词与已知证据存在明显出入，嫌疑加深。",
+  ],
+  target_account_consistent: [
+    "奉命查办之事已有回报。",
+    "经问询，受害之人所述有所提供，调查仍在继续。",
+  ],
+};
+
+function investigationUpdateBody(summaryCode: string): string[] {
+  return (
+    INVESTIGATION_UPDATE_SUMMARY_CODES[summaryCode] ?? [
+      "奉命查办之事已有回报。",
+      "经查，宫人供述中出现前后不一之处，现有线索仍不足以定论。",
+    ]
+  );
+}
+
+function investigationFinalBody(summaryCode: string, confidence: string): string[] {
+  const confLabel =
+    confidence === "confirmed"
+      ? "已有确证"
+      : confidence === "strong"
+        ? "线索较为明确"
+        : "已有一定眉目";
+  return [
+    "此案调查已有较为明确的结果。",
+    `目前${confLabel}，相关卷宗已呈入紫宸殿，待圣上裁定。`,
+    ...(summaryCode === "suspect_contradicted_account"
+      ? ["嫌疑人供词与证据出入较大，可信度存疑。"]
+      : []),
+  ];
+}
+
 export function presentHaremIntrigueReport(
   report: HaremIntrigueReport,
   resolveCharacterName: (id: string) => string,
@@ -97,6 +145,30 @@ export function presentHaremIntrigueReport(
   const targetLabel = targetLabels[0] ?? "某侍君";
   const outcome = OUTCOME_LABELS[report.knownOutcome] ?? "结果不明";
   const confidence = CONFIDENCE_LABELS[report.confidence] ?? report.confidence;
+
+  if (report.reportKind === "investigation_final") {
+    return {
+      title: "调查结果上报",
+      body: investigationFinalBody(report.summaryCode, report.confidence),
+      actorLabel: undefined,
+      targetLabels,
+      outcomeLabel: outcome,
+      confidenceLabel: confidence,
+      timeLabel: timeLabelOf(report),
+    };
+  }
+
+  if (report.reportKind === "investigation_update") {
+    return {
+      title: "调查已有进展",
+      body: investigationUpdateBody(report.summaryCode),
+      actorLabel: undefined,
+      targetLabels,
+      outcomeLabel: outcome,
+      confidenceLabel: confidence,
+      timeLabel: timeLabelOf(report),
+    };
+  }
 
   if (report.reportKind === "exposure") {
     const actorId = report.suspectedActorIds[0];
@@ -133,6 +205,12 @@ export function intrigueReportSummaryLine(
 ): string {
   const time = timeLabelOf(report);
   const target = report.knownTargetIds.map(resolveCharacterName).join("、") || "某侍君";
+  if (report.reportKind === "investigation_final") {
+    return `${time}　关于${target}一案调查已有结果，待裁定`;
+  }
+  if (report.reportKind === "investigation_update") {
+    return `${time}　关于${target}一案调查已有进展`;
+  }
   if (report.reportKind === "exposure") {
     const actorId = report.suspectedActorIds[0];
     const actor = actorId ? resolveCharacterName(actorId) : "不明人士";

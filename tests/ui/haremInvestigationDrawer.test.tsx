@@ -1,11 +1,17 @@
 /**
- * Phase 5B-1B: HaremInvestigationDrawer 排序测试。
+ * Phase 5B-1B / 5B-3: HaremInvestigationDrawer 排序测试。
  * 重点验证 active 优先 + GameTime 数值排序（跨月、跨年、同月旬次）。
  */
 import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { HaremInvestigationDrawer, type HaremInvestigationCaseView } from "../../src/ui/components/HaremInvestigationDrawer";
+import { describe, expect, it, vi } from "vitest";
+import { HaremInvestigationDrawer, type HaremInvestigationCaseView, type HaremInvestigationDrawerCallbacks } from "../../src/ui/components/HaremInvestigationDrawer";
 import { makeGameTime } from "../../src/engine/calendar/time";
+
+const NO_OP_CALLBACKS: HaremInvestigationDrawerCallbacks = {
+  onStartTask: vi.fn().mockResolvedValue(null),
+  onCancelCase: vi.fn().mockResolvedValue(null),
+  onReviewCase: vi.fn().mockResolvedValue(null),
+};
 
 function makeView(
   id: string,
@@ -30,6 +36,9 @@ function makeView(
       kindLabels: [],
       emptyKindText: "作案手段尚未查明",
       confidenceLabel: "线索模糊",
+      leadViews: [],
+      availableActions: [],
+      suspectViews: [],
     },
   };
 }
@@ -46,7 +55,7 @@ describe("HaremInvestigationDrawer: 排序", () => {
       makeView("old-active", 1, 1, "early", "open"),
       makeView("new-closed", 1, 9, "late", "closed_confirmed"),
     ];
-    render(<HaremInvestigationDrawer cases={cases} onClose={() => {}} />);
+    render(<HaremInvestigationDrawer cases={cases} playerAp={3} onClose={() => {}} callbacks={NO_OP_CALLBACKS} />);
     const titles = renderedTitles();
     expect(titles[0]).toBe("old-active");
     expect(titles[1]).toBe("new-closed");
@@ -57,7 +66,7 @@ describe("HaremInvestigationDrawer: 排序", () => {
       makeView("sep", 1, 9, "late", "open"),
       makeView("oct", 1, 10, "early", "open"),
     ];
-    render(<HaremInvestigationDrawer cases={cases} onClose={() => {}} />);
+    render(<HaremInvestigationDrawer cases={cases} playerAp={3} onClose={() => {}} callbacks={NO_OP_CALLBACKS} />);
     const titles = renderedTitles();
     expect(titles[0]).toBe("oct");
     expect(titles[1]).toBe("sep");
@@ -68,7 +77,7 @@ describe("HaremInvestigationDrawer: 排序", () => {
       makeView("prev-year", 9, 12, "late", "closed_confirmed"),
       makeView("next-year", 10, 1, "early", "closed_confirmed"),
     ];
-    render(<HaremInvestigationDrawer cases={cases} onClose={() => {}} />);
+    render(<HaremInvestigationDrawer cases={cases} playerAp={3} onClose={() => {}} callbacks={NO_OP_CALLBACKS} />);
     const titles = renderedTitles();
     expect(titles[0]).toBe("next-year");
     expect(titles[1]).toBe("prev-year");
@@ -80,7 +89,7 @@ describe("HaremInvestigationDrawer: 排序", () => {
       makeView("mid", 2, 5, "mid", "open"),
       makeView("late", 2, 5, "late", "open"),
     ];
-    render(<HaremInvestigationDrawer cases={cases} onClose={() => {}} />);
+    render(<HaremInvestigationDrawer cases={cases} playerAp={3} onClose={() => {}} callbacks={NO_OP_CALLBACKS} />);
     const titles = renderedTitles();
     expect(titles[0]).toBe("late");
     expect(titles[1]).toBe("mid");
@@ -94,12 +103,10 @@ describe("HaremInvestigationDrawer: 排序", () => {
       makeView("closed-old", 1, 1, "early", "closed_confirmed"),
       makeView("closed-new", 1, 8, "mid", "closed_confirmed"),
     ];
-    render(<HaremInvestigationDrawer cases={cases} onClose={() => {}} />);
+    render(<HaremInvestigationDrawer cases={cases} playerAp={3} onClose={() => {}} callbacks={NO_OP_CALLBACKS} />);
     const titles = renderedTitles();
-    // active first: newest first
     expect(titles[0]).toBe("active-new");
     expect(titles[1]).toBe("active-old");
-    // then closed: newest first
     expect(titles[2]).toBe("closed-new");
     expect(titles[3]).toBe("closed-old");
   });

@@ -1,21 +1,27 @@
 /**
- * Phase 5B-1B: 宫中案件抽屉。
- * 只读：展示调查案件列表及详情，不提供取消操作（5B-2 后开放）。
- *
- * 知识边界：仅展示玩家已知字段，不从 haremSchemes / haremIncidents 补全真相。
+ * Phase 5B-3: 宫中案件抽屉 — 交互层。
+ * 展示案件列表与详情，支持派发调查任务、取消案件、裁定主谋。
+ * 知识边界：仅读取玩家已知字段，不访问 haremSchemes / haremIncidents / investigationTruths。
  */
 import { useState } from "react";
-import type { HaremInvestigationPresentation } from "../haremInvestigationPresenter";
+import type { InvestigationDetailPresentation } from "../haremInvestigationPresenter";
 import { CASE_STATUS_LABELS } from "../haremInvestigationPresenter";
-import type { IntrigueInvestigationStatus } from "../../engine/characters/haremInvestigation/types";
+import type { IntrigueInvestigationStatus, InvestigationMethod } from "../../engine/characters/haremInvestigation/types";
 import { isActiveCase } from "../../engine/characters/haremInvestigation/types";
+import type { AvailableInvestigationAction } from "../../engine/characters/haremInvestigation/actions";
 import type { GameTime } from "../../engine/calendar/time";
 
 export interface HaremInvestigationCaseView {
   id: string;
-  presentation: HaremInvestigationPresentation;
+  presentation: InvestigationDetailPresentation;
   status: IntrigueInvestigationStatus;
   openedAt: GameTime;
+}
+
+export interface HaremInvestigationDrawerCallbacks {
+  onStartTask: (caseId: string, method: InvestigationMethod, subjectId?: string) => Promise<string | null>;
+  onCancelCase: (caseId: string) => Promise<string | null>;
+  onReviewCase: (caseId: string, decision: "confirm" | "close_unresolved", suspectId?: string) => Promise<string | null>;
 }
 
 const PERIOD_ORDER = { early: 0, mid: 1, late: 2 } as const;
@@ -28,16 +34,19 @@ function compareGameTimeDesc(a: GameTime, b: GameTime): number {
 
 export function HaremInvestigationDrawer({
   cases,
+  playerAp,
   onClose,
+  callbacks,
 }: {
   cases: readonly HaremInvestigationCaseView[];
+  playerAp: number;
   onClose: () => void;
+  callbacks: HaremInvestigationDrawerCallbacks;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const selected = selectedId !== null ? cases.find((c) => c.id === selectedId) : undefined;
 
-  // 排序：活跃优先，同组按 openedAt 数值倒序（新案在前）
   const sorted = [...cases].sort((a, b) => {
     const aActive = isActiveCase(a.status) ? 0 : 1;
     const bActive = isActiveCase(b.status) ? 0 : 1;
@@ -53,7 +62,12 @@ export function HaremInvestigationDrawer({
       </div>
 
       {selected ? (
-        <CaseDetail caseView={selected} onBack={() => setSelectedId(null)} />
+        <CaseDetail
+          caseView={selected}
+          playerAp={playerAp}
+          onBack={() => setSelectedId(null)}
+          callbacks={callbacks}
+        />
       ) : (
         <CaseList cases={sorted} onSelect={(id) => setSelectedId(id)} />
       )}
@@ -123,48 +137,244 @@ function CaseListItem({
 
 function CaseDetail({
   caseView,
+  playerAp,
   onBack,
+  callbacks,
 }: {
   caseView: HaremInvestigationCaseView;
+  playerAp: number;
   onBack: () => void;
+  callbacks: HaremInvestigationDrawerCallbacks;
 }) {
-  const { presentation: pres } = caseView;
+  const { presentation: pres, id: caseId, status } = caseView;
+  const [error, setError] = useState<string | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [selectedSuspectForReview, setSelectedSuspectForReview] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleStartTask(action: AvailableInvestigationAction) {
+    const subjectId = action.subjectCandidateIds ? selectedSubject ?? undefined : undefined;
+    if (action.subjectCandidateIds && !subjectId) {
+      setError("请先选择调查对象");
+      return;
+    }
+    if (playerAp < action.apCost) {
+      setError(`行动力不足（需要 ${action.apCost}，当前 ${playerAp}）`);
+      return;
+    }
+    setPending(true);
+    setError(null);
+    const err = await callbacks.onStartTask(caseId, action.method, subjectId);
+    setPending(false);
+    if (err) setError(err);
+    else setSelectedSubject(null);
+  }
+
+  async function handleCancel() {
+    setPending(true);
+    setError(null);
+    const err = await callbacks.onCancelCase(caseId);
+    setPending(false);
+    if (err) setError(err);
+  }
+
+  async function handleReview(decision: "confirm" | "close_unresolved") {
+    if (decision === "confirm" && !selectedSuspectForReview) {
+      setError("请先选择确认主谋");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    const err = await callbacks.onReviewCase(
+      caseId,
+      decision,
+      decision === "confirm" ? (selectedSuspectForReview ?? undefined) : undefined,
+    );
+    setPending(false);
+    if (err) setError(err);
+    else setSelectedSuspectForReview(null);
+  }
+
+  const canConfirmCulprit = pres.confidenceLabel === "已有确证" || pres.confidenceLabel === "线索较明";
+
   return (
     <div className="investigation-drawer__detail">
       <button type="button" className="investigation-drawer__back" onClick={onBack}>← 返回列表</button>
       <h3 className="investigation-drawer__detail-title">{pres.title}</h3>
+
       <dl className="investigation-drawer__fields">
-        <dt>立案时间</dt>
-        <dd>{pres.openedAtLabel}</dd>
-
-        <dt>案件状态</dt>
-        <dd>{pres.statusLabel}</dd>
-
+        <dt>立案时间</dt><dd>{pres.openedAtLabel}</dd>
+        <dt>案件状态</dt><dd>{pres.statusLabel}</dd>
         <dt>受影响之人</dt>
         <dd>{pres.targetLabels.length > 0 ? pres.targetLabels.join("、") : "—"}</dd>
-
         <dt>目前嫌疑人</dt>
-        <dd>
-          {pres.suspectLabels.length > 0
-            ? pres.suspectLabels.join("、")
-            : pres.emptySuspectText}
-        </dd>
-
+        <dd>{pres.suspectLabels.length > 0 ? pres.suspectLabels.join("、") : pres.emptySuspectText}</dd>
         <dt>已知手段</dt>
-        <dd>
-          {pres.kindLabels.length > 0
-            ? pres.kindLabels.join("、")
-            : pres.emptyKindText}
-        </dd>
-
-        <dt>可信程度</dt>
-        <dd>{pres.confidenceLabel}</dd>
+        <dd>{pres.kindLabels.length > 0 ? pres.kindLabels.join("、") : pres.emptyKindText}</dd>
+        <dt>可信程度</dt><dd>{pres.confidenceLabel}</dd>
       </dl>
+
+      {/* 当前任务进度 */}
+      {pres.currentTask && (
+        <div className="investigation-drawer__current-task">
+          <p>当前正在{pres.currentTask.methodLabel}
+            {pres.currentTask.subjectLabel ? `（${pres.currentTask.subjectLabel}）` : ""}
+          </p>
+          <p className="investigation-drawer__due">预计 {pres.currentTask.dueAtLabel} 回报</p>
+        </div>
+      )}
+
+      {/* 历史线索 */}
+      {pres.leadViews.length > 0 && (
+        <section className="investigation-drawer__leads">
+          <h4>已有线索</h4>
+          <ul>
+            {pres.leadViews.map((l) => (
+              <li key={l.id} className="investigation-drawer__lead-item">
+                <span className="lead-time">{l.discoveredAtLabel}</span>
+                <span className="lead-method">{l.methodLabel}</span>
+                <span className="lead-summary">{l.summary}</span>
+                <span className="lead-strength">{l.strengthLabel}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* 裁定主谋（closed_confirmed） */}
+      {pres.confirmedCulpritLabel && (
+        <div className="investigation-drawer__verdict">
+          <p>已认定主谋：<strong>{pres.confirmedCulpritLabel}</strong></p>
+        </div>
+      )}
+
+      {/* open — 可用行动 */}
+      {status === "open" && pres.availableActions.length > 0 && (
+        <section className="investigation-drawer__actions">
+          <h4>调查行动</h4>
+          {pres.availableActions.map((action) => {
+            const needsSubject = !!action.subjectCandidateIds;
+            return (
+              <div key={action.method} className="investigation-action">
+                {needsSubject && (
+                  <select
+                    className="investigation-action__select"
+                    value={selectedSubject ?? ""}
+                    onChange={(e) => setSelectedSubject(e.target.value || null)}
+                    disabled={pending}
+                  >
+                    <option value="">— 选择对象 —</option>
+                    {action.subjectCandidateIds!.map((id) => (
+                      <option key={id} value={id}>{id}</option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  className="investigation-action__btn"
+                  onClick={() => handleStartTask(action)}
+                  disabled={pending || playerAp < action.apCost}
+                >
+                  {ACTION_LABEL[action.method] ?? action.method}
+                  　{action.apCost} 行动力 · {action.durationDays} 旬
+                </button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            className="investigation-action__cancel"
+            onClick={handleCancel}
+            disabled={pending}
+          >
+            终止调查
+          </button>
+        </section>
+      )}
+
+      {/* in_progress — 等待结算 */}
+      {status === "in_progress" && (
+        <div className="investigation-drawer__waiting">
+          <p>调查进行中，请等待回报。</p>
+          <button
+            type="button"
+            className="investigation-action__cancel"
+            onClick={handleCancel}
+            disabled={pending}
+          >
+            终止调查
+          </button>
+        </div>
+      )}
+
+      {/* ready_for_review — 裁定 */}
+      {status === "ready_for_review" && (
+        <section className="investigation-drawer__review">
+          <h4>待圣上裁定</h4>
+          {canConfirmCulprit && pres.suspectViews.length > 0 && (
+            <div className="investigation-action">
+              <select
+                className="investigation-action__select"
+                value={selectedSuspectForReview ?? ""}
+                onChange={(e) => setSelectedSuspectForReview(e.target.value || null)}
+                disabled={pending}
+              >
+                <option value="">— 选择主谋 —</option>
+                {pres.suspectViews.map(({ id, label }) => (
+                  <option key={id} value={id}>{label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="investigation-drawer__review-buttons">
+            <button
+              type="button"
+              className="investigation-action__btn investigation-action__btn--primary"
+              onClick={() => handleReview("confirm")}
+              disabled={pending || !canConfirmCulprit || !selectedSuspectForReview}
+            >
+              确认主谋
+            </button>
+            <button
+              type="button"
+              className="investigation-action__btn"
+              onClick={() => handleReview("close_unresolved")}
+              disabled={pending}
+            >
+              证据不足，结案
+            </button>
+          </div>
+          <button
+            type="button"
+            className="investigation-action__cancel"
+            onClick={handleCancel}
+            disabled={pending}
+          >
+            继续调查
+          </button>
+        </section>
+      )}
+
+      {/* 已结案 */}
+      {(status === "closed_confirmed" || status === "closed_unresolved" || status === "cancelled") && (
+        <div className="investigation-drawer__closed">
+          {status === "closed_confirmed" && <p>已经查明，认定主谋：{pres.confirmedCulpritLabel ?? "—"}</p>}
+          {status === "closed_unresolved" && <p>证据不足，未能查明。</p>}
+          {status === "cancelled" && <p>圣上已下令终止调查。</p>}
+        </div>
+      )}
+
+      {error && <p className="investigation-drawer__error" role="alert">{error}</p>}
     </div>
   );
 }
 
-/** 获取状态分类标签（供外部列表分组时使用）。 */
+const ACTION_LABEL: Record<string, string> = {
+  question_target: "询问受影响之人",
+  question_suspect: "传问嫌疑人",
+  quiet_inquiry: "暗中查访",
+};
+
 export function getCaseStatusLabel(status: IntrigueInvestigationStatus): string {
   return CASE_STATUS_LABELS[status];
 }
