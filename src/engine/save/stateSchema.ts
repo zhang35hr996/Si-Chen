@@ -959,7 +959,7 @@ export const gameStateSchema = z.strictObject({
     source: z.strictObject({ incidentId: z.string().min(1) }),
     reportKind: z.enum(["anomaly", "rumor", "exposure", "investigation_update", "investigation_final"]),
     createdAt: gameTimeSchema,
-    status: z.enum(["unread", "seen", "actioned", "archived"]),
+    status: z.enum(["unread", "acknowledged", "actioned", "archived"]),
     knownTargetIds: z.array(idSchema),
     suspectedActorIds: z.array(idSchema),
     suspectedKinds: z.array(z.enum(["slander", "false_accusation", "steal_credit", "faction_pressure", "servant_subversion"])),

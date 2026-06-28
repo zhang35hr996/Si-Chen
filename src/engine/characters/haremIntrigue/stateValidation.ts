@@ -187,8 +187,11 @@ export function validateHaremIntrigueLinks(
       errors.push(stateError("INTRIGUE_REPORT_ORPHAN", `haremIntrigueReports[id=${report.id}]: 引用不存在的 incidentId="${report.source.incidentId}"`));
     }
 
-    if ((report.status === "actioned" || report.status === "archived") && !report.acknowledgedAt) {
+    if (report.status !== "unread" && !report.acknowledgedAt) {
       errors.push(stateError("INTRIGUE_REPORT_MISSING_ACK", `haremIntrigueReports[id=${report.id}]: status=${report.status} 但无 acknowledgedAt`));
+    }
+    if (report.status === "unread" && report.acknowledgedAt) {
+      errors.push(stateError("INTRIGUE_REPORT_SPURIOUS_ACK", `haremIntrigueReports[id=${report.id}]: status=unread 但有 acknowledgedAt`));
     }
   }
 

@@ -132,6 +132,9 @@ import { ColdPalaceInterventionModal } from "./components/ColdPalaceIntervention
 import { ColdPalaceMadnessModal } from "./components/ColdPalaceMadnessModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
 import { oldestPendingHaremAdminReport, buildHaremAdminReviewLine } from "../store/haremAdminAnnualReview";
+import { oldestUnreadIntrigueReport } from "./settlement";
+import { HaremIntrigueReportModal } from "./components/HaremIntrigueReportModal";
+import { intrigueReportSummaryLine } from "./haremIntrigueReportPresenter";
 import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
@@ -1242,6 +1245,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
         coldPalaceReportDue: oldestPresentableIncident(liveState) !== undefined,
+        haremIntrigueReportDue: oldestUnreadIntrigueReport(liveState) !== undefined,
         haremDisciplineDue: liveState.haremDisciplineIncidents.some((i) => i.status === "pending_response"),
         haremAdminReviewDue: oldestPendingHaremAdminReport(liveState) !== null,
         grandSelectionDue: liveState.pendingDaxuan !== undefined,
@@ -1913,6 +1917,17 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                 setConsortListReturnId(null);
                 setConsortListOpen(true);
               }}
+              intrigueHistoryItems={liveState.haremIntrigueReports
+                .slice()
+                .sort((a, b) => b.createdAt.dayIndex - a.createdAt.dayIndex)
+                .map((r) => ({
+                  id: r.id,
+                  summaryLine: intrigueReportSummaryLine(r, (id) => {
+                    const ch = db.characters[id] ?? liveState.generatedConsorts[id];
+                    return ch ? ch.profile.name : id;
+                  }),
+                  status: r.status,
+                }))}
             />
           </GameShell>
         );
@@ -2731,6 +2746,22 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             onAcknowledge={() => { if (store.acknowledgeIncident(incident.id)) doAutosave(); }}
             onNavigate={() => { setFreeViewId("changmengong"); setView("freeview"); }}
             onRestore={(charId) => setRestoreCharId(charId)}
+          />
+        );
+      })()}
+      {activeGlobalInterrupt === "harem_intrigue_report" && (() => {
+        const report = oldestUnreadIntrigueReport(liveState);
+        if (!report) return null;
+        return (
+          <HaremIntrigueReportModal
+            key={report.id}
+            db={db}
+            state={liveState}
+            report={report}
+            onAcknowledge={() => {
+              const r = store.acknowledgeHaremIntrigueReport(report.id);
+              if (r.ok) doAutosave();
+            }}
           />
         );
       })()}
