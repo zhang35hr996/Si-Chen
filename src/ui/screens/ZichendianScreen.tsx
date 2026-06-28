@@ -1,3 +1,31 @@
+/** 宫中情报历史抽屉（只读列表）。 */
+function IntrigueHistoryDrawer({
+  items,
+  onClose,
+}: {
+  items: readonly IntrigueHistoryItem[];
+  onClose: () => void;
+}) {
+  return (
+    <div className="pending-audience-drawer" role="dialog" aria-label="宫中奏报">
+      <div className="pending-audience-drawer__header">
+        <h2 className="pending-audience-drawer__title">宫中奏报</h2>
+        <button type="button" className="pending-audience-drawer__close" onClick={onClose} aria-label="关闭">✕</button>
+      </div>
+      <ul className="intrigue-history-list">
+        {items.length === 0 && (
+          <li className="intrigue-history-list__empty">暂无情报记录</li>
+        )}
+        {items.map((item) => (
+          <li key={item.id} className={`intrigue-history-list__item${item.status === "unread" ? " intrigue-history-list__item--unread" : ""}`}>
+            {item.summaryLine}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * 紫宸殿场景屏（scene-ui-narrative-refactor §6 / Task 2.4）。把候见 / 召见 / 乘风落到本殿专用屏，移除人物卡。
  *
@@ -75,13 +103,25 @@ export interface ZichendianScreenProps {
   onBestow: () => void;
   onPhysician: () => void;
   onTransferHaremAdministration?: () => void;
+
+  /** 宫中情报历史（宫斗报告已读/未读汇总）。 */
+  intrigueHistoryItems?: readonly IntrigueHistoryItem[];
+}
+
+/** 宫中情报历史列表条目（App 层预计算，ZichendianScreen 只渲染）。 */
+export interface IntrigueHistoryItem {
+  id: string;
+  summaryLine: string;
+  /** "unread" 时加粗标记 */
+  status: string;
 }
 
 /** 单一前景 surface 判别联合：至多一个前景对话存在。 */
 type ZichendianForeground =
   | { kind: "none" }
   | { kind: "pending-audience" }
-  | { kind: "chengfeng" };
+  | { kind: "chengfeng" }
+  | { kind: "intrigue-history" };
 
 export function ZichendianScreen({
   background,
@@ -112,6 +152,7 @@ export function ZichendianScreen({
   onBestow,
   onPhysician,
   onTransferHaremAdministration,
+  intrigueHistoryItems = [],
 }: ZichendianScreenProps) {
   const [foreground, setForeground] = useState<ZichendianForeground>({ kind: "none" });
   const reasonId = useId();
@@ -135,6 +176,7 @@ export function ZichendianScreen({
   // 前景切换：开启 surface 仅可从 none 出发（守住单一前景不变量）；关闭一律回 none。
   const openPending = () => setForeground((f) => (f.kind === "none" ? { kind: "pending-audience" } : f));
   const openChengfeng = () => setForeground((f) => (f.kind === "none" ? { kind: "chengfeng" } : f));
+  const openIntrigueHistory = () => setForeground((f) => (f.kind === "none" ? { kind: "intrigue-history" } : f));
   const closeForeground = () => setForeground({ kind: "none" });
 
   // 乘风谕令为业务交接：先关菜单，再在同一交互内发出对应回调（原子切换，便于父层接着开下一个业务面板）。
@@ -244,6 +286,11 @@ export function ZichendianScreen({
       <button type="button" className="action-btn" onClick={openPending} disabled={sceneActionsLocked}>
         待宣 · {deferredAudienceCount}
       </button>
+      {intrigueHistoryItems.length > 0 && (
+        <button type="button" className="action-btn" onClick={openIntrigueHistory} disabled={sceneActionsLocked}>
+          宫中奏报 · {intrigueHistoryItems.length}
+        </button>
+      )}
       {showInterruptReason && (
         <span id={reasonId} role="note" className="zichendian-actions__reason">
           {interruptDisabledReason}
@@ -283,6 +330,9 @@ export function ZichendianScreen({
           onTransferHaremAdministration={onTransferHaremAdministration ? () => handoff(onTransferHaremAdministration) : undefined}
           onClose={closeForeground}
         />
+      )}
+      {internalSurfacesAllowed && foreground.kind === "intrigue-history" && (
+        <IntrigueHistoryDrawer items={intrigueHistoryItems} onClose={closeForeground} />
       )}
     </>
   );

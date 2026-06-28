@@ -1269,7 +1269,7 @@ export type HaremIntrigueReportKind =
   | "investigation_final";   // 调查终报（5B-2）
 
 /** 宫斗情报报告状态（玩家视角）。 */
-export type HaremIntrigueReportStatus = "unread" | "seen" | "actioned" | "archived";
+export type HaremIntrigueReportStatus = "unread" | "acknowledged" | "actioned" | "archived";
 
 /** 玩家对结果的知情程度。 */
 export type HaremIntrigueKnownOutcome = "unknown" | "harm_observed" | "attempt_observed";

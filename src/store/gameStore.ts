@@ -2602,6 +2602,21 @@ export class GameStore {
     return ok(undefined);
   }
 
+  acknowledgeHaremIntrigueReport(reportId: string): Result<void, GameError[]> {
+    const idx = this.state.haremIntrigueReports.findIndex((r) => r.id === reportId);
+    if (idx === -1) return err([stateError("REPORT_NOT_FOUND", `haremIntrigueReport "${reportId}" not found`)]);
+    const report = this.state.haremIntrigueReports[idx]!;
+    if (report.status === "acknowledged") return ok(undefined); // idempotent
+    if (report.status !== "unread") {
+      return err([stateError("REPORT_BAD_STATUS", `haremIntrigueReport "${reportId}" status="${report.status}" cannot be acknowledged`)]);
+    }
+    const updated = [...this.state.haremIntrigueReports];
+    updated[idx] = { ...report, status: "acknowledged", acknowledgedAt: toGameTime(this.state.calendar) };
+    this.state = { ...this.state, haremIntrigueReports: updated };
+    this.emit();
+    return ok(undefined);
+  }
+
   acknowledgeHaremAdminReview(reviewId: string): boolean {
     const idx = this.state.haremAdminReviews.findIndex(
       (r) => r.id === reviewId && !r.acknowledged,
