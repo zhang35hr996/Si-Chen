@@ -103,6 +103,7 @@ import type { InvestigationMethod } from "../engine/characters/haremInvestigatio
 import { resolveInvestigationTruth, buildHeirHealthTruthContext, hashStr } from "../engine/characters/haremInvestigation/truth/truthResolver";
 import type { HeirHealthSymptom, HeirHealthAnomalyIncident } from "../engine/characters/haremInvestigation/truth/types";
 import { applyCompanionReconciliation, planCompanionReconciliation } from "../engine/characters/companionReconciliation";
+import { applyMonthlyHeirUpbringing, planMonthlyHeirUpbringing } from "../engine/characters/heirUpbringingSettlement";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -2011,6 +2012,15 @@ export class GameStore {
     if (!swept.ok) return err(swept.error);
     candidate = swept.value;
     collector?.capturePhaseScheduled("sweep_expired_confinements", diffGameState(beforeSweep, candidate));
+
+    // 皇嗣成长环境月结（每月一次幂等键守卫；先于伴读 reconciliation，使本月养父照料/忽视先更新）。
+    {
+      const beforeUpbringing = candidate;
+      const now = toGameTime(candidate.calendar);
+      const upbringingPlan = planMonthlyHeirUpbringing(db, candidate, now);
+      candidate = applyMonthlyHeirUpbringing(candidate, upbringingPlan);
+      collector?.capturePhaseScheduled("heir_upbringing_settlement", diffGameState(beforeUpbringing, candidate));
+    }
 
     // 伴读幂等协调（每次时间推进后运行；无 AP、无 EventEffect，纯不可变变换）。
     {

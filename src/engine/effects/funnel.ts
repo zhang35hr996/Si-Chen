@@ -16,7 +16,7 @@
  */
 import type { TraceCollector } from "../trace/collector";
 import { diffGameState } from "../trace/diff";
-import { toGameTime } from "../calendar/time";
+import { toGameTime, timeOfDay } from "../calendar/time";
 import { chamberOf, hasChambers } from "../characters/chambers";
 import { applyFavorDelta } from "../characters/favor";
 import { isConfined, nextStatusEffectId } from "../characters/confinement";
@@ -26,7 +26,8 @@ import {
   canAdministratorAdjustRank,
   canEmpressAdjustRank,
 } from "../characters/haremRankAuthority";
-import { nextHeirId } from "../characters/heirs";
+import { nextHeirId, residesInYuqing } from "../characters/heirs";
+import { resolveCustodianAvailability, custodianUnlocksRecustody } from "../characters/custodianAvailability";
 import { gestationRollRaw } from "../characters/gestation";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
@@ -314,6 +315,19 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_night_visit": {
+        const heir = state.resources.bloodline.heirs.find((h) => h.id === e.heirId);
+        if (!heir) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        } else if (heir.lifecycle !== "alive") {
+          bad(index, "BAD_EFFECT_TARGET", `heir_night_visit on non-alive heir "${e.heirId}"`, { heir: e.heirId });
+        } else if (!residesInYuqing(heir, state.calendar)) {
+          bad(index, "BAD_EFFECT_TARGET", `heir "${e.heirId}" has not moved to 毓庆宫`, { heir: e.heirId });
+        } else if (timeOfDay(state.calendar) !== "night") {
+          bad(index, "BAD_EFFECT", `heir_night_visit only at night`, { heir: e.heirId });
+        }
+        break;
+      }
       case "heir_lesson_response": {
         if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
           bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
@@ -331,8 +345,12 @@ export function validateEffects(
           break;
         }
         if (heir.legitimate) {
-          bad(index, "BAD_EFFECT", "嫡出皇嗣的抚养归属已定，不可在奉先殿更改。", { heir: e.heirId });
-          break;
+          // 嫡出归属已定——仅当现抚养人身故/入冷宫（死锁）时解锁重新指定。
+          const { availability } = resolveCustodianAvailability(db, state, heir);
+          if (!custodianUnlocksRecustody(availability)) {
+            bad(index, "BAD_EFFECT", "嫡出皇嗣的抚养归属已定，不可在奉先殿更改。", { heir: e.heirId });
+            break;
+          }
         }
         if (e.custodianId === heir.adoptiveFatherId) {
           bad(index, "BAD_EFFECT", `heir_custody: custodian "${e.custodianId}" is already the current custodian`, { heir: e.heirId, custodian: e.custodianId });
@@ -591,6 +609,7 @@ function describeEffect(effect: EventEffect): string {
     case "heir_candidate": return `heir_candidate ${effect.char} op=${effect.op}`;
     case "heir_name": return `heir_name ${effect.heirId} ${effect.field}="${effect.name}"`;
     case "heir_audience": return `heir_audience ${effect.heirId} ${effect.action}`;
+    case "heir_night_visit": return `heir_night_visit ${effect.heirId} ${effect.action}`;
     case "heir_lesson_response": return `heir_lesson_response ${effect.heirId} ${effect.subject} ${effect.performance} → ${effect.response}`;
     case "heir_educate": return `heir_educate ${effect.heirId} ${effect.subject}`;
     case "heir_custody": return `heir_custody ${effect.heirId} → ${effect.custodianId}`;
@@ -897,6 +916,22 @@ export function applyEffects(
           heir.closeness = clampPct(heir.closeness + 4);
           heir.imperialFear = clampPct(heir.imperialFear - 3);
           heir.neglect = Math.max(0, heir.neglect - 10);
+        }
+        heir.lastImperialInteractionAt = now;
+        break;
+      }
+      case "heir_night_visit": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        if (effect.action === "heart_to_heart") {
+          heir.favor = clampPct(heir.favor + 2);
+          heir.closeness = clampPct(heir.closeness + 4);
+          heir.imperialFear = clampPct(heir.imperialFear - 2);
+          heir.neglect = Math.max(0, heir.neglect - 8);
+        } else {
+          heir.favor = clampPct(heir.favor + 3);
+          heir.closeness = clampPct(heir.closeness + 3);
+          heir.imperialFear = clampPct(heir.imperialFear - 1);
+          heir.neglect = Math.max(0, heir.neglect - 9);
         }
         heir.lastImperialInteractionAt = now;
         break;

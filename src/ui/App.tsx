@@ -85,6 +85,7 @@ import type { DialogueLine } from "../engine/dialogue/types";
 import type { HeirAudiencePlan } from "../store/heirAudience";
 import { buildWenzhaoLesson, buildWenzhaoTutorReport } from "../store/heirEducation";
 import { buildHeirAudienceAction, resolveHeirLessonPerformance, buildHeirLessonResponseReaction } from "../store/heirAudience";
+import { buildHeirNightVisit } from "../store/heirNightVisit";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
 import { buildProvinceTribute, buildMinisterTribute } from "../store/tribute";
@@ -1205,6 +1206,21 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     setChildReaction(plan);
   };
 
+  // 毓庆宫·夜访（耗 1 行动点）：谈心 / 陪坐片刻。
+  const heirNightVisit = (heirId: string, action: "heart_to_heart" | "quiet_company") => {
+    const plan = buildHeirNightVisit(db, store.getState(), heirId, action);
+    if (!plan) return;
+    const before = store.getState().calendar;
+    const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+    const decreeBeats = rollActionBeats(before, 1);
+    doAutosave();
+    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
+    setChildReaction({ effects: plan.effects, lines: plan.lines, portraitSet: plan.portraitSet, speakerName: plan.speakerName });
+  };
+
   // 紫宸殿·询功课（不耗行动力，仅计算并显示成绩供选择应对方式）。
   const heirAskLesson = () => {
     const heirId = summonedHeirId;
@@ -1943,6 +1959,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           registry={registry}
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
           onOpenSettings={() => setSettingsOpen(true)}
+          onNightVisit={heirNightVisit}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
         />

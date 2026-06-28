@@ -134,7 +134,7 @@ describe("cross-screen emperor pregnancy consistency", () => {
     map.unmount();
 
     const yuqing = render(
-      <YuqingGongScreen db={db} store={store} registry={registry} onOpenMap={vi.fn()} onOpenSettings={vi.fn()} />,
+      <YuqingGongScreen db={db} store={store} registry={registry} onOpenMap={vi.fn()} onOpenSettings={vi.fn()} onNightVisit={vi.fn()} />,
     );
     expect(within(yuqing.container).getByText("怀胎 · 孕3月")).toBeInTheDocument();
   });

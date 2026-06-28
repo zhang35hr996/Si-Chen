@@ -619,6 +619,80 @@ button:active:enabled {
   cursor: pointer;
 }
 
+.roster-row--selected {
+  background: rgba(217, 184, 124, 0.1);
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+
+/* 皇嗣双栏布局（文昭殿 / 毓庆宫）：左名册、右详情。 */
+.wenzhao-screen__body,
+.yuqing-screen__body {
+  display: flex;
+  gap: 1.2rem;
+  padding: 0.8rem 1.2rem;
+  align-items: flex-start;
+}
+
+.wenzhao-screen__roster,
+.yuqing-screen__roster {
+  flex: 0 0 14rem;
+}
+
+.wenzhao-screen__detail,
+.yuqing-screen__detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.wenzhao-screen__detail--placeholder,
+.yuqing-screen__detail--placeholder {
+  color: var(--muted);
+}
+
+.wenzhao-screen__portrait,
+.yuqing-screen__portrait {
+  width: 8rem;
+  height: 10rem;
+  background-size: cover;
+  background-position: center top;
+  border: 1px solid var(--line-soft);
+}
+
+.yuqing-screen__status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.yuqing-screen__status > div {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.yuqing-screen__status dt {
+  color: var(--muted);
+  flex: 0 0 4.5rem;
+}
+
+.yuqing-screen__status dd {
+  margin: 0;
+}
+
+.wenzhao-screen__actions,
+.yuqing-screen__actions {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 0.4rem;
+}
+
+.wenzhao-screen__actions button,
+.yuqing-screen__actions button {
+  cursor: pointer;
+}
+
 /* ════════════════════════════════════════════════════════════════
    人物卡片
    ════════════════════════════════════════════════════════════════ */

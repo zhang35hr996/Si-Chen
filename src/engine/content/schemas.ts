@@ -315,6 +315,11 @@ export const eventEffectSchema = z.union([
     action: z.enum(["talk", "play"]),
   }),
   z.strictObject({
+    type: z.literal("heir_night_visit"),
+    heirId: nonEmpty,
+    action: z.enum(["heart_to_heart", "quiet_company"]),
+  }),
+  z.strictObject({
     type: z.literal("heir_lesson_response"),
     heirId: nonEmpty,
     subject: z.enum(["scholarship", "martial", "virtue"]),

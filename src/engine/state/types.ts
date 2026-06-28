@@ -1560,6 +1560,8 @@ export interface GameState {
   justice: JusticeState;
   /** 已完成季度财政结算的期号集合（格式 "quarterly_settlement:${year}:${month}"）。独立幂等键，与奏折存在无关。 */
   settledQuarterlyPeriods: string[];
+  /** 已完成皇嗣成长环境月结的月键集合（格式 "${year}:${pad2(month)}"）。每月一次幂等键，不依赖玩家是否打开毓庆宫/文昭殿。 */
+  settledHeirUpbringingMonths: string[];
   /** 对话历史日志（上限 NARRATIVE_LOG_MAX，溢出时从头删除）。*/
   narrativeLog?: NarrativeEntry[];
   rngSeed: number;
