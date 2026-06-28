@@ -8,7 +8,7 @@ import type { CalendarState, GameTime } from "../calendar/time";
 import type { CharacterContent } from "../content/schemas";
 import type { JusticeState, JusticeLinks } from "../justice/types";
 import type { HaremIntriguePlan, HaremIntrigueOutcome, HaremIntrigueKind } from "../characters/haremIntrigue/types";
-import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead } from "../characters/haremInvestigation/types";
+import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead, InvestigationPublicReport } from "../characters/haremInvestigation/types";
 import type { InvestigationTruth, InvestigationIncident } from "../characters/haremInvestigation/truth/types";
 
 // ── Global resource pillars (scaffold values 0–100) ──────────────────
@@ -1541,6 +1541,8 @@ export interface GameState {
   investigationIncidents: InvestigationIncident[];
   /** 宫斗事件后台真相层（Phase 5B-2A）。绝不传入 Presenter。 */
   investigationTruths: InvestigationTruth[];
+  /** 皇嗣异常等新事件族的玩家可见公开报告（Phase 5B-2B），立案入口。 */
+  investigationPublicReports: InvestigationPublicReport[];
   /**
    * 已完成宫斗月度结算的期号集合（格式 "harem_intrigue_settlement:{year}:{MM}"）。
    * 无阴谋月份也需写入，避免重复规划。

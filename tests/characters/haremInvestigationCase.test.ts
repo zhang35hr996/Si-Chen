@@ -242,7 +242,7 @@ describe("validateHaremInvestigationLinks", () => {
   it("detects missing source.reportId", () => {
     const r = createIntrigueInvestigationCase(stateWithReport(), "ireport_test_001", AT);
     if (!r.ok) throw new Error();
-    const c = { ...r.value.state.haremInvestigationCases[0]!, source: { reportId: "ghost_report", incidentId: "incident_001" } };
+    const c = { ...r.value.state.haremInvestigationCases[0]!, source: { kind: "legacy_intrigue" as const, reportId: "ghost_report", incidentId: "incident_001" } };
     const errors = makeInput(r.value.state.haremIntrigueReports, [c]);
     expect(errors.some((e) => e.code === "INTRIGUE_CASE_ORPHAN_REPORT")).toBe(true);
   });

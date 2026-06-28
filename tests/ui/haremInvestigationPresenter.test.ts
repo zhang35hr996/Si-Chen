@@ -15,7 +15,7 @@ const AT: GameTime = makeGameTime(1, 3, "early");
 function makeCase(overrides: Partial<IntrigueInvestigationCase> = {}): IntrigueInvestigationCase {
   return {
     id: "icase_test_001",
-    source: { reportId: "ireport_test_001", incidentId: "incident_001" },
+    source: { kind: "legacy_intrigue", reportId: "ireport_test_001", incidentId: "incident_001" },
     openedAt: AT,
     openedFromReportKind: "exposure",
     status: "open",

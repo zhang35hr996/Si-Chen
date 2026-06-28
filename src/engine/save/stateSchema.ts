@@ -1128,10 +1128,18 @@ export const gameStateSchema = z.strictObject({
   })).default([]),
   haremInvestigationCases: z.array(z.strictObject({
     id: z.string().min(1),
-    source: z.strictObject({
-      reportId: z.string().min(1),
-      incidentId: z.string().min(1),
-    }),
+    source: z.discriminatedUnion("kind", [
+      z.strictObject({
+        kind: z.literal("legacy_intrigue"),
+        reportId: z.string().min(1),
+        incidentId: z.string().min(1),
+      }),
+      z.strictObject({
+        kind: z.literal("investigation_incident"),
+        reportId: z.string().min(1),
+        incidentId: z.string().min(1),
+      }),
+    ]),
     openedAt: gameTimeSchema,
     openedFromReportKind: z.enum(["anomaly", "rumor", "exposure"]),
     status: z.enum(["open", "in_progress", "ready_for_review", "closed_unresolved", "closed_confirmed", "cancelled"]),
@@ -1169,6 +1177,25 @@ export const gameStateSchema = z.strictObject({
   haremInvestigationNextSeq: z.number().int().min(1).default(1),
   investigationIncidents: z.array(heirHealthAnomalyIncidentSchema).default([]),
   investigationTruths: z.array(investigationTruthSchema).default([]),
+  investigationPublicReports: z.array(z.strictObject({
+    id: z.string().min(1),
+    source: z.strictObject({
+      kind: z.literal("investigation_incident"),
+      incidentId: z.string().min(1),
+    }),
+    reportKind: z.literal("anomaly"),
+    eventFamily: z.literal("heir_health_anomaly"),
+    createdAt: gameTimeSchema,
+    status: z.enum(["unread", "acknowledged", "investigating"]),
+    knownTargetIds: z.array(idSchema),
+    suspectedActorIds: z.array(idSchema),
+    confidence: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
+    symptomCode: z.enum(["hysteria", "acute_pain", "high_fever", "convulsions", "excessive_drowsiness"]),
+    publicFactCodes: z.array(z.string().min(1)),
+    accuserIds: z.array(idSchema),
+    acknowledgedAt: gameTimeSchema.optional(),
+    linkedInvestigationId: z.string().optional(),
+  })).default([]),
   settledHaremIntriguePeriods: z.array(z.string().regex(/^harem_intrigue_settlement:\d+:\d{2}$/)).default([]),
   haremDisciplineIncidents: z.array(z.strictObject({
     id: idSchema,
@@ -1307,6 +1334,8 @@ export const gameStateSchema = z.strictObject({
       haremInvestigationLeads: (data as { haremInvestigationLeads: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationLeads"] }).haremInvestigationLeads,
       haremInvestigationNextSeq: (data as { haremInvestigationNextSeq: number }).haremInvestigationNextSeq,
       incidentIds: new Set((data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIncidents.map((i) => i.id)),
+      investigationPublicReports: (data as { investigationPublicReports: Parameters<typeof validateHaremInvestigationLinks>[0]["investigationPublicReports"] }).investigationPublicReports,
+      investigationIncidentIds: new Set((data as { investigationIncidents: { id: string }[] }).investigationIncidents.map((i) => i.id)),
     }),
     ...validateInvestigationIncidents({
       investigationIncidents: (data as { investigationIncidents: Parameters<typeof validateInvestigationIncidents>[0]["investigationIncidents"] }).investigationIncidents,

@@ -4,7 +4,7 @@
  */
 import { stateError, type GameError } from "../../infra/errors";
 import type { HaremIntrigueReport } from "../../state/types";
-import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead } from "./types";
+import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead, InvestigationPublicReport } from "./types";
 import { isActiveCase } from "./types";
 
 const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation_final"]);
@@ -15,7 +15,12 @@ export interface HaremInvestigationValidationInput {
   haremInvestigationTasks: Record<string, IntrigueInvestigationTask>;
   haremInvestigationLeads: Record<string, IntrigueInvestigationLead>;
   haremInvestigationNextSeq: number;
+  /** 旧宫斗事件 ID 集合（haremIncidents）。 */
   incidentIds: Set<string>;
+  /** 皇嗣异常等新事件族公开报告（5B-2B）。缺省视为空。 */
+  investigationPublicReports?: InvestigationPublicReport[];
+  /** 新事件族 incident ID 集合（investigationIncidents）。缺省视为空。 */
+  investigationIncidentIds?: Set<string>;
 }
 
 export function validateHaremInvestigationLinks(
@@ -23,8 +28,11 @@ export function validateHaremInvestigationLinks(
 ): GameError[] {
   const errors: GameError[] = [];
   const { haremIntrigueReports, haremInvestigationCases, haremInvestigationTasks, haremInvestigationLeads, haremInvestigationNextSeq, incidentIds } = data;
+  const investigationPublicReports = data.investigationPublicReports ?? [];
+  const investigationIncidentIds = data.investigationIncidentIds ?? new Set<string>();
 
   const reportById = new Map(haremIntrigueReports.map((r) => [r.id, r]));
+  const publicReportById = new Map(investigationPublicReports.map((r) => [r.id, r]));
   const caseIds = new Set<string>();
 
   for (const c of haremInvestigationCases) {
@@ -34,24 +42,37 @@ export function validateHaremInvestigationLinks(
     }
     caseIds.add(c.id);
 
+    // 按事件族来源解析 report / incident 集合
+    // 归一化为 { linkedInvestigationId, incidentId, reportKind } 以复用一致性检查
+    const sourceReport: { linkedInvestigationId?: string; incidentId: string; reportKind: string } | undefined =
+      c.source.kind === "legacy_intrigue"
+        ? (() => {
+            const r = reportById.get(c.source.reportId);
+            return r ? { linkedInvestigationId: r.linkedInvestigationId, incidentId: r.source.incidentId, reportKind: r.reportKind } : undefined;
+          })()
+        : (() => {
+            const r = publicReportById.get(c.source.reportId);
+            return r ? { linkedInvestigationId: r.linkedInvestigationId, incidentId: r.source.incidentId, reportKind: r.reportKind } : undefined;
+          })();
+    const incidentSet = c.source.kind === "legacy_intrigue" ? incidentIds : investigationIncidentIds;
+
     // source.reportId 必须存在
-    const report = reportById.get(c.source.reportId);
-    if (!report) {
+    if (!sourceReport) {
       errors.push(stateError("INTRIGUE_CASE_ORPHAN_REPORT", `haremInvestigationCases[id=${c.id}]: source.reportId="${c.source.reportId}" 不存在`));
     }
 
     // case → report 反向链接：report 必须指回此 case
-    if (report && report.linkedInvestigationId !== c.id) {
-      errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `haremInvestigationCases[id=${c.id}]: source report 的 linkedInvestigationId="${report.linkedInvestigationId ?? "(undefined)"}" 未反向链接此案件`));
+    if (sourceReport && sourceReport.linkedInvestigationId !== c.id) {
+      errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `haremInvestigationCases[id=${c.id}]: source report 的 linkedInvestigationId="${sourceReport.linkedInvestigationId ?? "(undefined)"}" 未反向链接此案件`));
     }
 
     // source.incidentId 必须存在
-    if (!incidentIds.has(c.source.incidentId)) {
+    if (!incidentSet.has(c.source.incidentId)) {
       errors.push(stateError("INTRIGUE_CASE_ORPHAN_INCIDENT", `haremInvestigationCases[id=${c.id}]: source.incidentId="${c.source.incidentId}" 不存在`));
     }
 
     // source.incidentId 与 report 一致
-    if (report && report.source.incidentId !== c.source.incidentId) {
+    if (sourceReport && sourceReport.incidentId !== c.source.incidentId) {
       errors.push(stateError("INTRIGUE_CASE_INCIDENT_MISMATCH", `haremInvestigationCases[id=${c.id}]: source.incidentId 与 report.source.incidentId 不一致`));
     }
 
@@ -61,8 +82,8 @@ export function validateHaremInvestigationLinks(
     }
 
     // openedFromReportKind 必须与来源 report 一致
-    if (report && report.reportKind !== c.openedFromReportKind) {
-      errors.push(stateError("INTRIGUE_CASE_KIND_MISMATCH", `haremInvestigationCases[id=${c.id}]: openedFromReportKind="${c.openedFromReportKind}" 与 report.reportKind="${report.reportKind}" 不一致`));
+    if (sourceReport && sourceReport.reportKind !== c.openedFromReportKind) {
+      errors.push(stateError("INTRIGUE_CASE_KIND_MISMATCH", `haremInvestigationCases[id=${c.id}]: openedFromReportKind="${c.openedFromReportKind}" 与 report.reportKind="${sourceReport.reportKind}" 不一致`));
     }
 
     // knownTargetIds 不为空
@@ -229,6 +250,26 @@ export function validateHaremInvestigationLinks(
     }
     if (!report.acknowledgedAt) {
       errors.push(stateError("INTRIGUE_CASE_REPORT_STATUS", `haremIntrigueReports[id=${report.id}]: linkedInvestigationId 存在但无 acknowledgedAt`));
+    }
+  }
+
+  // PublicReport ↔ Case 双向链接（5B-2B）
+  for (const report of investigationPublicReports) {
+    if (!report.linkedInvestigationId) continue;
+    const linkedCase = haremInvestigationCases.find((c) => c.id === report.linkedInvestigationId);
+    if (!linkedCase) {
+      errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `investigationPublicReports[id=${report.id}]: linkedInvestigationId="${report.linkedInvestigationId}" 对应 case 不存在`));
+      continue;
+    }
+    if (linkedCase.source.reportId !== report.id) {
+      errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `investigationPublicReports[id=${report.id}]: case.source.reportId="${linkedCase.source.reportId}" 与 report.id 不一致`));
+    }
+    // 有 case 的公开报告必须处于 investigating 且已 acknowledged
+    if (report.status !== "investigating") {
+      errors.push(stateError("INTRIGUE_CASE_REPORT_STATUS", `investigationPublicReports[id=${report.id}]: linkedInvestigationId 存在但 status="${report.status}"，期望 investigating`));
+    }
+    if (!report.acknowledgedAt) {
+      errors.push(stateError("INTRIGUE_CASE_REPORT_STATUS", `investigationPublicReports[id=${report.id}]: linkedInvestigationId 存在但无 acknowledgedAt`));
     }
   }
 

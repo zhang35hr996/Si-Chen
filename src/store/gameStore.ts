@@ -100,8 +100,9 @@ import { availableInvestigationActions, validateCanStartTask } from "../engine/c
 import { settleDueInvestigationTasks, nextTaskId } from "../engine/characters/haremInvestigation/settlement";
 import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS } from "../engine/characters/haremInvestigation/types";
 import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
-import { resolveInvestigationTruth, buildHeirHealthTruthContext, hashStr } from "../engine/characters/haremInvestigation/truth/truthResolver";
-import type { HeirHealthSymptom, HeirHealthAnomalyIncident } from "../engine/characters/haremInvestigation/truth/types";
+import { createHeirHealthAnomalyBundle } from "../engine/characters/haremInvestigation/createAnomalyBundle";
+import { createInvestigationCaseFromAnomalyReport } from "../engine/characters/haremInvestigation/createCaseFromAnomaly";
+import type { HeirHealthSymptom } from "../engine/characters/haremInvestigation/truth/types";
 import { applyCompanionReconciliation, planCompanionReconciliation } from "../engine/characters/companionReconciliation";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
@@ -2810,54 +2811,31 @@ export class GameStore {
     symptom: HeirHealthSymptom;
     publicFactCodes: string[];
     victimHealth: number;
-  }): Result<{ incidentId: string; truthId: string }, GameError[]> {
-    const at = toGameTime(this.state.calendar);
+  }): Result<{ incidentId: string; truthId: string; reportId: string }, GameError[]> {
+    // 原子生成 incident + 后台真相 + 玩家可见公开报告（5B-2B1）
+    const result = createHeirHealthAnomalyBundle(this.state, params);
+    if (!result.ok) return result;
 
-    // Derive sourceKey internally — callers cannot influence it
-    const month = String(this.state.calendar.month).padStart(2, "0");
-    const sourceKey = `heir_health_anomaly:${this.state.calendar.year}:${month}:${params.victimHeirId}`;
-    const incidentId = `heir_health_${params.victimHeirId}_${hashStr(sourceKey)}`;
-    const truthId = `itruth_${incidentId}`;
-
-    // Idempotency: both must exist together
-    const existingIncident = this.state.investigationIncidents.find((i) => i.id === incidentId);
-    const existingTruth = this.state.investigationTruths.find((t) => t.id === truthId);
-    if (existingIncident !== undefined && existingTruth !== undefined) {
-      return ok({ incidentId, truthId });
-    }
-    if (existingIncident !== undefined || existingTruth !== undefined) {
-      return err([
-        stateError(
-          "INCONSISTENT_INVESTIGATION_STATE",
-          `Investigation incident/truth pair is inconsistent: incidentId="${incidentId}"`,
-          { context: { incidentId, truthId } },
-        ),
-      ]);
-    }
-
-    const incident: HeirHealthAnomalyIncident = {
-      id: incidentId,
-      eventFamily: "heir_health_anomaly",
-      occurredAt: at,
-      sourceKey,
-      victimHeirId: params.victimHeirId,
-      custodianId: params.custodianId,
-      accuserIds: params.accuserIds,
-      initiallyAccusedIds: params.initiallyAccusedIds,
-      symptom: params.symptom,
-      publicFactCodes: params.publicFactCodes,
-    };
-
-    const context = buildHeirHealthTruthContext(incident, this.state, params.victimHealth);
-    const truth = resolveInvestigationTruth(context, this.state.rngSeed);
-
-    this.state = {
-      ...this.state,
-      investigationIncidents: [...this.state.investigationIncidents, incident],
-      investigationTruths: [...this.state.investigationTruths, truth],
-    };
+    this.state = result.value.state;
     this.emit();
-    return ok({ incidentId, truthId });
+    return ok({
+      incidentId: result.value.incidentId,
+      truthId: result.value.truthId,
+      reportId: result.value.reportId,
+    });
+  }
+
+  /**
+   * 从皇嗣异常公开报告立案（5B-2B1）。
+   * 仅做桥接：读取 investigationPublicReports，按 investigation_incident 来源建案。
+   */
+  openInvestigationFromAnomalyReport(reportId: string): Result<{ caseId: string }, GameError[]> {
+    const at = toGameTime(this.state.calendar);
+    const result = createInvestigationCaseFromAnomalyReport(this.state, reportId, at);
+    if (!result.ok) return result;
+    this.state = result.value.state;
+    this.emit();
+    return ok({ caseId: result.value.caseId });
   }
 
   cancelHaremInvestigation(caseId: string): Result<void, GameError[]> {
