@@ -185,6 +185,7 @@ import { TitleScreen } from "./screens/TitleScreen";
 import { CoronationScreen } from "./screens/CoronationScreen";
 import { StorehouseScreen } from "./screens/StorehouseScreen";
 import { ShopScreen } from "./screens/ShopScreen";
+import { useVersionedNullableState } from "./hooks/useVersionedNullableState";
 
 type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" | "court" | "wenzhaodian" | "yuqing_gong" | "fengxiandian" | "cining_gong" | "courtyard" | "shop" | "dianxuan" | "zichendian" | "garden" | "xuanzhengdian" | "officials" | "examination" | "personnelDecisions" | "courtMemorials";
 
@@ -227,7 +228,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     | { kind: "template"; eventId: string; instanceId: string; templateId: string; runtimeDb: RuntimeContentDB };
 
   const [view, setView] = useState<View>("title");
-  const [activeSession, setActiveSession] = useState<ActiveEventSession | null>(null);
+  // 事件会话 + 版本号：版本号作 DialogueScreen 的 React key，事件链切换强制重挂（历史记录隔离）。
+  const [activeSession, setActiveSession, dialogueKey] = useVersionedNullableState<ActiveEventSession>();
   const [court, setCourt] = useState<CourtSession | null>(null);
   // 宣政殿朝议结果（真实快照 diff）；非空 = 结果态。朝议前快照存 ref（不入存档）。
   const [courtResult, setCourtResult] = useState<CourtMetricsDiff | null>(null);
@@ -247,7 +249,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [housingQueue, setHousingQueue] = useState<{ charId: string; name: string; rankId: string }[]>([]);
   const [restoreCharId, setRestoreCharId] = useState<string | null>(null);
   const [coldPalaceInterventionTarget, setColdPalaceInterventionTarget] = useState<string | null>(null);
-  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine; record?: boolean } | null>(null);
+  // 反应 + 版本号：版本号作 ReactionScreen 的 React key，反应队列切换强制重挂（index/scriptedLine/去重重建）。
+  const [reaction, setReaction, reactionKey] = useVersionedNullableState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine; record?: boolean }>();
   /** 当前展示的乘风年度例核禀报 id（瞬时，不持久化）；onDone 时才 acknowledge。 */
   const [pendingHaremAdminReviewId, setPendingHaremAdminReviewId] = useState<string | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
@@ -294,14 +297,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [namePetHeirIds, setNamePetHeirIds] = useState<string[]>([]);
   const namePetHeirId = namePetHeirIds[0] ?? null;
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine; record?: boolean }[]>([]);
-  // 渲染期派生的「会话/反应」重挂 key：每当 activeSession / reaction 切换为新对象即自增，作为
-  // DialogueScreen / ReactionScreen 的 React key，强制重挂——确保事件链/反应队列切换时组件、frame、
-  // 去重集合全部重建（修复跨事件首帧漏记、上一条反应台词串到下一说话人名下）。StrictMode 双渲染安全
-  // （比对 prev，相同对象不自增）。
-  const dialogueKeyRef = useRef(0);
-  const prevSessionRef = useRef<ActiveEventSession | null>(null);
-  const reactionKeyRef = useRef(0);
-  const prevReactionRef = useRef<typeof reaction>(null);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   // 国库与国情一致：浮层，任意画面可开，关闭后回到原处（不切 view）。
   const [storehouseOpen, setStorehouseOpen] = useState(false);
@@ -1874,16 +1869,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (beats.length > 0) { const [f, ...rest] = beats; setReaction(f!); setReactionQueue(rest); }
   };
 
-  // 派生重挂 key（渲染期，StrictMode 安全）：对象身份变化即自增。
-  if (prevSessionRef.current !== activeSession) {
-    prevSessionRef.current = activeSession;
-    if (activeSession) dialogueKeyRef.current += 1;
-  }
-  if (prevReactionRef.current !== reaction) {
-    prevReactionRef.current = reaction;
-    if (reaction) reactionKeyRef.current += 1;
-  }
-
   return (
     <>
       {notice && (
@@ -2507,7 +2492,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       )}
       {view === "event" && activeSession && (
         <DialogueScreen
-          key={dialogueKeyRef.current}
+          key={dialogueKey}
           db={activeSession.kind === "template" ? activeSession.runtimeDb : db}
           store={store}
           registry={registry}
@@ -2734,7 +2719,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       )}
       {reaction && (
         <ReactionScreen
-          key={reactionKeyRef.current}
+          key={reactionKey}
           db={db}
           store={store}
           registry={registry}
