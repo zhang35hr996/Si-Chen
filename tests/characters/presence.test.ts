@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getCharacterLocation, getPresentAt } from "../../src/engine/characters/presence";
+import { getCharacterLocation, getPresentAt, inPalaceConsorts, consortLocationAt } from "../../src/engine/characters/presence";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 import { withConsort } from "../helpers/consortFixture";
+import { MAO_SLOT } from "../../src/engine/calendar/time";
 
 const db = loadRealContent();
 const baseState = createNewGameState(db);
@@ -46,5 +47,42 @@ describe("presence: 搬迁 (standing.residence override)", () => {
       expect(db.locations[id]).toBeDefined();
       expect(db.locations[id]!.zone).toBe("hougong");
     }
+  });
+});
+
+describe("presence: 运行时 DB 去重 (runtime-db dedup)", () => {
+  it("inPalaceConsorts yields no duplicate IDs when caller pre-merges generatedConsorts into db", () => {
+    // App.tsx spreads generatedConsorts into db.characters at runtime.
+    // Presence functions must not double-count by also iterating state.generatedConsorts.
+    const runtimeDb = {
+      ...db,
+      characters: { ...db.characters, ...baseState.generatedConsorts },
+    };
+    const ids = inPalaceConsorts(runtimeDb, baseState).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("getPresentAt yields no duplicate IDs under runtime-db pattern", () => {
+    const runtimeDb = {
+      ...db,
+      characters: { ...db.characters, ...baseState.generatedConsorts },
+    };
+    const genId = Object.keys(baseState.generatedConsorts)[0]!;
+    const residence = baseState.standing[genId]?.residence ?? "";
+    const ids = getPresentAt(runtimeDb, baseState, residence).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("presence: consortLocationAt with raw db", () => {
+  it("generated consort location is non-empty with raw db (no greeting/wander short-circuit)", () => {
+    // When called with raw db (state.generatedConsorts not merged), consortLocationAt must
+    // still resolve the character and apply greeting/wander rules rather than bailing early.
+    const genId = Object.keys(baseState.generatedConsorts)[0]!;
+    const loc = consortLocationAt(db, baseState, genId, MAO_SLOT);
+    expect(loc).toBeTruthy();
+    // At MAO_SLOT a non-excused consort goes to the greeting location or stays home.
+    // Either way the result is a non-empty string — it should NOT be "" (the failure path).
+    expect(typeof loc).toBe("string");
   });
 });
