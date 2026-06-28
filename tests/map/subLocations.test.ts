@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ContentDB } from "../../src/engine/content/loader";
 import type { GameEventContent } from "../../src/engine/content/schemas";
-import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations } from "../../src/engine/map/subLocations";
+import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations, assignGardenOccupants } from "../../src/engine/map/subLocations";
+import { gardenSubLocationFor } from "../../src/engine/characters/greeting";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadTestContent } from "../helpers/testContentFixture";
@@ -137,5 +138,55 @@ describe("eventPinnedSubLocations", () => {
   it("无 exploration 事件的子地点不产生固定映射", () => {
     const pinned = eventPinnedSubLocations(db, at("yuhuayuan"), "yuhuayuan", ["tuixiushan"]);
     expect(pinned.size).toBe(0);
+  });
+});
+
+describe("assignGardenOccupants", () => {
+  const SUBS = ["taiyechi", "tuixiushan", "jiangxuexuan", "fubiting"] as const;
+  const items = [
+    { id: "a", name: "甲" },
+    { id: "b", name: "乙" },
+    { id: "c", name: "丙" },
+  ];
+
+  it("每名人物恰好出现在一个子地点（无重复、无遗漏）", () => {
+    const map = assignGardenOccupants(items, new Map(), 7, 3, SUBS);
+    const all = [...map.values()].flat().map((i) => i.id).sort();
+    expect(all).toEqual(["a", "b", "c"]);
+    // 无任何人物出现在两个子地点
+    const seen = new Set<string>();
+    for (const list of map.values()) for (const i of list) {
+      expect(seen.has(i.id)).toBe(false);
+      seen.add(i.id);
+    }
+  });
+
+  it("事件钉扎优先于哈希分配（pinnedMap 覆盖 gardenSubLocationFor）", () => {
+    const hashSub = gardenSubLocationFor(7, 3, "a", SUBS)!;
+    const pinTarget = SUBS.find((s) => s !== hashSub)!; // 故意钉到非哈希结果
+    const map = assignGardenOccupants(items, new Map([["a", pinTarget]]), 7, 3, SUBS);
+    expect(map.get(pinTarget)!.some((i) => i.id === "a")).toBe(true);
+    expect(map.get(hashSub)?.some((i) => i.id === "a") ?? false).toBe(false);
+  });
+
+  it("非钉扎人物落点与 gardenSubLocationFor 一致", () => {
+    const map = assignGardenOccupants(items, new Map(), 7, 3, SUBS);
+    for (const i of items) {
+      const expected = gardenSubLocationFor(7, 3, i.id, SUBS)!;
+      expect(map.get(expected)!.some((x) => x.id === i.id)).toBe(true);
+    }
+  });
+
+  it("同 (seed, day, 角色) 分配稳定", () => {
+    const a = assignGardenOccupants(items, new Map(), 42, 9, SUBS);
+    const b = assignGardenOccupants(items, new Map(), 42, 9, SUBS);
+    const flat = (m: Map<string, { id: string }[]>) =>
+      [...m.entries()].map(([k, v]) => [k, v.map((i) => i.id).sort()]).sort();
+    expect(flat(a)).toEqual(flat(b));
+  });
+
+  it("子地点为空时不产生任何归属", () => {
+    const map = assignGardenOccupants(items, new Map(), 7, 3, []);
+    expect(map.size).toBe(0);
   });
 });
