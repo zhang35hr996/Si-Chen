@@ -78,6 +78,19 @@ describe("GardenOverviewScreen — overview", () => {
     const fb = screen.getByText("浮碧亭").closest("button")!;
     expect(within(fb).getByText("暂无人在此")).toBeInTheDocument();
   });
+
+  it("有事件线索但无公开人物时，不显示「暂无人在此」（线索与空地点文案互斥）", () => {
+    // 模板探索事件：预览确认有可选参与者并给出 eventHint，但参与者不进 characters。
+    const withHintNoPeople = subAreas.map((s) =>
+      s.id === "fubiting"
+        ? { ...s, hasEvent: true, eventHint: "亭中似有一道身影。", characters: [] }
+        : s,
+    );
+    render(<GardenOverviewScreen {...base} subAreas={withHintNoPeople} />);
+    const fb = screen.getByText("浮碧亭").closest("button")!;
+    expect(within(fb).getByText("亭中似有一道身影。")).toBeInTheDocument();
+    expect(within(fb).queryByText("暂无人在此")).toBeNull();
+  });
 });
 
 describe("GardenOverviewScreen — sub-area", () => {

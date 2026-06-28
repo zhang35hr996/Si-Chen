@@ -123,7 +123,8 @@ export function GardenOverviewScreen(props: GardenOverviewScreenProps) {
                   {sa.hasEvent && sa.eventHint && (
                     <span className="garden-area-card__hint">{sa.eventHint}</span>
                   )}
-                  {/* 人物姓名仅提示所在子地点，不直接交互；进入子地点后再叙话。 */}
+                  {/* 人物姓名仅提示所在子地点，不直接交互；进入子地点后再叙话。
+                      有事件线索（eventHint 已暗示"似有人在此"）时不再显示空地点文案，避免线索与「暂无人在此」并存。 */}
                   <span className="garden-area-card__occupants">
                     {sa.characters.length > 0 ? (
                       sa.characters.map((c) => (
@@ -131,9 +132,9 @@ export function GardenOverviewScreen(props: GardenOverviewScreenProps) {
                           {c.name} · {c.role}
                         </span>
                       ))
-                    ) : (
+                    ) : !sa.hasEvent ? (
                       <span className="garden-area-card__occupant garden-area-card__occupant--empty">暂无人在此</span>
-                    )}
+                    ) : null}
                   </span>
                 </button>
               </li>
