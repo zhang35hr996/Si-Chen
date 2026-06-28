@@ -22,8 +22,8 @@ const db = loadRealContent();
 
 // ── version check ─────────────────────────────────────────────────────────────
 
-it("V34-01: SAVE_FORMAT_VERSION = 34", () => {
-  expect(SAVE_FORMAT_VERSION).toBe(34);
+it("V34-01: SAVE_FORMAT_VERSION bumped beyond 34 (currently 35+)", () => {
+  expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(35);
 });
 
 // ── v33 save builder ──────────────────────────────────────────────────────────

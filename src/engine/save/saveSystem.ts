@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 34;
+export const SAVE_FORMAT_VERSION = 35;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -645,6 +645,16 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       state["templateEventRecords"] = {};
     }
     return { ...env, formatVersion: 34, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+
+  // v34 → v35: 宫斗调查案件（Phase 5B-1A）。新增 haremInvestigationCases 字段。
+  34: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (!Array.isArray(state["haremInvestigationCases"])) {
+      state["haremInvestigationCases"] = [];
+    }
+    return { ...env, formatVersion: 35, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

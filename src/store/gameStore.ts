@@ -94,6 +94,7 @@ import {
   type ResolveHaremDisciplineInput,
 } from "../engine/characters/haremDisciplineResolver";
 import { settleHaremIntrigue } from "../engine/characters/haremIntrigueSettlement";
+import { createIntrigueInvestigationCase, cancelIntrigueInvestigationCase } from "../engine/characters/haremInvestigation/createCase";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -2613,6 +2614,24 @@ export class GameStore {
     const updated = [...this.state.haremIntrigueReports];
     updated[idx] = { ...report, status: "acknowledged", acknowledgedAt: toGameTime(this.state.calendar) };
     this.state = { ...this.state, haremIntrigueReports: updated };
+    this.emit();
+    return ok(undefined);
+  }
+
+  openHaremInvestigation(reportId: string): Result<{ caseId: string }, GameError[]> {
+    const at = toGameTime(this.state.calendar);
+    const result = createIntrigueInvestigationCase(this.state, reportId, at);
+    if (!result.ok) return result;
+    this.state = result.value.state;
+    this.emit();
+    return ok({ caseId: result.value.caseId });
+  }
+
+  cancelHaremInvestigation(caseId: string): Result<void, GameError[]> {
+    const at = toGameTime(this.state.calendar);
+    const result = cancelIntrigueInvestigationCase(this.state, caseId, at);
+    if (!result.ok) return result;
+    this.state = result.value;
     this.emit();
     return ok(undefined);
   }

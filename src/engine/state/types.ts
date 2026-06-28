@@ -8,6 +8,7 @@ import type { CalendarState, GameTime } from "../calendar/time";
 import type { CharacterContent } from "../content/schemas";
 import type { JusticeState, JusticeLinks } from "../justice/types";
 import type { HaremIntriguePlan, HaremIntrigueOutcome, HaremIntrigueKind } from "../characters/haremIntrigue/types";
+import type { IntrigueInvestigationCase } from "../characters/haremInvestigation/types";
 
 // ── Global resource pillars (scaffold values 0–100) ──────────────────
 // 皇帝(玩家本人)属性。明面: health/diligence/prestige/martial/statecraft；
@@ -1410,6 +1411,8 @@ export interface GameState {
    * unread 状态构成全局中断；玩家知识层，不含 actorId 真相。
    */
   haremIntrigueReports: HaremIntrigueReport[];
+  /** 玩家主动立案的宫斗调查案件（Phase 5B-1A）。 */
+  haremInvestigationCases: IntrigueInvestigationCase[];
   /**
    * 已完成宫斗月度结算的期号集合（格式 "harem_intrigue_settlement:{year}:{MM}"）。
    * 无阴谋月份也需写入，避免重复规划。
