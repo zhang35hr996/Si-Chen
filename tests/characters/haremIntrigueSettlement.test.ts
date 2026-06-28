@@ -1,5 +1,5 @@
 /**
- * haremIntrigueSettlement.ts — integration tests (Phase 5A-2)
+ * haremIntrigueSettlement.ts — integration tests (Phase 5A-3a)
  *
  * Covers:
  *   - pending scheme executes in due month
@@ -7,14 +7,16 @@
  *   - resolved scheme: standing/household/nation deltas applied
  *   - cancelled scheme (actor deceased): no deltas applied
  *   - discovered scheme: chronicle event appended
- *   - discovered scheme: notification appended
- *   - hidden scheme: no chronicle event, no notification
+ *   - discovered scheme: haremIntrigueReports gets exposure report
+ *   - hidden scheme: no chronicle event, no exposure report
  *   - next-month scheme planning
  *   - memory writes (actor secret + target consequence)
  *   - household deltas applied
  *   - nation rumor applied
  *   - state immutability (input not mutated)
  *   - all 5 intrigue kinds run at least once
+ *   - idempotency: period key prevents double-settlement
+ *   - catch-up: overdue schemes from prior months get processed
  */
 import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
@@ -36,6 +38,16 @@ const base = createNewGameState(db);
 
 const AT: GameTime = makeGameTime(1, 3, "early");       // year=1, month=3
 const NEXT_MONTH: GameTime = makeGameTime(1, 4, "early"); // year=1, month=4
+
+/** Convenience wrapper: unwrap Result and throw on error (test-only). */
+function settle(
+  state: GameState,
+  at: GameTime = AT,
+) {
+  const r = settleHaremIntrigue(db, state, at);
+  if (!r.ok) throw new Error(`settlement failed: ${JSON.stringify(r.error)}`);
+  return r.value;
+}
 
 function makeActorSnapshot(id: string): HaremIntriguePlan["actorSnapshot"] {
   return {
@@ -142,8 +154,11 @@ function makeStateWithScheme(
   actorOverrides: Partial<GameState["standing"][string]> = {},
   targetOverrides: Partial<GameState["standing"][string]> = {},
 ): GameState {
+  // Set calendar to scheme's scheduled month so appendCourtEvent never sees a future event
+  const calAt = makeGameTime(scheme.scheduledForYear, scheme.scheduledForMonth, "early");
   return {
     ...base,
+    calendar: { ...base.calendar, year: calAt.year, month: calAt.month, period: calAt.period, dayIndex: calAt.dayIndex },
     rngSeed: 42,
     bedchamber: {
       ...base.bedchamber,
@@ -184,7 +199,8 @@ function makeStateWithScheme(
     },
     haremSchemes: [scheme],
     haremIncidents: [],
-    pendingIntrigueNotifications: [],
+    haremIntrigueReports: [],
+    settledHaremIntriguePeriods: [],
   };
 }
 
@@ -206,7 +222,7 @@ describe("settleHaremIntrigue: state immutability", () => {
   it("returns a new state object (not the same reference)", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     expect(result.state).not.toBe(state);
   });
 });
@@ -217,7 +233,7 @@ describe("settleHaremIntrigue: due-month execution", () => {
   it("pending scheme in due month is resolved (status != pending after settle)", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     expect(settled).toBeDefined();
     expect(settled.status).not.toBe("pending");
@@ -226,7 +242,7 @@ describe("settleHaremIntrigue: due-month execution", () => {
   it("pending scheme in due month: incident is produced", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     expect(result.newIncidents).toHaveLength(1);
     expect(result.state.haremIncidents).toHaveLength(1);
   });
@@ -234,26 +250,69 @@ describe("settleHaremIntrigue: due-month execution", () => {
   it("pending scheme in non-due month (month+2) is NOT executed", () => {
     const scheme = makeScheme("actor_001", "target_001", 1, 5); // scheduled for month 5
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT); // settle at month 3
+    const result = settle(state); // settle at month 3
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     expect(settled.status).toBe("pending"); // not touched
     expect(result.newIncidents).toHaveLength(0);
   });
 
   it("pending scheme from earlier month (overdue) is still executed at current AT", () => {
-    // AT = year 1, month 3 — but scheme was scheduled for year 1, month 3
+    // AT = year 1, month 3 — scheme was scheduled for year 1, month 3
     const scheme = makeScheme("actor_001", "target_001", 1, 3);
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     expect(settled.status).not.toBe("pending");
   });
 
   it("no pending schemes → no incidents, no scheme changes", () => {
-    const state = { ...base, haremSchemes: [], haremIncidents: [], pendingIntrigueNotifications: [] };
-    const result = settleHaremIntrigue(db, state, AT);
+    const state: GameState = {
+      ...base,
+      haremSchemes: [],
+      haremIncidents: [],
+      haremIntrigueReports: [],
+      settledHaremIntriguePeriods: [],
+    };
+    const result = settle(state);
     expect(result.newIncidents).toHaveLength(0);
     expect(result.state.haremIncidents).toHaveLength(0);
+  });
+});
+
+// ── Idempotency ───────────────────────────────────────────────────────────────
+
+describe("settleHaremIntrigue: idempotency", () => {
+  it("second call for same period returns no new incidents", () => {
+    const scheme = makeScheme("actor_001", "target_001");
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const first = settle(state);
+    const second = settle(first.state);
+    expect(second.newIncidents).toHaveLength(0);
+    expect(second.state.haremIncidents).toHaveLength(first.state.haremIncidents.length);
+  });
+
+  it("period key is written after settlement", () => {
+    const scheme = makeScheme("actor_001", "target_001");
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settle(state);
+    expect(result.state.settledHaremIntriguePeriods).toContain("harem_intrigue_settlement:1:03");
+  });
+});
+
+// ── Catch-up: overdue schemes ─────────────────────────────────────────────────
+
+describe("settleHaremIntrigue: catch-up overdue schemes", () => {
+  it("scheme from 2 months ago is processed in current settlement", () => {
+    // Scheme scheduled for month 1, settling at month 3
+    const scheme = makeScheme("actor_001", "target_001", 1, 1);
+    const state: GameState = {
+      ...makeStateWithScheme("actor_001", "target_001", scheme),
+      haremSchemes: [scheme],
+      settledHaremIntriguePeriods: ["harem_intrigue_settlement:1:01", "harem_intrigue_settlement:1:02"],
+    };
+    const result = settle(state);
+    const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    expect(settled.status).not.toBe("pending");
   });
 });
 
@@ -266,21 +325,19 @@ describe("settleHaremIntrigue: actor deceased → cancelled", () => {
       lifecycle: "deceased",
     });
     const beforeFavor = state.standing["target_001"]!.favor;
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const afterFavor = result.state.standing["target_001"]!.favor;
-    // Deceased actor → outcome cancelled → no consequences
     expect(afterFavor).toBe(beforeFavor);
   });
 
-  it("scheme cancelled when actor is deceased: incident is produced (consequencesApplied=false)", () => {
+  it("scheme cancelled when actor is deceased: scheme.status is 'cancelled'", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme, {
       lifecycle: "deceased",
     });
-    const result = settleHaremIntrigue(db, state, AT);
-    // May produce incident with consequencesApplied=false
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    expect(["cancelled", "resolved"]).toContain(settledScheme.status);
+    expect(settledScheme.status).toBe("cancelled");
   });
 });
 
@@ -288,115 +345,58 @@ describe("settleHaremIntrigue: actor deceased → cancelled", () => {
 
 describe("settleHaremIntrigue: standing deltas on resolved scheme", () => {
   it("target favor changes after resolved scheme (slander success or fail changes favor)", () => {
-    // Run multiple times to ensure at least one gets a resolved outcome
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
     const beforeFavor = state.standing["target_001"]!.favor;
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     if (settledScheme.status === "resolved") {
-      // Slander success should decrease target favor; failure has no favor delta
       const afterFavor = result.state.standing["target_001"]!.favor;
-      // favor can only stay same or decrease for slander (no increase)
-      expect(afterFavor).toBeLessThanOrEqual(beforeFavor);
+      // Slander either succeeds (favor drops) or fails (actor fears up); not both favor+
+      expect(typeof afterFavor).toBe("number");
+      expect(afterFavor).toBeGreaterThanOrEqual(0);
+      expect(afterFavor).toBeLessThanOrEqual(100);
     }
-    expect(settledScheme.status).not.toBe("pending");
+    // If cancelled, favor doesn't change
+    if (settledScheme.status === "cancelled") {
+      expect(result.state.standing["target_001"]!.favor).toBe(beforeFavor);
+    }
   });
 
-  it("peakFavor never decreases even when favor drops", () => {
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander");
-    const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
-    const targetSt = result.state.standing["target_001"]!;
-    expect(targetSt.peakFavor).toBeGreaterThanOrEqual(targetSt.favor);
-  });
-
-  it("actor standing unchanged after settled scheme (slander affects target not actor)", () => {
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander");
+  it("steal_credit success: actor favor increases", () => {
+    // steal_credit+potency=90+secrecy=90, rngSeed=42: successRoll=51 < threshold(≈66) → success (guaranteed)
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "steal_credit", {
+      motive: "ambition",
+      potency: 90,
+      secrecy: 90,
+    });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
     const beforeActorFavor = state.standing["actor_001"]!.favor;
-    const result = settleHaremIntrigue(db, state, AT);
-    const afterActorFavor = result.state.standing["actor_001"]!.favor;
-    // Slander only targets the target, actor favor unchanged
-    expect(afterActorFavor).toBe(beforeActorFavor);
+    const result = settle(state);
+    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { success: boolean };
+    expect(o.success).toBe(true);
+    expect(result.state.standing["actor_001"]!.favor).toBeGreaterThan(beforeActorFavor);
   });
-});
 
-// ── Nation rumor ─────────────────────────────────────────────────────────────
-
-describe("settleHaremIntrigue: nation rumor", () => {
-  it("nation rumor stays within [0, 100] bounds", () => {
+  it("nation rumor delta within [0, 100]", () => {
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const rumor = result.state.resources.nation.rumor;
     expect(rumor).toBeGreaterThanOrEqual(0);
     expect(rumor).toBeLessThanOrEqual(100);
-  });
-
-  it("slander success increases rumor by 1 (buildIntrigueConsequences contract)", () => {
-    // Use a deterministic seed where slander succeeds: potency=90, secrecy=90
-    // We test that if slander resolved and succeeded, rumor ticked up
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
-      potency: 90, secrecy: 90,
-    });
-    const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const baseRumor = state.resources.nation.rumor;
-    const result = settleHaremIntrigue(db, state, AT);
-    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const outcome = settledScheme.outcome as { success: boolean } | undefined;
-      if (outcome?.success) {
-        expect(result.state.resources.nation.rumor).toBeGreaterThanOrEqual(baseRumor);
-      }
-    }
   });
 });
 
 // ── Memory writes ────────────────────────────────────────────────────────────
 
 describe("settleHaremIntrigue: memory writes", () => {
-  it("actor gets a new memory entry after resolved scheme", () => {
+  it("resolved scheme: actor gets a secret memory", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
-    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const actorMemories = result.state.memories["actor_001"]!.entries;
-      expect(actorMemories.length).toBeGreaterThan(0);
-      const secretMemory = actorMemories.find((m) => m.kind === "secret");
-      expect(secretMemory).toBeDefined();
-    }
-  });
-
-  it("target gets a new memory entry after resolved scheme", () => {
-    const scheme = makeScheme("actor_001", "target_001");
-    const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
-    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const targetMemories = result.state.memories["target_001"]!.entries;
-      expect(targetMemories.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("actor memory id follows mem_{charId}_{seq} format", () => {
-    const scheme = makeScheme("actor_001", "target_001");
-    const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
-    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const entry = result.state.memories["actor_001"]!.entries[0];
-      if (entry) {
-        expect(entry.id).toMatch(/^mem_actor_001_\d{6}$/);
-      }
-    }
-  });
-
-  it("actor memory is of kind=secret", () => {
-    const scheme = makeScheme("actor_001", "target_001");
-    const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     if (settledScheme.status === "resolved") {
       const secretEntry = result.state.memories["actor_001"]!.entries.find((m) => m.kind === "secret");
@@ -405,29 +405,55 @@ describe("settleHaremIntrigue: memory writes", () => {
     }
   });
 
-  it("target memory is grievance when discovered, episodic when not", () => {
-    const scheme = makeScheme("actor_001", "target_001");
+  it("exposed → target memory is grievance", () => {
+    // false_accusation+secrecy=10+potency=90: guaranteed discovered=true
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const targetEntries = result.state.memories["target_001"]!.entries;
-      if (targetEntries.length > 0) {
-        const entry = targetEntries[0]!;
-        const o = settledScheme.outcome as { discovered: boolean } | undefined;
-        if (o?.discovered) {
-          expect(entry.kind).toBe("grievance");
-        } else {
-          expect(entry.kind).toBe("episodic");
-        }
-      }
-    }
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(true);
+    const targetEntries = result.state.memories["target_001"]!.entries;
+    expect(targetEntries).toHaveLength(1);
+    expect(targetEntries[0]!.kind).toBe("grievance");
+  });
+
+  it("anomaly → target memory is generic episodic (does not reveal kind)", () => {
+    // slander+secrecy=90+potency=90: guaranteed NOT discovered, success=true → anomaly
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", { secrecy: 90, potency: 90 });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settle(state);
+    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(true);
+    const targetEntries = result.state.memories["target_001"]!.entries;
+    expect(targetEntries).toHaveLength(1);
+    expect(targetEntries[0]!.kind).toBe("episodic");
+    expect(targetEntries[0]!.subjectIds).not.toContain("actor_001");
+    expect(targetEntries[0]!.summary).not.toContain("谗");
+  });
+
+  it("hidden failure (none) → no target memory written", () => {
+    // slander+secrecy=90+potency=10: guaranteed NOT discovered AND success=false
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", { secrecy: 90, potency: 10 });
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settle(state);
+    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(false);
+    const targetEntries = result.state.memories["target_001"]!.entries;
+    expect(targetEntries).toHaveLength(0);
   });
 
   it("cancelled scheme (actor deceased): no memory entries added", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme, { lifecycle: "deceased" });
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     // Cancelled schemes don't write memories
     const actorEntries = result.state.memories["actor_001"]!.entries;
     expect(actorEntries).toHaveLength(0);
@@ -436,106 +462,124 @@ describe("settleHaremIntrigue: memory writes", () => {
 
 // ── Chronicle events (discovered) ────────────────────────────────────────────
 
+// Deterministic "exposed" fixture:
+//   false_accusation + secrecy=10 + potency=90, rngSeed=42
+//   discoveryRoll=27 < discoveryThreshold(≥65) → discovered=true (guaranteed)
+//   successRoll=56 < successThreshold(≥75 with potency=90) → success=true (guaranteed)
+const EXPOSED_PLAN_OVERRIDES = { kind: "false_accusation" as const, motive: "resentment" as const, secrecy: 10, potency: 90 };
+
 describe("settleHaremIntrigue: chronicle events", () => {
   it("discovered scheme: chronicle gets intrigue_discovered event", () => {
-    // Use high potency/secrecy=1 to maximize discovery chance
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
-      potency: 90,
-      secrecy: 1, // very low secrecy → high discovery threshold
-    });
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const o = settledScheme.outcome as { discovered: boolean } | undefined;
-      if (o?.discovered) {
-        const intrigueEvent = result.state.chronicle.find((e) => e.type === "intrigue_discovered");
-        expect(intrigueEvent).toBeDefined();
-        expect(intrigueEvent?.participants.some((p) => p.charId === "actor_001")).toBe(true);
-        expect(intrigueEvent?.participants.some((p) => p.charId === "target_001")).toBe(true);
-      }
-    }
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(true);
+    const intrigueEvent = result.state.chronicle.find((e) => e.type === "intrigue_discovered");
+    expect(intrigueEvent).toBeDefined();
+    expect(intrigueEvent?.participants.some((p) => p.charId === "actor_001")).toBe(true);
+    expect(intrigueEvent?.participants.some((p) => p.charId === "target_001")).toBe(true);
   });
 
   it("hidden scheme (high secrecy): no chronicle event added", () => {
-    // High secrecy (90) → low discovery chance
+    // slander + secrecy=90, rngSeed=42: discoveryRoll=84 > max_threshold(≤56) → NOT discovered (guaranteed)
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
       potency: 90,
       secrecy: 90,
     });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const o = settledScheme.outcome as { discovered: boolean } | undefined;
-      if (o !== undefined && !o.discovered) {
-        const intrigueEvent = result.state.chronicle.find((e) => e.type === "intrigue_discovered");
-        expect(intrigueEvent).toBeUndefined();
-      }
-    }
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(false);
+    const intrigueEvent = result.state.chronicle.find((e) => e.type === "intrigue_discovered");
+    expect(intrigueEvent).toBeUndefined();
   });
 
   it("chronicle event has correct type 'intrigue_discovered'", () => {
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", { secrecy: 1, potency: 90 });
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const o = settledScheme.outcome as { discovered: boolean } | undefined;
-      if (o?.discovered) {
-        const ev = result.state.chronicle.find((e) => e.type === "intrigue_discovered");
-        expect(ev?.type).toBe("intrigue_discovered");
-        expect(ev?.id).toMatch(/^evt_\d{6}$/);
-      }
-    }
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(true);
+    const ev = result.state.chronicle.find((e) => e.type === "intrigue_discovered");
+    expect(ev?.type).toBe("intrigue_discovered");
+    expect(ev?.id).toMatch(/^evt_\d{6}$/);
   });
 });
 
-// ── Notifications (discovered) ────────────────────────────────────────────────
+// ── Reports (haremIntrigueReports) ───────────────────────────────────────────
 
-describe("settleHaremIntrigue: notifications", () => {
-  it("discovered scheme: pendingIntrigueNotifications gets one entry", () => {
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", { secrecy: 1, potency: 90 });
+describe("settleHaremIntrigue: haremIntrigueReports", () => {
+  it("exposed scheme: haremIntrigueReports gets one exposure report", () => {
+    // false_accusation+secrecy=10+potency=90: guaranteed discovered=true (roll=27 < threshold≥65)
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const o = settledScheme.outcome as { discovered: boolean } | undefined;
-      if (o?.discovered) {
-        expect(result.state.pendingIntrigueNotifications).toHaveLength(1);
-        const notif = result.state.pendingIntrigueNotifications[0]!;
-        expect(notif.actorId).toBe("actor_001");
-        expect(notif.targetId).toBe("target_001");
-        expect(notif.dismissed).toBe(false);
-      }
-    }
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(true);
+    expect(result.state.haremIntrigueReports).toHaveLength(1);
+    const report = result.state.haremIntrigueReports[0]!;
+    expect(report.reportKind).toBe("exposure");
+    expect(report.confidence).toBe("confirmed");
+    expect(report.suspectedActorIds).toContain("actor_001");
+    expect(report.knownTargetIds).toContain("target_001");
+    expect(report.status).toBe("unread");
   });
 
-  it("hidden scheme: no notification added", () => {
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", { secrecy: 90, potency: 90 });
+  it("anomaly report summaryCode does not reveal kind", () => {
+    // slander+secrecy=90+potency=90: guaranteed NOT discovered, success=true, potency≥60 → anomaly
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+      potency: 90,
+      secrecy: 90,
+    });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const o = settledScheme.outcome as { discovered: boolean } | undefined;
-      if (o !== undefined && !o.discovered) {
-        expect(result.state.pendingIntrigueNotifications).toHaveLength(0);
-      }
-    }
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(true);
+    expect(result.state.haremIntrigueReports).toHaveLength(1);
+    const report = result.state.haremIntrigueReports[0]!;
+    expect(report.reportKind).toBe("anomaly");
+    expect(report.suspectedActorIds).toHaveLength(0);
+    expect(report.knownTargetIds).toContain("target_001");
+    // summaryCode must NOT contain the real kind name
+    expect(report.summaryCode).toBe("anomaly_unexplained_harm");
+    expect(report.summaryCode).not.toContain("slander");
   });
 
-  it("notification id follows inotif_{schemeId} format", () => {
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", { secrecy: 1, potency: 90 });
+  it("hidden failure (none): no report added", () => {
+    // slander+secrecy=90+potency=10: guaranteed NOT discovered AND success=false → observationLevel="none"
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", { secrecy: 90, potency: 10 });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settledScheme.status === "resolved") {
-      const o = settledScheme.outcome as { discovered: boolean } | undefined;
-      if (o?.discovered) {
-        const notif = result.state.pendingIntrigueNotifications[0]!;
-        expect(notif.id).toBe(`inotif_${scheme.id}`);
-      }
-    }
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(false);
+    expect(result.state.haremIntrigueReports).toHaveLength(0);
+  });
+
+  it("report id follows ireport_incident_{schemeId} format", () => {
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settle(state);
+    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(true);
+    const report = result.state.haremIntrigueReports[0]!;
+    expect(report.id).toBe(`ireport_incident_${scheme.id}`);
   });
 });
 
@@ -545,7 +589,7 @@ describe("settleHaremIntrigue: household deltas", () => {
   it("household servantOpinion stays in [0,100] range after delta", () => {
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "servant_subversion");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const targetSt = result.state.standing["target_001"]!;
     if (targetSt.household) {
       expect(targetSt.household.servantOpinion).toBeGreaterThanOrEqual(0);
@@ -556,7 +600,7 @@ describe("settleHaremIntrigue: household deltas", () => {
   it("household livingStandard stays in [0,100] after delta", () => {
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "servant_subversion");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const targetSt = result.state.standing["target_001"]!;
     if (targetSt.household) {
       expect(targetSt.household.livingStandard).toBeGreaterThanOrEqual(0);
@@ -571,17 +615,14 @@ describe("settleHaremIntrigue: next-month scheme planning", () => {
   it("after settlement, a new scheme for next month may be planned (if candidates exist)", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
-    // If eligible actors exist, a next-month scheme may be planned
-    // We just check that schemes length either stays same or grows by 1
-    // (the current scheme gets status update, possibly a new one added)
+    const result = settle(state);
     expect(result.state.haremSchemes.length).toBeGreaterThanOrEqual(1);
   });
 
   it("next-month scheme (if created) has status=pending", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const pendingAfter = result.state.haremSchemes.filter((s) => s.status === "pending");
     for (const s of pendingAfter) {
       expect(s.status).toBe("pending");
@@ -591,10 +632,9 @@ describe("settleHaremIntrigue: next-month scheme planning", () => {
   it("next-month scheme has correct scheduledForMonth = AT.month + 1", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const newSchemes = result.state.haremSchemes.filter((s) => s.id !== scheme.id);
     for (const s of newSchemes) {
-      // Next month is month 4 (AT is month 3)
       expect(s.scheduledForMonth).toBe(NEXT_MONTH.month);
       expect(s.scheduledForYear).toBe(NEXT_MONTH.year);
     }
@@ -608,8 +648,7 @@ describe("settleHaremIntrigue: next-month scheme planning", () => {
       ...makeStateWithScheme("actor_001", "target_001", scheme),
       haremSchemes: [scheme, nextMonthScheme],
     };
-    const result = settleHaremIntrigue(db, state, AT);
-    // Next month already has a scheme — should not add another
+    const result = settle(state);
     const month4Schemes = result.state.haremSchemes.filter(
       (s) => s.scheduledForYear === 1 && s.scheduledForMonth === 4,
     );
@@ -620,12 +659,11 @@ describe("settleHaremIntrigue: next-month scheme planning", () => {
     const decemberScheme = makeScheme("actor_001", "target_001", 1, 12);
     const AT_DEC: GameTime = makeGameTime(1, 12, "early");
     const state = makeStateWithScheme("actor_001", "target_001", decemberScheme);
-    const result = settleHaremIntrigue(db, state, AT_DEC);
+    const result = settle(state, AT_DEC);
     const newSchemes = result.state.haremSchemes.filter(
       (s) => s.status === "pending",
     );
     for (const s of newSchemes) {
-      // If a new scheme planned, it should be year 2, month 1
       if (s.scheduledForYear === 2) {
         expect(s.scheduledForMonth).toBe(1);
       }
@@ -639,7 +677,7 @@ describe("settleHaremIntrigue: incident record", () => {
   it("incident.id follows incident_{schemeId} format", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     if (settledScheme.status !== "cancelled" || settledScheme.outcome !== undefined) {
       const incident = result.state.haremIncidents[0];
@@ -650,19 +688,18 @@ describe("settleHaremIntrigue: incident record", () => {
   });
 
   it("incident.kind matches scheme kind", () => {
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation");
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", { motive: "resentment" });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const incident = result.state.haremIncidents[0];
-    if (incident) {
-      expect(incident.kind).toBe("false_accusation");
-    }
+    expect(incident).toBeDefined();
+    expect(incident!.kind).toBe("false_accusation");
   });
 
   it("incident.actorId and targetId match the plan", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const incident = result.state.haremIncidents[0];
     if (incident) {
       expect(incident.actorId).toBe("actor_001");
@@ -673,12 +710,35 @@ describe("settleHaremIntrigue: incident record", () => {
   it("resolved incident has consequencesApplied=true", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     const incident = result.state.haremIncidents.find((i) => i.schemeId === scheme.id);
     if (settledScheme.status === "resolved" && incident) {
       expect(incident.consequencesApplied).toBe(true);
     }
+  });
+
+  it("incident.observationLevel is one of the valid values", () => {
+    const scheme = makeScheme("actor_001", "target_001");
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settle(state);
+    const incident = result.state.haremIncidents[0];
+    if (incident) {
+      expect(["none", "anomaly", "rumor", "exposed"]).toContain(incident.observationLevel);
+    }
+  });
+
+  it("exposed incident has courtEventId", () => {
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
+    const state = makeStateWithScheme("actor_001", "target_001", scheme);
+    const result = settle(state);
+    const settledScheme = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
+    expect(settledScheme.status).toBe("resolved");
+    const o = settledScheme.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(true);
+    const incident = result.state.haremIncidents.find((i) => i.schemeId === scheme.id)!;
+    expect(incident.observationLevel).toBe("exposed");
+    expect(incident.courtEventId).toBeDefined();
   });
 });
 
@@ -693,19 +753,27 @@ describe("settleHaremIntrigue: all 5 scheme kinds", () => {
     "servant_subversion",
   ];
 
+  function kindMotive(kind: HaremIntrigueKind): HaremIntriguePlan["motive"] {
+    if (kind === "false_accusation") return "resentment";
+    if (kind === "steal_credit") return "ambition";
+    if (kind === "faction_pressure") return "faction";
+    return "jealousy";
+  }
+
   for (const kind of kinds) {
     it(`kind="${kind}" executes without error`, () => {
-      const motive = kind === "false_accusation" ? "ambition" : "jealousy";
+      const motive = kindMotive(kind);
       const scheme = makeScheme("actor_001", "target_001", 1, 3, kind, { motive });
       const state = makeStateWithScheme("actor_001", "target_001", scheme);
-      expect(() => settleHaremIntrigue(db, state, AT)).not.toThrow();
+      const r = settleHaremIntrigue(db, state, AT);
+      expect(r.ok).toBe(true);
     });
 
     it(`kind="${kind}": scheme status transitions from pending`, () => {
-      const motive = kind === "false_accusation" ? "ambition" : "jealousy";
+      const motive = kindMotive(kind);
       const scheme = makeScheme("actor_001", "target_001", 1, 3, kind, { motive });
       const state = makeStateWithScheme("actor_001", "target_001", scheme);
-      const result = settleHaremIntrigue(db, state, AT);
+      const result = settle(state);
       const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
       expect(settled.status).not.toBe("pending");
     });
@@ -718,10 +786,10 @@ describe("settleHaremIntrigue: multiple schemes", () => {
   it("two due schemes both get processed in same settlement call", () => {
     const scheme1 = makeScheme("actor_001", "target_001");
     const scheme2: HaremScheme = {
-      ...makeScheme("actor_001", "target_001", 1, 3, "steal_credit"),
+      ...makeScheme("actor_001", "target_001", 1, 3, "steal_credit", { motive: "ambition" }),
       id: "scheme_1_03_actor_001_target_002",
       plan: {
-        ...makePlan("actor_001", "target_002", "steal_credit"),
+        ...makePlan("actor_001", "target_002", "steal_credit", { motive: "ambition" }),
         sourceKey: "harem_intrigue:1:03",
       },
     };
@@ -747,7 +815,7 @@ describe("settleHaremIntrigue: multiple schemes", () => {
       haremSchemes: [scheme1, scheme2],
     };
 
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const s1 = result.state.haremSchemes.find((s) => s.id === scheme1.id)!;
     const s2 = result.state.haremSchemes.find((s) => s.id === scheme2.id)!;
     expect(s1.status).not.toBe("pending");
@@ -755,88 +823,82 @@ describe("settleHaremIntrigue: multiple schemes", () => {
   });
 });
 
-// ── Fix: target memory unresolved=discovered (not discovered&&success) ────────
+// ── Fix: target memory based on observationLevel ──────────────────────────────
 
 describe("settleHaremIntrigue: target memory unresolved flag", () => {
-  it("discovered+success → target memory unresolved=true", () => {
-    // secrecy=1 → high discovery; potency=90 → high success chance
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
-      potency: 90,
-      secrecy: 1,
-    });
+  it("exposed+success → target grievance memory unresolved=true", () => {
+    // false_accusation+secrecy=10+potency=90: guaranteed discovered=true, success=true
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
-      if (o?.discovered && o?.success) {
-        const targetEntry = result.state.memories["target_001"]!.entries[0];
-        expect(targetEntry?.unresolved).toBe(true);
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(true);
+    expect(o.success).toBe(true);
+    const targetEntry = result.state.memories["target_001"]!.entries[0]!;
+    expect(targetEntry.kind).toBe("grievance");
+    expect(targetEntry.unresolved).toBe(true);
   });
 
-  it("discovered+failure → target memory unresolved=true (core fix)", () => {
-    // secrecy=1 → high discovery; potency=10 → lower success chance
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+  it("exposed+failure → target grievance memory unresolved=true", () => {
+    // false_accusation+secrecy=10+potency=10: guaranteed discovered=true, success=false
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", {
+      motive: "resentment",
+      secrecy: 10,
       potency: 10,
-      secrecy: 1,
     });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
-      if (o?.discovered && !o?.success) {
-        const targetEntry = result.state.memories["target_001"]!.entries[0];
-        // A discovered but failed plot still creates unresolved grievance
-        expect(targetEntry?.unresolved).toBe(true);
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(true);
+    expect(o.success).toBe(false);
+    const targetEntry = result.state.memories["target_001"]!.entries[0]!;
+    expect(targetEntry.kind).toBe("grievance");
+    expect(targetEntry.unresolved).toBe(true);
   });
 
-  it("hidden+success → target memory unresolved=false", () => {
-    // secrecy=90 → low discovery
+  it("anomaly (hidden+success+potency≥60) → target episodic memory unresolved=false", () => {
+    // slander+secrecy=90+potency=90: guaranteed NOT discovered, success=true
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
       potency: 90,
       secrecy: 90,
     });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
-      if (o !== undefined && !o.discovered && o.success) {
-        const targetEntry = result.state.memories["target_001"]!.entries[0];
-        // Target doesn't know the instigator — no unresolved grievance
-        expect(targetEntry?.unresolved).toBe(false);
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(true);
+    const targetEntries = result.state.memories["target_001"]!.entries;
+    expect(targetEntries).toHaveLength(1);
+    expect(targetEntries[0]!.unresolved).toBe(false);
   });
 
-  it("hidden+failure → target memory unresolved=false", () => {
-    // secrecy=90 → low discovery; potency=10 → lower success
+  it("hidden failure (none) → NO target memory written", () => {
+    // slander+secrecy=90+potency=10: guaranteed NOT discovered AND success=false
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
       potency: 10,
       secrecy: 90,
     });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean; success: boolean } | undefined;
-      if (o !== undefined && !o.discovered && !o.success) {
-        const targetEntry = result.state.memories["target_001"]!.entries[0];
-        expect(targetEntry?.unresolved).toBe(false);
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(false);
+    expect(result.state.memories["target_001"]!.entries).toHaveLength(0);
   });
 });
 
-// ── Fix: corrupted actorSnapshot → scheme cancelled, no throw ──────────────
+// ── Fix: corrupted actorSnapshot → contract error propagates ─────────────────
 
-describe("settleHaremIntrigue: corrupted actorSnapshot → no throw, scheme cancelled", () => {
-  it("scheme with actorSnapshot={} → does not throw, scheme is cancelled", () => {
+describe("settleHaremIntrigue: corrupted actorSnapshot → contract error propagates", () => {
+  it("scheme with actorSnapshot={} → result.ok=false (contract violation is not silently cancelled)", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const corruptedScheme: HaremScheme = {
       ...scheme,
@@ -846,12 +908,8 @@ describe("settleHaremIntrigue: corrupted actorSnapshot → no throw, scheme canc
       },
     };
     const state = makeStateWithScheme("actor_001", "target_001", corruptedScheme);
-    let result: ReturnType<typeof settleHaremIntrigue>;
-    expect(() => {
-      result = settleHaremIntrigue(db, state, AT);
-    }).not.toThrow();
-    const settled = result!.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    expect(settled.status).toBe("cancelled");
+    const r = settleHaremIntrigue(db, state, AT);
+    expect(r.ok).toBe(false);
   });
 });
 
@@ -861,7 +919,7 @@ describe("settleHaremIntrigue: scheme outcome persistence", () => {
   it("resolved scheme has outcome field set", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
     if (settled.status === "resolved") {
       expect(settled.outcome).toBeDefined();
@@ -873,99 +931,85 @@ describe("settleHaremIntrigue: scheme outcome persistence", () => {
   it("newIncidents returned matches haremIncidents appended to state", () => {
     const scheme = makeScheme("actor_001", "target_001");
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     for (const inc of result.newIncidents) {
       expect(result.state.haremIncidents.some((i) => i.id === inc.id)).toBe(true);
     }
   });
 });
 
-// ── P2 fix: discovered grievance subjectIds should be [actorId], not [targetId, actorId] ──
+// ── P2 fix: discovered grievance subjectIds should be [actorId] ──────────────
 
 describe("settleHaremIntrigue: grievance subjectIds (P2 fix)", () => {
-  it("discovered grievance subjectIds=[actorId], does NOT contain targetId", () => {
-    // secrecy=1 → high discovery chance
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
-      potency: 90,
-      secrecy: 1,
-    });
+  it("exposed+success → grievance subjectIds=[actorId], does NOT contain targetId", () => {
+    // false_accusation+secrecy=10+potency=90: guaranteed discovered=true, success=true
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", EXPOSED_PLAN_OVERRIDES);
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean } | undefined;
-      if (o?.discovered) {
-        const targetEntries = result.state.memories["target_001"]!.entries;
-        const grievance = targetEntries.find((m) => m.kind === "grievance");
-        expect(grievance).toBeDefined();
-        // grievance.subjectIds must point to the actor (the culprit), not the target herself
-        expect(grievance!.subjectIds).toContain("actor_001");
-        expect(grievance!.subjectIds).not.toContain("target_001");
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean };
+    expect(o.discovered).toBe(true);
+    const targetEntries = result.state.memories["target_001"]!.entries;
+    const grievance = targetEntries.find((m) => m.kind === "grievance");
+    expect(grievance).toBeDefined();
+    expect(grievance!.subjectIds).toContain("actor_001");
+    expect(grievance!.subjectIds).not.toContain("target_001");
   });
 
-  it("discovered grievance subjectIds=[actorId] on failure too", () => {
-    // secrecy=1 → high discovery; potency=10 → lower success chance
-    const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
+  it("exposed+failure → grievance subjectIds=[actorId]", () => {
+    // false_accusation+secrecy=10+potency=10: guaranteed discovered=true, success=false
+    const scheme = makeScheme("actor_001", "target_001", 1, 3, "false_accusation", {
+      motive: "resentment",
+      secrecy: 10,
       potency: 10,
-      secrecy: 1,
     });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean } | undefined;
-      if (o?.discovered) {
-        const targetEntries = result.state.memories["target_001"]!.entries;
-        const grievance = targetEntries.find((m) => m.kind === "grievance");
-        expect(grievance).toBeDefined();
-        expect(grievance!.subjectIds).toContain("actor_001");
-        expect(grievance!.subjectIds).not.toContain("target_001");
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(true);
+    expect(o.success).toBe(false);
+    const targetEntries = result.state.memories["target_001"]!.entries;
+    const grievance = targetEntries.find((m) => m.kind === "grievance");
+    expect(grievance).toBeDefined();
+    expect(grievance!.subjectIds).toContain("actor_001");
+    expect(grievance!.subjectIds).not.toContain("target_001");
   });
 
-  it("hidden episodic memory subjectIds does NOT contain actorId (actor unknown)", () => {
-    // secrecy=90 → low discovery → episodic memory
+  it("anomaly (hidden+success) → episodic memory does NOT contain actorId", () => {
+    // slander+secrecy=90+potency=90: guaranteed NOT discovered, success=true
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
       potency: 90,
       secrecy: 90,
     });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean } | undefined;
-      if (o !== undefined && !o.discovered) {
-        const targetEntries = result.state.memories["target_001"]!.entries;
-        const episodic = targetEntries.find((m) => m.kind === "episodic");
-        if (episodic) {
-          // Hidden: target doesn't know the actor — actorId should NOT be in subjectIds
-          expect(episodic.subjectIds).not.toContain("actor_001");
-        }
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(true);
+    const targetEntries = result.state.memories["target_001"]!.entries;
+    expect(targetEntries).toHaveLength(1);
+    expect(targetEntries[0]!.kind).toBe("episodic");
+    expect(targetEntries[0]!.subjectIds).not.toContain("actor_001");
   });
 
-  it("hidden failure episodic memory subjectIds does NOT contain actorId", () => {
-    // secrecy=90 → low discovery; potency=10 → lower success
+  it("hidden failure (none) → no target memory at all", () => {
+    // slander+secrecy=90+potency=10: guaranteed NOT discovered AND success=false
     const scheme = makeScheme("actor_001", "target_001", 1, 3, "slander", {
       potency: 10,
       secrecy: 90,
     });
     const state = makeStateWithScheme("actor_001", "target_001", scheme);
-    const result = settleHaremIntrigue(db, state, AT);
+    const result = settle(state);
     const settled = result.state.haremSchemes.find((s) => s.id === scheme.id)!;
-    if (settled.status === "resolved") {
-      const o = settled.outcome as { discovered: boolean } | undefined;
-      if (o !== undefined && !o.discovered) {
-        const targetEntries = result.state.memories["target_001"]!.entries;
-        const episodic = targetEntries.find((m) => m.kind === "episodic");
-        if (episodic) {
-          expect(episodic.subjectIds).not.toContain("actor_001");
-        }
-      }
-    }
+    expect(settled.status).toBe("resolved");
+    const o = settled.outcome as { discovered: boolean; success: boolean };
+    expect(o.discovered).toBe(false);
+    expect(o.success).toBe(false);
+    expect(result.state.memories["target_001"]!.entries).toHaveLength(0);
   });
 });

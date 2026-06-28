@@ -93,6 +93,7 @@ import {
   resolveHaremDiscipline,
   type ResolveHaremDisciplineInput,
 } from "../engine/characters/haremDisciplineResolver";
+import { settleHaremIntrigue } from "../engine/characters/haremIntrigueSettlement";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -1717,28 +1718,40 @@ export class GameStore {
     }
 
     // 5-pre) 后宫内部惩戒（月度；PUNISH-4G-B）。
-    // 若本月六宫年度例核产生了晋/降位，跳过，避免同月双重处分。
+    // 仅排除本月被例核调整位分的当事人，不再因任意一人被调整而全局跳过。
     if (monthChanged) {
       const { year: curYear, month: curMonth } = candidate.calendar;
-      const adminRankChangedThisMonth = candidate.haremAdminReviews.some(
-        (r) =>
-          r.outcome === "rank_changed" &&
-          r.settledAt.year === curYear &&
-          r.settledAt.month === curMonth,
+      const adminRankChangedTargetsThisMonth = new Set(
+        candidate.haremAdminReviews
+          .filter(
+            (r) =>
+              r.outcome === "rank_changed" &&
+              r.settledAt.year === curYear &&
+              r.settledAt.month === curMonth &&
+              r.decision !== undefined,
+          )
+          .map((r) => r.decision!.targetId),
       );
-      if (!adminRankChangedThisMonth) {
-        const beforeDiscipline = candidate;
-        const plan = planHaremDiscipline(db, candidate);
-        if (plan !== null) {
-          const occResult = resolveHaremDisciplineOccurrence(db, candidate, plan);
-          if (!occResult.ok) return err(occResult.error);
-          candidate = occResult.value.state;
-        }
-        collector?.capturePhaseScheduled(
-          "harem_discipline_occurrence",
-          diffGameState(beforeDiscipline, candidate),
-        );
+      const beforeDiscipline = candidate;
+      const plan = planHaremDiscipline(db, candidate, adminRankChangedTargetsThisMonth);
+      if (plan !== null) {
+        const occResult = resolveHaremDisciplineOccurrence(db, candidate, plan);
+        if (!occResult.ok) return err(occResult.error);
+        candidate = occResult.value.state;
       }
+      collector?.capturePhaseScheduled(
+        "harem_discipline_occurrence",
+        diffGameState(beforeDiscipline, candidate),
+      );
+    }
+
+    // 5-mid) 宫斗月度结算（Phase 5A-3a）。
+    if (monthChanged) {
+      const beforeIntrigue = candidate;
+      const intrigueResult = settleHaremIntrigue(db, candidate, toGameTime(candidate.calendar));
+      if (!intrigueResult.ok) return err(intrigueResult.error);
+      candidate = intrigueResult.value.state;
+      collector?.capturePhaseScheduled("harem_intrigue_settlement", diffGameState(beforeIntrigue, candidate));
     }
 
     // 5) Cold-palace incident generation (月度；replay-stable).

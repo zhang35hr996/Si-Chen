@@ -1,12 +1,14 @@
 /**
- * Migration v30 → v31: haremSchemes / haremIncidents / pendingIntrigueNotifications
+ * Migration v30 → v31: haremSchemes / haremIncidents / haremIntrigueReports
  *
- * Phase 5A-2 adds three new array fields to GameState. Old saves (v30) don't
- * have these fields; MIGRATIONS[30] initialises them to []. The schema's
- * .default([]) fallback also covers direct v31 saves that omit these fields.
+ * Phase 5A-2 adds haremSchemes, haremIncidents to GameState.
+ * Phase 5A-3a (v33) renames pendingIntrigueNotifications → haremIntrigueReports + settledHaremIntriguePeriods.
+ * After loading a v30 save through the full chain (v31→v32→v33), the state should have
+ * haremIntrigueReports = [] and settledHaremIntriguePeriods = [].
  *
  * Migration chain verified:
  *   v28 → v29 (haremAdminReviews) → v30 (quarterly settlement) → v31 (harem intrigue)
+ *     → v32 (discipline) → v33 (haremIntrigueReports + settledHaremIntriguePeriods)
  */
 import { describe, expect, it } from "vitest";
 import { checksumOf } from "../../src/engine/save/canonical";
@@ -26,15 +28,17 @@ const db = loadRealContent();
 
 // ── v30 save builder ──────────────────────────────────────────────────────────
 
-/** Build a v30-format save. A v30 save doesn't have haremSchemes/haremIncidents/pendingIntrigueNotifications. */
+/** Build a v30-format save. A v30 save doesn't have haremSchemes/haremIncidents/intrigue fields. */
 function makeV30Save(stateOverrides?: (raw: Record<string, unknown>) => void): string {
   const s = createNewGameState(db);
   const raw = structuredClone(s) as unknown as Record<string, unknown>;
 
-  // Strip the new v31 fields — a v30 save wouldn't have them
+  // Strip fields that didn't exist in v30
   delete raw["haremSchemes"];
   delete raw["haremIncidents"];
-  delete raw["pendingIntrigueNotifications"];
+  delete raw["haremIntrigueReports"];
+  delete raw["settledHaremIntriguePeriods"];
+  delete raw["haremDisciplineIncidents"];
 
   stateOverrides?.(raw);
 
@@ -50,15 +54,15 @@ function makeV30Save(stateOverrides?: (raw: Record<string, unknown>) => void): s
 
 // ── Current version ───────────────────────────────────────────────────────────
 
-describe("save format v31", () => {
+describe("save format v31+", () => {
   it("SAVE_FORMAT_VERSION >= 31", () => {
     expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(31);
   });
 });
 
-// ── v30 → v31 migration ───────────────────────────────────────────────────────
+// ── v30 → v31+ migration ──────────────────────────────────────────────────────
 
-describe("save migration v30 → v31", () => {
+describe("save migration v30 → v31+", () => {
   it("v30 save (no haremSchemes) migrates: haremSchemes = []", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV30Save());
@@ -80,14 +84,24 @@ describe("save migration v30 → v31", () => {
     expect(loaded.value.state.haremIncidents).toHaveLength(0);
   });
 
-  it("v30 save (no pendingIntrigueNotifications) migrates: pendingIntrigueNotifications = []", () => {
+  it("v30 save migrates: haremIntrigueReports = [] (v33 field)", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV30Save());
     const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    expect(Array.isArray(loaded.value.state.pendingIntrigueNotifications)).toBe(true);
-    expect(loaded.value.state.pendingIntrigueNotifications).toHaveLength(0);
+    expect(Array.isArray(loaded.value.state.haremIntrigueReports)).toBe(true);
+    expect(loaded.value.state.haremIntrigueReports).toHaveLength(0);
+  });
+
+  it("v30 save migrates: settledHaremIntriguePeriods = [] (v33 field)", () => {
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV30Save());
+    const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(Array.isArray(loaded.value.state.settledHaremIntriguePeriods)).toBe(true);
+    expect(loaded.value.state.settledHaremIntriguePeriods).toHaveLength(0);
   });
 
   it("migrated state passes gameStateSchema", () => {
@@ -123,7 +137,7 @@ describe("save migration v30 → v31", () => {
     expect(loaded.value.state.haremSchemes).toHaveLength(0);
   });
 
-  it("idempotent round-trip: migrated v31 state saves and reloads cleanly", () => {
+  it("idempotent round-trip: migrated state saves and reloads cleanly", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV30Save());
     const first = readSlot(storage, db, "slot1", { now: () => 0 });
@@ -139,7 +153,8 @@ describe("save migration v30 → v31", () => {
     if (!second.ok) return;
     expect(Array.isArray(second.value.state.haremSchemes)).toBe(true);
     expect(Array.isArray(second.value.state.haremIncidents)).toBe(true);
-    expect(Array.isArray(second.value.state.pendingIntrigueNotifications)).toBe(true);
+    expect(Array.isArray(second.value.state.haremIntrigueReports)).toBe(true);
+    expect(Array.isArray(second.value.state.settledHaremIntriguePeriods)).toBe(true);
   });
 
   it("input envelope is not mutated by migration", () => {
@@ -162,9 +177,9 @@ describe("save migration v30 → v31", () => {
   });
 });
 
-// ── Chain migration v28 → v29 → v30 → v31 ───────────────────────────────────
+// ── Chain migration v28 → v29 → v30 → v31 → v32 → v33 ──────────────────────
 
-describe("save migration chain v28 → v29 → v30 → v31", () => {
+describe("save migration chain v28 → v29 → v30 → v31 → v32 → v33", () => {
   function makeV28Save(): string {
     const s = createNewGameState(db);
     const raw = structuredClone(s) as unknown as Record<string, unknown>;
@@ -174,7 +189,9 @@ describe("save migration chain v28 → v29 → v30 → v31", () => {
     delete raw["settledQuarterlyPeriods"];
     delete raw["haremSchemes"];
     delete raw["haremIncidents"];
-    delete raw["pendingIntrigueNotifications"];
+    delete raw["haremIntrigueReports"];
+    delete raw["settledHaremIntriguePeriods"];
+    delete raw["haremDisciplineIncidents"];
 
     const current = createSaveData(db, s, "slot1");
     const env = {
@@ -186,7 +203,7 @@ describe("save migration chain v28 → v29 → v30 → v31", () => {
     return JSON.stringify(env);
   }
 
-  it("v28 save migrates through v29→v30→v31: acquires haremSchemes + haremIncidents + pendingIntrigueNotifications", () => {
+  it("v28 save migrates through chain: acquires haremSchemes + haremIncidents + haremIntrigueReports + settledHaremIntriguePeriods", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV28Save());
     const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
@@ -196,13 +213,15 @@ describe("save migration chain v28 → v29 → v30 → v31", () => {
     const state = loaded.value.state;
     expect(Array.isArray(state.haremSchemes)).toBe(true);
     expect(Array.isArray(state.haremIncidents)).toBe(true);
-    expect(Array.isArray(state.pendingIntrigueNotifications)).toBe(true);
+    expect(Array.isArray(state.haremIntrigueReports)).toBe(true);
+    expect(Array.isArray(state.settledHaremIntriguePeriods)).toBe(true);
     expect(state.haremSchemes).toHaveLength(0);
     expect(state.haremIncidents).toHaveLength(0);
-    expect(state.pendingIntrigueNotifications).toHaveLength(0);
+    expect(state.haremIntrigueReports).toHaveLength(0);
+    expect(state.settledHaremIntriguePeriods).toHaveLength(0);
   });
 
-  it("v28 save migrates through v29→v30→v31: haremAdminReviews initialised (v29 step)", () => {
+  it("v28 save migrates through chain: haremAdminReviews initialised (v29 step)", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV28Save());
     const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
@@ -212,7 +231,7 @@ describe("save migration chain v28 → v29 → v30 → v31", () => {
     expect(Array.isArray(loaded.value.state.haremAdminReviews)).toBe(true);
   });
 
-  it("v28 save migrates through v29→v30→v31: settledQuarterlyPeriods initialised (v30 step)", () => {
+  it("v28 save migrates through chain: settledQuarterlyPeriods initialised (v30 step)", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV28Save());
     const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
@@ -222,7 +241,7 @@ describe("save migration chain v28 → v29 → v30 → v31", () => {
     expect(Array.isArray(loaded.value.state.settledQuarterlyPeriods)).toBe(true);
   });
 
-  it("v28 → v31 chain: passes gameStateSchema", () => {
+  it("v28 → v33 chain: passes gameStateSchema", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV28Save());
     const loaded = readSlot(storage, db, "slot1", { now: () => 0 });
@@ -233,9 +252,9 @@ describe("save migration chain v28 → v29 → v30 → v31", () => {
   });
 });
 
-// ── New-game state has all v31 fields ────────────────────────────────────────
+// ── New-game state has all v31+ fields ───────────────────────────────────────
 
-describe("v31 new-game state", () => {
+describe("v31+ new-game state", () => {
   it("createNewGameState includes haremSchemes = []", () => {
     const state = createNewGameState(db);
     expect(state.haremSchemes).toEqual([]);
@@ -246,9 +265,14 @@ describe("v31 new-game state", () => {
     expect(state.haremIncidents).toEqual([]);
   });
 
-  it("createNewGameState includes pendingIntrigueNotifications = []", () => {
+  it("createNewGameState includes haremIntrigueReports = []", () => {
     const state = createNewGameState(db);
-    expect(state.pendingIntrigueNotifications).toEqual([]);
+    expect(state.haremIntrigueReports).toEqual([]);
+  });
+
+  it("createNewGameState includes settledHaremIntriguePeriods = []", () => {
+    const state = createNewGameState(db);
+    expect(state.settledHaremIntriguePeriods).toEqual([]);
   });
 
   it("new-game state passes gameStateSchema", () => {

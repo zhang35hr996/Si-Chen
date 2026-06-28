@@ -1239,31 +1239,68 @@ export interface HaremScheme {
   scheduledForMonth: number;
 }
 
-/** 宫斗结果事件记录（Phase 5A-2）。 */
+/** 事件当时产生了何种可见迹象（冻结于 settlement 时，不可事后重算）。 */
+export type HaremIntrigueObservationLevel = "none" | "anomaly" | "rumor" | "exposed";
+
+/** 宫斗结果事件记录（Phase 5A-3a）。 */
 export interface HaremIncident {
   /** "incident_{schemeId}" */
   id: string;
   schemeId: string;
   kind: HaremIntrigueKind;
+  /** 后台真相：真实主谋。不得直接传给 UI。 */
   actorId: string;
   targetId: string;
   success: boolean;
-  discovered: boolean;
+  /** 事件可见程度（后台记录；玩家只通过 HaremIntrigueReport 知道）。 */
+  observationLevel: HaremIntrigueObservationLevel;
   resolvedAt: GameTime;
   consequencesApplied: boolean;
+  /** 败露时写入的 CourtEvent ID（可选）。 */
+  courtEventId?: string;
 }
 
-/** 已揭发阴谋的待消费通知（Phase 5A-2）。 */
-export interface IntrigueNotification {
-  /** "inotif_{schemeId}" */
+/** 宫斗情报报告种类（Phase 5A-3a）。 */
+export type HaremIntrigueReportKind =
+  | "anomaly"           // 有异常但不知主谋
+  | "rumor"             // 宫中风闻
+  | "exposure"          // 完整败露
+  | "investigation_update"   // 调查进展（5B-2）
+  | "investigation_final";   // 调查终报（5B-2）
+
+/** 宫斗情报报告状态（玩家视角）。 */
+export type HaremIntrigueReportStatus = "unread" | "seen" | "actioned" | "archived";
+
+/** 玩家对结果的知情程度。 */
+export type HaremIntrigueKnownOutcome = "unknown" | "harm_observed" | "attempt_observed";
+
+/** 情报可信度（玩家视角，非后台真实可靠度）。 */
+export type HaremIntrigueReportConfidence = "tenuous" | "plausible" | "strong" | "confirmed";
+
+/**
+ * 宫斗情报报告：玩家知识层（Phase 5A-3a）。
+ * 不存 actorId 真相；只暴露玩家实际得知的内容。
+ */
+export interface HaremIntrigueReport {
+  /** "ireport_{incidentId}" */
   id: string;
-  schemeId: string;
-  kind: HaremIntrigueKind;
-  actorId: string;
-  targetId: string;
-  success: boolean;
+  source: { incidentId: string };
+  reportKind: HaremIntrigueReportKind;
   createdAt: GameTime;
-  dismissed: boolean;
+  status: HaremIntrigueReportStatus;
+  /** 玩家得知的受影响侍君 ID 列表。 */
+  knownTargetIds: string[];
+  /** 玩家怀疑的主谋列表（可为空；exposure 时才填真实 actorId）。 */
+  suspectedActorIds: string[];
+  /** 玩家得知的阴谋种类（可能不完整）。 */
+  suspectedKinds: HaremIntrigueKind[];
+  knownOutcome: HaremIntrigueKnownOutcome;
+  confidence: HaremIntrigueReportConfidence;
+  /** 结构化模板代码，UI 据此生成文案（不持久化自由文本）。 */
+  summaryCode: string;
+  acknowledgedAt?: GameTime;
+  action?: "dismissed" | "watching" | "investigating" | "summoned";
+  linkedInvestigationId?: string;
 }
 
 /** 对话历史日志条目：记录每次播放反应时的发言人与台词，上限 NARRATIVE_LOG_MAX 条，先进先出。 */
@@ -1352,8 +1389,16 @@ export interface GameState {
   haremSchemes: HaremScheme[];
   /** 宫斗结果事件记录（Phase 5A-2）。append-only。 */
   haremIncidents: HaremIncident[];
-  /** 已揭发阴谋的待消费通知（Phase 5A-2）。 */
-  pendingIntrigueNotifications: IntrigueNotification[];
+  /**
+   * 宫斗情报报告（Phase 5A-3a）。
+   * unread 状态构成全局中断；玩家知识层，不含 actorId 真相。
+   */
+  haremIntrigueReports: HaremIntrigueReport[];
+  /**
+   * 已完成宫斗月度结算的期号集合（格式 "harem_intrigue_settlement:{year}:{MM}"）。
+   * 无阴谋月份也需写入，避免重复规划。
+   */
+  settledHaremIntriguePeriods: string[];
   /** 后宫内部惩戒事件（PUNISH-4G-B）：append-only；pending_response 构成全局中断。 */
   haremDisciplineIncidents: HaremDisciplineIncident[];
   /** 司法记录持久层（PUNISH-3B1）。 */

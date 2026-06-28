@@ -257,6 +257,7 @@ export interface HaremDisciplinePlan {
 export function planHaremDiscipline(
   db: ContentDB,
   state: GameState,
+  excludeCharacterIds?: ReadonlySet<string>,
 ): HaremDisciplinePlan | null {
   const { year, month } = state.calendar;
   const fuRankOrder = db.ranks["fu"]?.order ?? 0;
@@ -275,6 +276,7 @@ export function planHaremDiscipline(
   const candidates: Candidate[] = [];
 
   for (const [actorId] of Object.entries(state.standing)) {
+    if (excludeCharacterIds?.has(actorId)) continue;
     if (!isActorEligible(db, state, actorId)) continue;
     const actorSt = state.standing[actorId]!;
     const actorRank = db.ranks[actorSt.rank];
@@ -283,6 +285,7 @@ export function planHaremDiscipline(
     const actorProtScore = imperialProtectionSnapshot(db, state, actorId).score;
 
     for (const [targetId] of Object.entries(state.standing)) {
+      if (excludeCharacterIds?.has(targetId)) continue;
       if (!isTargetEligible(db, state, targetId, actorId)) continue;
       const targetSt = state.standing[targetId]!;
       const targetRank = db.ranks[targetSt.rank];

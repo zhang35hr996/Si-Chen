@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 32;
+export const SAVE_FORMAT_VERSION = 33;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -579,6 +579,60 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
   31: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     return { ...env, formatVersion: 32, checksum: checksumOf(env.state) };
+  },
+
+  // v32 → v33: 宫斗情报知识层（Phase 5A-3a）。
+  //   1. haremIncidents.discovered(bool) → observationLevel("none"|"anomaly"|"exposed")
+  //   2. pendingIntrigueNotifications → haremIntrigueReports（揭发通知转 exposure 报告）
+  //   3. 初始化 haremIntrigueReports（新字段）
+  //   4. 初始化 settledHaremIntriguePeriods（新字段）
+  32: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+
+    // 1. 迁移 haremIncidents.discovered → observationLevel
+    // 旧存档没有 courtEventId，无法追溯创建宫廷事件；统一降级为 "none"（知识层保留在 haremIntrigueReports）。
+    if (Array.isArray(state["haremIncidents"])) {
+      state["haremIncidents"] = (state["haremIncidents"] as Array<Record<string, unknown>>).map((inc) => {
+        const { discovered: _d, ...rest } = inc;
+        return { ...rest, observationLevel: "none" };
+      });
+    } else {
+      state["haremIncidents"] = [];
+    }
+
+    // 2. 迁移 pendingIntrigueNotifications → haremIntrigueReports（exposure 类型）
+    const oldNotifs = Array.isArray(state["pendingIntrigueNotifications"])
+      ? (state["pendingIntrigueNotifications"] as Array<Record<string, unknown>>)
+      : [];
+    const newReports = oldNotifs.map((notif) => ({
+      id: `ireport_incident_${String(notif["schemeId"] ?? "")}`,
+      source: { incidentId: `incident_${String(notif["schemeId"] ?? "")}` },
+      reportKind: "exposure",
+      createdAt: notif["createdAt"],
+      status: notif["dismissed"] ? "archived" : "unread",
+      knownTargetIds: notif["targetId"] ? [notif["targetId"]] : [],
+      suspectedActorIds: notif["actorId"] ? [notif["actorId"]] : [],
+      suspectedKinds: notif["kind"] ? [notif["kind"]] : [],
+      knownOutcome: notif["success"] ? "harm_observed" : "attempt_observed",
+      confidence: "confirmed",
+      summaryCode: `exposure_${String(notif["kind"] ?? "unknown")}_${notif["success"] ? "success" : "failed"}`,
+      ...(notif["dismissed"] ? { acknowledgedAt: notif["createdAt"] } : {}),
+    }));
+
+    if (!Array.isArray(state["haremIntrigueReports"])) {
+      state["haremIntrigueReports"] = newReports;
+    } else {
+      (state["haremIntrigueReports"] as unknown[]).push(...newReports);
+    }
+    delete state["pendingIntrigueNotifications"];
+
+    // 3. 初始化 settledHaremIntriguePeriods
+    if (!Array.isArray(state["settledHaremIntriguePeriods"])) {
+      state["settledHaremIntriguePeriods"] = [];
+    }
+
+    return { ...env, formatVersion: 33, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

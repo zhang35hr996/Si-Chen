@@ -1,27 +1,36 @@
 /**
- * 月度宫斗 settlement（Phase 5A-2）。
+ * 月度宫斗 settlement（Phase 5A-3a）。
  *
- * 执行当月 due 的 pending schemes：
- *   1. 解析结果（resolveIntrigueOutcome）
- *   2. 应用 standing / household / nation 后果
- *   3. 写入 actor 秘密记忆 + target 后果记忆
- *   4. 若 discovered → 追加 CourtEvent + IntrigueNotification
- *   5. 规划下月阴谋
+ * 执行所有逾期 due 的 pending schemes（catch-up）：
+ *   1. 检查幂等期号键
+ *   2. 解析结果（resolveIntrigueOutcome）
+ *   3. 应用 standing / household / nation 后果
+ *   4. 写入 actor 秘密记忆 + target 后果记忆
+ *   5. 根据 observationLevel 决定是否追加 CourtEvent
+ *   6. 生成脱敏的 HaremIntrigueReport（玩家知识层）
+ *   7. 规划下月阴谋
+ *   8. 写入幂等期号键
  *
- * 所有入参均不被修改（结构化克隆或扩展运算符产生新对象）。
+ * 纯函数——入参 state 不被修改。
+ * 返回 Result；CourtEvent 追加失败会令整个 settlement 失败。
  */
 import type { ContentDB } from "../content/loader";
 import type {
   GameState,
   HaremScheme,
   HaremIncident,
-  IntrigueNotification,
+  HaremIntrigueReport,
+  HaremIntrigueObservationLevel,
 } from "../state/types";
 import type { GameTime } from "../calendar/time";
 import { makeGameTime } from "../calendar/time";
 import { appendCourtEvent } from "../chronicle/append";
 import { applyFavorDelta } from "./favor";
 import { memoryEntryId } from "../state/newGame";
+import type { Result } from "../infra/result";
+import { ok, err } from "../infra/result";
+import { stateError } from "../infra/errors";
+import type { GameError } from "../infra/errors";
 import {
   resolveIntrigueOutcome,
   planMonthlyHaremIntrigue,
@@ -46,6 +55,16 @@ function nextMonthAt(at: GameTime): GameTime {
   return makeGameTime(nextYear, nextMonth, "early");
 }
 
+/** 月度幂等期号键：格式 "harem_intrigue_settlement:{year}:{MM}"。 */
+function settlementPeriodKey(year: number, month: number): string {
+  return `harem_intrigue_settlement:${year}:${String(month).padStart(2, "0")}`;
+}
+
+/** 月度序数（用于排序逾期 scheme）。 */
+function monthOrdinal(year: number, month: number): number {
+  return year * 12 + month;
+}
+
 // ── Label maps ───────────────────────────────────────────────────────────────
 
 const INTRIGUE_KIND_LABELS: Record<HaremIntrigueKind, string> = {
@@ -55,6 +74,63 @@ const INTRIGUE_KIND_LABELS: Record<HaremIntrigueKind, string> = {
   faction_pressure: "派系施压",
   servant_subversion: "收买宫人",
 };
+
+// ── observationLevel derivation ──────────────────────────────────────────────
+
+/**
+ * 事件当时产生了何种可见迹象（在 settlement 时冻结）。
+ * - exposed: 败露（discovered=true）
+ * - anomaly: 未败露但成功且影响明显（potency >= 60）
+ * - none: 其余
+ */
+function deriveObservationLevel(
+  resolved: HaremIntrigueResolvedOutcome,
+  plan: HaremIntriguePlan,
+): HaremIntrigueObservationLevel {
+  if (resolved.discovered) return "exposed";
+  if (resolved.success && plan.potency >= 60) return "anomaly";
+  return "none";
+}
+
+// ── Report builder ───────────────────────────────────────────────────────────
+
+function buildReport(
+  incidentId: string,
+  plan: HaremIntriguePlan,
+  resolved: HaremIntrigueResolvedOutcome,
+  observationLevel: HaremIntrigueObservationLevel,
+  at: GameTime,
+): HaremIntrigueReport {
+  if (observationLevel === "exposed") {
+    return {
+      id: `ireport_${incidentId}`,
+      source: { incidentId },
+      reportKind: "exposure",
+      createdAt: at,
+      status: "unread",
+      knownTargetIds: [plan.targetId],
+      suspectedActorIds: [plan.actorId],
+      suspectedKinds: [plan.kind],
+      knownOutcome: resolved.success ? "harm_observed" : "attempt_observed",
+      confidence: "confirmed",
+      summaryCode: `exposure_${plan.kind}_${resolved.success ? "success" : "failed"}`,
+    };
+  }
+  // anomaly — do not expose actor
+  return {
+    id: `ireport_${incidentId}`,
+    source: { incidentId },
+    reportKind: "anomaly",
+    createdAt: at,
+    status: "unread",
+    knownTargetIds: [plan.targetId],
+    suspectedActorIds: [],
+    suspectedKinds: [],
+    knownOutcome: resolved.success ? "harm_observed" : "attempt_observed",
+    confidence: "tenuous",
+    summaryCode: "anomaly_unexplained_harm",
+  };
+}
 
 // ── Memory summary builders ──────────────────────────────────────────────────
 
@@ -132,7 +208,7 @@ function applyHouseholdDeltas(
     const st = standing[delta.characterId];
     if (!st) continue;
     const hh = st.household;
-    if (!hh) continue; // 无 household 记录则跳过
+    if (!hh) continue;
     const updatedHH = {
       servantOpinion: delta.servantOpinion !== undefined
         ? clamp(hh.servantOpinion + delta.servantOpinion, 0, 100)
@@ -169,7 +245,7 @@ type MemoryDraft = Omit<import("../state/types").MemoryEntry, "id" | "ownerId" |
 
 function appendMemory(state: GameState, charId: string, draft: MemoryDraft, at: GameTime): GameState {
   const store = state.memories[charId];
-  if (!store) return state; // 角色无 memories 记录则跳过（官员等）
+  if (!store) return state;
   const newEntry: import("../state/types").MemoryEntry = {
     id: memoryEntryId(charId, store.nextSeq),
     ownerId: charId,
@@ -211,38 +287,52 @@ export interface HaremIntrigueSettlementResult {
 }
 
 /**
- * 处理当月 due 的 pending 宫斗阴谋，写入后果，规划下月阴谋。
+ * 处理所有逾期 pending 宫斗阴谋，写入后果，规划下月阴谋。
+ * 幂等：已完成期号直接返回当前 state。
  * 纯函数——入参 state 不被修改。
  */
 export function settleHaremIntrigue(
   db: ContentDB,
   state: GameState,
   at: GameTime,
-): HaremIntrigueSettlementResult {
+): Result<HaremIntrigueSettlementResult, GameError[]> {
+  // A. 幂等检查
+  const periodKey = settlementPeriodKey(at.year, at.month);
+  if (state.settledHaremIntriguePeriods.includes(periodKey)) {
+    return ok({ state, newIncidents: [] });
+  }
+
   let next = state;
   const newIncidents: HaremIncident[] = [];
 
-  // A. 找出本月 due 的 pending schemes
-  const dueSchemes = next.haremSchemes.filter(
-    (s) =>
-      s.status === "pending" &&
-      s.scheduledForYear === at.year &&
-      s.scheduledForMonth === at.month,
-  );
+  // B. 找出所有逾期 pending schemes（包括过去未处理月份），按年月/sourceKey/id 排序
+  const currentOrdinal = monthOrdinal(at.year, at.month);
+  const dueSchemes = next.haremSchemes
+    .filter(
+      (s) =>
+        s.status === "pending" &&
+        monthOrdinal(s.scheduledForYear, s.scheduledForMonth) <= currentOrdinal,
+    )
+    .sort((a, b) => {
+      const ordDiff =
+        monthOrdinal(a.scheduledForYear, a.scheduledForMonth) -
+        monthOrdinal(b.scheduledForYear, b.scheduledForMonth);
+      if (ordDiff !== 0) return ordDiff;
+      if (a.sourceKey < b.sourceKey) return -1;
+      if (a.sourceKey > b.sourceKey) return 1;
+      if (a.id < b.id) return -1;
+      if (a.id > b.id) return 1;
+      return 0;
+    });
 
   for (const scheme of dueSchemes) {
     const plan = scheme.plan;
     const result = resolveIntrigueOutcome(db, next, plan, at);
 
     if (!result.ok) {
-      // 合约违规 → 取消 scheme，不产生 incident
-      next = {
-        ...next,
-        haremSchemes: next.haremSchemes.map((s) =>
-          s.id === scheme.id ? { ...s, status: "cancelled" as const } : s,
-        ),
-      };
-      continue;
+      // 合约违规（plan 校验失败）→ 整个 settlement 失败并回滚
+      const detail = result.error.map((f) => f.message).join("; ");
+      return err([stateError("INTRIGUE_SETTLEMENT_FAILED", `scheme ${scheme.id}: ${detail}`)]);
     }
 
     const outcome = result.value;
@@ -256,7 +346,7 @@ export function settleHaremIntrigue(
         actorId: plan.actorId,
         targetId: plan.targetId,
         success: false,
-        discovered: false,
+        observationLevel: "none",
         resolvedAt: at,
         consequencesApplied: false,
       };
@@ -273,14 +363,14 @@ export function settleHaremIntrigue(
 
     // outcome.status === "resolved"
     const resolved = outcome as HaremIntrigueResolvedOutcome;
+    const observationLevel = deriveObservationLevel(resolved, plan);
 
-    // B. 应用后果
+    // C. 应用后果
     next = applyStandingDeltas(next, resolved.consequences.standing);
     next = applyHouseholdDeltas(next, resolved.consequences.household);
     next = applyNationRumor(next, resolved.consequences.nation.rumor);
 
-    // C. Memory writes
-    // Actor secret memory
+    // D. Memory writes
     next = appendMemory(next, plan.actorId, {
       kind: "secret",
       summary: buildActorSecretSummary(plan, resolved),
@@ -292,21 +382,36 @@ export function settleHaremIntrigue(
       emotions: resolved.success ? { guilt: 20 } : { shame: 20 },
     }, at);
 
-    // Target consequence memory
-    next = appendMemory(next, plan.targetId, {
-      kind: resolved.discovered ? "grievance" : "episodic",
-      summary: buildTargetConsequenceSummary(plan, resolved),
-      strength: resolved.success ? 55 : 30,
-      retention: "slow",
-      subjectIds: resolved.discovered ? [plan.actorId] : [plan.targetId],
-      perspective: "witness",
-      unresolved: resolved.discovered,
-      emotions: buildTargetEmotions(resolved),
-    }, at);
+    // Target memory: only written when observationLevel reveals perceptible harm
+    if (observationLevel === "exposed") {
+      next = appendMemory(next, plan.targetId, {
+        kind: "grievance",
+        summary: buildTargetConsequenceSummary(plan, resolved),
+        strength: resolved.success ? 55 : 30,
+        retention: "slow",
+        subjectIds: [plan.actorId],
+        perspective: "witness",
+        unresolved: true,
+        emotions: buildTargetEmotions(resolved),
+      }, at);
+    } else if (observationLevel === "anomaly") {
+      // Hidden but noticeable harm: generic memory, never reveals actor or kind
+      next = appendMemory(next, plan.targetId, {
+        kind: "episodic",
+        summary: "近来似有人暗中算计，然无从查起。",
+        strength: 40,
+        retention: "slow",
+        subjectIds: [plan.targetId],
+        perspective: "witness",
+        unresolved: false,
+        emotions: { grief: 30, fear: 20 },
+      }, at);
+    }
+    // observationLevel === "none" → no target memory (hidden and undetectable)
 
-    // D. Discovered → CourtEvent + notification
-    let discoveredEventId: string | undefined;
-    if (resolved.discovered) {
+    // E. Exposed → CourtEvent（必须成功，否则 settlement 整体失败）
+    let courtEventId: string | undefined;
+    if (observationLevel === "exposed") {
       const appendResult = appendCourtEvent(next, {
         type: "intrigue_discovered",
         occurredAt: at,
@@ -326,60 +431,54 @@ export function settleHaremIntrigue(
         tags: ["intrigue", plan.kind],
       });
 
-      if (appendResult.ok) {
-        next = appendResult.value.state;
-        discoveredEventId = appendResult.value.event.id;
+      if (!appendResult.ok) {
+        return err([stateError("INTRIGUE_SETTLEMENT_FAILED", `CourtEvent 追加失败: ${String(appendResult.error)}`)]);
       }
+      next = appendResult.value.state;
+      courtEventId = appendResult.value.event.id;
 
-      // E. Pending notification
-      const notification: IntrigueNotification = {
-        id: `inotif_${scheme.id}`,
-        schemeId: scheme.id,
-        kind: plan.kind,
-        actorId: plan.actorId,
-        targetId: plan.targetId,
-        success: resolved.success,
-        createdAt: at,
-        dismissed: false,
-      };
-      next = {
-        ...next,
-        pendingIntrigueNotifications: [...next.pendingIntrigueNotifications, notification],
-      };
-
-      // Update actor memory with event link if available
-      if (discoveredEventId) {
-        const store = next.memories[plan.actorId];
-        if (store && store.entries.length > 0) {
-          const lastEntry = store.entries[store.entries.length - 1]!;
-          if (lastEntry.ownerId === plan.actorId && lastEntry.kind === "secret") {
-            const updated = { ...lastEntry, sourceEventId: discoveredEventId };
-            next = {
-              ...next,
-              memories: {
-                ...next.memories,
-                [plan.actorId]: {
-                  entries: [...store.entries.slice(0, -1), updated],
-                  nextSeq: store.nextSeq,
-                },
+      // 更新 actor memory 的 sourceEventId
+      const store = next.memories[plan.actorId];
+      if (store && store.entries.length > 0) {
+        const lastEntry = store.entries[store.entries.length - 1]!;
+        if (lastEntry.ownerId === plan.actorId && lastEntry.kind === "secret") {
+          const updated = { ...lastEntry, sourceEventId: courtEventId };
+          next = {
+            ...next,
+            memories: {
+              ...next.memories,
+              [plan.actorId]: {
+                entries: [...store.entries.slice(0, -1), updated],
+                nextSeq: store.nextSeq,
               },
-            };
-          }
+            },
+          };
         }
       }
     }
 
-    // Update scheme record
+    // F. 生成脱敏的 HaremIntrigueReport（observationLevel !== "none" 时）
+    const incidentId = `incident_${scheme.id}`;
+    if (observationLevel !== "none") {
+      const report = buildReport(incidentId, plan, resolved, observationLevel, at);
+      next = {
+        ...next,
+        haremIntrigueReports: [...next.haremIntrigueReports, report],
+      };
+    }
+
+    // G. 更新 scheme 和 incident
     const incident: HaremIncident = {
-      id: `incident_${scheme.id}`,
+      id: incidentId,
       schemeId: scheme.id,
       kind: plan.kind,
       actorId: plan.actorId,
       targetId: plan.targetId,
       success: resolved.success,
-      discovered: resolved.discovered,
+      observationLevel,
       resolvedAt: at,
       consequencesApplied: true,
+      ...(courtEventId !== undefined ? { courtEventId } : {}),
     };
     newIncidents.push(incident);
     next = {
@@ -391,7 +490,7 @@ export function settleHaremIntrigue(
     };
   }
 
-  // F. 规划下月阴谋
+  // H. 规划下月阴谋
   const existingKeys = new Set(next.haremSchemes.map((s) => s.sourceKey));
   const nextMonthTime = nextMonthAt(at);
   const newPlan = planMonthlyHaremIntrigue(db, next, {
@@ -416,5 +515,11 @@ export function settleHaremIntrigue(
     };
   }
 
-  return { state: next, newIncidents };
+  // I. 写入幂等期号键
+  next = {
+    ...next,
+    settledHaremIntriguePeriods: [...next.settledHaremIntriguePeriods, periodKey],
+  };
+
+  return ok({ state: next, newIncidents });
 }
