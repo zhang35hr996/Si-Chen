@@ -60,15 +60,15 @@ export interface ZichendianScreenProps {
   onAdmitPendingAudience: (eventId: string) => void;
 
   onReviewMemorials: () => void;
+  /** 待批奏折总数（批阅奏折 badge = 内政 + 前朝合并）。 */
+  memorialTotalCount?: number;
   /** 人事奏折与请托裁决入口（PR3C-3b）；提供时渲染入口，badge 显待裁数。 */
   onReviewPersonnel?: () => void;
   /** 待裁人事决策数（badge）。 */
   personnelDecisionCount?: number;
-  /** 前朝奏折批阅入口（Phase 4A）；提供时渲染入口，badge 显待批数。 */
-  onReviewCourtMemorials?: () => void;
-  /** 待批前朝奏折数（badge）。 */
-  courtMemorialCount?: number;
   onSummonConsort: () => void;
+  /** 召见皇嗣（可选；提供时在乘风菜单中显示入口）。 */
+  onSummonHeir?: () => void;
   onRest: () => void;
   onLeave: () => void;
 
@@ -107,11 +107,11 @@ export function ZichendianScreen({
   onDeferAudience,
   onAdmitPendingAudience,
   onReviewMemorials,
+  memorialTotalCount = 0,
   onReviewPersonnel,
   personnelDecisionCount = 0,
-  onReviewCourtMemorials,
-  courtMemorialCount = 0,
   onSummonConsort,
+  onSummonHeir,
   onRest,
   onLeave,
   onManageRank,
@@ -230,16 +230,11 @@ export function ZichendianScreen({
   const actions = (
     <>
       <button type="button" className="action-btn action-btn--key" onClick={onReviewMemorials} disabled={sceneActionsLocked}>
-        批阅奏折
+        批阅奏折{memorialTotalCount > 0 ? ` · ${memorialTotalCount}` : ""}
       </button>
       {onReviewPersonnel && (
         <button type="button" className="action-btn" onClick={onReviewPersonnel} disabled={sceneActionsLocked}>
           人事奏折{personnelDecisionCount > 0 ? ` · ${personnelDecisionCount}` : ""}
-        </button>
-      )}
-      {onReviewCourtMemorials && (
-        <button type="button" className="action-btn" onClick={onReviewCourtMemorials} disabled={sceneActionsLocked}>
-          前朝奏折{courtMemorialCount > 0 ? ` · ${courtMemorialCount}` : ""}
         </button>
       )}
       <button
@@ -292,6 +287,7 @@ export function ZichendianScreen({
           interruptible={interruptible}
           disabledReason={interruptDisabledReason}
           onSummonConsort={() => handoff(onSummonConsort)}
+          onSummonHeir={onSummonHeir ? () => handoff(onSummonHeir) : undefined}
           onManageRank={() => handoff(onManageRank)}
           onBestow={() => handoff(onBestow)}
           onPhysician={() => handoff(onPhysician)}
