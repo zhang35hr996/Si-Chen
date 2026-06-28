@@ -193,7 +193,7 @@ v38：`heir.custodianId = legacyHeir.adoptiveFatherId; delete heir.adoptiveFathe
 
 **`HeirFaction` 枚举值 `"adoptive"` → `"custodian"`**（当前义为「依附承养人」）。正式过继加入后 "adoptive" 会歧义；v38 已在做，顺手迁移成本最低（见 §5）。
 
-**仅** `MIGRATIONS[37]` 允许读取 legacy `adoptiveFatherId` / `faction:"adoptive"`（无需长期保留的 legacy decoder）；v38 runtime `gameStateSchema` 直接**拒绝**旧字段与旧枚举值，并拒绝新状态中同时存在 `custodianId` 与 `adoptiveFatherId`。
+**仅** `MIGRATIONS[38]`（parentage 迁移）允许读取 legacy `adoptiveFatherId` / `faction:"adoptive"`（无需长期保留的 legacy decoder）；v39 runtime `gameStateSchema` 直接**拒绝**旧字段与旧枚举值，并拒绝新状态中同时存在 `custodianId` 与 `adoptiveFatherId`。
 
 ### 约束 6：空容器只建形状，不预设行为
 `adoptionRecords` / `royalResidences`（+ `adoptionNextSeq` / `royalResidenceNextSeq`）在 Slice A 加入，使 v38 一次性完成顶层状态形状升级，后续 C/D 不必再改存档根结构；相关 selector/validation 可提前认识这些字段。类型保持克制（见 §2）。两个 state constructor（`createInitialState` @ `src/engine/state/initialState.ts`、`createNewGameState` @ `src/engine/state/newGame.ts`）与常用测试 fixture 都必须初始化这三个新 map 与两个计数器。
@@ -289,18 +289,20 @@ getCurrentCustodian(state, childId): CharacterId | undefined         // 读 Heir
 
 ---
 
-## 5. v38 存档迁移
+## 5. parentage 存档迁移
 
-`SAVE_FORMAT_VERSION` 由 37 → 38，新增 `MIGRATIONS[37]`。固定顺序：
+> **版本勘误（重要）**：本 spec 初稿时 `SAVE_FORMAT_VERSION=37`，预期迁移为 v38。主分支随后推进至 **38**（investigation Phase 5B-2B1 已占用 v37→v38）。故 parentage 迁移实际为 **v38 → v39**：新增 `MIGRATIONS[38]`，`SAVE_FORMAT_VERSION` 提升至 **39**。**全文凡称「v38 迁移」均指这条 parentage 迁移**；实现时以仓库当前 `SAVE_FORMAT_VERSION` 为准（main 仍可能再推进，届时顺延）。
 
-`MIGRATIONS[37]` 函数本身**只转换 state、提升版本并重算 checksum**——它**不**自行跑 schema 校验。现有加载管线为 `parse → envelope/version → migrations → checksum → state schema → content-id cross-check`，故 `gameStateSchema` 与 parentage cross-link validation（§3 约束 8）由迁移链结束后的统一阶段执行。
+`SAVE_FORMAT_VERSION` 由 38 → 39，新增 `MIGRATIONS[38]`。固定顺序：
+
+`MIGRATIONS[38]` 函数本身**只转换 state、提升版本并重算 checksum**——它**不**自行跑 schema 校验。现有加载管线为 `parse → envelope/version → migrations → checksum → state schema → content-id cross-check`，故 `gameStateSchema` 与 parentage cross-link validation（§3 约束 8）由迁移链结束后的统一阶段执行。
 
 ```text
 1. 初始化 parentage / adoptionRecords / royalResidences（后两者为空 map）+ adoptionNextSeq=1 / royalResidenceNextSeq=1
 2. 遍历所有 heirs，生成 parentage
 3. adoptiveFatherId → custodianId；faction "adoptive" → "custodian"
 4. 删除旧 adoptiveFatherId 字段
-5. 返回 formatVersion=38 并重算 checksum
+5. 返回 formatVersion=39 并重算 checksum
 6. 后续由正常 load pipeline 执行 gameStateSchema + parentage cross-link validation（约束 3、4、7、8）
 ```
 
@@ -352,7 +354,7 @@ if (heir.faction === "adoptive") heir.faction = "custodian";
 6. 运行时**不能**第二次建立或修改 biological parentage（`PARENTAGE_ALREADY_ESTABLISHED`）。
 7. 缺少 parentage 的皇嗣**不能**通过 state validation。
 8. 生身祖先（`getBiologicalAncestors`）与法统后代（`getLegalDescendants`）selector 能正确区分两条链。
-9. v37 存档可迁移；v38 round-trip 后状态中**不再出现** `adoptiveFatherId`。
+9. v38 存档可迁移；v39 round-trip 后状态中**不再出现** `adoptiveFatherId`。
 10. 空的 `adoptionRecords`、`royalResidences` 可正常保存与加载。
 11. 双生出生**同时**建立两条独立 parentage（不同 key，互不覆盖）。
 12. 自孕皇嗣的 `biologicalFatherId` 与 `legalFatherId` 显式为 `null`（非 `undefined`）。
@@ -371,7 +373,7 @@ if (heir.faction === "adoptive") heir.faction = "custodian";
 
 ## 8. 交付策略（PR 边界）
 
-**Slice A 不可拆成 ①类型 ②迁移 ③rename ④selectors 四个各自合并到 `main` 的独立 PR。** 当前 runtime schema 为 `strictObject` 且 v37 是唯一在用版本——v38 必须与新 schema、两个 constructor、Heir 字段 rename、全部消费者、validation **同批**进入主分支，否则任何中间态都无法通过 strict 校验/类型检查。
+**Slice A 不可拆成 ①类型 ②迁移 ③rename ④selectors 四个各自合并到 `main` 的独立 PR。** 当前 runtime schema 为 `strictObject` 且 v38 是唯一在用版本——v39 迁移必须与新 schema、两个 constructor、Heir 字段 rename、全部消费者、validation **同批**进入主分支，否则任何中间态都无法通过 strict 校验/类型检查。
 
 落地方式（二选一，均为一个原子 Slice A）：
 
