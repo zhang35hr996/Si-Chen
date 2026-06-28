@@ -122,6 +122,21 @@ describe("resolveTemplateEvent", () => {
   });
 });
 
+describe("resolveTemplateEvent — strict trace mode", () => {
+  it("does not throw in strict trace mode (template_record_resolution is tracked)", () => {
+    const template = makeAutoTemplate("tpl_strict");
+    const patchedDb: ContentDB = { ...db, templates: { tpl_strict: template } };
+    const store = createGameStore({ traceMode: "strict" });
+    const base = createNewGameState(db);
+    store["state"] = { ...base };
+    const plan = planTemplateEventStart(patchedDb, store.getState(), "time_advance");
+    expect(plan).not.toBeNull();
+    if (!plan) return;
+    store.beginTemplateEvent(plan.statePatch);
+    expect(() => store.resolveTemplateEvent(plan.runtimeDb, plan.instanceId, "opt_a", [])).not.toThrow();
+  });
+});
+
 describe("abandonTemplateEvent", () => {
   it("removes generated record, does not revert seq", () => {
     const template = makeAutoTemplate("tpl_abandon");

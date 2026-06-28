@@ -74,17 +74,19 @@ function planFromEligible(
 }
 
 /**
- * 为 auto checkpoint（time_advance / location_enter / scene_end）物化模板事件。
- * exploration 模式模板不在此处选取（须通过 planSubLocationTemplateStart）。
+ * 为 auto checkpoint（time_advance / location_enter）物化模板事件。
+ * exploration 和 manual 模板不在此处选取：exploration 须通过 planSubLocationTemplateStart，
+ * manual 须由玩家主动触发。
  */
 export function planTemplateEventStart(
   db: ContentDB,
   state: GameState,
   checkpoint: Checkpoint,
 ): TemplateEventStartPlan | null {
-  const eligible = getEligibleTemplates(db, state, checkpoint).filter(
-    ({ template }) => template.presentation?.mode !== "exploration",
-  );
+  const eligible = getEligibleTemplates(db, state, checkpoint).filter(({ template }) => {
+    const mode = template.presentation?.mode;
+    return mode === undefined || mode === "auto_on_enter";
+  });
   const seedStr = `template:${state.rngSeed}:${checkpoint}:${state.calendar.dayIndex}:${state.playerLocation}:${state.templateEventNextSeq}`;
   return planFromEligible(db, state, eligible, state.playerLocation, seedStr);
 }

@@ -2014,15 +2014,18 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         const focused2 = effSel2 ? focusedCharacterView(db, liveState, registry, effSel2) : undefined;
         const leaveGarden = () => { setGardenSelectedId(null); setGardenSubLocationId(null); setMapAtRoot(false); setView("map"); };
         const enterGardenSubArea = (subId: string) => {
-          // 子地点有可探索事件且可承担 → 进入即开始（返回上下文精确到该子地点）；
-          // 有事件但行动力不足 → 进入子地点，显「行动力不足」（不伪装成普通游览）；
-          // 无事件 → 普通游览（仍可与园中在场人物叙话）。
+          // 子地点有可探索静态事件 → 不论 AP 是否足够，静态事件优先（AP 不足时显真实原因）。
+          // 无静态事件时再尝试模板 exploration 事件。
           const ev = pickSubLocationEvent(db, store.getState(), "yuhuayuan", subId);
-          if (ev && subLocationEventAffordable(store.getState(), ev)) {
-            startEvent(ev.id, { kind: "garden", subLocationId: subId });
+          if (ev) {
+            if (subLocationEventAffordable(store.getState(), ev)) {
+              startEvent(ev.id, { kind: "garden", subLocationId: subId });
+            } else {
+              setGardenSubLocationId(subId); // 进入子地点，UI 显行动力不足
+            }
             return;
           }
-          // 静态探索事件未命中时，尝试模板 exploration 事件。
+          // 无静态事件时，尝试模板 exploration 事件。
           const tPlan = planSubLocationTemplateStart(db, store.getState(), "yuhuayuan", subId);
           if (tPlan) {
             startTemplateEvent(tPlan, { kind: "garden", subLocationId: subId });

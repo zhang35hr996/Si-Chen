@@ -124,6 +124,16 @@ describe("planTemplateEventStart", () => {
     const state = makeState();
     expect(planTemplateEventStart(patchedDb, state, "location_enter")).toBeNull();
   });
+
+  it("manual templates are excluded from auto checkpoint", () => {
+    const template: EventTemplate = {
+      ...makeAutoTemplate("t_manual"),
+      presentation: { mode: "manual" },
+    };
+    const patchedDb: ContentDB = { ...db, templates: { t_manual: template } };
+    const state = makeState();
+    expect(planTemplateEventStart(patchedDb, state, "time_advance")).toBeNull();
+  });
 });
 
 describe("planSubLocationTemplateStart", () => {

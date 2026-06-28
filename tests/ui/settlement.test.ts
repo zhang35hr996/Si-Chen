@@ -239,6 +239,22 @@ describe("App settlement wiring source contract (no jsdom)", () => {
   });
 });
 
+describe("garden sub-location template priority", () => {
+  const appSrc = readFileSync(new URL("../../src/ui/App.tsx", import.meta.url), "utf8");
+
+  it("static exploration event blocks template even when AP is insufficient (ev exists → early return, template never tried)", () => {
+    // 模板只在 ev === null 时才尝试，保证静态 AP 不足时显示真实原因而非启动模板。
+    const block = appSrc.match(/const enterGardenSubArea[\s\S]*?^        \};/m)?.[0] ?? "";
+    // ev 存在时走 if (ev) { ... return; } 分支，return 之后才到 planSubLocationTemplateStart
+    expect(block).toMatch(/if \(ev\) \{/);
+    expect(block).toMatch(/return;\s*\}\s*\/\/ 无静态事件时/);
+    // planSubLocationTemplateStart 在 if (ev) 块之外
+    const evBlockEnd = block.indexOf("// 无静态事件时");
+    const templateTryIdx = block.indexOf("planSubLocationTemplateStart");
+    expect(templateTryIdx).toBeGreaterThan(evBlockEnd);
+  });
+});
+
 describe("deferredAutoCheckpointMode (Blocker 1 routing)", () => {
   it("arrival completes immediately (no global drain)", () => {
     expect(deferredAutoCheckpointMode({ source: "arrival", returnTarget: { kind: "map", atRoot: true }, dispatch: "new_chain" })).toBe("complete_now");

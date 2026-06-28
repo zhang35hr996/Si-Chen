@@ -1484,6 +1484,10 @@ export class GameStore {
     if (record.status !== "generated") {
       return err([stateError("EVENT_ALREADY_FIRED", `template event "${instanceId}" already ${record.status}`)]);
     }
+    const template = runtimeDb.templates[record.templateId];
+    if (!selectedChoiceId || !template?.choices.some((c) => c.id === selectedChoiceId)) {
+      return err([stateError("BAD_CHOICE", `"${selectedChoiceId}" is not a valid choice for template "${record.templateId}"`)]);
+    }
 
     const collector = this.makeCollector();
     const beforeState = this.state;
@@ -1533,6 +1537,11 @@ export class GameStore {
     };
 
     if (collector) {
+      // record 从 generated → resolved 的 diff 需单独登记，否则 strict 模式会抛 untracked
+      collector.capturePhaseScheduled(
+        "template_record_resolution",
+        diffGameState(settled.value.state, finalState),
+      );
       captureEligibilityTransitions(runtimeDb, beforeState, finalState, collector);
       const tx = this.buildTrace(beforeState, finalState, source, collector, "committed");
       this.state = finalState;
