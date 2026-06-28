@@ -2856,7 +2856,7 @@ export class GameStore {
     caseId: string,
     method: InvestigationMethod,
     subjectId?: string,
-  ): Result<{ taskId: string }, GameError[]> {
+  ): Result<{ taskId: string; rolledOver: boolean; healthOutcome: MonthlyTickResult | null }, GameError[]> {
     const c = this.state.haremInvestigationCases.find((x) => x.id === caseId);
     if (!c) {
       return err([stateError("INTRIGUE_CASE_NOT_FOUND", `haremInvestigationCases: case "${caseId}" not found`)]);
@@ -2903,7 +2903,7 @@ export class GameStore {
       },
     );
     if (!result.ok) return err(result.error);
-    return ok({ taskId });
+    return ok({ taskId, rolledOver: result.value.rolledOver, healthOutcome: result.value.healthOutcome });
   }
 
   /**

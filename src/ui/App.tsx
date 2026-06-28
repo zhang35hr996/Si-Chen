@@ -144,8 +144,8 @@ import { oldestPendingHaremAdminReport, buildHaremAdminReviewLine } from "../sto
 import { oldestUnreadIntrigueReport } from "./settlement";
 import { HaremIntrigueReportModal } from "./components/HaremIntrigueReportModal";
 import { intrigueReportSummaryLine } from "./haremIntrigueReportPresenter";
-import { presentHaremInvestigationCase } from "./haremInvestigationPresenter";
-import type { HaremInvestigationCaseView } from "./components/HaremInvestigationDrawer";
+import { presentHaremInvestigationDetail } from "./haremInvestigationPresenter";
+import type { HaremInvestigationCaseView, HaremInvestigationDrawerCallbacks } from "./components/HaremInvestigationDrawer";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
@@ -2103,9 +2103,40 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                   id: c.id,
                   status: c.status,
                   openedAt: c.openedAt,
-                  presentation: presentHaremInvestigationCase(c, resolveName),
+                  presentation: presentHaremInvestigationDetail(
+                    c,
+                    Object.values(liveState.haremInvestigationTasks),
+                    Object.values(liveState.haremInvestigationLeads),
+                    store.getAvailableInvestigationActions(c.id),
+                    resolveName,
+                  ),
                 }));
               })()}
+              playerAp={liveState.calendar.ap}
+              investigationCallbacks={
+                {
+                  onStartTask: async (caseId, method, subjectId) => {
+                    const r = store.startHaremInvestigationTask(db, caseId, method, subjectId);
+                    if (!r.ok) return r.error.map((e) => e.message).join("; ");
+                    if (r.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return null; }
+                    doAutosave();
+                    if (r.value.rolledOver) beginSettlement(stationaryRequest());
+                    return null;
+                  },
+                  onCancelCase: async (caseId) => {
+                    const r = store.cancelHaremInvestigation(caseId);
+                    if (!r.ok) return r.error.map((e) => e.message).join("; ");
+                    doAutosave();
+                    return null;
+                  },
+                  onReviewCase: async (caseId, decision) => {
+                    const r = store.reviewHaremInvestigation(caseId, decision);
+                    if (!r.ok) return r.error.map((e) => e.message).join("; ");
+                    doAutosave();
+                    return null;
+                  },
+                } satisfies HaremInvestigationDrawerCallbacks
+              }
             />
           </GameShell>
         );

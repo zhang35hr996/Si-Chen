@@ -7,9 +7,16 @@
  *  - anomaly 案件嫌疑人列表可能为空（符合玩家知识）；
  *  - 未知角色 ID 显示 "身份不明之人"。
  */
-import type { IntrigueInvestigationCase, IntrigueInvestigationStatus } from "../engine/characters/haremInvestigation/types";
+import type {
+  IntrigueInvestigationCase,
+  IntrigueInvestigationStatus,
+  IntrigueInvestigationTask,
+  IntrigueInvestigationLead,
+} from "../engine/characters/haremInvestigation/types";
 import type { HaremIntrigueKind } from "../engine/characters/haremIntrigue/types";
 import type { HaremIntrigueReportConfidence } from "../engine/state/types";
+import type { AvailableInvestigationAction } from "../engine/characters/haremInvestigation/actions";
+import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
 
 export interface HaremInvestigationPresentation {
   /** 案件标题（含嫌疑人/目标/手段语境） */
@@ -102,5 +109,145 @@ export function presentHaremInvestigationCase(
     confidenceLabel: CONFIDENCE_LABELS[investigationCase.confidence] ?? investigationCase.confidence,
     emptySuspectText: "目前尚无明确嫌疑人",
     emptyKindText: "作案手段尚未查明",
+  };
+}
+
+// ── 详情视图（含任务 / 线索 / 可用行动）────────────────────────────────
+
+export interface InvestigationCurrentTaskView {
+  methodLabel: string;
+  subjectLabel?: string;
+  requestedAtLabel: string;
+  dueAtLabel: string;
+}
+
+export interface InvestigationLeadView {
+  id: string;
+  discoveredAtLabel: string;
+  methodLabel: string;
+  summary: string;
+  strengthLabel: string;
+}
+
+export interface AvailableActionView {
+  method: InvestigationMethod;
+  label: string;
+  apCost: number;
+  durationDays: number;
+  subjects?: Array<{ id: string; label: string }>;
+}
+
+export interface InvestigationDetailPresentation extends HaremInvestigationPresentation {
+  currentTask?: InvestigationCurrentTaskView;
+  leadViews: InvestigationLeadView[];
+  availableActionViews: AvailableActionView[];
+  confirmedCulpritLabel?: string;
+  /** 当前嫌疑人 {id, label} 列表，供 ready_for_review 裁定选人使用。 */
+  suspectViews: Array<{ id: string; label: string }>;
+  /** 是否允许确认主谋：仅当 case.confidence === "confirmed" 时为 true。 */
+  canConfirmCulprit: boolean;
+}
+
+const METHOD_LABELS: Record<string, string> = {
+  question_target: "询问受害者",
+  question_suspect: "传问嫌疑人",
+  quiet_inquiry: "暗中查访",
+};
+
+const LEAD_STRENGTH_LABELS: Record<string, string> = {
+  tenuous: "模糊线索",
+  plausible: "有效线索",
+  strong: "有力证据",
+  confirmed: "确凿证据",
+};
+
+const LEAD_SUMMARY_LABELS: Record<string, string> = {
+  // question_target
+  target_mentioned_unusual: "受影响之人提及近来有异常情形",
+  target_noted_prior_activity: "受影响之人回忆起事前的可疑举动",
+  // question_suspect — true actor
+  suspect_admitted_under_pressure: "当事人受审时有所失口，嫌疑加重",
+  suspect_contradicted_account: "供词与证据相悖，嫌疑明显加深",
+  suspect_evasive_response: "当事人回避追问，态度可疑",
+  suspect_denied_convincingly: "当事人坦然应对，暂无实证",
+  // question_suspect — non-actor
+  suspect_cleared_alibi: "当事人提供可信不在场证明，基本排除",
+  suspect_irrelevant_account: "当事人所述与案情无关",
+  suspect_inconclusive_account: "供述存在漏洞，尚无定论",
+  // quiet_inquiry
+  inquiry_gathered_servant_rumors: "查访所得有限，仅有零散传闻",
+  inquiry_tracked_actor_movement: "追踪到可疑人员的行踪脉络",
+  inquiry_found_suspicious_pattern: "发现可疑规律，需进一步核实",
+  inquiry_revealed_scheme_method: "查访揭示了作案手段的部分情况",
+  inquiry_limited_findings: "暗中查访所得有限，线索仍不充分",
+  // misc
+  orphan_task_skipped: "（调查记录缺失）",
+};
+
+function gameTimeLabel(gt: { year: number; month: number; period: string }): string {
+  const yearStr = gt.year === 1 ? "元年" : `${gt.year}年`;
+  return `${yearStr}${gt.month}月${PERIOD_LABELS[gt.period] ?? ""}`;
+}
+
+export function presentHaremInvestigationDetail(
+  investigationCase: IntrigueInvestigationCase,
+  tasks: IntrigueInvestigationTask[],
+  leads: IntrigueInvestigationLead[],
+  availableActions: AvailableInvestigationAction[],
+  resolveCharacterName: (id: string) => string,
+): InvestigationDetailPresentation {
+  const base = presentHaremInvestigationCase(investigationCase, resolveCharacterName);
+
+  const pendingTask = tasks.find((t) => t.caseId === investigationCase.id && t.status === "pending");
+  const currentTask: InvestigationCurrentTaskView | undefined = pendingTask
+    ? {
+        methodLabel: METHOD_LABELS[pendingTask.method] ?? pendingTask.method,
+        subjectLabel: pendingTask.subjectId ? resolveCharacterName(pendingTask.subjectId) : undefined,
+        requestedAtLabel: gameTimeLabel(pendingTask.requestedAt),
+        dueAtLabel: gameTimeLabel(pendingTask.dueAt),
+      }
+    : undefined;
+
+  const caseLeads = leads
+    .filter((l) => investigationCase.leadIds.includes(l.id))
+    .sort((a, b) => a.discoveredAt.dayIndex - b.discoveredAt.dayIndex);
+
+  const leadViews: InvestigationLeadView[] = caseLeads.map((l) => ({
+    id: l.id,
+    discoveredAtLabel: gameTimeLabel(l.discoveredAt),
+    methodLabel: METHOD_LABELS[l.method] ?? l.method,
+    summary: LEAD_SUMMARY_LABELS[l.summaryCode] ?? "调查取得了一项新线索，详情尚待核实",
+    strengthLabel: LEAD_STRENGTH_LABELS[l.strength] ?? l.strength,
+  }));
+
+  const confirmedCulpritLabel =
+    investigationCase.confirmedCulpritId
+      ? resolveCharacterName(investigationCase.confirmedCulpritId)
+      : undefined;
+
+  const suspectViews = investigationCase.suspectIds.map((id) => ({
+    id,
+    label: resolveCharacterName(id),
+  }));
+
+  const availableActionViews: AvailableActionView[] = availableActions.map((a) => ({
+    method: a.method,
+    label: METHOD_LABELS[a.method] ?? a.method,
+    apCost: a.apCost,
+    durationDays: a.durationDays,
+    subjects: a.subjectCandidateIds?.map((id) => ({ id, label: resolveCharacterName(id) })),
+  }));
+
+  const canConfirmCulprit =
+    investigationCase.status === "ready_for_review" && investigationCase.confidence === "confirmed";
+
+  return {
+    ...base,
+    currentTask,
+    leadViews,
+    availableActionViews,
+    confirmedCulpritLabel,
+    suspectViews,
+    canConfirmCulprit,
   };
 }

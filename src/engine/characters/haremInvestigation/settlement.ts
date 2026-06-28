@@ -13,7 +13,7 @@
  *   任何形如 "actorId / groundTruth / isTrueLead" 的字段一律不写入 Lead。
  */
 import type { ContentDB } from "../../content/loader";
-import type { GameState } from "../../state/types";
+import type { GameState, HaremIntrigueReport } from "../../state/types";
 import type { GameTime } from "../../calendar/time";
 import { fromTurnIndex } from "../../calendar/time";
 import { fnv1a64Hex } from "../../save/canonical";
@@ -287,6 +287,33 @@ export function settleDueInvestigationTasks(
       const cases = [...state.haremInvestigationCases];
       cases[cIdx] = { ...c, status: "open" };
       state = { ...state, haremInvestigationCases: cases };
+    }
+
+    // 5) 生成调查进展通报（幂等：按 task.id 去重）
+    const reportId = `ireport_investigation_${task.id}`;
+    const alreadyHasReport = state.haremIntrigueReports.some((r) => r.id === reportId);
+    if (!alreadyHasReport) {
+      // 读取结算后最新案件状态
+      const updatedCase = state.haremInvestigationCases.find((x) => x.id === task.caseId);
+      if (updatedCase) {
+        const reportKind: HaremIntrigueReport["reportKind"] =
+          updatedCase.status === "ready_for_review" ? "investigation_final" : "investigation_update";
+        const investigationReport: HaremIntrigueReport = {
+          id: reportId,
+          source: { incidentId: updatedCase.source.incidentId },
+          reportKind,
+          createdAt: resolvedAt,
+          status: "unread",
+          knownTargetIds: [...updatedCase.knownTargetIds],
+          suspectedActorIds: [...updatedCase.suspectIds],
+          suspectedKinds: [...updatedCase.suspectedKinds],
+          knownOutcome: "unknown",
+          confidence: updatedCase.confidence,
+          summaryCode: lead.summaryCode,
+          linkedInvestigationId: updatedCase.id,
+        };
+        state = { ...state, haremIntrigueReports: [...state.haremIntrigueReports, investigationReport] };
+      }
     }
 
     settledTaskIds.push(task.id);
