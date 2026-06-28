@@ -158,7 +158,7 @@ describe("acknowledgeHaremIntrigueReport", () => {
 
   it("is idempotent: already-acknowledged report returns ok", () => {
     const store = createGameStore();
-    store.loadState(stateWithReports([makeReport({ status: "acknowledged" })]));
+    store.loadState(stateWithReports([makeReport({ status: "acknowledged", acknowledgedAt: BASE_TIME })]));
     expect(store.acknowledgeHaremIntrigueReport("ireport_test_001").ok).toBe(true);
   });
 
@@ -234,35 +234,39 @@ describe("knowledge boundary: anomaly report", () => {
 describe("settlement → presenter: no fallback path for real reports", () => {
   const resolveName = (id: string) => id;
 
-  it("exposure + success: presenter body not empty and does not use generic fallback", () => {
-    // false_accusation + secrecy=10 + potency=90: guaranteed discovered=true, success=false
+  it("exposure (discovered, success): false_accusation presenter does not fall back", () => {
+    // false_accusation + secrecy=10 + potency=90 + rng=42:
+    //   discovery roll=27 < threshold(secrecy=10)≥65 → discovered=true → reportKind="exposure"
+    //   potency=90 → success=true
     const scheme = makeScheme("actor_001", "target_001", { kind: "false_accusation", motive: "resentment", secrecy: 10, potency: 90 });
     const result = settle(makeStateWithScheme("actor_001", "target_001", scheme));
     const report = result.state.haremIntrigueReports[0];
     expect(report).toBeDefined();
     expect(report!.reportKind).toBe("exposure");
-    // summaryCode must be real production format
-    expect(report!.summaryCode).toMatch(/^exposure_false_accusation_(success|failed)$/);
+    expect(report!.summaryCode).toBe("exposure_false_accusation_success");
 
     const pres = presentHaremIntrigueReport(report!, resolveName);
     const bodyText = pres.body.join(" ");
-    // Must NOT fall through to generic "宫中近日似有异常，详情尚未查明" fallback
-    expect(bodyText).not.toBe("宫中近日似有异常，详情尚未查明。");
-    // Must contain actor and kind reference
+    expect(bodyText).not.toContain("宫中近日似有异常，详情尚未查明");
     expect(pres.actorLabel).toBe("actor_001");
     expect(bodyText).toContain("诬告陷害");
+    expect(bodyText).toContain("已伤及当事人");
     expect(pres.title).toBe("宫中来报");
   });
 
-  it("exposure + slander success: kind label renders correctly", () => {
-    // slander + secrecy=10 + potency=90: discovered, success depends on rng
-    const scheme = makeScheme("actor_001", "target_001", { kind: "slander", motive: "jealousy", secrecy: 10, potency: 90 });
-    const result = settle(makeStateWithScheme("actor_001", "target_001", scheme));
-    const report = result.state.haremIntrigueReports[0];
-    if (!report || report.reportKind !== "exposure") return; // may be anomaly if not discovered
-    const pres = presentHaremIntrigueReport(report, resolveName);
+  it("exposure (slander): kind label renders correctly via direct report fixture", () => {
+    // rng=42 + slander + secrecy=10 → anomaly (different RNG path from false_accusation).
+    // Presenter logic is kind-driven, not settlement-driven; verify via direct fixture.
+    const slanderExposure = makeReport({
+      reportKind: "exposure",
+      summaryCode: "exposure_slander_success",
+      suspectedKinds: ["slander"],
+      knownOutcome: "harm_observed",
+    });
+    const pres = presentHaremIntrigueReport(slanderExposure, resolveName);
     expect(pres.body.join(" ")).toContain("散布谣言");
-    expect(pres.actorLabel).toBe("actor_001");
+    expect(pres.actorLabel).toBe("bai_zhuying");
+    expect(pres.title).toBe("宫中来报");
   });
 
   it("anomaly report: presenter does not fall back to generic wording", () => {
