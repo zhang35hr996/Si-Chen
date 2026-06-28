@@ -9,6 +9,7 @@ import type { GameEventContent } from "../content/schemas";
 import type { GameState } from "../state/types";
 import { getEligibleEvents } from "../events/engine";
 import { resolveEntryMode } from "../events/entryMode";
+import { gardenSubLocationFor } from "../characters/greeting";
 
 export function pickSubLocationEvent(
   db: ContentDB,
@@ -64,4 +65,27 @@ export function eventPinnedSubLocations(
     }
   }
   return pinned;
+}
+
+/**
+ * 将园中在场人物按子地点分配：事件参与者钉扎到事件子地点（pinnedMap 优先），其余走
+ * gardenSubLocationFor 的确定性哈希。每名人物恰好出现在一个子地点（同 seed/日期/角色 ID 稳定）。
+ * 纯函数，便于单测；UI 层据此渲染各子地点人物。
+ */
+export function assignGardenOccupants<T extends { id: string }>(
+  items: readonly T[],
+  pinnedMap: ReadonlyMap<string, string>,
+  rngSeed: number,
+  dayIndex: number,
+  subLocationIds: readonly string[],
+): Map<string, T[]> {
+  const bySubId = new Map<string, T[]>();
+  for (const item of items) {
+    const subId = pinnedMap.get(item.id) ?? gardenSubLocationFor(rngSeed, dayIndex, item.id, subLocationIds);
+    if (subId === null) continue;
+    const cur = bySubId.get(subId) ?? [];
+    cur.push(item);
+    bySubId.set(subId, cur);
+  }
+  return bySubId;
 }

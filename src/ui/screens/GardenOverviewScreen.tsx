@@ -2,8 +2,9 @@
  * 御花园探索总览（scene-ui-narrative-refactor §8 / PR3 Task 3.4）。御花园不再是普通地点人物卡页，
  * 而是四个真实子地点（绛雪轩/太液池/浮碧亭/堆秀山）的总览：每个子地点显示静态环境描述，可进入/返回。
  *
- * 单一权威：园中在场人物一律以 presentAt(御花园) 为唯一来源（presentBar / focusedCharacter 由 App 以
- * 物理在场算好喂入），绝不拼接住处花名册。子地点动态线索仅在存在符合条件的 exploration 事件时显示
+ * 人物归属：园中在场人物按子地点分配（事件参与者钉扎到事件子地点，其余确定性哈希），每人恰好属于一处。
+ * 总览不再统一列出「园中之人」，而是把各人的姓名显示在其所属子地点卡片下（仅提示位置，不直接交互）；
+ * 进入子地点后只列该子地点的人物，并可叙话。子地点动态线索仅在存在符合条件的 exploration 事件时显示
  * （非剧透 eventHint），无事件只显普通环境，不虚构「有人影」。
  *
  * 纯展示 + 回调：组件不读/改 store、不查事件。SceneShell 由本屏注入；GameShell（顶栏/孕月/国情）由 App 外层提供。
@@ -28,6 +29,8 @@ export interface GardenSubAreaView {
   eventAffordable?: boolean;
   /** 事件存在但不可承担时的真实原因。 */
   eventReason?: string;
+  /** 分配到该子地点的在场人物（事件钉扎优先，否则确定性哈希；每人恰好一处）。 */
+  characters: SceneCharacterBarItem[];
 }
 
 export interface GardenOverviewScreenProps {
@@ -35,10 +38,8 @@ export interface GardenOverviewScreenProps {
   isFallbackBackground?: boolean;
   backgroundPosition?: string;
   subAreas: GardenSubAreaView[];
-  /** 非空 = 已进入某子地点（普通游览：背景 + 静态描述 + 返回总览）；null/缺省 = 总览。 */
+  /** 非空 = 已进入某子地点（普通游览：背景 + 静态描述 + 该地点人物 + 返回总览）；null/缺省 = 总览。 */
   activeSubArea?: GardenSubAreaView | null;
-  /** 园中此刻在场人物（presentAt 唯一来源）。 */
-  presentBar: SceneCharacterBarItem[];
   selectedId?: string | null;
   focusedCharacter?: FocusedCharacterView;
   onSelectCharacter: (id: string) => void;
@@ -56,17 +57,6 @@ export interface GardenOverviewScreenProps {
 export function GardenOverviewScreen(props: GardenOverviewScreenProps) {
   const { activeSubArea } = props;
 
-  // 园中在场人物（presentAt 唯一来源）在总览与子地点皆可交互——人物在「御花园」而非具体子地点，
-  // 故进入子地点后仍可与园中之人叙话（无事件≠无人）。聚焦立绘随选中呈现。
-  const presence = (ariaLabel: string) =>
-    props.presentBar.length > 0 ? (
-      <SceneCharacterBar
-        characters={props.presentBar}
-        selectedId={props.selectedId}
-        onFocus={props.onSelectCharacter}
-        ariaLabel={ariaLabel}
-      />
-    ) : null;
   const focusPanel = props.focusedCharacter ? (
     <SceneFocusedCharacter
       view={props.focusedCharacter}
@@ -79,6 +69,8 @@ export function GardenOverviewScreen(props: GardenOverviewScreenProps) {
   ) : null;
 
   if (activeSubArea) {
+    // 子地点：只列分配到此处的人物（0 人不显人物栏；选中后右侧出立绘可叙话）。
+    const occupants = activeSubArea.characters;
     return (
       <SceneShell
         background={activeSubArea.background}
@@ -93,7 +85,14 @@ export function GardenOverviewScreen(props: GardenOverviewScreenProps) {
             {activeSubArea.hasEvent && activeSubArea.eventAffordable === false && activeSubArea.eventReason && (
               <p className="garden-subarea__reason" role="note">{activeSubArea.eventReason}</p>
             )}
-            {presence("园中之人")}
+            {occupants.length > 0 && (
+              <SceneCharacterBar
+                characters={occupants}
+                selectedId={props.selectedId}
+                onFocus={props.onSelectCharacter}
+                ariaLabel="此处之人"
+              />
+            )}
           </div>
         }
         narrative={focusPanel}
@@ -115,7 +114,6 @@ export function GardenOverviewScreen(props: GardenOverviewScreenProps) {
       stage={
         <div className="garden-overview">
           <h1 className="garden-overview__name">御花园</h1>
-          {presence("园中之人")}
           <ul className="garden-overview__areas">
             {props.subAreas.map((sa) => (
               <li key={sa.id} className="garden-overview__area">
@@ -125,13 +123,24 @@ export function GardenOverviewScreen(props: GardenOverviewScreenProps) {
                   {sa.hasEvent && sa.eventHint && (
                     <span className="garden-area-card__hint">{sa.eventHint}</span>
                   )}
+                  {/* 人物姓名仅提示所在子地点，不直接交互；进入子地点后再叙话。 */}
+                  <span className="garden-area-card__occupants">
+                    {sa.characters.length > 0 ? (
+                      sa.characters.map((c) => (
+                        <span key={c.id} className="garden-area-card__occupant">
+                          {c.name} · {c.role}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="garden-area-card__occupant garden-area-card__occupant--empty">暂无人在此</span>
+                    )}
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
         </div>
       }
-      narrative={focusPanel}
       actions={
         <button type="button" className="action-btn" onClick={props.onBack}>
           离开御花园

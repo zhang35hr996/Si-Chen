@@ -4135,6 +4135,20 @@ button:active:enabled {
   color: var(--c-gold);
   opacity: 0.92;
 }
+.garden-area-card__occupants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.7rem;
+  margin-top: 0.15rem;
+}
+.garden-area-card__occupant {
+  font-size: 0.85rem;
+  color: var(--c-text);
+}
+.garden-area-card__occupant--empty {
+  color: var(--c-text-dim);
+  font-style: italic;
+}
 .garden-subarea {
   padding: 1.4rem 1.2rem;
 }

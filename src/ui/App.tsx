@@ -46,7 +46,7 @@ import { assetError, stateError } from "../engine/infra/errors";
 
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
-import { greetingAttendees, gardenSubLocationFor } from "../engine/characters/greeting";
+import { greetingAttendees } from "../engine/characters/greeting";
 import { activeEmpressId, isEmpress } from "../engine/characters/empress";
 import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
@@ -173,7 +173,7 @@ import { MemorialsScreen } from "./court/MemorialsScreen";
 import { getPendingMemorials } from "../engine/court/memorials";
 import { getHighVacancyPosts } from "../engine/officials/selectors";
 import { getUnacknowledgedExaminationResults } from "../engine/officials/examination";
-import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations } from "../engine/map/subLocations";
+import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations, assignGardenOccupants } from "../engine/map/subLocations";
 import { presentBarItems, focusedCharacterView, reconcileSelection, displayRole } from "./sceneView";
 import { courtAgendaPreview, snapshotCourtMetrics, diffCourtMetrics, type CourtMetrics, type CourtMetricsDiff } from "../engine/court/agenda";
 import { buildCourtSummary, courtHoldGate } from "./xuanzhengView";
@@ -2115,9 +2115,30 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         const loc = db.locations["yuhuayuan"]!;
         const bg = registry.resolveVariant(loc.backgroundKey, timeOfDay(liveState.calendar), "background");
         const presentItems = presentBarItems(db, liveState, "yuhuayuan");
+        const subLocationIds = (loc.subLocations ?? []).map((sa) => sa.id);
+        // 人物归属：有剧情事件的参与者优先固定到事件子地点，其余侍君走确定性哈希分配，
+        // 每名在场人物恰好属于一个子地点（同 seed/日期/角色 ID 稳定）。
+        const pinnedMap = eventPinnedSubLocations(db, liveState, loc.id, subLocationIds);
+        // 剧情参与者可能不在随机游走列表中（如卯时）——确保他们出现在园中。
+        const presentItemIds = new Set(presentItems.map((i) => i.id));
+        const eventParticipants = [...pinnedMap.keys()].flatMap((charId) => {
+          if (presentItemIds.has(charId)) return [];
+          const char = db.characters[charId];
+          if (!char || liveState.standing[charId]?.lifecycle === "deceased") return [];
+          return [{ id: charId, name: char.profile.name, role: displayRole(db, liveState, charId) }];
+        });
+        const allGardenItems = [...presentItems, ...eventParticipants];
+        const occupantsBySubId = assignGardenOccupants(
+          allGardenItems,
+          pinnedMap,
+          liveState.rngSeed,
+          liveState.calendar.dayIndex,
+          subLocationIds,
+        );
         const subAreas: GardenSubAreaView[] = (loc.subLocations ?? []).map((sa) => {
           const ev = pickSubLocationEvent(db, liveState, "yuhuayuan", sa.id);
           const sbg = registry.resolveVariant(sa.backgroundKey, timeOfDay(liveState.calendar), "background");
+          const characters = occupantsBySubId.get(sa.id) ?? [];
           if (ev) {
             // 静态事件优先：hint 和 affordable 均以静态事件为准
             const hint = ev.presentation?.mode === "exploration" ? ev.presentation.eventHint : undefined;
@@ -2133,6 +2154,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               eventHint: hint,
               eventAffordable: affordable,
               eventReason: affordable === false ? `行动力不足（需 ${ev.apCost} 行动点）。` : undefined,
+              characters,
             };
           }
           // 无静态事件时：查询模板线索预览（只读，不实例化）
@@ -2148,34 +2170,24 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             eventHint: preview?.eventHint,
             eventAffordable: preview?.affordable,
             eventReason: preview && !preview.affordable ? `行动力不足。` : undefined,
+            characters,
           };
         });
         const activeSub = gardenSubLocationId ? subAreas.find((s) => s.id === gardenSubLocationId) ?? null : null;
-        // 子地点视图：只显示分配到该子地点的侍君；总览：显示园中全部在场人物。
-        const subLocationIds = (loc.subLocations ?? []).map((sa) => sa.id);
-        // 有剧情事件的参与者优先固定到事件子地点，其他侍君走哈希分配。
-        const pinnedMap = eventPinnedSubLocations(db, liveState, loc.id, subLocationIds);
-        // 剧情参与者可能不在随机游走列表中（如卯时）——确保他们出现在园中。
-        const presentItemIds = new Set(presentItems.map((i) => i.id));
-        const eventParticipants = [...pinnedMap.keys()].flatMap((charId) => {
-          if (presentItemIds.has(charId)) return [];
-          const char = db.characters[charId];
-          if (!char || liveState.standing[charId]?.lifecycle === "deceased") return [];
-          return [{ id: charId, name: char.profile.name, role: displayRole(db, liveState, charId) }];
-        });
-        const allGardenItems = [...presentItems, ...eventParticipants];
-        const subPresentItems = activeSub
-          ? allGardenItems.filter((i) => {
-              const pin = pinnedMap.get(i.id);
-              if (pin !== undefined) return pin === activeSub.id;
-              return gardenSubLocationFor(liveState.rngSeed, liveState.calendar.dayIndex, i.id, subLocationIds) === activeSub.id;
-            })
-          : allGardenItems;
-        const subPresentIds = subPresentItems.map((i) => i.id);
-        const effSel2 = gardenSelectedId == null ? null : reconcileSelection(subPresentIds, gardenSelectedId);
+        // 子地点选中态：仅在子地点视图内取该地点人物；单人自动聚焦，多人待选。
+        const subOccupants = activeSub?.characters ?? [];
+        const subOccupantIds = subOccupants.map((i) => i.id);
+        const autoSel = subOccupants.length === 1 ? subOccupants[0]!.id : null;
+        const effSel2 = activeSub
+          ? gardenSelectedId == null
+            ? autoSel
+            : reconcileSelection(subOccupantIds, gardenSelectedId)
+          : null;
         const focused2 = effSel2 ? focusedCharacterView(db, liveState, registry, effSel2) : undefined;
         const leaveGarden = () => { setGardenSelectedId(null); setGardenSubLocationId(null); setMapAtRoot(false); setView("map"); };
         const enterGardenSubArea = (subId: string) => {
+          // 切换子地点：先清旧选中，避免上一个地点的人物立绘残留。
+          setGardenSelectedId(null);
           // 子地点有可探索静态事件 → 不论 AP 是否足够，静态事件优先（AP 不足时显真实原因）。
           // 无静态事件时再尝试模板 exploration 事件。
           const ev = pickSubLocationEvent(db, store.getState(), "yuhuayuan", subId);
@@ -2195,6 +2207,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           }
           setGardenSubLocationId(subId);
         };
+        // 返回总览：清子地点与选中，避免立绘残留。
+        const exitGardenSubArea = () => { setGardenSelectedId(null); setGardenSubLocationId(null); };
         return (
           <GameShell
             calendar={liveState.calendar}
@@ -2212,12 +2226,11 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               backgroundPosition={loc.backgroundPosition}
               subAreas={subAreas}
               activeSubArea={activeSub}
-              presentBar={subPresentItems}
               selectedId={effSel2}
               focusedCharacter={focused2}
               onSelectCharacter={setGardenSelectedId}
               onEnterSubArea={enterGardenSubArea}
-              onExitSubArea={() => setGardenSubLocationId(null)}
+              onExitSubArea={exitGardenSubArea}
               onBack={leaveGarden}
               onConverse={(id) => void converse(id)}
               onBedchamber={(id) => beginBedchamber(id)}
