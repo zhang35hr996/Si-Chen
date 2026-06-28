@@ -142,8 +142,9 @@ import { ColdPalaceInterventionModal } from "./components/ColdPalaceIntervention
 import { ColdPalaceMadnessModal } from "./components/ColdPalaceMadnessModal";
 import { oldestPresentableIncident } from "../engine/characters/coldPalaceIncidents";
 import { oldestPendingHaremAdminReport, buildHaremAdminReviewLine } from "../store/haremAdminAnnualReview";
-import { oldestUnreadIntrigueReport } from "./settlement";
+import { oldestUnreadInvestigationReport } from "./settlement";
 import { HaremIntrigueReportModal } from "./components/HaremIntrigueReportModal";
+import { InvestigationProgressReportModal } from "./components/InvestigationProgressReportModal";
 import { intrigueReportSummaryLine } from "./haremIntrigueReportPresenter";
 import { presentHaremInvestigationDetail } from "./haremInvestigationPresenter";
 import type { HaremInvestigationCaseView, HaremInvestigationDrawerCallbacks } from "./components/HaremInvestigationDrawer";
@@ -1360,7 +1361,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         successorDue: successorAutoDue && selfCarrying,
         centennialDue: centennialHeir !== null,
         coldPalaceReportDue: oldestPresentableIncident(liveState) !== undefined,
-        haremIntrigueReportDue: oldestUnreadIntrigueReport(liveState) !== undefined,
+        haremIntrigueReportDue: oldestUnreadInvestigationReport(liveState) !== undefined,
         haremDisciplineDue: liveState.haremDisciplineIncidents.some((i) => i.status === "pending_response"),
         haremAdminReviewDue: oldestPendingHaremAdminReport(liveState) !== null,
         grandSelectionDue: liveState.pendingDaxuan !== undefined,
@@ -3030,8 +3031,23 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         );
       })()}
       {activeGlobalInterrupt === "harem_intrigue_report" && (() => {
-        const report = oldestUnreadIntrigueReport(liveState);
-        if (!report) return null;
+        const pending = oldestUnreadInvestigationReport(liveState);
+        if (!pending) return null;
+        // 证据案件进展通报：简单占位文案 + acknowledge（5B-2B2a）
+        if (pending.domain === "investigation_incident") {
+          const report = pending.report;
+          return (
+            <InvestigationProgressReportModal
+              key={report.id}
+              report={report}
+              onAcknowledge={() => {
+                const r = store.acknowledgeInvestigationProgressReport(report.id);
+                if (r.ok) doAutosave();
+              }}
+            />
+          );
+        }
+        const report = pending.report;
         return (
           <HaremIntrigueReportModal
             key={report.id}

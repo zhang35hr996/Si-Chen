@@ -9,7 +9,10 @@ import {
   type GlobalInterruptInputs,
   pickNextGlobalInterrupt,
   timeSettlementReducer,
+  oldestUnreadInvestigationReport,
 } from "../../src/ui/settlement";
+import type { GameState } from "../../src/engine/state/types";
+import { makeGameTime } from "../../src/engine/calendar/time";
 
 const none: GlobalInterruptInputs = {
   birthDue: false,
@@ -56,6 +59,44 @@ describe("pickNextGlobalInterrupt priority", () => {
   });
   it("harem_admin_review outranks grand_selection", () => {
     expect(pickNextGlobalInterrupt({ ...none, haremAdminReviewDue: true, grandSelectionDue: true })).toBe("harem_admin_review");
+  });
+});
+
+describe("oldestUnreadInvestigationReport: 跨两数组取最早未读（5B-2B2a）", () => {
+  const at = (day: number) => ({ ...makeGameTime(1, 1, "early"), dayIndex: day });
+  function stateWith(legacy: { id: string; day: number; status: string }[], progress: { id: string; day: number; status: string }[]): GameState {
+    return {
+      haremIntrigueReports: legacy.map((r) => ({ id: r.id, createdAt: at(r.day), status: r.status })),
+      investigationPublicReports: progress.map((r) => ({
+        id: r.id, reportKind: "investigation_update", createdAt: at(r.day), status: r.status,
+        source: { kind: "investigation_incident", incidentId: "inc" }, linkedInvestigationId: "icase",
+        knownTargetIds: [], suspectedActorIds: [], confidence: "tenuous", summaryCode: "x",
+      })),
+    } as unknown as GameState;
+  }
+
+  it("无未读 → undefined", () => {
+    expect(oldestUnreadInvestigationReport(stateWith([], []))).toBeUndefined();
+  });
+
+  it("仅证据进展通报未读 → 选中且 domain=investigation_incident", () => {
+    const picked = oldestUnreadInvestigationReport(stateWith([], [{ id: "iprog_1", day: 5, status: "unread" }]));
+    expect(picked?.domain).toBe("investigation_incident");
+    expect(picked?.report.id).toBe("iprog_1");
+  });
+
+  it("两数组皆有未读 → 取 createdAt.dayIndex 最早者", () => {
+    const picked = oldestUnreadInvestigationReport(stateWith(
+      [{ id: "ireport_late", day: 9, status: "unread" }],
+      [{ id: "iprog_early", day: 3, status: "unread" }],
+    ));
+    expect(picked?.domain).toBe("investigation_incident");
+    expect(picked?.report.id).toBe("iprog_early");
+  });
+
+  it("已 acknowledged 的进展通报不计入", () => {
+    const picked = oldestUnreadInvestigationReport(stateWith([], [{ id: "iprog_done", day: 1, status: "acknowledged" }]));
+    expect(picked).toBeUndefined();
   });
 });
 

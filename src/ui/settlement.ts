@@ -8,6 +8,7 @@
  */
 import type { AutoCheckpointRequest } from "./eventReturn";
 import type { GameState, HaremIntrigueReport } from "../engine/state/types";
+import type { InvestigationProgressPublicReport } from "../engine/characters/haremInvestigation/types";
 
 export type GlobalInterruptKind =
   | "birth" // 到产生产
@@ -56,6 +57,32 @@ export function oldestUnreadIntrigueReport(state: GameState): HaremIntrigueRepor
   return state.haremIntrigueReports
     .filter((r) => r.status === "unread")
     .sort((a, b) => a.createdAt.dayIndex - b.createdAt.dayIndex || a.id.localeCompare(b.id))[0];
+}
+
+/**
+ * 统一的最早未读调查报告（5B-2B2a）：同时比较旧宫斗情报与证据案件进展通报，
+ * 按 createdAt.dayIndex 升序取最早一条，按 domain 区分由谁消费/acknowledge。
+ * 这样证据案件结算后写入 investigationPublicReports 的 unread 进展通报也能进入全局中断流。
+ */
+export type PendingInvestigationReport =
+  | { domain: "legacy_intrigue"; report: HaremIntrigueReport }
+  | { domain: "investigation_incident"; report: InvestigationProgressPublicReport };
+
+export function oldestUnreadInvestigationReport(state: GameState): PendingInvestigationReport | undefined {
+  type Row = { day: number; id: string; pick: PendingInvestigationReport };
+  const rows: Row[] = [];
+  for (const r of state.haremIntrigueReports) {
+    if (r.status === "unread") {
+      rows.push({ day: r.createdAt.dayIndex, id: r.id, pick: { domain: "legacy_intrigue", report: r } });
+    }
+  }
+  for (const r of state.investigationPublicReports) {
+    if ((r.reportKind === "investigation_update" || r.reportKind === "investigation_final") && r.status === "unread") {
+      rows.push({ day: r.createdAt.dayIndex, id: r.id, pick: { domain: "investigation_incident", report: r } });
+    }
+  }
+  rows.sort((a, b) => a.day - b.day || a.id.localeCompare(b.id));
+  return rows[0]?.pick;
 }
 
 /** 原子待结算上下文：携带完整 AutoCheckpointRequest（来源 + 完整语义返回目标，原样用于完成）。 */

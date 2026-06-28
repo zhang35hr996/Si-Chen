@@ -6,7 +6,7 @@ import { stateError, type GameError } from "../../infra/errors";
 import type { HaremIntrigueReport } from "../../state/types";
 import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead, InvestigationPublicReport } from "./types";
 import { isActiveCase, EVIDENCE_INVESTIGATION_METHODS, LEGACY_INVESTIGATION_METHODS } from "./types";
-import type { HeirHealthAnomalyIncident } from "./truth/types";
+import type { HeirHealthAnomalyIncident, InvestigationTruth } from "./truth/types";
 
 const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation_final"]);
 
@@ -22,6 +22,8 @@ export interface HaremInvestigationValidationInput {
   investigationPublicReports?: InvestigationPublicReport[];
   /** 新事件族 incident ID 集合（investigationIncidents）。缺省视为空。 */
   investigationIncidentIds?: Set<string>;
+  /** 后台真相（用于校验证据线索的 sourceEvidenceNodeId 引用完整性，5B-2B2a）。缺省视为空。 */
+  investigationTruths?: InvestigationTruth[];
 }
 
 export function validateHaremInvestigationLinks(
@@ -31,9 +33,12 @@ export function validateHaremInvestigationLinks(
   const { haremIntrigueReports, haremInvestigationCases, haremInvestigationTasks, haremInvestigationLeads, haremInvestigationNextSeq, incidentIds } = data;
   const investigationPublicReports = data.investigationPublicReports ?? [];
   const investigationIncidentIds = data.investigationIncidentIds ?? new Set<string>();
+  const investigationTruths = data.investigationTruths ?? [];
 
   const reportById = new Map(haremIntrigueReports.map((r) => [r.id, r]));
   const publicReportById = new Map(investigationPublicReports.map((r) => [r.id, r]));
+  const caseById = new Map(haremInvestigationCases.map((c) => [c.id, c]));
+  const truthByIncidentId = new Map(investigationTruths.map((t) => [t.incidentId, t]));
   const caseIds = new Set<string>();
 
   for (const c of haremInvestigationCases) {
@@ -221,10 +226,62 @@ export function validateHaremInvestigationLinks(
       errors.push(stateError("INTRIGUE_LEAD_ORPHAN", `haremInvestigationLeads[id=${lead.id}]: caseId="${lead.caseId}" 对应案件不存在`));
     }
     // lead.id 必须出现在其 case.leadIds 中（反向引用）
-    const parentCase = haremInvestigationCases.find((c) => c.id === lead.caseId);
+    const parentCase = caseById.get(lead.caseId);
     if (parentCase && !parentCase.leadIds.includes(lead.id)) {
       errors.push(stateError("INTRIGUE_LEAD_NOT_IN_CASE", `haremInvestigationLeads[id=${lead.id}]: 未出现在 case[id=${lead.caseId}].leadIds 中`));
     }
+
+    // ── 5B-2B2a：证据线索引用完整性 ────────────────────────────────
+    const isEvidenceCase = parentCase?.source.kind === "investigation_incident";
+
+    // 旧宫斗案件线索不得携带证据字段
+    if (parentCase && !isEvidenceCase) {
+      if (lead.sourceEvidenceNodeId !== undefined) {
+        errors.push(stateError("INTRIGUE_LEAD_EVIDENCE_ON_LEGACY", `haremInvestigationLeads[id=${lead.id}]: 旧宫斗案件线索不得有 sourceEvidenceNodeId`));
+      }
+      if (lead.claims !== undefined) {
+        errors.push(stateError("INTRIGUE_LEAD_EVIDENCE_ON_LEGACY", `haremInvestigationLeads[id=${lead.id}]: 旧宫斗案件线索不得有 claims`));
+      }
+    }
+
+    // claims ↔ implicated/cleared 派生字段一致性
+    if (lead.claims) {
+      const claimImplicated = new Set(lead.claims.filter((cl) => cl.kind === "implicates_character").map((cl) => (cl as { characterId: string }).characterId));
+      const claimCleared = new Set(lead.claims.filter((cl) => cl.kind === "exonerates_character").map((cl) => (cl as { characterId: string }).characterId));
+      for (const id of lead.implicatedIds) {
+        if (!claimImplicated.has(id)) errors.push(stateError("INTRIGUE_LEAD_CLAIM_MISMATCH", `haremInvestigationLeads[id=${lead.id}]: implicatedIds 含 "${id}" 但 claims 无对应 implicates_character`));
+      }
+      for (const id of lead.clearedIds) {
+        if (!claimCleared.has(id)) errors.push(stateError("INTRIGUE_LEAD_CLAIM_MISMATCH", `haremInvestigationLeads[id=${lead.id}]: clearedIds 含 "${id}" 但 claims 无对应 exonerates_character`));
+      }
+    }
+
+    // sourceEvidenceNodeId 引用：节点须属于该案件 truth，且方法匹配
+    if (lead.sourceEvidenceNodeId !== undefined && parentCase && isEvidenceCase) {
+      const truth = truthByIncidentId.get(parentCase.source.incidentId);
+      if (!truth) {
+        errors.push(stateError("INTRIGUE_LEAD_EVIDENCE_NO_TRUTH", `haremInvestigationLeads[id=${lead.id}]: 案件 incident="${parentCase.source.incidentId}" 无对应 truth，无法核对 sourceEvidenceNodeId`));
+      } else {
+        const node = truth.evidenceNodes.find((n) => n.id === lead.sourceEvidenceNodeId);
+        if (!node) {
+          errors.push(stateError("INTRIGUE_LEAD_EVIDENCE_ORPHAN_NODE", `haremInvestigationLeads[id=${lead.id}]: sourceEvidenceNodeId="${lead.sourceEvidenceNodeId}" 不属于本案 truth`));
+        } else if (!(node.discoverableBy as string[]).includes(lead.method)) {
+          errors.push(stateError("INTRIGUE_LEAD_EVIDENCE_METHOD_MISMATCH", `haremInvestigationLeads[id=${lead.id}]: 节点 discoverableBy 不含 lead.method="${lead.method}"`));
+        }
+      }
+    }
+  }
+
+  // 同一案件内 sourceEvidenceNodeId 不得重复（一个证据节点至多被发现一次）
+  const caseNodeSeen = new Map<string, Set<string>>();
+  for (const lead of Object.values(haremInvestigationLeads)) {
+    if (lead.sourceEvidenceNodeId === undefined) continue;
+    const seen = caseNodeSeen.get(lead.caseId) ?? new Set<string>();
+    if (seen.has(lead.sourceEvidenceNodeId)) {
+      errors.push(stateError("INTRIGUE_LEAD_EVIDENCE_DUP_NODE", `haremInvestigationLeads: case "${lead.caseId}" 的证据节点 "${lead.sourceEvidenceNodeId}" 被重复发现`));
+    }
+    seen.add(lead.sourceEvidenceNodeId);
+    caseNodeSeen.set(lead.caseId, seen);
   }
 
 

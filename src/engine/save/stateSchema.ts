@@ -1384,6 +1384,7 @@ export const gameStateSchema = z.strictObject({
       incidentIds: new Set((data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIncidents.map((i) => i.id)),
       investigationPublicReports: (data as { investigationPublicReports: Parameters<typeof validateHaremInvestigationLinks>[0]["investigationPublicReports"] }).investigationPublicReports,
       investigationIncidentIds: new Set((data as { investigationIncidents: { id: string }[] }).investigationIncidents.map((i) => i.id)),
+      investigationTruths: (data as { investigationTruths: Parameters<typeof validateHaremInvestigationLinks>[0]["investigationTruths"] }).investigationTruths,
     }),
     ...validateInvestigationIncidents({
       investigationIncidents: (data as { investigationIncidents: Parameters<typeof validateInvestigationIncidents>[0]["investigationIncidents"] }).investigationIncidents,

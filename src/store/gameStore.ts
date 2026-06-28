@@ -2804,6 +2804,22 @@ export class GameStore {
     return ok(undefined);
   }
 
+  /** acknowledge 证据案件进展通报（5B-2B2a）：investigationPublicReports 中的 update/final。 */
+  acknowledgeInvestigationProgressReport(reportId: string): Result<void, GameError[]> {
+    const idx = this.state.investigationPublicReports.findIndex((r) => r.id === reportId);
+    if (idx === -1) return err([stateError("REPORT_NOT_FOUND", `investigationPublicReport "${reportId}" not found`)]);
+    const report = this.state.investigationPublicReports[idx]!;
+    if (report.reportKind === "anomaly") {
+      return err([stateError("REPORT_BAD_STATUS", `investigationPublicReport "${reportId}" 是立案报告，不能按进展通报 acknowledge`)]);
+    }
+    if (report.status === "acknowledged") return ok(undefined); // idempotent
+    const updated = [...this.state.investigationPublicReports];
+    updated[idx] = { ...report, status: "acknowledged", acknowledgedAt: toGameTime(this.state.calendar) };
+    this.state = { ...this.state, investigationPublicReports: updated };
+    this.emit();
+    return ok(undefined);
+  }
+
   openHaremInvestigation(reportId: string): Result<{ caseId: string }, GameError[]> {
     const at = toGameTime(this.state.calendar);
     const result = createIntrigueInvestigationCase(this.state, reportId, at);
