@@ -2,7 +2,7 @@
  * 子嗣命名 / 年龄 / 列表派生（纯逻辑）。两表（皇子=女 / 皇郎=男）各按出生序独立编号，
  * 1→大、≥2→中文数字。id 单调（heir_NNNNNN）。
  */
-import { chineseNumeral, monthOrdinal, type GameTime } from "../calendar/time";
+import { chineseNumeral, monthOrdinal, timeOfDay, type CalendarState, type GameTime } from "../calendar/time";
 import type { Heir, HeirSex } from "../state/types";
 
 const SEX_NOUN: Record<HeirSex, string> = { daughter: "皇子", son: "皇郎" };
@@ -86,6 +86,19 @@ const YUQING_MOVE_AGE: Record<HeirSex, number> = { daughter: 5, son: 7 };
 /** 是否已迁居毓庆宫（按性别年龄门槛）。未达龄者仍由乳母照护，不在此列。 */
 export function residesInYuqing(heir: Heir, now: Pick<GameTime, "year">): boolean {
   return heirAge(heir, now) >= YUQING_MOVE_AGE[heir.sex];
+}
+
+/** 是否是文昭殿在读皇嗣（已开蒙且存活）。皇郎 18 岁起离校，皇子无上限。 */
+export function isWenzhaoStudent(heir: Heir, now: Pick<GameTime, "year">): boolean {
+  if (heir.lifecycle !== "alive") return false;
+  const age = heirAge(heir, now);
+  if (heir.sex === "daughter") return age >= enlightenmentAge("daughter");
+  return age >= enlightenmentAge("son") && age < 18;
+}
+
+/** 文昭殿是否开馆（日间时段方可旁听）。 */
+export function isWenzhaodianOpen(calendar: CalendarState): boolean {
+  return timeOfDay(calendar) === "day";
 }
 
 /** 当前外观阶段的立绘集 id（来自出生时固定的 portraitVariants）。 */

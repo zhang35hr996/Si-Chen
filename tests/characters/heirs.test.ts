@@ -3,7 +3,9 @@ import { makeGameTime } from "../../src/engine/calendar/time";
 import {
   heirName, heirAge, nextHeirId, listHeirsBySex,
   heirAgeMonths, heirStage, centennialDue, isEnrolled, heirPortraitSet,
+  isWenzhaoStudent, isWenzhaodianOpen,
 } from "../../src/engine/characters/heirs";
+import { createCalendar } from "../../src/engine/calendar/time";
 import type { Heir } from "../../src/engine/state/types";
 
 const defaultPersonality = { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 };
@@ -120,5 +122,73 @@ describe("heirPortraitSet", () => {
     expect(heirPortraitSet(h, makeGameTime(9, 1, "early"))).toBe("girl_child3"); // 8 岁→child
     expect(heirPortraitSet(h, makeGameTime(13, 1, "early"))).toBe("girl_teen4"); // 12 岁→teen
     expect(heirPortraitSet(h, makeGameTime(19, 1, "early"))).toBe("girl_teen4"); // 18 岁→adult→falls back to teen
+  });
+});
+
+describe("isWenzhaoStudent", () => {
+  const schoolingHeir = (over: Partial<ReturnType<typeof heir>> = {}) =>
+    heir({ birthAt: makeGameTime(1, 1, "early"), sex: "daughter", ...over });
+
+  it("returns true for alive enrolled daughter at year 6 (age 5)", () => {
+    const h = schoolingHeir({ lifecycle: "alive" });
+    expect(isWenzhaoStudent(h, makeGameTime(6, 1, "early"))).toBe(true);
+  });
+
+  it("returns false for deceased enrolled daughter", () => {
+    const h = schoolingHeir({ lifecycle: "deceased" });
+    expect(isWenzhaoStudent(h, makeGameTime(6, 1, "early"))).toBe(false);
+  });
+
+  it("returns false for alive daughter not yet enrolled (age 4)", () => {
+    const h = schoolingHeir({ lifecycle: "alive" });
+    expect(isWenzhaoStudent(h, makeGameTime(5, 1, "early"))).toBe(false);
+  });
+
+  it("returns false for alive son at age 5 (son opens at 7)", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "son" });
+    expect(isWenzhaoStudent(h, makeGameTime(6, 1, "early"))).toBe(false);
+  });
+
+  it("returns true for alive son at age 7", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "son" });
+    expect(isWenzhaoStudent(h, makeGameTime(8, 1, "early"))).toBe(true);
+  });
+
+  it("returns true for alive son at age 17", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "son" });
+    expect(isWenzhaoStudent(h, makeGameTime(18, 1, "early"))).toBe(true);
+  });
+
+  it("returns false for alive son at age 18 (离校)", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "son" });
+    expect(isWenzhaoStudent(h, makeGameTime(19, 1, "early"))).toBe(false);
+  });
+
+  it("returns true for alive daughter at age 18 (无上限)", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "daughter" });
+    expect(isWenzhaoStudent(h, makeGameTime(19, 1, "early"))).toBe(true);
+  });
+});
+
+describe("isWenzhaodianOpen", () => {
+  it("returns true at full AP — slot 0 (卯时 = day)", () => {
+    const cal = createCalendar(); // ap=apMax=5, slot=0 → 卯时 → day
+    expect(isWenzhaodianOpen(cal)).toBe(true);
+  });
+
+  it("returns true at ap=4 — slot 1 (辰时 = day)", () => {
+    expect(isWenzhaodianOpen({ ...createCalendar(), ap: 4 })).toBe(true);
+  });
+
+  it("returns true at ap=3 — slot 2 (申时 = day)", () => {
+    expect(isWenzhaodianOpen({ ...createCalendar(), ap: 3 })).toBe(true);
+  });
+
+  it("returns false at ap=2 — slot 3 (酉时 = twilight)", () => {
+    expect(isWenzhaodianOpen({ ...createCalendar(), ap: 2 })).toBe(false);
+  });
+
+  it("returns false at ap=1 — slot 4 (戌时 = night)", () => {
+    expect(isWenzhaodianOpen({ ...createCalendar(), ap: 1 })).toBe(false);
   });
 });

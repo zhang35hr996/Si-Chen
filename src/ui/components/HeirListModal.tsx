@@ -21,15 +21,11 @@ export function HeirListModal({
   db,
   state,
   registry,
-  onSummon,
-  canSummon,
   onClose,
 }: {
   db: ContentDB;
   state: GameState;
   registry: AssetRegistry;
-  onSummon?: (heirId: string) => void;
-  canSummon: boolean;
   onClose: () => void;
 }) {
   const heirs = state.resources.bloodline.heirs;
@@ -128,11 +124,6 @@ export function HeirListModal({
           <p className="heir-detail__field">亲近：{describe("closeness", h.closeness)}</p>
           <p className="heir-detail__field">继位支持：{describe("support", h.support)}</p>
           <div className="heir-detail__actions">
-            {onSummon && (
-              <button type="button" disabled={!canSummon} onClick={() => onSummon(h.id)}>
-                召见
-              </button>
-            )}
             <button type="button" onClick={() => setSelectedId(null)}>
               返回
             </button>

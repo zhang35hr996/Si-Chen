@@ -81,7 +81,8 @@ import { assembleDialogueRequest, produceDialogueTurn } from "../engine/dialogue
 import { toDialogueTurnOptions, type DialogueRuntimeDeps } from "../engine/dialogue/runtimeDeps";
 import { deriveConverseSceneContext, type ConverseSceneContext } from "./converseScene";
 import type { DialogueLine } from "../engine/dialogue/types";
-import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
+import type { HeirAudiencePlan } from "../store/heirAudience";
+import { buildWenzhaoLesson, buildWenzhaoTutorReport } from "../store/heirEducation";
 import { buildHeirAudienceAction, resolveHeirLessonPerformance, buildHeirLessonResponseReaction } from "../store/heirAudience";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
@@ -104,7 +105,7 @@ import { audioController } from "./audio/AudioController";
 import { trackFor } from "./audio/trackFor";
 import { CourtyardScreen } from "./screens/CourtyardScreen";
 import { buildTravelBatch } from "../engine/map/travel";
-import { ShangshufangScreen } from "./screens/ShangshufangScreen";
+import { WenzhaodianScreen } from "./screens/WenzhaodianScreen";
 import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
@@ -270,7 +271,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [physicianReaction, setPhysicianReaction] = useState<{ portraitSet: string; speakerName: string; lines: string[] } | null>(null);
   const [physicianConsortPickerOpen, setPhysicianConsortPickerOpen] = useState(false);
   const [physicianHeirPickerOpen, setPhysicianHeirPickerOpen] = useState(false);
-  const [childReaction, setChildReaction] = useState<HeirInteractionPlan | null>(null);
+  const [childReaction, setChildReaction] = useState<HeirAudiencePlan | null>(null);
   const [namePetHeirIds, setNamePetHeirIds] = useState<string[]>([]);
   const namePetHeirId = namePetHeirIds[0] ?? null;
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine }[]>([]);
@@ -1164,22 +1165,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     beginSettlement(stationaryRequest());
   };
 
-  // 召见皇嗣（耗 1 行动点）：舞台感知反应台词 +20 宠爱。行动先于时间，跨月 tick 不会杀死再宠爱。
-  const summonHeir = (heirId: string) => {
-    const plan = buildHeirSummon(db, store.getState(), heirId);
-    if (!plan) return;
-    const before = store.getState().calendar;
-    const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
-    if (!settled.ok) return;
-    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
-    const decreeBeats = rollActionBeats(before, 1);
-    doAutosave();
-    setHeirListOpen(false);
-    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
-    setChildReaction(plan);
-  };
-
   // 紫宸殿·皇嗣叙话/陪玩（耗 1 行动点）；互动结束即清除召见态，一次召见仅一次互动。
   const heirAudience = (action: "talk" | "play") => {
     const heirId = summonedHeirId;
@@ -1231,9 +1216,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (reactionPlan) setChildReaction(reactionPlan);
   };
 
-  // 上书房·问功课（耗 1 行动点）：轮换一科 + 宠爱。行动先于时间。
-  const heirLesson = (heirId: string) => {
-    const plan = buildHeirLesson(db, store.getState(), heirId);
+  // 文昭殿·旁听授课（耗 1 行动点）：由 WenzhaodianScreen 传入 subject 后调用。
+  const heirLesson = (heirId: string, subject: "scholarship" | "martial" | "virtue") => {
+    const plan = buildWenzhaoLesson(store.getState(), heirId, subject);
     if (!plan) return;
     const before = store.getState().calendar;
     const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
@@ -1242,19 +1227,19 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
-    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
     setChildReaction(plan);
   };
 
-  // 上书房·问先生（耗 1 行动点）：汇报功课，不改属性。
+  // 文昭殿·询问先生（耗 1 行动点）：详细汇报功课，不改属性。
   const tutorReport = (heirId: string) => {
-    const lines = buildTutorReport(db, store.getState(), heirId);
-    if (!lines) return;
+    const report = buildWenzhaoTutorReport(store.getState(), heirId);
+    if (!report) return;
     const { spend, decreeBeats, sovereignDied } = spendAp(1);
     if (!spend.ok) return;
     if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
-    playReactions([{ speakerId: "wei_sui", lines }, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
+    playReactions([{ speakerId: "wei_sui", lines: [...report.summary, ...report.warnings] }, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
   };
 
   const transferHeirCustody = (heirId: string, toCustodianId: string) => {
@@ -1915,17 +1900,19 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         />
       )}
       {view === "wenzhaodian" && (
-        <ShangshufangScreen
+        <WenzhaodianScreen
           db={db}
           store={store}
           registry={registry}
           onOpenMap={() => {
-            setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
+            setMapAtRoot(false);
             setView("map");
           }}
           onOpenSettings={() => setSettingsOpen(true)}
           onLesson={heirLesson}
           onTutorReport={tutorReport}
+          onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
         />
       )}
       {view === "yuqing_gong" && (
@@ -1935,7 +1922,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           registry={registry}
           onOpenMap={() => { setMapAtRoot(false); setView("map"); }}
           onOpenSettings={() => setSettingsOpen(true)}
-          onSummon={summonHeir}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
         />
@@ -2860,8 +2846,6 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           db={db}
           state={liveState}
           registry={registry}
-          onSummon={summonHeir}
-          canSummon={liveState.calendar.ap >= 1}
           onClose={() => setHeirListOpen(false)}
         />
       )}
