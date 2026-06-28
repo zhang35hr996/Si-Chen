@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { makeGameTime } from "../../src/engine/calendar/time";
-import type { GameState, Heir } from "../../src/engine/state/types";
+import type { GameState, Heir, HeirCompanionAssignment } from "../../src/engine/state/types";
 import { buildWenzhaoLesson, buildWenzhaoTutorReport, courseLabel } from "../../src/store/heirEducation";
 
 const content = loadGameContent();
@@ -265,5 +265,68 @@ describe("buildWenzhaoTutorReport", () => {
       makeState({ neglect: 0, education: { scholarship: 90, martial: 5, virtue: 5 } }), HEIR_ID,
     );
     expect(report!.warnings.join("")).toContain("均衡");
+  });
+});
+
+// ── 伴读优先同窗片段 ─────────────────────────────────────────────────────────────
+
+const defaultPersonality = { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 };
+
+function makeCompanionAssignment(companionName: string): HeirCompanionAssignment {
+  return {
+    heirId: HEIR_ID,
+    companion: { kind: "royal_relative", personId: "royal_youth_h1_6" },
+    assignedAt: makeGameTime(6, 1, "early"),
+    status: "active",
+    bond: 5,
+    profile: {
+      name: companionName,
+      sex: "female",
+      age: 5,
+      legitimate: true,
+      personality: { ...defaultPersonality, sociability: 80 }, // high social → bothSocial path
+    },
+  };
+}
+
+describe("伴读优先同窗片段", () => {
+  it("peer fragment uses companion name when active companion exists", () => {
+    const s = makeState({ sociability: 80 }); // high social → bothSocial
+    s.heirCompanions[HEIR_ID] = makeCompanionAssignment("宗室小友");
+
+    let foundCompanionName = false;
+    for (let i = 0; i < 30; i++) {
+      const state = { ...s, calendar: { ...s.calendar, dayIndex: i } };
+      const plan = buildWenzhaoLesson(state, HEIR_ID, "scholarship")!;
+      if (plan.lines.join("").includes("宗室小友")) {
+        foundCompanionName = true;
+        break;
+      }
+    }
+    expect(foundCompanionName).toBe(true);
+  });
+
+  it("peer fragment appears even with no peer heir when companion exists", () => {
+    // No peer heir in bloodline, but companion is active
+    const s = makeState({ sociability: 80 });
+    s.heirCompanions[HEIR_ID] = makeCompanionAssignment("宗室伴读");
+
+    let found = false;
+    for (let i = 0; i < 30; i++) {
+      const state = { ...s, calendar: { ...s.calendar, dayIndex: i } };
+      const plan = buildWenzhaoLesson(state, HEIR_ID, "scholarship")!;
+      if (plan.lines.length > 2) { found = true; break; }
+    }
+    expect(found).toBe(true);
+  });
+
+  it("still no peer fragment with single student and no companion", () => {
+    const s = makeState({ sociability: 90 });
+    // no companion, no peer heir
+    for (let i = 0; i < 20; i++) {
+      const state = { ...s, calendar: { ...s.calendar, dayIndex: i } };
+      const plan = buildWenzhaoLesson(state, HEIR_ID, "scholarship")!;
+      expect(plan.lines.length).toBeLessThanOrEqual(2);
+    }
   });
 });

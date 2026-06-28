@@ -232,6 +232,70 @@ export interface Heir {
   lastPhysicianVisitMonthKey?: string;
 }
 
+// ── 宗室青年 ─────────────────────────────────────────────────────────────────
+
+/** 宗室旁支青年人物（持久存档；仅按需生成，不预生成全宗室树）。 */
+export interface RoyalRelative {
+  id: string;
+  name: string;
+  sex: PersonSex;
+  age: number;
+  /** 宗室支系亲疏。 */
+  branch: "close" | "collateral" | "distant";
+  /** 支系地位 0–100（服务伴读择定与台词）。 */
+  branchPrestige: number;
+  legitimate: boolean;
+  personality: HeirPersonality;
+  lifecycle: "alive" | "deceased";
+  deceasedAt?: GameTime;
+}
+
+// ── 伴读 ─────────────────────────────────────────────────────────────────────
+
+/** 伴读的人物引用（官员家族子弟 or 宗室青年）。 */
+export type CompanionPersonRef =
+  | { kind: "family_member"; personId: string }
+  | { kind: "royal_relative"; personId: string };
+
+/** 伴读关系（key = heirId）。 */
+export interface HeirCompanionAssignment {
+  heirId: string;
+  companion: CompanionPersonRef;
+  assignedAt: GameTime;
+  status: "active" | "ended";
+  endedAt?: GameTime;
+  endReason?: "heir_left_school" | "companion_deceased" | "dismissed";
+  /** 伴读与该皇嗣的感情基础 0–100。 */
+  bond: number;
+  /** 择定时快照，不随后续家族变化漂移。 */
+  profile: {
+    name: string;
+    sex: PersonSex;
+    age: number;
+    legitimate: boolean;
+    personality: HeirPersonality;
+    familyName?: string;
+    familyRole?: string;
+  };
+}
+
+/** 自动择定后的汇报通知（等待玩家知晓）。 */
+export interface CompanionAppointmentReport {
+  heirId: string;
+  companion: CompanionPersonRef;
+  createdAt: GameTime;
+  acknowledged: boolean;
+}
+
+// ── 官员家族青年派生资料 ──────────────────────────────────────────────────────
+
+/** 官员家族子弟的嫡庶/性格派生结果（稳定种子派生，快照进 assignment 避免漂移）。 */
+export interface FamilyYouthProfile {
+  legitimate: boolean;
+  birthOrder: number;
+  personality: HeirPersonality;
+}
+
 export interface BloodlineState {
   /** 经血状态 */
   menstrualStatus: MenstrualStatus;
@@ -1482,6 +1546,12 @@ export interface GameState {
   settledHaremIntriguePeriods: string[];
   /** 后宫内部惩戒事件（PUNISH-4G-B）：append-only；pending_response 构成全局中断。 */
   haremDisciplineIncidents: HaremDisciplineIncident[];
+  /** 宗室青年人物（按需生成；id="royal_youth_*"）。 */
+  royalRelatives: Record<string, RoyalRelative>;
+  /** 皇嗣伴读关系（key = heirId；每名皇嗣至多一条 active）。 */
+  heirCompanions: Record<string, HeirCompanionAssignment>;
+  /** 待玩家知晓的伴读择定通知。 */
+  pendingCompanionAppointments: CompanionAppointmentReport[];
   /** 动态模板事件实例序列号（每次实例化递增，用于确定性 ID 生成）。 */
   templateEventNextSeq: number;
   /** 已生成/已解决的模板事件实例（按 instanceId 索引）；存档校验据此跳过 MISSING_REF 检查。 */

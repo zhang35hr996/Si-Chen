@@ -102,6 +102,7 @@ import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS } from "../engine/ch
 import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
 import { resolveInvestigationTruth, buildHeirHealthTruthContext, hashStr } from "../engine/characters/haremInvestigation/truth/truthResolver";
 import type { HeirHealthSymptom, HeirHealthAnomalyIncident } from "../engine/characters/haremInvestigation/truth/types";
+import { applyCompanionReconciliation, planCompanionReconciliation } from "../engine/characters/companionReconciliation";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -2010,6 +2011,16 @@ export class GameStore {
     if (!swept.ok) return err(swept.error);
     candidate = swept.value;
     collector?.capturePhaseScheduled("sweep_expired_confinements", diffGameState(beforeSweep, candidate));
+
+    // 伴读幂等协调（每次时间推进后运行；无 AP、无 EventEffect，直接变换 state）。
+    {
+      const beforeCompanion = candidate;
+      const companionPlan = planCompanionReconciliation(candidate, toGameTime(candidate.calendar));
+      const nextCandidate = { ...candidate };
+      applyCompanionReconciliation(nextCandidate, companionPlan, toGameTime(candidate.calendar));
+      candidate = nextCandidate;
+      collector?.capturePhaseScheduled("companion_reconciliation", diffGameState(beforeCompanion, candidate));
+    }
 
     return ok({ state: candidate, monthChanged, healthOutcome });
   }

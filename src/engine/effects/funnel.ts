@@ -402,6 +402,20 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_companion_assign": {
+        const heir = state.resources.bloodline.heirs.find((h) => h.id === e.heirId);
+        if (!heir) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
+      case "heir_companion_end": {
+        const assignment = state.heirCompanions[e.heirId];
+        if (!assignment || assignment.status !== "active") {
+          bad(index, "BAD_EFFECT_TARGET", `no active companion for heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
       case "record_physician_visit": {
         const sub = e.subject;
         const expectedKey = `${state.calendar.year}:${state.calendar.month}`;
@@ -590,6 +604,8 @@ function describeEffect(effect: EventEffect): string {
     case "heir_custody": return `heir_custody ${effect.heirId} → ${effect.custodianId}`;
     case "child_favor": return `child_favor ${effect.heirId} ${effect.delta >= 0 ? "+" : ""}${effect.delta}`;
     case "heir_died": return `heir_died ${effect.heirId}`;
+    case "heir_companion_assign": return `heir_companion_assign ${effect.heirId} ${effect.companionKind}:${effect.companionPersonId}`;
+    case "heir_companion_end": return `heir_companion_end ${effect.heirId} reason=${effect.endReason}`;
     case "heir_decease": return `heir_decease ${effect.heirId}`;
     case "set_sovereign_health": return `set_sovereign_health${effect.healthDelta !== undefined ? ` delta=${effect.healthDelta}` : ""}${effect.healthStatus !== undefined ? ` status=${effect.healthStatus}` : ""}`;
     case "set_taihou_health": return `set_taihou_health${effect.healthDelta !== undefined ? ` delta=${effect.healthDelta}` : ""}`;
@@ -944,6 +960,20 @@ export function applyEffects(
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         heir.lifecycle = "deceased";
         heir.deceasedAt = now;
+        break;
+      }
+      case "heir_companion_assign": {
+        // 实际的 assignment 构建由 companionReconciliation.applyCompanionReconciliation 处理；
+        // funnel 只负责结构校验和 describe，此处标记 acknowledged 即可（无附加状态变更）。
+        break;
+      }
+      case "heir_companion_end": {
+        const assignment = next.heirCompanions[effect.heirId];
+        if (assignment?.status === "active") {
+          assignment.status = "ended";
+          assignment.endedAt = now;
+          assignment.endReason = effect.endReason;
+        }
         break;
       }
       case "set_sovereign_health": {
