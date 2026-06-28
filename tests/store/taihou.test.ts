@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildShizhiEncounter, buildTaihouRebuke } from "../../src/store/taihou";
+import { inPalaceConsorts } from "../../src/engine/characters/presence";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { withConsort } from "../helpers/consortFixture";
@@ -83,18 +84,20 @@ describe("buildTaihouRebuke", () => {
     expect(JSON.stringify(buildTaihouRebuke(db2, s, "k"))).toBe(JSON.stringify(buildTaihouRebuke(db2, s, "k")));
   });
 
-  it("runtime-db（生成角色合并进 characters）：敲打池无重复 ID", () => {
+  it("runtime-db（生成角色合并进 characters）：敲打/侍疾池来自去重后的 inPalaceConsorts，无重复 ID", () => {
     const s = createNewGameState(db2);
+    // App-style runtime db：generatedConsorts 同时存在于 characters 与 state.generatedConsorts
     const runtimeDb = { ...db2, characters: { ...db2.characters, ...s.generatedConsorts } };
-    const seen = new Set<string>();
-    for (let i = 0; i < 500; i++) {
-      const plan = buildTaihouRebuke(runtimeDb, s, `dedup:${i}`);
-      if (plan) seen.add(plan.targetId);
-    }
-    // All picked IDs should be unique per round; verify no ID could appear twice in same pool
-    const poolIds = Object.keys(s.generatedConsorts);
-    for (const id of poolIds) {
-      expect(poolIds.filter((x) => x === id)).toHaveLength(1);
+    // rebukePool / attendantPool 均为 inPalaceConsorts().filter(...).map(...)；
+    // filter/map 不会引入重复，故池去重等价于 inPalaceConsorts 去重。
+    const ids = inPalaceConsorts(runtimeDb, s).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length); // 无任何重复 ID
+    // 每名在宫生成侍君恰好出现一次（旧实现会出现两次）
+    for (const id of Object.keys(s.generatedConsorts)) {
+      const st = s.standing[id];
+      if (st && st.rank !== "huanghou" && st.lifecycle !== "deceased") {
+        expect(ids.filter((x) => x === id)).toHaveLength(1);
+      }
     }
   });
 

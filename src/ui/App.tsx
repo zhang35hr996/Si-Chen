@@ -193,6 +193,23 @@ interface CourtSession {
   index: number;
 }
 
+/**
+ * 新游戏随机种子。生产环境始终用 crypto 真随机；仅当 e2e 构建（VITE_E2E）时，
+ * 允许通过 `?e2eSeed=N` 注入确定性种子，便于 E2E 断言固定后宫组成。
+ */
+function resolveNewGameSeed(): number {
+  if (import.meta.env.VITE_E2E && typeof window !== "undefined") {
+    const param = new URLSearchParams(window.location.search).get("e2eSeed");
+    if (param) {
+      const n = Number(param);
+      if (Number.isFinite(n) && n > 0) return Math.floor(n);
+    }
+  }
+  const seedArray = new Uint32Array(1);
+  crypto.getRandomValues(seedArray);
+  return seedArray[0] || 1;
+}
+
 export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRuntime?: DialogueRuntimeDeps }) {
   const logger = dialogueRuntime?.logger;
   const content = useMemo(() => loadGameContent(), []);
@@ -945,10 +962,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   };
 
   const newGame = () => {
-    const seedArray = new Uint32Array(1);
-    crypto.getRandomValues(seedArray);
-    const rngSeed = seedArray[0] || 1;
-    store.newGame(content.value, rngSeed);
+    store.newGame(content.value, resolveNewGameSeed());
     resetRollGuards();
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });

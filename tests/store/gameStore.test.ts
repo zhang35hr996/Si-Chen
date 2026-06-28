@@ -148,14 +148,22 @@ describe("GameStore.newGame — seed isolation", () => {
     expect(Object.keys(second.standing).some((id) => id.includes("generated_empress_1"))).toBe(false);
   });
 
-  it("runtime-db（生成角色合并进 characters）不应传给 newGame：会出现两位皇后（App 已修复此路径）", () => {
+  it("即便误传 runtime-db（合并了旧 generatedConsorts），newGame 仍跳过 generated_* 内容角色，只有一位新 seed 皇后", () => {
     const store = createGameStore();
     store.newGame(db, 1);
     const first = store.getState();
+    expect(Object.keys(first.generatedConsorts).length).toBeGreaterThan(0);
+
+    // App 已改传 content.value；这里仍传 runtime-db 以验证 newGame 自身的防御
     const runtimeDb = { ...db, characters: { ...db.characters, ...first.generatedConsorts } };
     store.newGame(runtimeDb, 2);
     const second = store.getState();
+
     const empressEntries = Object.entries(second.standing).filter(([, st]) => st.rank === "huanghou");
-    expect(empressEntries.length).toBeGreaterThan(1); // bug manifests; App now avoids this path
+    expect(empressEntries).toHaveLength(1); // newGame 跳过 generated_*，不会再现旧皇后
+    expect(empressEntries[0]![0]).toBe("generated_empress_2");
+    // 旧 seed-1 生成角色不得残留在 standing
+    expect(Object.keys(second.standing).some((id) => id.startsWith("generated_empress_1"))).toBe(false);
+    expect(Object.keys(second.standing).some((id) => id.startsWith("generated_consort_1_"))).toBe(false);
   });
 });
