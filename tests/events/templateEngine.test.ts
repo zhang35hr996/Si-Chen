@@ -41,11 +41,12 @@ const baseTemplate = (): EventTemplate => ({
       weightFactors: [],
     },
   ],
+  participantConstraints: [],
   hiddenTruthCandidates: [
     { id: "truth_a", description: "真相A", weight: 1 },
     { id: "truth_b", description: "真相B", weight: 1 },
   ],
-  openingNarration: "{protagonist}出现了。",
+  openingNarration: { mode: "narration" as const, text: "{protagonist}出现了。" },
   choices: [
     { id: "stay", text: "留下" },
     { id: "leave", text: "离开" },
@@ -136,12 +137,22 @@ describe("getEligibleTemplates", () => {
     expect(eligible[0]?.affordable).toBe(false);
   });
 
-  it("respects cooldown using eventLog", () => {
+  it("respects cooldown using templateEventRecords", () => {
     const testDB = withTemplate({ cooldown: { actionDays: 10 } });
     const state: GameState = {
       ...atLocation("yuhuayuan"),
+      templateEventRecords: {
+        "tei_000001": {
+          id: "tei_000001",
+          templateId: "tpl_test",
+          participants: {},
+          hiddenTruthId: "truth_a",
+          generatedAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
+          status: "resolved",
+        },
+      },
       eventLog: [
-        { eventId: "tpl_test", firedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } },
+        { eventId: "tei_000001", firedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } },
       ],
     };
     // dayIndex 0, cooldown 10, so still cooling
@@ -180,7 +191,7 @@ describe("instantiateTemplate", () => {
   it("returns null when no consorts in standing (empty game)", () => {
     const testDB = withTemplate({});
     const emptyState: GameState = { ...fresh(), standing: {} };
-    const result = instantiateTemplate(testDB, emptyState, testDB.templates["tpl_test"]!, seededRng(1));
+    const result = instantiateTemplate(testDB, emptyState, testDB.templates["tpl_test"]!, seededRng(1), 0);
     expect(result).toBeNull();
   });
 
@@ -190,7 +201,7 @@ describe("instantiateTemplate", () => {
     const consortIds = Object.keys(state.standing);
     expect(consortIds.length).toBeGreaterThan(0);
 
-    const instance = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, seededRng(1));
+    const instance = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, seededRng(1), 0);
     expect(instance).not.toBeNull();
     expect(consortIds).toContain(instance!.participants["protagonist"]);
   });
@@ -198,7 +209,7 @@ describe("instantiateTemplate", () => {
   it("assigns a hiddenTruthId from candidates", () => {
     const testDB = withTemplate({});
     const state = atLocation("yuhuayuan");
-    const instance = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, seededRng(1));
+    const instance = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, seededRng(1), 0);
     expect(instance).not.toBeNull();
     expect(["truth_a", "truth_b"]).toContain(instance!.hiddenTruthId);
   });
@@ -207,8 +218,8 @@ describe("instantiateTemplate", () => {
     const testDB = withTemplate({});
     const state = atLocation("yuhuayuan");
     const rng = seededRng(1);
-    const a = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, rng);
-    const b = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, rng);
+    const a = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, rng, 0);
+    const b = instantiateTemplate(testDB, state, testDB.templates["tpl_test"]!, rng, 1);
     expect(a?.instanceId).not.toBe(b?.instanceId);
   });
 
@@ -229,7 +240,7 @@ describe("instantiateTemplate", () => {
     );
     if (consortIds.length < 2) return;
 
-    const instance = instantiateTemplate(testDB, state, twoRoleTemplate, seededRng(1));
+    const instance = instantiateTemplate(testDB, state, twoRoleTemplate, seededRng(1), 0);
     expect(instance).not.toBeNull();
     const ids = Object.values(instance!.participants);
     expect(new Set(ids).size).toBe(ids.length); // no duplicates
@@ -271,7 +282,7 @@ describe("instantiateTemplate", () => {
         [allIds[0]!]: { ...s.standing[allIds[0]!]!, lifecycle: "deceased" },
       },
     };
-    const result = instantiateTemplate(testDB, allDead, testDB.templates["tpl_test"]!, seededRng(1));
+    const result = instantiateTemplate(testDB, allDead, testDB.templates["tpl_test"]!, seededRng(1), 0);
     expect(result).toBeNull();
   });
 });

@@ -19,6 +19,7 @@
       ]
     }
   ],
+  "participantConstraints": [],
   "presentation": {
     "mode": "exploration",
     "hostLocationId": "yuhuayuan",
@@ -32,11 +33,14 @@
     { "id": "concealing_item", "description": "身上藏有不愿被发现的物件", "weight": 1 },
     { "id": "misread_intent", "description": "误以为陛下不愿见自己", "weight": 2 }
   ],
-  "openingNarration": "陛下远远瞥见竹径间{consort}的背影——对方显然也看见了陛下，却悄然转身，往另一条小径走去。",
+  "openingNarration": {
+    "mode": "narration",
+    "text": "陛下远远瞥见竹径间{consort}的背影——对方显然也看见了陛下，却悄然转身，往另一条小径走去。"
+  },
   "choices": [
     { "id": "call_back", "text": "命他回来", "tone": "neutral" },
     { "id": "follow_ask", "text": "亲自追上询问", "tone": "friendly" },
-    { "id": "send_eunuch", "text": "让宦官稍后去问", "tone": "neutral" },
+    { "id": "send_servant", "text": "让宫人稍后去问", "tone": "neutral" },
     { "id": "pretend_unseen", "text": "当作没有看见", "tone": "guarded" }
   ],
   "outcomes": [
@@ -96,10 +100,10 @@
       ]
     },
     {
-      "choiceId": "send_eunuch",
+      "choiceId": "send_servant",
       "responseLine": {
         "role": "consort",
-        "text": "（宦官传话后，回报：臣侍称无事，只是一时不适，不敢惊扰陛下。）",
+        "text": "……臣侍称无事，只是一时不适，不敢惊扰陛下。",
         "expression": "neutral"
       },
       "effects": [],
@@ -109,7 +113,7 @@
       "choiceId": "pretend_unseen",
       "responseLine": {
         "role": "consort",
-        "text": "（{consort}的背影在竹径深处消失，不知去向。）",
+        "text": "……",
         "expression": "neutral"
       },
       "effects": [

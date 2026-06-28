@@ -1049,6 +1049,17 @@ export const gameStateSchema = z.strictObject({
     speakerId: z.string(),
     lines: z.array(z.string()),
   })).optional(),
+  templateEventNextSeq: z.number().int().min(0).default(0),
+  templateEventRecords: z.record(z.string(), z.object({
+    id: z.string(),
+    templateId: z.string(),
+    participants: z.record(z.string(), z.string()),
+    hiddenTruthId: z.string(),
+    generatedAt: gameTimeSchema,
+    status: z.enum(["generated", "resolved"]),
+    selectedChoiceId: z.string().optional(),
+    resolvedAt: gameTimeSchema.optional(),
+  })).default({}),
   rngSeed: z.number(),
 }).superRefine((data, ctx) => {
   const errs = [

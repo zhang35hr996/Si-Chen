@@ -14,7 +14,7 @@
     {
       "roleId": "higher_rank",
       "pool": "consort_alive_active",
-      "exclude": ["candidate", "carrying_late", "in_cold_palace", "grounded"],
+      "exclude": ["candidate", "carrying_late"],
       "weightFactors": [
         { "type": "attr_low", "attr": "favor", "threshold": 35, "weight": 3 },
         { "type": "attr_high", "attr": "pride", "threshold": 60, "weight": 3 }
@@ -23,13 +23,16 @@
     {
       "roleId": "lower_rank",
       "pool": "consort_alive_active",
-      "exclude": ["candidate", "carrying_late", "in_cold_palace", "grounded"],
+      "exclude": ["candidate", "carrying_late"],
       "weightFactors": [
         { "type": "attr_high", "attr": "favor", "threshold": 60, "weight": 4 },
         { "type": "attr_high", "attr": "ambition", "threshold": 55, "weight": 3 },
         { "type": "attr_high", "attr": "pride", "threshold": 65, "weight": 2 }
       ]
     }
+  ],
+  "participantConstraints": [
+    { "type": "rank_higher_than", "higherRole": "higher_rank", "lowerRole": "lower_rank" }
   ],
   "hiddenTruthCandidates": [
     { "id": "lower_deliberate", "description": "恩宠较高的低位侍君故意不让步", "weight": 3 },
@@ -38,13 +41,16 @@
     { "id": "misunderstanding", "description": "一方根本无意争执，另一方过度解读", "weight": 2 },
     { "id": "third_party_instigated", "description": "第三名侍君暗中挑拨", "weight": 2 }
   ],
-  "openingNarration": "宦官禀报：{higher_rank}与{lower_rank}在请安时，因谁先行、谁先受礼起了争执。双方都称自己只是按规矩行事，互不相让。",
+  "openingNarration": {
+    "mode": "narration",
+    "text": "宫人禀报：{higher_rank}与{lower_rank}在请安时，因谁先行、谁先受礼起了争执。双方都称自己只是按规矩行事，互不相让。"
+  },
   "choices": [
     { "id": "by_rank", "text": "严格按位分裁定", "tone": "neutral" },
     { "id": "by_seniority", "text": "按入宫资历调解", "tone": "neutral" },
     { "id": "scold_both", "text": "斥责双方小题大做", "tone": "hostile" },
     { "id": "punish_instigator", "text": "只处罚先挑衅者", "tone": "neutral" },
-    { "id": "defer_empress", "text": "交皇后依宫规处理", "tone": "guarded" }
+    { "id": "defer_empress", "text": "交六宫主理依宫规处理", "tone": "guarded" }
   ],
   "outcomes": [
     {
@@ -158,7 +164,7 @@
       "choiceId": "defer_empress",
       "responseLine": {
         "role": "higher_rank",
-        "text": "……是，臣侍知道了，这便请皇后娘娘处置。",
+        "text": "……是，臣侍知道了。",
         "expression": "neutral"
       },
       "effects": [],

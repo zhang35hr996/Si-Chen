@@ -19,6 +19,7 @@
       ]
     }
   ],
+  "participantConstraints": [],
   "presentation": {
     "mode": "exploration",
     "hostLocationId": "yuhuayuan",
@@ -28,11 +29,14 @@
   "hiddenTruthCandidates": [
     { "id": "true_coincidence", "description": "确实偶然经过", "weight": 1 },
     { "id": "deliberate_wait", "description": "已连续数日来此等候", "weight": 4 },
-    { "id": "heard_from_eunuch", "description": "从宦官口中得知皇帝会经过", "weight": 3 },
+    { "id": "heard_from_servant", "description": "从宫人口中得知皇帝会经过", "weight": 3 },
     { "id": "avoiding_others", "description": "原本想独处，却碰见皇帝", "weight": 1 },
     { "id": "hiding_distress", "description": "刚哭过，在此整理仪容", "weight": 2 }
   ],
-  "openingNarration": "{protagonist}在太液池畔缓缓行走，见到陛下后神色间有一瞬不自然的欢喜，随即恢复端然。",
+  "openingNarration": {
+    "mode": "narration",
+    "text": "{protagonist}在太液池畔缓缓行走，见到陛下后神色间有一瞬不自然的欢喜，随即恢复端然。"
+  },
   "choices": [
     { "id": "stay_talk", "text": "留下与他说话", "tone": "friendly" },
     { "id": "ask_wait", "text": "问他是否特意在此等候", "tone": "neutral" },

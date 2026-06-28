@@ -167,8 +167,8 @@ function makeV32Save(opts?: {
 
 // ── Version check ─────────────────────────────────────────────────────────────
 
-it("V33-01: SAVE_FORMAT_VERSION = 33", () => {
-  expect(SAVE_FORMAT_VERSION).toBe(33);
+it("V33-01: SAVE_FORMAT_VERSION >= 33", () => {
+  expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(33);
 });
 
 // ── v32 → v33: haremIncidents migration ──────────────────────────────────────

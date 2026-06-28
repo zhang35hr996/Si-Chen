@@ -114,6 +114,7 @@ function resolveTemplateEffect(
 function resolveTemplateMemory(
   entry: TemplateMemoryEntry,
   participants: Record<string, string>,
+  nameMap: Record<string, string>,
 ): EventEffect {
   const charId = resolveRole(entry.forRole, participants);
   const subjectIds = entry.entry.subjectIds.map((id) =>
@@ -124,6 +125,7 @@ function resolveTemplateMemory(
     char: charId,
     entry: {
       ...entry.entry,
+      summary: substituteRoles(entry.entry.summary, nameMap),
       subjectIds,
     },
   };
@@ -133,12 +135,13 @@ function resolveTemplateMemory(
 export function resolveOutcomeEffects(
   outcome: TemplateOutcome,
   participants: Record<string, string>,
+  nameMap: Record<string, string> = {},
 ): EventEffect[] {
   const effects: EventEffect[] = outcome.effects.map((e) =>
     resolveTemplateEffect(e, participants),
   );
   const memories: EventEffect[] = outcome.memories.map((m) =>
-    resolveTemplateMemory(m, participants),
+    resolveTemplateMemory(m, participants, nameMap),
   );
   return [...effects, ...memories];
 }
@@ -147,7 +150,7 @@ export function resolveOutcomeEffects(
 
 /**
  * 合成 SceneContent。结构：
- *   n_open (line, narrator=protagonist)
+ *   n_open (line, speaker="narrator" 或指定角色)
  *     → n_choice (choice)
  *       → n_fx_{choiceId} (effect)  [optional n_resp_{choiceId} (line)]
  */
@@ -161,17 +164,19 @@ export function synthesizeSceneContent(
   const { participants } = instance;
   const nameMap = buildNameMap(db, state, participants);
 
-  const protagonistRole = template.participantRoles[0]!.roleId;
-  const protagonistId = participants[protagonistRole] ?? "narrator";
-
   const nodes: SceneNode[] = [];
 
-  // 开场叙述（旁白风格，speaker 设为 protagonist，可在 UI 层按 speaker 判断是否加引号）
-  const openText = substituteRoles(template.openingNarration, nameMap);
+  // 开场段：旁白用 "narrator"，对话用 speakerRole 对应的实际 charId
+  const opening = template.openingNarration;
+  const openSpeaker =
+    opening.mode === "narration"
+      ? "narrator"
+      : (participants[opening.speakerRole] ?? opening.speakerRole);
+  const openText = substituteRoles(opening.text, nameMap);
   nodes.push({
     type: "line",
     id: "n_open",
-    speaker: protagonistId,
+    speaker: openSpeaker,
     text: openText,
     next: "n_choice",
   });
@@ -191,7 +196,7 @@ export function synthesizeSceneContent(
   // 每个选项的效果节点 + 可选回应台词
   for (const choice of template.choices) {
     const outcome = template.outcomes.find((o) => o.choiceId === choice.id);
-    const effects = outcome ? resolveOutcomeEffects(outcome, participants) : [];
+    const effects = outcome ? resolveOutcomeEffects(outcome, participants, nameMap) : [];
 
     const hasResponse = !!outcome?.responseLine;
     const nextAfterEffect = hasResponse ? `n_resp_${choice.id}` : undefined;
@@ -218,10 +223,12 @@ export function synthesizeSceneContent(
     }
   }
 
+  const participantIds = Object.values(participants).filter((v): v is string => !!v);
+
   return {
     id: instance.instanceId,
     locationId,
-    participants: Object.values(participants).filter((v): v is string => typeof v === "string"),
+    participants: participantIds.length > 0 ? participantIds : ["player"],
     startNodeId: "n_open",
     nodes,
   };

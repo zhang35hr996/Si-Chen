@@ -916,6 +916,37 @@ export const templateOutcomeSchema = z.strictObject({
   memories: z.array(templateMemoryEntrySchema).default([]),
 });
 
+/**
+ * 参与者间约束：引擎在选人后校验，不满足则放弃本次模板实例化。
+ * 只用于无法通过 pool/weightFactor 独立保证的跨 role 关系。
+ */
+export const participantConstraintSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("rank_higher_than"),
+    higherRole: idSchema,
+    lowerRole: idSchema,
+  }),
+]);
+export type ParticipantConstraint = z.infer<typeof participantConstraintSchema>;
+
+/**
+ * 事件开场段：旁白（narrator）或角色台词（dialogue）。
+ * 旁白不显示立绘与姓名框；台词显示 speakerRole 对应的立绘。
+ * 两种模式均允许 {roleId} 占位符，合成时替换为实际角色名。
+ */
+export const openingNarrationSchema = z.discriminatedUnion("mode", [
+  z.strictObject({
+    mode: z.literal("narration"),
+    text: z.string().min(1).max(400),
+  }),
+  z.strictObject({
+    mode: z.literal("dialogue"),
+    speakerRole: idSchema,
+    text: z.string().min(1).max(400),
+  }),
+]);
+export type TemplateOpeningNarration = z.infer<typeof openingNarrationSchema>;
+
 /** 完整 EventTemplate content schema。 */
 export const eventTemplateSchema = z.strictObject({
   id: idSchema,
@@ -927,6 +958,8 @@ export const eventTemplateSchema = z.strictObject({
   /** 模板整体触发条件（地点、月份等）。参与者选择通过 participantRoles 控制。 */
   triggerCondition: triggerConditionSchema,
   participantRoles: z.array(templateParticipantRoleSchema).min(1).max(3),
+  /** 跨 role 参与者约束（选人后校验；不满足则放弃本次实例化）。 */
+  participantConstraints: z.array(participantConstraintSchema).default([]),
   presentation: z
     .discriminatedUnion("mode", [
       z.strictObject({
@@ -942,10 +975,10 @@ export const eventTemplateSchema = z.strictObject({
     .optional(),
   hiddenTruthCandidates: z.array(hiddenTruthCandidateSchema).min(1),
   /**
-   * 事件开场叙述。可含 {roleId} 占位符，合成时替换为实际角色名。
-   * 若 presentation.mode === "exploration"，此文本作为 eventHint 之后的首段叙述。
+   * 事件开场：旁白（narration）不显示发言人立绘，对话（dialogue）显示 speakerRole 立绘。
+   * 均可含 {roleId} 占位符，合成时替换为实际角色名。
    */
-  openingNarration: z.string().min(1).max(400),
+  openingNarration: openingNarrationSchema,
   choices: z.array(templateChoiceSchema).min(2).max(5),
   outcomes: z.array(templateOutcomeSchema).min(1),
   basePriority: z.number().int(),

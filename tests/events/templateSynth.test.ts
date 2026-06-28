@@ -26,8 +26,9 @@ const baseTemplate = (): EventTemplate => ({
   participantRoles: [
     { roleId: "protagonist", pool: "consort_alive_active", exclude: [], weightFactors: [] },
   ],
+  participantConstraints: [],
   hiddenTruthCandidates: [{ id: "truth_a", description: "真相A", weight: 1 }],
-  openingNarration: "{protagonist}出现了。",
+  openingNarration: { mode: "narration" as const, text: "{protagonist}出现了。" },
   choices: [
     { id: "stay", text: "留下" },
     { id: "leave", text: "离开" },

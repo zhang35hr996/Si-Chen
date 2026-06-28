@@ -14,7 +14,7 @@
     {
       "roleId": "suspect",
       "pool": "consort_alive_active",
-      "exclude": ["candidate", "in_cold_palace", "grounded"],
+      "exclude": ["candidate"],
       "weightFactors": [
         { "type": "attr_high", "attr": "ambition", "threshold": 60, "weight": 4 },
         { "type": "attr_high", "attr": "jealousy", "threshold": 55, "weight": 3 },
@@ -22,6 +22,7 @@
       ]
     }
   ],
+  "participantConstraints": [],
   "hiddenTruthCandidates": [
     { "id": "pure_fiction", "description": "完全是凭空虚构的流言", "weight": 2 },
     { "id": "exaggeration", "description": "由真实变化夸大而来", "weight": 3 },
@@ -30,7 +31,10 @@
     { "id": "scheme_trace", "description": "是现有宫斗阴谋产生的表面迹象", "weight": 2 },
     { "id": "official_discussion", "description": "皇后或官员曾私下提及相关建议", "weight": 1 }
   ],
-  "openingNarration": "宦官禀报：宫中近来流传着关于{suspect}的说法，涉及其可能晋位或失宠。消息来源不明，但已在数处宫室流传。陛下尚未公开表态。",
+  "openingNarration": {
+    "mode": "narration",
+    "text": "宫人禀报：宫中近来流传着关于{suspect}的说法，涉及其可能晋位或失宠。消息来源不明，但已在数处宫室流传。陛下尚未公开表态。"
+  },
   "choices": [
     { "id": "silence", "text": "命宫中噤声", "tone": "hostile" },
     { "id": "investigate", "text": "查流言源头", "tone": "neutral" },
@@ -42,7 +46,7 @@
       "choiceId": "silence",
       "responseLine": {
         "role": "suspect",
-        "text": "（流言被压制，{suspect}神色略有异样，未置一词。）",
+        "text": "……",
         "expression": "neutral"
       },
       "effects": [
@@ -55,7 +59,7 @@
       "choiceId": "investigate",
       "responseLine": {
         "role": "suspect",
-        "text": "（消息传入宫中，{suspect}听闻后沉默片刻，未有异动。）",
+        "text": "……",
         "expression": "worried"
       },
       "effects": [],
@@ -80,7 +84,7 @@
       "choiceId": "clarify",
       "responseLine": {
         "role": "suspect",
-        "text": "（陛下公开表态后，{suspect}宫中传来消息，称感激陛下明鉴。）",
+        "text": "……臣侍谢陛下明鉴。",
         "expression": "neutral"
       },
       "effects": [
@@ -108,7 +112,7 @@
       "choiceId": "observe",
       "responseLine": {
         "role": "suspect",
-        "text": "（流言持续发酵，各宫侍君反应不一，{suspect}似乎也有所察觉。）",
+        "text": "……",
         "expression": "neutral"
       },
       "effects": [
