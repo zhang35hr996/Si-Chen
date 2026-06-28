@@ -1303,6 +1303,22 @@ export interface HaremIntrigueReport {
   linkedInvestigationId?: string;
 }
 
+/**
+ * 模板事件实例持久化记录（event-template-system）。
+ * instanceId 同时作为合成 GameEventContent.id / SceneContent.id，
+ * 存档校验凭此记录允许动态 event/scene 引用，不触发 MISSING_REF 隔离。
+ */
+export interface TemplateEventRecord {
+  id: string;                               // tei_000001 格式
+  templateId: string;
+  participants: Record<string, string>;     // roleId → charId
+  hiddenTruthId: string;
+  generatedAt: GameTime;
+  status: "generated" | "resolved";
+  selectedChoiceId?: string;
+  resolvedAt?: GameTime;
+}
+
 /** 对话历史日志条目：记录每次播放反应时的发言人与台词，上限 NARRATIVE_LOG_MAX 条，先进先出。 */
 export interface NarrativeEntry {
   /** 游戏时间（存档时的 calendar 日历）。 */
@@ -1401,6 +1417,10 @@ export interface GameState {
   settledHaremIntriguePeriods: string[];
   /** 后宫内部惩戒事件（PUNISH-4G-B）：append-only；pending_response 构成全局中断。 */
   haremDisciplineIncidents: HaremDisciplineIncident[];
+  /** 动态模板事件实例序列号（每次实例化递增，用于确定性 ID 生成）。 */
+  templateEventNextSeq: number;
+  /** 已生成/已解决的模板事件实例（按 instanceId 索引）；存档校验据此跳过 MISSING_REF 检查。 */
+  templateEventRecords: Record<string, TemplateEventRecord>;
   /** 司法记录持久层（PUNISH-3B1）。 */
   justice: JusticeState;
   /** 已完成季度财政结算的期号集合（格式 "quarterly_settlement:${year}:${month}"）。独立幂等键，与奏折存在无关。 */

@@ -763,6 +763,13 @@ export const sceneNodeSchema = z.union([
     expression: nonEmpty.optional(),
     next: idSchema.optional(), // no next = terminal
   }),
+  // narration: 无说话人的旁白节点，SceneRunner 直接产生 frame，不经过 DialogueProvider。
+  z.strictObject({
+    type: z.literal("narration"),
+    id: idSchema,
+    text: z.string().min(1).max(600),
+    next: idSchema.optional(),
+  }),
   z.strictObject({
     type: z.literal("choice"),
     id: idSchema,
@@ -800,6 +807,198 @@ export const sceneSchema = z
   });
 
 export type SceneContent = z.infer<typeof sceneSchema>;
+
+// ── event templates ───────────────────────────────────────────────────
+/**
+ * 动态事件模板系统（event-template-system）。
+ *
+ * EventTemplate 定义可复用的事件骨架：触发条件、参与者选择规则、隐藏真相候选、
+ * authored fallback 台词和模板化效果。引擎在 checkpoint 时从已加载模板中选择符合
+ * 条件的一个，动态选人后生成 EventInstance，再合成为 GameEventContent + SceneContent
+ * 注入 RuntimeContentDB 供现有 SceneRunner 驱动。
+ *
+ * 参与者 role 标识符在效果、记忆、台词中代替具体 charId；合成阶段替换为实际 ID。
+ */
+
+/** 参与者候选池类型。 */
+const templateParticipantPoolSchema = z.enum([
+  "consort_alive_active", // 存活、非冷宫、非禁足、非后期妊娠
+  "empress_or_harem_admin", // 当前六宫主理人（皇后或协理侍君）
+  "court_official_active", // 在职文官（lifecycle === "active"，非候补）
+]);
+
+/** 权重因子：影响该 role 从候选池中抽取某具体侍君的概率。 */
+const templateWeightFactorSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("days_since_interaction"),
+    minDays: z.number().int().min(1).max(90),
+    weight: z.number().int().min(1).max(10),
+  }),
+  z.strictObject({
+    type: z.literal("attr_high"),
+    attr: z.enum(["favor", "affection", "jealousy", "pride", "ambition"]),
+    threshold: percent,
+    weight: z.number().int().min(1).max(10),
+  }),
+  z.strictObject({
+    type: z.literal("attr_low"),
+    attr: z.enum(["favor", "affection"]),
+    threshold: percent,
+    weight: z.number().int().min(1).max(10),
+  }),
+  z.strictObject({
+    type: z.literal("has_grievance"),
+    weight: z.number().int().min(1).max(10),
+  }),
+]);
+
+/** 单个参与者 role 定义。 */
+export const templateParticipantRoleSchema = z.strictObject({
+  roleId: idSchema,
+  pool: templateParticipantPoolSchema,
+  exclude: z
+    .array(z.enum(["carrying_late", "sick_or_critical", "in_cold_palace", "grounded", "candidate"]))
+    .default([]),
+  weightFactors: z.array(templateWeightFactorSchema).default([]),
+});
+
+/** 隐藏真相候选项。引擎随机选择一项作为本次 EventInstance 的底层事实。 */
+export const hiddenTruthCandidateSchema = z.strictObject({
+  id: idSchema,
+  description: z.string().min(1).max(200),
+  weight: z.number().int().min(1).max(10),
+});
+
+/** 玩家选项（authored text，不含 role 替换）。 */
+export const templateChoiceSchema = z.strictObject({
+  id: idSchema,
+  text: z.string().min(1).max(120),
+  tone: z.enum(["friendly", "neutral", "guarded", "hostile"]).optional(),
+});
+
+/**
+ * 模板化效果：与 EventEffect 结构相同，但用 roleId 代替具体 charId。
+ * 合成时替换为实际 charId。resource/flag 效果直接透传。
+ */
+export const templateEffectSchema = z.union([
+  z.strictObject({ type: z.literal("favor"), role: idSchema, delta }),
+  z.strictObject({
+    type: z.literal("adjust_consort_attr"),
+    role: idSchema,
+    field: z.enum(["affection", "fear", "ambition", "loyalty"]),
+    delta: z.number().int().min(-50).max(50),
+  }),
+  z.strictObject({
+    type: z.literal("resource"),
+    pillar: z.enum(["sovereign", "nation"]),
+    field: nonEmpty,
+    delta,
+  }),
+  z.strictObject({
+    type: z.literal("flag"),
+    key: nonEmpty,
+    value: z.union([z.boolean(), z.number(), z.string()]),
+  }),
+]);
+export type TemplateEffect = z.infer<typeof templateEffectSchema>;
+
+/** 模板化记忆条目；forRole 指定接收记忆的侍君 role，entry 中 subjectIds 可引用 roleId。 */
+export const templateMemoryEntrySchema = z.strictObject({
+  forRole: idSchema,
+  entry: effectMemoryDraftSchema,
+});
+
+/** 单个选项的结果：回应台词 + 效果 + 记忆。 */
+export const templateOutcomeSchema = z.strictObject({
+  choiceId: idSchema,
+  /** 参与者的 authored fallback 回应台词（LLM 渲染阶段替换）。 */
+  responseLine: z
+    .strictObject({
+      role: idSchema,
+      text: z.string().min(1).max(600),
+      expression: nonEmpty.optional(),
+    })
+    .optional(),
+  effects: z.array(templateEffectSchema).default([]),
+  memories: z.array(templateMemoryEntrySchema).default([]),
+});
+
+/**
+ * 参与者间约束：引擎在选人后校验，不满足则放弃本次模板实例化。
+ * 只用于无法通过 pool/weightFactor 独立保证的跨 role 关系。
+ */
+export const participantConstraintSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("rank_higher_than"),
+    higherRole: idSchema,
+    lowerRole: idSchema,
+  }),
+]);
+export type ParticipantConstraint = z.infer<typeof participantConstraintSchema>;
+
+/**
+ * 事件开场段：旁白（narrator）或角色台词（dialogue）。
+ * 旁白不显示立绘与姓名框；台词显示 speakerRole 对应的立绘。
+ * 两种模式均允许 {roleId} 占位符，合成时替换为实际角色名。
+ */
+export const openingNarrationSchema = z.discriminatedUnion("mode", [
+  z.strictObject({
+    mode: z.literal("narration"),
+    text: z.string().min(1).max(400),
+  }),
+  z.strictObject({
+    mode: z.literal("dialogue"),
+    speakerRole: idSchema,
+    text: z.string().min(1).max(400),
+  }),
+]);
+export type TemplateOpeningNarration = z.infer<typeof openingNarrationSchema>;
+
+/** 完整 EventTemplate content schema。 */
+export const eventTemplateSchema = z.strictObject({
+  id: idSchema,
+  title: nonEmpty,
+  category: z.enum(["garden_encounter", "harem_admin", "harem_conflict", "ritual", "heir_family"]),
+  checkpoint: z.enum(["location_enter", "time_advance"]),
+  apCost: z.number().int().min(0).max(3),
+  cooldown: z.strictObject({ actionDays: z.number().int().min(1) }).optional(),
+  /** 模板整体触发条件（地点、月份等）。参与者选择通过 participantRoles 控制。 */
+  triggerCondition: triggerConditionSchema,
+  participantRoles: z.array(templateParticipantRoleSchema).min(1).max(3),
+  /** 跨 role 参与者约束（选人后校验；不满足则放弃本次实例化）。 */
+  participantConstraints: z.array(participantConstraintSchema).default([]),
+  presentation: z
+    .discriminatedUnion("mode", [
+      z.strictObject({
+        mode: z.literal("exploration"),
+        hostLocationId: idSchema,
+        /** 静态绑定的子地点（与 GameEventContent 对齐，exploration 模板必须指定）。 */
+        subLocationId: idSchema,
+        eventHint: nonEmpty.optional(),
+      }),
+      z.strictObject({ mode: z.literal("auto_on_enter") }),
+      z.strictObject({ mode: z.literal("manual") }),
+    ])
+    .optional(),
+  hiddenTruthCandidates: z.array(hiddenTruthCandidateSchema).min(1),
+  /**
+   * 事件开场：旁白（narration）不显示发言人立绘，对话（dialogue）显示 speakerRole 立绘。
+   * 均可含 {roleId} 占位符，合成时替换为实际角色名。
+   */
+  openingNarration: openingNarrationSchema,
+  choices: z.array(templateChoiceSchema).min(2).max(5),
+  outcomes: z.array(templateOutcomeSchema).min(1),
+  basePriority: z.number().int(),
+  /** LLM narrative brief 模板（预留，Phase 2 接入 LLM 渲染层）。 */
+  narrativeBriefTemplate: z.string().optional(),
+});
+
+export type EventTemplate = z.infer<typeof eventTemplateSchema>;
+export type TemplateParticipantRole = z.infer<typeof templateParticipantRoleSchema>;
+export type HiddenTruthCandidate = z.infer<typeof hiddenTruthCandidateSchema>;
+export type TemplateChoice = z.infer<typeof templateChoiceSchema>;
+export type TemplateOutcome = z.infer<typeof templateOutcomeSchema>;
+export type TemplateMemoryEntry = z.infer<typeof templateMemoryEntrySchema>;
 
 // ── lexicon (content/lexicon.json — plan §3.9 of DESIGN) ──────────────
 export const worldLexiconSchema = z.strictObject({

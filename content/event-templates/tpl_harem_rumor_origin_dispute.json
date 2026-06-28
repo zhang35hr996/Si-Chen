@@ -1,0 +1,126 @@
+{
+  "id": "tpl_harem_rumor_origin_dispute",
+  "title": "宫中流言从何而起",
+  "category": "harem_conflict",
+  "checkpoint": "time_advance",
+  "apCost": 1,
+  "cooldown": { "actionDays": 30 },
+  "triggerCondition": {
+    "all": [
+      { "monthAtLeast": 3 }
+    ]
+  },
+  "participantRoles": [
+    {
+      "roleId": "suspect",
+      "pool": "consort_alive_active",
+      "exclude": ["candidate"],
+      "weightFactors": [
+        { "type": "attr_high", "attr": "ambition", "threshold": 60, "weight": 4 },
+        { "type": "attr_high", "attr": "jealousy", "threshold": 55, "weight": 3 },
+        { "type": "has_grievance", "weight": 3 }
+      ]
+    }
+  ],
+  "participantConstraints": [],
+  "hiddenTruthCandidates": [
+    { "id": "pure_fiction", "description": "完全是凭空虚构的流言", "weight": 2 },
+    { "id": "exaggeration", "description": "由真实变化夸大而来", "weight": 3 },
+    { "id": "suspect_released", "description": "涉事侍君故意放出试探各方反应", "weight": 3 },
+    { "id": "servant_rumor", "description": "宫人误传", "weight": 2 },
+    { "id": "scheme_trace", "description": "是现有宫斗阴谋产生的表面迹象", "weight": 2 },
+    { "id": "official_discussion", "description": "皇后或官员曾私下提及相关建议", "weight": 1 }
+  ],
+  "openingNarration": {
+    "mode": "narration",
+    "text": "宫人禀报：宫中近来流传着关于{suspect}的说法，涉及其可能晋位或失宠。消息来源不明，但已在数处宫室流传。陛下尚未公开表态。"
+  },
+  "choices": [
+    { "id": "silence", "text": "命宫中噤声", "tone": "hostile" },
+    { "id": "investigate", "text": "查流言源头", "tone": "neutral" },
+    { "id": "clarify", "text": "公开澄清", "tone": "neutral" },
+    { "id": "observe", "text": "放任流传，观察各方反应", "tone": "guarded" }
+  ],
+  "outcomes": [
+    {
+      "choiceId": "silence",
+      "responseLine": {
+        "role": "suspect",
+        "text": "……",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "resource", "pillar": "nation", "field": "rumor", "delta": -2 },
+        { "type": "adjust_consort_attr", "role": "suspect", "field": "fear", "delta": 2 }
+      ],
+      "memories": []
+    },
+    {
+      "choiceId": "investigate",
+      "responseLine": {
+        "role": "suspect",
+        "text": "……",
+        "expression": "worried"
+      },
+      "effects": [],
+      "memories": [
+        {
+          "forRole": "suspect",
+          "entry": {
+            "kind": "episodic",
+            "summary": "宫中流传关于我的流言，陛下命人查问源头。",
+            "strength": 55,
+            "retention": "slow",
+            "subjectIds": ["player", "suspect"],
+            "perspective": "target",
+            "triggerTags": ["rumor", "investigation", "harem"],
+            "unresolved": true,
+            "emotions": { "fear": 30, "shame": 15 }
+          }
+        }
+      ]
+    },
+    {
+      "choiceId": "clarify",
+      "responseLine": {
+        "role": "suspect",
+        "text": "……臣侍谢陛下明鉴。",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "favor", "role": "suspect", "delta": 1 },
+        { "type": "resource", "pillar": "nation", "field": "rumor", "delta": -1 }
+      ],
+      "memories": [
+        {
+          "forRole": "suspect",
+          "entry": {
+            "kind": "episodic",
+            "summary": "陛下公开为我澄清了宫中流言。",
+            "strength": 60,
+            "retention": "slow",
+            "subjectIds": ["player", "suspect"],
+            "perspective": "target",
+            "triggerTags": ["rumor", "clarified", "harem"],
+            "unresolved": false,
+            "emotions": { "relief": 40, "joy": 25 }
+          }
+        }
+      ]
+    },
+    {
+      "choiceId": "observe",
+      "responseLine": {
+        "role": "suspect",
+        "text": "……",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "resource", "pillar": "nation", "field": "rumor", "delta": 2 }
+      ],
+      "memories": []
+    }
+  ],
+  "basePriority": 38,
+  "narrativeBriefTemplate": "场景类型：宫中流言。流言内容与{suspect}有关。隐藏真相：{hiddenTruth}。玩家只能知道流言内容，不可直接告知真相来源，除非调查成功。"
+}

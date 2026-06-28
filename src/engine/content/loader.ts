@@ -9,6 +9,7 @@ import { err, ok, type Result } from "../infra/result";
 import { resolveEntryMode } from "../events/entryMode";
 import {
   characterSchema,
+  eventTemplateSchema,
   gameEventSchema,
   itemsFileSchema,
   locationSchema,
@@ -18,6 +19,7 @@ import {
   type CharacterContent,
   type CharacterRank,
   type EventEffect,
+  type EventTemplate,
   type GameEventContent,
   type ItemDef,
   type LocationContent,
@@ -43,6 +45,8 @@ export interface RawContent {
   events: RawFile[];
   scenes: RawFile[];
   items?: RawFile;
+  /** content/event-templates/ — optional so existing tooling stays backward-compatible. */
+  eventTemplates?: RawFile[];
 }
 
 export interface ContentDB {
@@ -56,6 +60,8 @@ export interface ContentDB {
   events: Record<string, GameEventContent>;
   scenes: Record<string, SceneContent>;
   items: Record<string, ItemDef>;
+  /** 动态事件模板，keyed by template id。 */
+  templates: Record<string, EventTemplate>;
 }
 
 /** Runtime guard for scene execution (plan §10 #7) — exported for PR 8. */
@@ -70,6 +76,9 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
   const locations = parseCollection(locationSchema, raw.locations, errors);
   const events = parseCollection(gameEventSchema, raw.events, errors);
   const scenes = parseCollection(sceneSchema, raw.scenes, errors);
+  const templates = raw.eventTemplates
+    ? parseCollection(eventTemplateSchema, raw.eventTemplates, errors)
+    : { byId: {} as Record<string, EventTemplate>, items: [] };
 
   const items: Record<string, ItemDef> = {};
   if (raw.items) {
@@ -141,6 +150,7 @@ export function loadContent(raw: RawContent): Result<ContentDB, GameError[]> {
       events: events.byId,
       scenes: scenes.byId,
       items,
+      templates: templates.byId,
     }),
   );
 }
@@ -614,6 +624,8 @@ function checkSceneGraph(scene: SceneContent, source: string, errors: GameError[
   const targetsOf = (node: SceneNode): string[] => {
     switch (node.type) {
       case "line":
+        return node.next ? [node.next] : [];
+      case "narration":
         return node.next ? [node.next] : [];
       case "choice":
         return node.choices.map((c) => c.next);

@@ -22,6 +22,7 @@ export function loadGameContent(): Result<ContentDB, GameError[]> {
   const locations: RawFile[] = [];
   const events: RawFile[] = [];
   const scenes: RawFile[] = [];
+  const eventTemplates: RawFile[] = [];
   let world: RawFile = { source: "content/world.json", data: null };
   let lexicon: RawFile = { source: "content/lexicon.json", data: null };
   let items: RawFile | undefined;
@@ -33,6 +34,7 @@ export function loadGameContent(): Result<ContentDB, GameError[]> {
     else if (path.endsWith("/items.json")) items = file;
     else if (path.includes("/characters/")) characters.push(file);
     else if (path.includes("/locations/")) locations.push(file);
+    else if (path.includes("/event-templates/")) eventTemplates.push(file);
     else if (path.includes("/events/")) events.push(file);
     else if (path.includes("/scenes/")) scenes.push(file);
     // unknown subdirs are ignored here; tools/validate-content covers hygiene
@@ -42,8 +44,9 @@ export function loadGameContent(): Result<ContentDB, GameError[]> {
   locations.sort(bySource);
   events.sort(bySource);
   scenes.sort(bySource);
+  eventTemplates.sort(bySource);
 
-  return loadContent({ world, lexicon, characters, locations, events, scenes, items });
+  return loadContent({ world, lexicon, characters, locations, events, scenes, items, eventTemplates });
 }
 
 const bySource = (a: RawFile, b: RawFile): number => a.source.localeCompare(b.source);

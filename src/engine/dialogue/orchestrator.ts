@@ -6,7 +6,7 @@
  */
 import { toGameTime } from "../calendar/time";
 import type { ContentDB } from "../content/loader";
-import type { CharacterRank } from "../content/schemas";
+import type { CharacterContent, CharacterRank } from "../content/schemas";
 import { resolveDisplayName } from "../characters/standing";
 import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 import { GroundTruthBeliefProjection } from "../chronicle/belief";
@@ -64,7 +64,8 @@ export function assembleDialogueRequest(
   options: DialogueAssemblyOptions = {},
 ): Result<DialogueRequest, GameError> {
   const targetId = options.targetId ?? "player";
-  const character = db.characters[speakerId];
+  // 动态生成的侍君（殿选）存在于 state.generatedConsorts，而非 db.characters
+  const character = db.characters[speakerId] ?? state.generatedConsorts?.[speakerId];
   if (!character) {
     return err(aiError("BAD_SPEAKER", `unknown speaker "${speakerId}"`));
   }
@@ -216,6 +217,19 @@ export function assembleDialogueRequest(
 }
 
 /**
+ * 统一角色解析：先查静态 db.characters，再回退到 state.generatedConsorts（殿选侍君）。
+ * 两处都查不到时返回 undefined；assembleDialogueRequest 已在 request 构建时验证过，
+ * 所以 finalizeLine / validateDialogueProviderResult 中可安全断言非空。
+ */
+function resolveDialogueChar(
+  db: ContentDB,
+  speakerId: string,
+  generatedConsorts?: Record<string, CharacterContent>,
+): CharacterContent | undefined {
+  return db.characters[speakerId] ?? generatedConsorts?.[speakerId];
+}
+
+/**
  * Internal helper: speaker check + text gates + expression normalize + line build.
  * Called by both produceDialogueLine and produceDialogueLineWithPolicy after the
  * provider call (and, in the WithPolicy path, after the claim gate).
@@ -226,6 +240,7 @@ function finalizeLine(
   request: DialogueRequest,
   response: DialogueProviderResult,
   logger?: import("../infra/logger").RingBufferLogger,
+  generatedConsorts?: Record<string, CharacterContent>,
 ): Result<DialogueLine, GameError> {
   if (response.speaker !== request.speakerId) {
     return err(
@@ -266,7 +281,8 @@ function finalizeLine(
   }
   const degraded = findings.length > 0; // flag-only findings still serve, marked degraded
 
-  const character = db.characters[request.speakerId]!;
+  // assembleDialogueRequest 已验证 speakerId 存在（静态或动态侍君），此处可安全断言非空。
+  const character = resolveDialogueChar(db, request.speakerId, generatedConsorts)!;
   const expression =
     response.expression !== undefined && character.expressions.includes(response.expression)
       ? response.expression
@@ -309,11 +325,12 @@ async function produceDialogueLine(
   provider: DialogueProvider,
   request: DialogueRequest,
   logger?: import("../infra/logger").RingBufferLogger,
+  generatedConsorts?: Record<string, CharacterContent>,
 ): Promise<Result<DialogueLine, GameError>> {
   const raw = await provider.generate(request);
   if (!raw.ok) return err(mapProviderErrorToGameError(raw.error));
 
-  return finalizeLine(db, provider, request, raw.value, logger);
+  return finalizeLine(db, provider, request, raw.value, logger, generatedConsorts);
 }
 
 /**
@@ -377,6 +394,7 @@ export function validateDialogueProviderResult(
   policy: DialoguePolicyContext,
   response: DialogueProviderResult,
   logger?: import("../infra/logger").RingBufferLogger,
+  generatedConsorts?: Record<string, CharacterContent>,
 ): DialogueValidationOutcome {
   const diagnostics: DialogueValidationDiagnostics = {
     claimFindings: [],
@@ -460,7 +478,7 @@ export function validateDialogueProviderResult(
   }
   const degraded = findings.length > 0;
 
-  const character = db.characters[request.speakerId]!;
+  const character = resolveDialogueChar(db, request.speakerId, generatedConsorts)!;
   const expression =
     response.expression !== undefined && character.expressions.includes(response.expression)
       ? response.expression
@@ -532,7 +550,7 @@ async function produceDialogueLineWithPolicy(
   const raw = await provider.generate(request);
   if (!raw.ok) return err(mapProviderErrorToGameError(raw.error));
 
-  const outcome = validateDialogueProviderResult(db, provider, request, policy, raw.value, logger);
+  const outcome = validateDialogueProviderResult(db, provider, request, policy, raw.value, logger, state.generatedConsorts);
   if (!outcome.ok) return err(outcome.error);
 
   // ── memory write-back ─────────────────────────────────────────────
@@ -674,7 +692,7 @@ export async function produceDialogueTurn(
 
   if (provider.kind === "scripted") {
     // Scripted path: text gates only, no claim gate, no state mutation
-    const lineResult = await produceDialogueLine(db, provider, finalRequest, logger);
+    const lineResult = await produceDialogueLine(db, provider, finalRequest, logger, state.generatedConsorts);
     if (!lineResult.ok) return err(lineResult.error);
     return ok({ line: lineResult.value, nextState: state });
   }

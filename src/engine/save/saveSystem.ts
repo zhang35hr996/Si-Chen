@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 33;
+export const SAVE_FORMAT_VERSION = 34;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -634,6 +634,18 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
 
     return { ...env, formatVersion: 33, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
+
+  // v33 → v34: 动态事件模板持久化（event-template-system）。
+  // 新增 templateEventNextSeq（顺序号）和 templateEventRecords（实例记录）。
+  33: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (typeof state["templateEventNextSeq"] !== "number") state["templateEventNextSeq"] = 0;
+    if (typeof state["templateEventRecords"] !== "object" || state["templateEventRecords"] === null) {
+      state["templateEventRecords"] = {};
+    }
+    return { ...env, formatVersion: 34, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
 };
 
 export interface SaveSystemOptions {
@@ -812,10 +824,18 @@ function validateSave(
     if (!db.characters[charId] && !state.generatedConsorts[charId]) missing.push(`character:${charId}`);
   }
   for (const entry of state.eventLog) {
-    if (!db.events[entry.eventId]) missing.push(`event:${entry.eventId}`);
+    // 允许模板实例 ID（存在于 templateEventRecords 且 templateId 仍在 db.templates）
+    if (!db.events[entry.eventId]) {
+      const rec = state.templateEventRecords[entry.eventId];
+      if (!rec || !db.templates[rec.templateId]) missing.push(`event:${entry.eventId}`);
+    }
   }
   for (const sceneId of state.sceneHistory) {
-    if (!db.scenes[sceneId]) missing.push(`scene:${sceneId}`);
+    // 允许模板实例 scene（与 event 共享 instanceId）
+    if (!db.scenes[sceneId]) {
+      const rec = state.templateEventRecords[sceneId];
+      if (!rec || !db.templates[rec.templateId]) missing.push(`scene:${sceneId}`);
+    }
   }
   // Severe tier: the save points at content objects that no longer exist.
   // It cannot load coherently → quarantine, never silently load (plan §9).
