@@ -10,7 +10,7 @@ import { ok, err, type Result } from "../../infra/result";
 import { stateError, type GameError } from "../../infra/errors";
 import type { GameState } from "../../state/types";
 import type { GameTime } from "../../calendar/time";
-import type { IntrigueInvestigationCase } from "./types";
+import type { IntrigueInvestigationCase, InvestigationPublicReport } from "./types";
 
 export function createInvestigationCaseFromAnomalyReport(
   state: GameState,
@@ -20,6 +20,10 @@ export function createInvestigationCaseFromAnomalyReport(
   const report = state.investigationPublicReports.find((r) => r.id === reportId);
   if (!report) {
     return err([stateError("INVESTIGATION_PUBLIC_REPORT_NOT_FOUND", `investigationPublicReports: report "${reportId}" not found`)]);
+  }
+  // 仅立案报告（anomaly）可立案；进展通报（investigation_update/final）不可
+  if (report.reportKind !== "anomaly") {
+    return err([stateError("INVESTIGATION_PUBLIC_REPORT_NOT_FOUND", `investigationPublicReports: report "${reportId}" reportKind="${report.reportKind}" 不是可立案的 anomaly 报告`)]);
   }
 
   // 写状态前确认底层 incident 存在，避免先建出孤儿案件、直到存档校验才失败
@@ -63,9 +67,10 @@ export function createInvestigationCaseFromAnomalyReport(
     leadIds: [],
   };
 
-  const updatedReports = state.investigationPublicReports.map((r) =>
+  // report 已确认为 anomaly 报告（上方 guard）；显式构造以保留判别联合类型
+  const updatedReports: InvestigationPublicReport[] = state.investigationPublicReports.map((r) =>
     r.id === reportId
-      ? { ...r, status: "investigating" as const, acknowledgedAt, linkedInvestigationId: caseId }
+      ? { ...report, status: "investigating" as const, acknowledgedAt, linkedInvestigationId: caseId }
       : r,
   );
 
