@@ -101,7 +101,7 @@ function heartToHeartLines(
     );
   } else if (companion) {
     lines.push(
-      `${name}提起今日伴读${companion}在文昭殿闹出的笑话，说到一半，${ta}自己先忍不住笑了。`,
+      `${name}提起今日与伴读${companion}在文昭殿相处的种种，说着说着，眉眼间便添了几分笑意。`,
     );
   } else if (custodianBond >= 60 && hasCustodian) {
     lines.push(`${name}说起养父昨日送来的书，眉眼间不自觉带了笑。`);
@@ -133,7 +133,7 @@ function quietCompanyLines(
   const lines = [opening];
 
   if (companion) {
-    lines.push(`${name}一边摆弄棋子，一边讲起伴读${companion}今日的趣事，陛下静静听着，并不打断。`);
+    lines.push(`${name}一边摆弄棋子，一边絮絮说着与伴读${companion}相处的点滴，陛下静静听着，并不打断。`);
   } else if (imperialFear >= 60) {
     lines.push(`${name}起先正襟危坐，见陛下只是安静陪着，并不考较功课，神色才慢慢松弛下来。`);
   } else if (neglect >= 60) {

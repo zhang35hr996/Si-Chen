@@ -55,23 +55,34 @@ function monthsSinceImperialInteraction(heir: Heir, now: Pick<GameTime, "year" |
 }
 
 /**
- * 皇帝近期互动对「本月新增忽视」的修正：
- *  - ≤1 月（本月或上月）：本月忽视最多不增加（neglectDelta 截到 ≤0）；
- *  - 2 月：忽视增量 −2；
- *  - ≥3 月或从未：无保护。
- * 只削弱新增，不主动降忽视（不再次减）。
+ * 皇帝近期互动对「本月**新增**忽视」的修正（只削弱新增，绝不进一步降低已为零或负的增量——
+ * 召见已在紫宸殿即时降忽视，月结不得重复减）：
+ *  - 增量 ≤0（照料带来的持平/下降）：原样返回，不受影响；
+ *  - 正增量 + ≤1 月（本月或上月）：本月忽视不增加（截到 0）；
+ *  - 正增量 + 2 月：增量 −2（不低于 0）；
+ *  - 正增量 + ≥3 月或从未：无保护。
  */
-function applyImperialDamping(neglectDelta: number, monthsSince: number): number {
-  if (monthsSince <= 1) return Math.min(neglectDelta, 0);
-  if (monthsSince === 2) return neglectDelta - 2;
+export function applyImperialDamping(neglectDelta: number, monthsSince: number): number {
+  if (neglectDelta <= 0) return neglectDelta;
+  if (monthsSince <= 1) return 0;
+  if (monthsSince === 2) return Math.max(0, neglectDelta - 2);
   return neglectDelta;
 }
 
 /**
+ * 太后抚养的基准照料分。太后无侍君性格/宫室，用一个显式中性偏高基准（慈和长辈），
+ * 不回退侍君默认值——避免日后侍君默认值变动悄然改变太后的养育能力。具体基准待太后系统细化。
+ */
+const TAIHOU_BASE_CARE = 45;
+
+/**
  * 照料倾向 careScore（0–100 量级）：复用养父（侍君）性格与宫室，绝不用恩宠/位分/家世
- * （那些决定政治资源与伴读质量，不等同于「会不会爱孩子」）。
+ * （那些决定政治资源与伴读质量，不等同于「会不会爱孩子」）。太后走显式基准分支。
  */
 function computeCareScore(db: ContentDB, state: GameState, custodianId: string, custodianBond: number): number {
+  if (custodianId === "taihou") {
+    return TAIHOU_BASE_CARE + custodianBond * 0.10;
+  }
   const attrs = resolveConsortRuntimeAttrs(db, state, custodianId);
   const { compassion, emotionalStability, sociability } = attrs.personality;
   const { servantOpinion, livingStandard } = attrs.household;

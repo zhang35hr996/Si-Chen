@@ -83,8 +83,9 @@ export function isEnrolled(heir: Heir, now: Pick<GameTime, "year">): boolean {
 /** 迁居毓庆宫的年龄门槛：皇子（女）满 5 岁、皇郎（男）满 7 岁。 */
 const YUQING_MOVE_AGE: Record<HeirSex, number> = { daughter: 5, son: 7 };
 
-/** 是否已迁居毓庆宫（按性别年龄门槛）。未达龄者仍由乳母照护，不在此列。 */
+/** 是否已迁居毓庆宫（存活 + 按性别年龄门槛）。未达龄者仍由乳母照护、已故者不在此列。 */
 export function residesInYuqing(heir: Heir, now: Pick<GameTime, "year">): boolean {
+  if (heir.lifecycle !== "alive") return false;
   return heirAge(heir, now) >= YUQING_MOVE_AGE[heir.sex];
 }
 
