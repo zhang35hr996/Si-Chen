@@ -39,27 +39,6 @@ function stateWithReport(report: HaremIntrigueReport = makeReport()): GameState 
   return { ...base, haremIntrigueReports: [report] };
 }
 
-function stateWithIncident(report: HaremIntrigueReport = makeReport()): GameState {
-  const incident = {
-    id: "incident_001",
-    schemeId: "scheme_001",
-    sourceKey: "harem_intrigue:1:03",
-    year: 1,
-    month: 3,
-    actorId: "bai_zhuying",
-    targetId: "lu_huaijin",
-    kind: "slander" as const,
-    success: true,
-    discovered: true,
-    effectSummary: [],
-    processedAt: AT,
-  };
-  return {
-    ...base,
-    haremIncidents: [incident],
-    haremIntrigueReports: [report],
-  };
-}
 
 // ── createIntrigueInvestigationCase ───────────────────────────────────────────
 
@@ -152,6 +131,18 @@ describe("createIntrigueInvestigationCase", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.state.haremInvestigationCases[0]!.openedFromReportKind).toBe("anomaly");
+  });
+
+  it("validateHaremInvestigationLinks: well-formed case with real incidentId set → no errors", () => {
+    // Verify the incidentId cross-ref check works when real incidentIds are provided
+    const r = createIntrigueInvestigationCase(stateWithReport(), "ireport_test_001", AT);
+    if (!r.ok) throw new Error();
+    const errors = validateHaremInvestigationLinks({
+      haremIntrigueReports: r.value.state.haremIntrigueReports,
+      haremInvestigationCases: r.value.state.haremInvestigationCases,
+      incidentIds: new Set(["incident_001"]),
+    });
+    expect(errors).toEqual([]);
   });
 });
 
@@ -260,15 +251,34 @@ describe("validateHaremInvestigationLinks", () => {
     expect(errors.some((e) => e.code === "INTRIGUE_CASE_LIFECYCLE")).toBe(true);
   });
 
-  it("detects broken bidirectional link", () => {
+  it("case→report link: case points to report but report has no linkedInvestigationId → error", () => {
     const r = createIntrigueInvestigationCase(stateWithReport(), "ireport_test_001", AT);
     if (!r.ok) throw new Error();
-    // report links to case, but case has different reportId
-    const c = { ...r.value.state.haremInvestigationCases[0]!, source: { reportId: "wrong", incidentId: "incident_001" } };
-    const reports = r.value.state.haremIntrigueReports;
-    const errors = makeInput(reports, [c]);
-    const codes = errors.map((e) => e.code);
-    expect(codes).toContain("INTRIGUE_CASE_ORPHAN_REPORT");
+    // Strip the back-link from the report
+    const reports = r.value.state.haremIntrigueReports.map((rep) => {
+      const { linkedInvestigationId: _, ...rest } = rep;
+      return rest as HaremIntrigueReport;
+    });
+    const errors = makeInput(reports, r.value.state.haremInvestigationCases);
+    expect(errors.some((e) => e.code === "INTRIGUE_CASE_BROKEN_LINK")).toBe(true);
+  });
+
+  it("two cases pointing at the same report → second case detected as broken link", () => {
+    const r = createIntrigueInvestigationCase(stateWithReport(), "ireport_test_001", AT);
+    if (!r.ok) throw new Error();
+    const c1 = r.value.state.haremInvestigationCases[0]!;
+    // c2 claims the same report but has a different id → report.linkedInvestigationId points to c1, not c2
+    const c2 = { ...c1, id: "icase_ireport_test_001_dup" };
+    const errors = makeInput(r.value.state.haremIntrigueReports, [c1, c2]);
+    expect(errors.some((e) => e.code === "INTRIGUE_CASE_BROKEN_LINK")).toBe(true);
+  });
+
+  it("openedFromReportKind mismatch with report.reportKind → error", () => {
+    const r = createIntrigueInvestigationCase(stateWithReport(), "ireport_test_001", AT);
+    if (!r.ok) throw new Error();
+    const c = { ...r.value.state.haremInvestigationCases[0]!, openedFromReportKind: "anomaly" as const };
+    const errors = makeInput(r.value.state.haremIntrigueReports, [c]);
+    expect(errors.some((e) => e.code === "INTRIGUE_CASE_KIND_MISMATCH")).toBe(true);
   });
 
   it("well-formed open case → no errors", () => {

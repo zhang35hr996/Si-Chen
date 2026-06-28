@@ -7,7 +7,7 @@ import { ok, err, type Result } from "../../infra/result";
 import { stateError, type GameError } from "../../infra/errors";
 import type { GameState } from "../../state/types";
 import type { GameTime } from "../../calendar/time";
-import type { IntrigueInvestigationCase } from "./types";
+import type { IntrigueInvestigationCase, InvestigatableReportKind } from "./types";
 
 /** 不可立案的 report 种类（调查进行中的中间报告）。 */
 const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation_final"]);
@@ -57,7 +57,7 @@ export function createIntrigueInvestigationCase(
       incidentId: report.source.incidentId,
     },
     openedAt: at,
-    openedFromReportKind: report.reportKind,
+    openedFromReportKind: report.reportKind as InvestigatableReportKind,
     status: "open",
     knownTargetIds: [...report.knownTargetIds],
     suspectIds: [...report.suspectedActorIds],
