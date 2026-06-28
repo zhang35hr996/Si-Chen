@@ -108,6 +108,21 @@ describe("deriveFamilyYouthProfile", () => {
     const s = makeState([], [member], [makeFamily("fam1")]);
     expect(deriveFamilyYouthProfile(s, member)).toEqual(deriveFamilyYouthProfile(s, member));
   });
+
+  it("内卿去世不改变子女嫡庶/排行（出生身份）", () => {
+    const child = makeMember("m_child", "fam1", 8);
+    const consortIn = makeMember("m_zheng", "fam1", 40, { role: "consort_in", sex: "male" });
+    const sAlive = makeState([], [child, consortIn], [makeFamily("fam1")]);
+    const before = deriveFamilyYouthProfile(sAlive, child);
+
+    const consortDead = { ...consortIn, deceasedAt: makeGameTime(5, 1, "early") };
+    const sDead = makeState([], [child, consortDead], [makeFamily("fam1")]);
+    const after = deriveFamilyYouthProfile(sDead, child);
+
+    expect(after.legitimate).toBe(before.legitimate);
+    expect(after.legitimate).toBe(true);
+    expect(after.birthOrder).toBe(before.birthOrder);
+  });
 });
 
 // ── computePatronage (养父=侍君) ──────────────────────────────────────────────
@@ -341,6 +356,36 @@ describe("planCompanionReconciliation — 结束", () => {
     expect(plan.endedAssignments).toContainEqual({ heirId: "h1", reason: "companion_deceased" });
     // 替补：同次为在读皇嗣 h1 选了新伴读
     expect(plan.newAssignments.some((a) => a.heirId === "h1")).toBe(true);
+  });
+
+  it("同年身故的宗室 fallback 不被复用，替补为不同 personId 的活人且不再循环结束", () => {
+    const heir = makeHeir("h1", 1); // age=5, year=6, no official candidates → 宗室 fallback
+    // 第一次：生成本年宗室 fallback。
+    const s0 = makeState([heir]);
+    const plan0 = planCompanionReconciliation(db, s0, NOW);
+    const first = plan0.newAssignments[0]!;
+    expect(first.companion.kind).toBe("royal_relative");
+    const firstId = first.companion.personId;
+    expect(firstId).toBe(`royal_youth_h1_${NOW.year}`);
+    const s1 = applyCompanionReconciliation(s0, plan0, NOW);
+
+    // 该宗室伴读在同年身故。
+    const dead = { ...s1.royalRelatives[firstId]!, lifecycle: "deceased" as const, deceasedAt: NOW };
+    const s2 = { ...s1, royalRelatives: { ...s1.royalRelatives, [firstId]: dead } };
+
+    // 第二次 reconciliation：结束身故 + 补选不同 personId 的活人。
+    const plan1 = planCompanionReconciliation(db, s2, NOW);
+    expect(plan1.endedAssignments).toContainEqual({ heirId: "h1", reason: "companion_deceased" });
+    const replacement = plan1.newAssignments.find((a) => a.heirId === "h1")!;
+    expect(replacement.companion.personId).not.toBe(firstId);
+    const newRel = plan1.newRoyalRelatives.find((r) => r.id === replacement.companion.personId)!;
+    expect(newRel.lifecycle).toBe("alive");
+    const s3 = applyCompanionReconciliation(s2, plan1, NOW);
+
+    // 第三次 reconciliation：活人替补已就位 → 不再结束、不再补选（无死循环）。
+    const plan2 = planCompanionReconciliation(db, s3, NOW);
+    expect(plan2.endedAssignments).toHaveLength(0);
+    expect(plan2.newAssignments).toHaveLength(0);
   });
 });
 

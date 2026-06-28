@@ -97,8 +97,10 @@ export function deriveFamilyYouthProfile(
     .sort((a, b) => (b.age !== a.age ? b.age - a.age : a.id.localeCompare(b.id)));
   const birthOrder = Math.max(0, siblings.findIndex((m) => m.id === member.id));
 
+  // 嫡庶是出生身份：曾有正室(consort_in)即可派生嫡出，不因正室后来去世而改判庶出。
+  // （休弃/婚姻无效/明确生父关系入场前，deceasedAt 不参与嫡庶判断。）
   const hasConsortIn = Object.values(state.familyMembers).some(
-    (m) => m.familyId === member.familyId && m.role === "consort_in" && !m.deceasedAt,
+    (m) => m.familyId === member.familyId && m.role === "consort_in",
   );
 
   let legitimate = false;
@@ -231,7 +233,27 @@ function royalBranchForPatronage(
   return { branch: "distant", branchPrestige: 20 + (gestationRollRaw(seed + ":bp") % 31) };
 }
 
-/** 当无合适官员家族候选时，生成（或复用已有）宗室伴读。性别同皇嗣规则；等级随 patronage。 */
+/**
+ * 解析本年宗室 fallback 的稳定 ID：从年度基 ID 起按 ordinal 递增，跳过**已故**占位，
+ * 返回首个「空缺」或「在世」的 ID。已故者绝不复用（否则会把亡者重构为 active，形成
+ * 死亡→替补死循环）。
+ */
+function resolveRoyalFallbackId(
+  state: GameState,
+  heir: Heir,
+  now: GameTime,
+): { id: string; reuse: RoyalRelative | null } {
+  const base = `royal_youth_${heir.id}_${now.year}`;
+  for (let ordinal = 1; ; ordinal++) {
+    const id = ordinal === 1 ? base : `${base}_${ordinal}`;
+    const existing = state.royalRelatives[id];
+    if (!existing) return { id, reuse: null };
+    if (existing.lifecycle === "alive") return { id, reuse: existing };
+    // 已故 → 继续下一个 ordinal
+  }
+}
+
+/** 当无合适官员家族候选时，生成（或复用在世）宗室伴读。性别同皇嗣规则；等级随 patronage。 */
 export function buildRoyalFallbackCompanion(
   state: GameState,
   heir: Heir,
@@ -239,11 +261,11 @@ export function buildRoyalFallbackCompanion(
   patronage: number,
   now: GameTime,
 ): RoyalRelative {
-  const existingId = `royal_youth_${heir.id}_${now.year}`;
-  const existing = state.royalRelatives[existingId];
-  if (existing) return existing;
+  const { id: resolvedId, reuse } = resolveRoyalFallbackId(state, heir, now);
+  if (reuse) return reuse;
+  const existingId = resolvedId;
 
-  const seed = `royal-fallback:${state.rngSeed}:${heir.id}:${now.year}`;
+  const seed = `royal-fallback:${state.rngSeed}:${existingId}`;
   const sex = companionSexForHeir(heir);
 
   // 年龄优先 ±1，最多 ±2（启蒙期儿童的“年龄相近”）。
