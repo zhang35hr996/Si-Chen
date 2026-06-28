@@ -47,6 +47,7 @@ import { assetError, stateError } from "../engine/infra/errors";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees, gardenSubLocationFor } from "../engine/characters/greeting";
+import { activeEmpressId, isEmpress } from "../engine/characters/empress";
 import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
@@ -190,6 +191,23 @@ type View = "title" | "coronation" | "location" | "map" | "freeview" | "event" |
 interface CourtSession {
   queue: string[];
   index: number;
+}
+
+/**
+ * 新游戏随机种子。生产环境始终用 crypto 真随机；仅当 e2e 构建（VITE_E2E）时，
+ * 允许通过 `?e2eSeed=N` 注入确定性种子，便于 E2E 断言固定后宫组成。
+ */
+function resolveNewGameSeed(): number {
+  if (import.meta.env.VITE_E2E && typeof window !== "undefined") {
+    const param = new URLSearchParams(window.location.search).get("e2eSeed");
+    if (param) {
+      const n = Number(param);
+      if (Number.isFinite(n) && n > 0) return Math.floor(n);
+    }
+  }
+  const seedArray = new Uint32Array(1);
+  crypto.getRandomValues(seedArray);
+  return seedArray[0] || 1;
 }
 
 export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRuntime?: DialogueRuntimeDeps }) {
@@ -944,7 +962,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   };
 
   const newGame = () => {
-    store.newGame(db);
+    store.newGame(content.value, resolveNewGameSeed());
     resetRollGuards();
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
@@ -979,7 +997,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     store.recordOvernight(db, plan.charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
-    const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
+    const firstNight = plan.isFirstNight && !isEmpress(store.getState(), plan.charId);
     if (firstNight) {
       setFirstNightPromptId(plan.charId);
       pendingReactionDispatch({ type: "begin", request: spend.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending（初夜提示关闭后据此补跑）
@@ -1079,14 +1097,17 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       const heirsNow = store.getState().resources.bloodline.heirs;
       setNamePetHeirIds(collectNewbornIds(beforeCount, heirsNow));
     }
-    if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && plan.bearer !== "shen_zhibai") {
-      setReaction({
-        speakerId: "shen_zhibai",
-        lines: ["恭喜陛下喜得麟儿。立功侍君劳苦功高，可愿晋升以彰圣眷？"],
-      });
+    const empressForBirth = activeEmpressId(store.getState());
+    if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && !isEmpress(store.getState(), plan.bearer)) {
+      if (empressForBirth) {
+        setReaction({
+          speakerId: empressForBirth,
+          lines: ["恭喜陛下喜得麟儿。立功侍君劳苦功高，可愿晋升以彰圣眷？"],
+        });
+      }
       setPostBirthPromoteId(plan.bearer);
-    } else if (plan.bearerOutcome === "safe") {
-      setReaction({ speakerId: "shen_zhibai", lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
+    } else if (plan.bearerOutcome === "safe" && empressForBirth) {
+      setReaction({ speakerId: empressForBirth, lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
     }
   };
 
@@ -2588,9 +2609,11 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               east_annex: "东偏殿", west_annex: "西偏殿",
             };
             const chamberName = CHAMBER_LABELS[assignment.chamberId] ?? assignment.chamberId;
-            setReaction({ speakerId: "shen_zhibai", lines: [`那么${cur.name}就先住${palaceName}的${chamberName}吧。`] });
+            const empressForRoom = activeEmpressId(store.getState());
+            if (empressForRoom) setReaction({ speakerId: empressForRoom, lines: [`那么${cur.name}就先住${palaceName}的${chamberName}吧。`] });
           } else {
-            setReaction({ speakerId: "shen_zhibai", lines: [`宫中的宫室还需要洒扫，${cur.name}先暂住储秀宫吧。`] });
+            const empressForRoom = activeEmpressId(store.getState());
+            if (empressForRoom) setReaction({ speakerId: empressForRoom, lines: [`宫中的宫室还需要洒扫，${cur.name}先暂住储秀宫吧。`] });
           }
           advance();
         };

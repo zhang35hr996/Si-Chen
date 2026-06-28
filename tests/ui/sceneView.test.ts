@@ -91,7 +91,10 @@ describe("focusedCharacterView gating mirrors existing summon rules", () => {
 describe("displayRole", () => {
   it("uses rank name for a consort with standing", () => {
     const state = fresh();
-    const consortId = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort" && state.standing[id])!;
+    // generated consorts are in state.generatedConsorts, not db.characters — check both
+    const consortId = Object.keys(state.standing).find(
+      (id) => (db.characters[id] ?? state.generatedConsorts[id])?.kind === "consort",
+    )!;
     expect(displayRole(db, state, consortId)).toBeTruthy();
   });
 });

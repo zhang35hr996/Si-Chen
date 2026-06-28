@@ -18,7 +18,9 @@ import { gameStateSchema } from "../../../src/engine/save/stateSchema";
 const db = loadRealContent();
 
 function baseState(): GameState {
-  return withConsort(createNewGameState(db), db, TARGET);
+  // shen_zhibai is now event_only; inject manually so empress-related assertions still work
+  const s = withConsort(createNewGameState(db), db, "shen_zhibai");
+  return withConsort(s, db, TARGET);
 }
 
 const TARGET = "lu_huaijin";

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { decideDecree, adjacentHaremRank } from "../../src/store/empressDecree";
+import { inPalaceConsorts } from "../../src/engine/characters/presence";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { withConsort } from "../helpers/consortFixture";
@@ -73,5 +74,27 @@ describe("decideDecree", () => {
   it("is deterministic for the same seed", () => {
     const s = oneConsortAt("cairen", 80);
     expect(decideDecree(db, s, "k")).toEqual(decideDecree(db, s, "k"));
+  });
+
+  it("runtime-db（生成角色合并进 characters）：候选池基于去重后的 inPalaceConsorts，无重复 ID", () => {
+    const s = createNewGameState(db);
+    // App-style runtime db：生成侍君同时存在于 characters 与 state.generatedConsorts
+    const runtimeDb = { ...db, characters: { ...db.characters, ...s.generatedConsorts } };
+    // decideDecree 的候选来自 inPalaceConsorts().filter(...)，去重等价于 inPalaceConsorts 去重。
+    const ids = inPalaceConsorts(runtimeDb, s).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length); // 无重复（旧实现会把生成侍君计两次）
+    for (const id of Object.keys(s.generatedConsorts)) {
+      const st = s.standing[id];
+      if (st && st.rank !== "huanghou" && st.lifecycle !== "deceased") {
+        expect(ids.filter((x) => x === id)).toHaveLength(1);
+      }
+    }
+    // 端到端：runtime-db 下 decideDecree 仍可正常下旨且只命中唯一侍君
+    const s2 = oneConsortAt("cairen", 80);
+    const runtimeDb2 = { ...db, characters: { ...db.characters, ...s2.generatedConsorts } };
+    const plan = decideDecree(runtimeDb2, s2, "seed-A");
+    expect(plan).not.toBeNull();
+    const setRank = plan!.effects.find((e) => e.type === "set_rank") as { char: string };
+    expect(setRank.char).toBe("lu_huaijin");
   });
 });

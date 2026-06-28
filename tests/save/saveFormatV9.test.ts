@@ -38,7 +38,9 @@ describe("save schema — 官员家族字段持久化", () => {
     expect(s.officialFamilies).toEqual(state.officialFamilies);
     expect(s.familyMembers).toEqual(state.familyMembers);
     expect(s.kinship).toEqual(state.kinship);
-    expect(s.standing["shen_zhibai"]!.birthFamilyId).toBe(state.standing["shen_zhibai"]!.birthFamilyId);
+    // shen_zhibai is now event_only; verify the generated empress round-trips instead
+    const empressId = Object.keys(state.standing).find((id) => state.standing[id]!.rank === "huanghou")!;
+    expect(s.standing[empressId]).toMatchObject(state.standing[empressId]!);
     expect(Object.keys(s.officialFamilies).length).toBeGreaterThan(0);
   });
 

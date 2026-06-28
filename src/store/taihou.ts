@@ -1,5 +1,7 @@
 /** 太后系统纯逻辑（侍疾/敲打），种子化确定性。*/
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
+import { isEmpress } from "../engine/characters/empress";
+import { inPalaceConsorts } from "../engine/characters/presence";
 import { canCharacterParticipate } from "../engine/characters/restrictions";
 import { isIll } from "../engine/characters/health";
 import { resolveDisplayName } from "../engine/characters/standing";
@@ -20,14 +22,13 @@ export interface ShizhiPlan {
   beats: { speakerId: string; lines: string[] }[];
 }
 
-/** 在宫存活的侍君 + 皇后。 */
+/** 在宫存活的侍君 + 皇后（含殿选侍君）。 */
 function attendantPool(db: ContentDB, state: GameState): string[] {
-  return Object.values(db.characters)
+  return inPalaceConsorts(db, state)
     .filter((c) => {
-      if (c.kind !== "consort") return false;
-      if (c.defaultLocation === "changmengong") return false;
-      if (!canCharacterParticipate(state, c.id, "attend_taihou")) return false; // 统一限制层
-      return state.standing[c.id]?.lifecycle !== "deceased";
+      const st = state.standing[c.id];
+      if (!st || st.lifecycle === "deceased") return false;
+      return canCharacterParticipate(state, c.id, "attend_taihou");
     })
     .map((c) => c.id);
 }
@@ -40,7 +41,7 @@ export function buildShizhiEncounter(db: ContentDB, state: GameState, seedKey: s
   const pool = attendantPool(db, state);
   if (pool.length === 0) return null;
   const attendantId = pool[gestationRoll(`taihou:shizhi:pick:${seedKey}`) % pool.length]!;
-  const char = db.characters[attendantId]!;
+  const char = (db.characters[attendantId] ?? state.generatedConsorts[attendantId])!;
   const st = state.standing[attendantId];
   const name = resolveDisplayName(char, st, st ? db.ranks[st.rank] : undefined);
   return {
@@ -80,14 +81,14 @@ export interface RebukePlan {
   beats: { speakerId: string; lines: string[] }[];
 }
 
-/** 候选：在宫存活侍君，排除皇后。 */
+/** 候选：在宫存活侍君，排除皇后（含殿选侍君）。 */
 function rebukePool(db: ContentDB, state: GameState): { id: string; favor: number }[] {
-  return Object.values(db.characters)
+  return inPalaceConsorts(db, state)
     .filter((c) => {
-      if (c.kind !== "consort" || c.id === "shen_zhibai") return false;
-      if (c.defaultLocation === "changmengong") return false;
-      if (!canCharacterParticipate(state, c.id, "summoned_by_taihou")) return false; // 统一限制层
-      return state.standing[c.id]?.lifecycle !== "deceased";
+      if (isEmpress(state, c.id)) return false;
+      const st = state.standing[c.id];
+      if (!st || st.lifecycle === "deceased") return false;
+      return canCharacterParticipate(state, c.id, "summoned_by_taihou");
     })
     .map((c) => ({ id: c.id, favor: state.standing[c.id]?.favor ?? 0 }));
 }
@@ -114,7 +115,7 @@ export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: stri
     }
   }
 
-  const char = db.characters[pickId]!;
+  const char = (db.characters[pickId] ?? state.generatedConsorts[pickId])!;
   const st = state.standing[pickId];
   const name = resolveDisplayName(char, st, st ? db.ranks[st.rank] : undefined);
   return {

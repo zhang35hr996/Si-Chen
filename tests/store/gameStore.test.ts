@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createLogger } from "../../src/engine/infra/logger";
 import { createGameStore } from "../../src/store/gameStore";
+import { loadGameContent } from "../../src/engine/content/viteSource";
 import type { GameState } from "../../src/engine/state/types";
 
 describe("GameStore", () => {
@@ -117,5 +118,52 @@ describe("GameStore.commitDialogueState", () => {
     const committed = store.commitDialogueState(snapshot, next);
     expect(committed).toBe(false); // race detected
     expect(store.getState().flags.async_result).toBeUndefined(); // stale result discarded
+  });
+});
+
+describe("GameStore.newGame — seed isolation", () => {
+  const content = loadGameContent();
+  const db = content.ok ? content.value : (() => { throw new Error("content"); })();
+
+  it("两次 newGame(seed=1, seed=2) 产生不同 rngSeed 并持久化进档", () => {
+    const store = createGameStore();
+    store.newGame(db, 1);
+    expect(store.getState().rngSeed).toBe(1);
+    store.newGame(db, 2);
+    expect(store.getState().rngSeed).toBe(2);
+  });
+
+  it("使用原始 content.value 开新档（App 的正确用法）：只有一位皇后且 ID 属于新 seed", () => {
+    const store = createGameStore();
+    store.newGame(db, 1);
+    expect(Object.keys(store.getState().generatedConsorts).length).toBeGreaterThan(0);
+
+    // App.tsx passes content.value (the clean DB), never the merged runtime db
+    store.newGame(db, 2);
+    const second = store.getState();
+
+    const empressEntries = Object.entries(second.standing).filter(([, st]) => st.rank === "huanghou");
+    expect(empressEntries).toHaveLength(1);
+    expect(empressEntries[0]![0]).toBe("generated_empress_2");
+    expect(Object.keys(second.standing).some((id) => id.includes("generated_empress_1"))).toBe(false);
+  });
+
+  it("即便误传 runtime-db（合并了旧 generatedConsorts），newGame 仍跳过 generated_* 内容角色，只有一位新 seed 皇后", () => {
+    const store = createGameStore();
+    store.newGame(db, 1);
+    const first = store.getState();
+    expect(Object.keys(first.generatedConsorts).length).toBeGreaterThan(0);
+
+    // App 已改传 content.value；这里仍传 runtime-db 以验证 newGame 自身的防御
+    const runtimeDb = { ...db, characters: { ...db.characters, ...first.generatedConsorts } };
+    store.newGame(runtimeDb, 2);
+    const second = store.getState();
+
+    const empressEntries = Object.entries(second.standing).filter(([, st]) => st.rank === "huanghou");
+    expect(empressEntries).toHaveLength(1); // newGame 跳过 generated_*，不会再现旧皇后
+    expect(empressEntries[0]![0]).toBe("generated_empress_2");
+    // 旧 seed-1 生成角色不得残留在 standing
+    expect(Object.keys(second.standing).some((id) => id.startsWith("generated_empress_1"))).toBe(false);
+    expect(Object.keys(second.standing).some((id) => id.startsWith("generated_consort_1_"))).toBe(false);
   });
 });

@@ -161,7 +161,7 @@ export function validateEffects(
         break; // already-deceased heir is allowed (apply case is idempotent)
       }
       case "set_rank": {
-        const ch = db.characters[e.char];
+        const ch = db.characters[e.char] ?? state.generatedConsorts[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `set_rank needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "huanghou") {
@@ -183,7 +183,7 @@ export function validateEffects(
         break;
       }
       case "set_title": {
-        const ch = db.characters[e.char];
+        const ch = db.characters[e.char] ?? state.generatedConsorts[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `set_title needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "huanghou") {
@@ -196,7 +196,7 @@ export function validateEffects(
         break;
       }
       case "remove_title": {
-        const ch = db.characters[e.char];
+        const ch = db.characters[e.char] ?? state.generatedConsorts[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `remove_title needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "huanghou") {
@@ -207,7 +207,7 @@ export function validateEffects(
         break;
       }
       case "bedchamber": {
-        const ch = db.characters[e.char];
+        const ch = db.characters[e.char] ?? state.generatedConsorts[e.char];
         if (!ch || ch.kind !== "consort" || !state.bedchamber[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `bedchamber needs a consort with a record: "${e.char}"`, { char: e.char });
         }
@@ -228,7 +228,7 @@ export function validateEffects(
       }
       case "heir_designate": {
         for (const id of e.charIds) {
-          const ch = db.characters[id];
+          const ch = db.characters[id] ?? state.generatedConsorts[id];
           const st = state.standing[id];
           if (!ch || ch.kind !== "consort" || !st) {
             bad(index, "BAD_EFFECT_TARGET", `heir_designate needs a consort with standing: "${id}"`, { char: id });
@@ -239,7 +239,7 @@ export function validateEffects(
         break;
       }
       case "heir_candidate": {
-        const ch = db.characters[e.char];
+        const ch = db.characters[e.char] ?? state.generatedConsorts[e.char];
         const st = state.standing[e.char];
         if (!ch || ch.kind !== "consort" || !st) {
           bad(index, "BAD_EFFECT_TARGET", `heir_candidate needs a consort with standing: "${e.char}"`, { char: e.char });
@@ -253,7 +253,7 @@ export function validateEffects(
         break;
       }
       case "pregnancy_transfer": {
-        const ch = db.characters[e.carrierId];
+        const ch = db.characters[e.carrierId] ?? state.generatedConsorts[e.carrierId];
         const st = state.standing[e.carrierId];
         const preg = state.resources.bloodline.pregnancy;
         const sov = state.resources.bloodline.gestations.find((g) => g.carrier === "sovereign");
@@ -279,11 +279,17 @@ export function validateEffects(
         if (!state.resources.bloodline.gestations.some((g) => g.carrier === e.bearer)) {
           bad(index, "BAD_EFFECT", `birth requires an active gestation`, {});
         }
-        if (e.bearer !== "sovereign" && (!db.characters[e.bearer] || !state.standing[e.bearer])) {
-          bad(index, "BAD_EFFECT_TARGET", `birth bearer is not a consort with standing: "${e.bearer}"`, { char: e.bearer });
+        if (e.bearer !== "sovereign") {
+          const bearer = db.characters[e.bearer] ?? state.generatedConsorts[e.bearer];
+          if (!bearer || bearer.kind !== "consort" || !state.standing[e.bearer]) {
+            bad(index, "BAD_EFFECT_TARGET", `birth bearer is not a consort with standing: "${e.bearer}"`, { char: e.bearer });
+          }
         }
-        if (e.fatherId !== null && (!db.characters[e.fatherId] || db.characters[e.fatherId]!.kind !== "consort")) {
-          bad(index, "BAD_EFFECT_TARGET", `birth fatherId is not a consort: "${e.fatherId}"`, { char: e.fatherId });
+        if (e.fatherId !== null) {
+          const father = db.characters[e.fatherId] ?? state.generatedConsorts[e.fatherId];
+          if (!father || father.kind !== "consort") {
+            bad(index, "BAD_EFFECT_TARGET", `birth fatherId is not a consort: "${e.fatherId}"`, { char: e.fatherId });
+          }
         }
         if ((e.twinSex !== undefined) !== (e.twinFavor !== undefined)) {
           bad(index, "BAD_EFFECT", `birth twinSex and twinFavor must both be present or both absent`, {});
@@ -435,7 +441,7 @@ export function validateEffects(
         break;
       }
       case "relocate": {
-        const ch = db.characters[e.char];
+        const ch = db.characters[e.char] ?? state.generatedConsorts[e.char];
         if (!ch || ch.kind !== "consort" || !state.standing[e.char]) {
           bad(index, "BAD_EFFECT_TARGET", `relocate needs a consort with standing: "${e.char}"`, { char: e.char });
         } else if (state.standing[e.char]!.rank === "huanghou") {

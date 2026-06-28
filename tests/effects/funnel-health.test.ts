@@ -13,7 +13,7 @@ function freshState() {
 describe("health funnel effects", () => {
   it("consort_decease clears carrier gestation (断胎) and is idempotent on re-death", () => {
     const { db, state } = freshState();
-    const id = Object.keys(state.standing).find((c) => db.characters[c]?.kind === "consort")!;
+    const id = Object.keys(state.standing).find((c) => (db.characters[c] ?? state.generatedConsorts[c])?.kind === "consort")!;
     const at = toGameTime(state.calendar);
     state.resources.bloodline.gestations.push({ carrier: id, conceivedAt: at });
     const r1 = applyEffects(db, state, [{ type: "consort_decease", char: id, at, cause: "illness" }]);
@@ -31,7 +31,7 @@ describe("health funnel effects", () => {
 
   it("consort_decease 首次置死时清陈旧 recoverUntilMonth（勿留「已故仍在休养」）", () => {
     const { db, state } = freshState();
-    const id = Object.keys(state.standing).find((c) => db.characters[c]?.kind === "consort")!;
+    const id = Object.keys(state.standing).find((c) => (db.characters[c] ?? state.generatedConsorts[c])?.kind === "consort")!;
     const at = toGameTime(state.calendar);
     state.standing[id]!.recoverUntilMonth = 9; // 顺产/child_dies 先写休养截止
     const r = applyEffects(db, state, [{ type: "consort_decease", char: id, at, cause: "childbirth" }]);

@@ -41,7 +41,7 @@ describe("record_physician_visit", () => {
 
   it("写侍君的本月已请脉月键", () => {
     const s0 = createNewGameState(db);
-    const cid = Object.keys(s0.standing).find((id) => s0.standing[id]!.lifecycle !== "deceased" && db.characters[id]?.kind === "consort")!;
+    const cid = Object.keys(s0.standing).find((id) => s0.standing[id]!.lifecycle !== "deceased" && (db.characters[id] ?? s0.generatedConsorts[id])?.kind === "consort")!;
     const r = applyEffects(db, s0, [
       { type: "record_physician_visit", subject: { kind: "consort", id: cid }, monthKey: monthKey(s0) },
     ]);
@@ -94,7 +94,7 @@ describe("record_physician_visit", () => {
 
   it("拒绝：已故侍君", () => {
     const s0 = createNewGameState(db);
-    const cid = Object.keys(s0.standing).find((id) => s0.standing[id]!.lifecycle !== "deceased" && db.characters[id]?.kind === "consort")!;
+    const cid = Object.keys(s0.standing).find((id) => s0.standing[id]!.lifecycle !== "deceased" && (db.characters[id] ?? s0.generatedConsorts[id])?.kind === "consort")!;
     s0.standing[cid]!.lifecycle = "deceased";
     expect(applyEffects(db, s0, [{ type: "record_physician_visit", subject: { kind: "consort", id: cid }, monthKey: monthKey(s0) }]).ok).toBe(false);
   });

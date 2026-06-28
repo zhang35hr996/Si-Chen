@@ -7,7 +7,19 @@ import type { GameState, HealthStatus } from "../../src/engine/state/types";
 import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const base = withConsort(createNewGameState(db), db, "lu_huaijin");
+// shen_zhibai is now event_only; inject her as empress (replacing the generated empress)
+// so that presence tests referencing shen_zhibai at kunninggong continue to work.
+const base = (() => {
+  let s = createNewGameState(db);
+  const genEmpressId = Object.keys(s.standing).find((id) => s.standing[id]!.rank === "huanghou");
+  if (genEmpressId) {
+    const { [genEmpressId]: _st, ...restSt } = s.standing;
+    const { [genEmpressId]: _gc, ...restGc } = s.generatedConsorts;
+    s = { ...s, standing: restSt, generatedConsorts: restGc };
+  }
+  s = withConsort(s, db, "shen_zhibai");
+  return withConsort(s, db, "lu_huaijin");
+})();
 const home = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
 
 /** 把日历调到指定 slot（apMax-ap=slot）。 */

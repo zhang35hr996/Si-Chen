@@ -23,12 +23,15 @@ const db = loadRealContent();
 
 /** A "played" state: one event resolved through the funnel, memory written. */
 const playedState = (): GameState => {
-  const result = applyEffects(db, createNewGameState(db), [
-    { type: "favor", char: "shen_zhibai", delta: 3 },
+  const base = createNewGameState(db);
+  // shen_zhibai is now event_only; use the generated empress
+  const empressId = Object.keys(base.standing).find((id) => base.standing[id]!.rank === "huanghou")!;
+  const result = applyEffects(db, base, [
+    { type: "favor", char: empressId, delta: 3 },
     { type: "flag", key: "rite_scheduled", value: true },
     {
       type: "memory",
-      char: "shen_zhibai",
+      char: empressId,
       entry: { kind: "episodic", summary: "存档测试记忆。", strength: 30, retention: "slow", subjectIds: ["player"], perspective: "witness", triggerTags: ["test"], unresolved: false, emotions: {} },
     },
   ]);

@@ -14,7 +14,7 @@ function fresh() {
 describe("planHealthChange — forceDeath + inert + deceased no-op", () => {
   it("forceDeath kills even when nextHealth > 0 (sudden death), enqueues aftermath", () => {
     const s = createNewGameState(db);
-    const id = Object.keys(s.standing).find((c) => db.characters[c]?.kind === "consort")!;
+    const id = Object.keys(s.standing).find((c) => (db.characters[c] ?? s.generatedConsorts[c])?.kind === "consort")!;
     s.standing[id]!.health = 66; s.standing[id]!.healthStatus = "critical";
     const { effects, outcome } = planHealthChange(s, { subject: { kind: "consort", id }, healthStatus: "critical", forceDeath: true, cause: "critical_sudden", at: toGameTime(s.calendar) });
     expect(outcome.died).toBe(true);
@@ -32,7 +32,7 @@ describe("planHealthChange — forceDeath + inert + deceased no-op", () => {
   });
   it("already-deceased consort: planHealthChange forceDeath=true is a no-op", () => {
     const s = createNewGameState(db);
-    const id = Object.keys(s.standing).find((c) => db.characters[c]?.kind === "consort")!;
+    const id = Object.keys(s.standing).find((c) => (db.characters[c] ?? s.generatedConsorts[c])?.kind === "consort")!;
     // Kill the consort first
     const at = toGameTime(s.calendar);
     const { effects: killEffects } = planHealthChange(s, { subject: { kind: "consort", id }, healthDelta: -100, cause: "illness", at });

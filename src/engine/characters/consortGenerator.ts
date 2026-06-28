@@ -260,10 +260,38 @@ export interface GeneratedConsortEntry {
   standing: CharacterStanding;
 }
 
+function pickName(
+  prefix: string,
+  tag: string,
+  usedSurnames: Set<string>,
+  usedFullNames: Set<string>,
+): { surname: string; givenName: string } {
+  const n = OFFICIAL_SURNAME_POOL.length;
+  const surnameStart = seededRoll(`${prefix}:${tag}:surname`, n);
+  let surname = OFFICIAL_SURNAME_POOL[surnameStart]!;
+  for (let k = 0; k < n; k++) {
+    const s = OFFICIAL_SURNAME_POOL[(surnameStart + k) % n]!;
+    if (!usedSurnames.has(s)) { surname = s; break; }
+  }
+  usedSurnames.add(surname);
+
+  const m = CONSORT_GIVEN_NAME_POOL.length;
+  const givenStart = seededRoll(`${prefix}:${tag}:given`, m);
+  let givenName = CONSORT_GIVEN_NAME_POOL[givenStart]!;
+  for (let k = 0; k < m; k++) {
+    const g = CONSORT_GIVEN_NAME_POOL[(givenStart + k) % m]!;
+    if (!usedFullNames.has(`${surname}${g}`)) { givenName = g; break; }
+  }
+  usedFullNames.add(`${surname}${givenName}`);
+
+  return { surname, givenName };
+}
+
 /**
- * 基于 rngSeed 确定性生成 1–5 位开局侍君。
+ * 基于 rngSeed 确定性生成 1 位随机皇后 + 1–5 位开局侍君。
  * 结果直接写入 GameState（generatedConsorts + standing + memories + bedchamber）。
  * 读档时不调用此函数。
+ * 返回值：第一个元素始终是皇后（id=generated_empress_{rngSeed}）。
  */
 export function generateInitialConsorts(
   rngSeed: number,
@@ -271,6 +299,7 @@ export function generateInitialConsorts(
   validRankIds: ReadonlySet<string>,
 ): GeneratedConsortEntry[] {
   const prefix = `init_consort:${rngSeed}`;
+  const empressPrefix = `init_empress:${rngSeed}`;
 
   const count = 1 + seededRoll(`${prefix}:count`, 5);
 
@@ -281,7 +310,7 @@ export function generateInitialConsorts(
     [palaces[i], palaces[j]] = [palaces[j]!, palaces[i]!];
   }
 
-  // Deterministic shuffle of portrait pool: 同批侍君不复用同一张立绘。
+  // Deterministic shuffle of portrait pool: 皇后取 [0]，普通侍君按序取后续，整批无重复立绘。
   const portraits = [...PORTRAIT_POOL];
   for (let i = portraits.length - 1; i > 0; i--) {
     const j = seededRoll(`${prefix}:portshuf:${i}`, i + 1);
@@ -290,6 +319,102 @@ export function generateInitialConsorts(
 
   const usedFullNames = new Set<string>();
   const usedSurnames = new Set<string>();
+
+  // ── 随机皇后（姓名先于侍君分配，保证全局姓氏唯一）──────────────────────────
+  const empressId = `generated_empress_${rngSeed}`;
+  const empressArchetype = ARCHETYPES[seededRoll(`${empressPrefix}:arch`, ARCHETYPES.length)]!;
+  const { surname: empressSurname, givenName: empressGiven } = pickName(
+    empressPrefix, "name", usedSurnames, usedFullNames,
+  );
+  const empressPortraitSet = portraits[0]!; // 从同批洗牌后的池首取，保证与普通侍君不重复
+  const [eApLo, eApHi] = empressArchetype.appearanceRange;
+  const [eNuLo, eNuHi] = empressArchetype.nurtureRange;
+  const empressAppearance = seededRange(`${empressPrefix}:appear`, eApLo, eApHi);
+  const empressHealth     = seededRange(`${empressPrefix}:health`, 45, 95);
+  const empressNurture    = seededRange(`${empressPrefix}:nurture`, eNuLo, eNuHi);
+  const empressAge        = seededRange(`${empressPrefix}:age`, 16, 28);
+  const empressSpecialty  = empressArchetype.specialties[seededRoll(`${empressPrefix}:spec`, empressArchetype.specialties.length)]!;
+  const empressLikeCount  = 1 + seededRoll(`${empressPrefix}:lc`, 2);
+  const empressLikes: string[] = [];
+  for (let li = 0; li < empressLikeCount; li++) {
+    const like = LIKES_POOL[seededRoll(`${empressPrefix}:like${li}`, LIKES_POOL.length)]!;
+    if (!empressLikes.includes(like)) empressLikes.push(like);
+  }
+  if (empressLikes.length === 0) empressLikes.push(LIKES_POOL[0]!);
+  const empressAffection = seededRange(`${empressPrefix}:aff`, 25, 65);
+  const empressFear      = seededRange(`${empressPrefix}:fear`, 15, 55);
+  const empressAmbition  = seededRange(`${empressPrefix}:amb`, 10, 90);
+  const empressLoyalty   = seededRange(`${empressPrefix}:loy`, 30, 75);
+  const epr = empressArchetype.personality;
+  const empressPersonality: ConsortPersonality = {
+    intelligence:       seededRange(`${empressPrefix}:int`,  epr.intelligence[0],       epr.intelligence[1]),
+    scheming:           seededRange(`${empressPrefix}:sch`,  epr.scheming[0],           epr.scheming[1]),
+    sociability:        seededRange(`${empressPrefix}:soc`,  epr.sociability[0],        epr.sociability[1]),
+    compassion:         seededRange(`${empressPrefix}:comp`, epr.compassion[0],         epr.compassion[1]),
+    courage:            seededRange(`${empressPrefix}:cou`,  epr.courage[0],            epr.courage[1]),
+    jealousy:           seededRange(`${empressPrefix}:jea`,  epr.jealousy[0],           epr.jealousy[1]),
+    emotionalStability: seededRange(`${empressPrefix}:emo`,  epr.emotionalStability[0], epr.emotionalStability[1]),
+    pride:              seededRange(`${empressPrefix}:pri`,  epr.pride[0],              epr.pride[1]),
+  };
+  const empressFavor = seededRange(`${empressPrefix}:favor`, 5, 35);
+  const empressTraitPool = empressArchetype.personalityTraits;
+  const empressTraitCount = Math.min(2 + seededRoll(`${empressPrefix}:tc`, 2), empressTraitPool.length);
+  const empressTraitSet = new Set<number>();
+  while (empressTraitSet.size < empressTraitCount) {
+    empressTraitSet.add(seededRoll(`${empressPrefix}:tr${empressTraitSet.size}`, empressTraitPool.length));
+  }
+  const empressTraits = [...empressTraitSet].map((idx) => empressTraitPool[idx]!);
+
+  const empressContent: CharacterContent = {
+    id: empressId,
+    kind: "consort",
+    attributes: { appearance: empressAppearance, health: empressHealth, nurture: empressNurture, specialty: empressSpecialty, likes: empressLikes },
+    hidden: { affection: empressAffection, fear: empressFear, ambition: empressAmbition, loyalty: empressLoyalty, personality: empressPersonality },
+    profile: {
+      name: `${empressSurname}${empressGiven}`,
+      surname: empressSurname,
+      age: empressAge,
+      role: empressArchetype.role,
+      appearance: `容貌${empressAppearance >= 70 ? "出众" : empressAppearance >= 50 ? "清秀" : "平常"}，气质独特。`,
+      personalityTraits: empressTraits,
+      reactionTraits: [],
+      coreFacts: [`${empressSurname}${empressGiven}`, `入宫为皇后`],
+      goals: ["执掌凤印，总理后宫", "博得君心"],
+      speechStyle: empressArchetype.speechStyle,
+    },
+    defaultLocation: "kunninggong",
+    portraitSet: empressPortraitSet,
+    expressions: ["neutral"],
+    voice: {
+      register: "formal" as const,
+      quirks: [],
+      tabooTopics: [],
+    },
+    initialStanding: { rank: "huanghou", favor: empressFavor, peakFavor: empressFavor, residence: "kunninggong" },
+    initialMemories: [],
+    secrets: [],
+  };
+
+  const empressStanding: CharacterStanding = {
+    rank: "huanghou",
+    favor: empressFavor,
+    peakFavor: empressFavor,
+    residence: "kunninggong",
+    chamber: "main",
+    affection: empressAffection,
+    fear: empressFear,
+    ambition: empressAmbition,
+    loyalty: empressLoyalty,
+    personality: materializePersonality(empressPersonality),
+    household: createDefaultHousehold(),
+    palaceEnteredAt: startTime,
+    health: empressHealth,
+    healthStatus: "healthy",
+  };
+
+  const empressEntry: GeneratedConsortEntry = { content: empressContent, standing: empressStanding };
+
+  // ── 普通侍君（1–5 位）────────────────────────────────────────────────────────
   let tier1Used = 0;
   let tier2Used = 0;
 
@@ -301,7 +426,7 @@ export function generateInitialConsorts(
     // Archetype
     const archetype = ARCHETYPES[seededRoll(`${p}:arch`, ARCHETYPES.length)]!;
 
-    // Surname (unique)
+    // Surname (unique across all generated consorts including empress)
     const n = OFFICIAL_SURNAME_POOL.length;
     const surnameStart = seededRoll(`${p}:surname`, n);
     let surname = OFFICIAL_SURNAME_POOL[surnameStart]!;
@@ -401,7 +526,7 @@ export function generateInitialConsorts(
         speechStyle: archetype.speechStyle,
       },
       defaultLocation: residence,
-      portraitSet: portraits[i] ?? PORTRAIT_POOL[0]!,
+      portraitSet: portraits[i + 1] ?? PORTRAIT_POOL[0]!, // portraits[0] is reserved for empress
       expressions: ["neutral"],
       voice: {
         register: seededRoll(`${p}:voice`, 2) === 0 ? "formal" : "casual",
@@ -433,5 +558,5 @@ export function generateInitialConsorts(
     results.push({ content, standing });
   }
 
-  return results;
+  return [empressEntry, ...results];
 }

@@ -15,7 +15,18 @@ function freshStore() {
 }
 
 describe("consortGate 皇后例外", () => {
-  const state = withConsort(createNewGameState(db), db, "xu_qinghuan");
+  // shen_zhibai is now event_only; inject her as empress (replacing generated empress)
+  const state = (() => {
+    let s = createNewGameState(db);
+    const genEmpressId = Object.keys(s.standing).find((id) => s.standing[id]!.rank === "huanghou");
+    if (genEmpressId) {
+      const { [genEmpressId]: _st, ...restSt } = s.standing;
+      const { [genEmpressId]: _gc, ...restGc } = s.generatedConsorts;
+      s = { ...s, standing: restSt, generatedConsorts: restGc };
+    }
+    s = withConsort(s, db, "shen_zhibai");
+    return withConsort(s, db, "xu_qinghuan");
+  })();
 
   it("禁足令对皇后：缺 administrator 时被拒", () => {
     const r = planImperialCommand(db, state, { type: "impose_confinement", targetId: "shen_zhibai", durationTurns: 3 });

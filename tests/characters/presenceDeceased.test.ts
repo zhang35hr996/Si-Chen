@@ -13,6 +13,12 @@ function pickConsort(s: ReturnType<typeof createNewGameState>): string {
     if (c.defaultLocation === "changmengong") continue;
     if (s.standing[c.id]) return c.id;
   }
+  // Fall back to generated consorts (story consorts may be event_only)
+  for (const [id, gc] of Object.entries(s.generatedConsorts)) {
+    if (gc.kind !== "consort") continue;
+    const st = s.standing[id];
+    if (st && st.lifecycle !== "deceased" && st.residence !== "changmengong") return id;
+  }
   throw new Error("no consort fixture");
 }
 

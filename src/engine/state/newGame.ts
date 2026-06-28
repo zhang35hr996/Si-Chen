@@ -72,6 +72,9 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
   const officialWorld = generateOfficialWorld(db, rngSeed, startTime);
 
   for (const character of Object.values(db.characters)) {
+    // `generated_*` 是上一局运行时生成的侍君，绝不应来自内容 DB。若出现（App 误传
+    // 合并了旧 generatedConsorts 的 runtime db），一律跳过，避免旧后宫混入新档。
+    if (character.id.startsWith("generated_")) continue;
     // spawnMode === "event_only"：剧情专属，不加入开局后宫 standing。
     if (character.initialStanding && character.spawnMode !== "event_only") {
       const birthFamilyId = officialWorld.consortBirthFamily[character.id];

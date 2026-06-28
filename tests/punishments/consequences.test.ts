@@ -13,7 +13,7 @@ const db = loadRealContent();
 function makeCtx(overrides: Partial<PunishmentOutcomeContext> = {}): PunishmentOutcomeContext {
   const state = createNewGameState(db);
   const firstConsorId = Object.keys(state.standing).find((id) => {
-    const c = db.characters[id];
+    const c = db.characters[id] ?? state.generatedConsorts[id];
     return c?.kind === "consort" && state.standing[id]?.lifecycle !== "deceased";
   })!;
   return {
@@ -199,7 +199,7 @@ describe("save migration / resolver", () => {
         [targetId]: { ...state.standing[targetId]!, fear: undefined },
       },
     };
-    const char = db.characters[targetId];
+    const char = db.characters[targetId] ?? oldState.generatedConsorts[targetId];
     const authoredFear = char?.kind === "consort" ? (char.hidden?.fear ?? 30) : 30;
     const resolved = resolveConsortRuntimeAttrs(db, oldState, targetId);
     expect(resolved.fear).toBe(authoredFear);

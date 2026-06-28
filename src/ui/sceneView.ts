@@ -11,6 +11,7 @@ import type { AssetRegistry } from "../engine/assets/registry";
 import type { ContentDB } from "../engine/content/loader";
 import type { GameState } from "../engine/state/types";
 import { presentAt } from "../engine/characters/presence";
+import { isEmpress } from "../engine/characters/empress";
 import { canSummon } from "../store/bedchamber";
 import type { SceneCharacterBarItem } from "./components/SceneCharacterBar";
 
@@ -39,6 +40,7 @@ export interface FocusedCharacterView {
   role: string;
   portraitSrc?: string;
   isConsort: boolean;
+  isEmpress: boolean;
   /** 叙话/侍寝是否可用（与人物卡同门槛：有行动点且本旬可侍寝；仅侍君）。 */
   actionable: boolean;
   /** 不可用时的真实原因（沿用既有门槛，不另造）。 */
@@ -71,6 +73,7 @@ export function focusedCharacterView(
     role: displayRole(db, state, charId),
     portraitSrc: registry.portrait(character.portraitSet, "neutral").url,
     isConsort,
+    isEmpress: isEmpress(state, charId),
     actionable,
     unavailableReason,
   };

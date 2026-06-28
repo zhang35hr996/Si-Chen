@@ -8,7 +8,7 @@ const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
-const mkState = () => withConsort(createNewGameState(db), db, "lu_huaijin");
+const mkState = () => withConsort(withConsort(createNewGameState(db), db, "shen_zhibai"), db, "lu_huaijin");
 
 describe("funnel: heir_designate", () => {
   it("tags consorts candidate + records candidateIds", () => {

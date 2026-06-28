@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildShizhiEncounter, buildTaihouRebuke } from "../../src/store/taihou";
+import { inPalaceConsorts } from "../../src/engine/characters/presence";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { withConsort } from "../helpers/consortFixture";
@@ -23,7 +24,8 @@ describe("buildShizhiEncounter", () => {
     }
     expect(seed).not.toBe("");
     const plan = buildShizhiEncounter(db, s, seed)!;
-    expect(db.characters[plan.attendantId]).toBeDefined();
+    // attendant may be a generated consort (not in db.characters)
+    expect(db.characters[plan.attendantId] ?? s.generatedConsorts[plan.attendantId]).toBeDefined();
     // 侍疾不再免费治愈太后。
     expect(plan.effects.some((e) => e.type === "set_taihou_health")).toBe(false);
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.attendantId && e.delta === 5)).toBe(true);
@@ -59,7 +61,8 @@ describe("buildTaihouRebuke", () => {
     expect(seed).not.toBe("");
     const plan = buildTaihouRebuke(db2, s, seed)!;
     expect(plan.targetId).not.toBe("shen_zhibai");
-    expect(db2.characters[plan.targetId]!.kind).toBe("consort");
+    // target may be a generated consort (not in db.characters)
+    expect((db2.characters[plan.targetId] ?? s.generatedConsorts[plan.targetId])?.kind).toBe("consort");
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.targetId && e.delta === -5)).toBe(true);
     expect(plan.beats.length).toBe(2);
   });
@@ -79,6 +82,23 @@ describe("buildTaihouRebuke", () => {
   it("deterministic", () => {
     const s = createNewGameState(db2);
     expect(JSON.stringify(buildTaihouRebuke(db2, s, "k"))).toBe(JSON.stringify(buildTaihouRebuke(db2, s, "k")));
+  });
+
+  it("runtime-db（生成角色合并进 characters）：敲打/侍疾池来自去重后的 inPalaceConsorts，无重复 ID", () => {
+    const s = createNewGameState(db2);
+    // App-style runtime db：generatedConsorts 同时存在于 characters 与 state.generatedConsorts
+    const runtimeDb = { ...db2, characters: { ...db2.characters, ...s.generatedConsorts } };
+    // rebukePool / attendantPool 均为 inPalaceConsorts().filter(...).map(...)；
+    // filter/map 不会引入重复，故池去重等价于 inPalaceConsorts 去重。
+    const ids = inPalaceConsorts(runtimeDb, s).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length); // 无任何重复 ID
+    // 每名在宫生成侍君恰好出现一次（旧实现会出现两次）
+    for (const id of Object.keys(s.generatedConsorts)) {
+      const st = s.standing[id];
+      if (st && st.rank !== "huanghou" && st.lifecycle !== "deceased") {
+        expect(ids.filter((x) => x === id)).toHaveLength(1);
+      }
+    }
   });
 
   it("weighting reaches every consort when total favor exceeds 99 (raw roll, no 0–99 clamp)", () => {

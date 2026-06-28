@@ -1,6 +1,7 @@
 /** 宗正寺·传嗣：在世侍君中择承嗣君（高亮候选）。皇后无嗣时提示优先皇后承嗣。 */
 import { useState } from "react";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
+import { activeEmpressId, isEmpress } from "../../engine/characters/empress";
 import { byRankDesc } from "../../engine/characters/presence";
 import { canSummon } from "../../store/bedchamber";
 import type { ContentDB } from "../../engine/content/loader";
@@ -19,7 +20,8 @@ export function SuccessorModal({
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const candidateIds = state.resources.bloodline.pregnancy.candidateIds;
-  const fenghouChildless = !state.resources.bloodline.heirs.some((h) => h.bearer === "shen_zhibai");
+  const empressId = activeEmpressId(state);
+  const fenghouChildless = empressId !== null && !state.resources.bloodline.heirs.some((h) => h.bearer === empressId);
 
   // 已承嗣怀胎者不可再受传胎；从可选承嗣君中剔除。
   const alreadyCarrying = (id: string) => state.resources.bloodline.gestations.some((g) => g.carrier === id);
@@ -48,7 +50,7 @@ export function SuccessorModal({
                 <input type="radio" name="successor" checked={picked === id} onChange={() => setPicked(id)} />
                 {name(id)}
                 {candidateIds.includes(id) ? "（候选承嗣）" : ""}
-                {id === "shen_zhibai" && fenghouChildless ? "（嫡子）" : ""}
+                {isEmpress(state, id) && fenghouChildless ? "（嫡子）" : ""}
               </label>
             </li>
           ))}

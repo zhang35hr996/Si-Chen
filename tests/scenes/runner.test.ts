@@ -9,9 +9,9 @@ import { createGameStore } from "../../src/store/gameStore";
 import type { GameState } from "../../src/engine/state/types";
 import type { GameError } from "../../src/engine/infra/errors";
 import type { Result } from "../../src/engine/infra/result";
-import { loadRealContent } from "../helpers/contentFixture";
+import { loadTestContent } from "../helpers/testContentFixture";
 
-const db = loadRealContent();
+const db = loadTestContent();
 const fresh = (): GameState => createNewGameState(db);
 
 const unwrap = (r: Result<RunnerStep, GameError>): RunnerStep => {
@@ -23,15 +23,15 @@ const asFrame = (s: RunnerStep) => {
   return s.frame;
 };
 
-describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)", () => {
+describe("SceneRunner walkthrough (sc_fixture_scene_runner, through the provider seam)", () => {
   it("start → intro line with 3 choices → effects accumulate → closing line → end batch", async () => {
     const runner = new SceneRunner(db, { provider: mockProvider });
     const state = fresh();
 
-    const first = asFrame(unwrap(await runner.start(state, "ev_shen_neglect")));
+    const first = asFrame(unwrap(await runner.start(state, "ev_fixture_scene_runner")));
     expect(first.awaiting).toBe("choice");
-    expect(first.line.speakerId).toBe("lu_huaijin");
-    expect(first.line.speakerName).toBe("陆承徽");
+    expect(first.line.speakerId).toBe("wenya");
+    expect(first.line.speakerName).toBe("温承徽");
     // v0 ships only the shared "neutral" portrait per kind, so the scene's
     // authored expression ("frown") normalizes to neutral (orchestrator fallback).
     // Add per-expression art back to a character's `expressions` to restore it.
@@ -53,14 +53,14 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
     const end = unwrap(await runner.advance());
     expect(end.kind).toBe("end");
     if (end.kind !== "end") return;
-    expect(end.eventId).toBe("ev_shen_neglect");
+    expect(end.eventId).toBe("ev_fixture_scene_runner");
     expect(end.effects).toHaveLength(1);
     expect(state.calendar.ap).toBe(5); // runner NEVER touches state — caller commits
   });
 
   it("invalid choice id is rejected without advancing", async () => {
     const runner = new SceneRunner(db, { provider: mockProvider });
-    unwrap(await runner.start(fresh(), "ev_shen_neglect"));
+    unwrap(await runner.start(fresh(), "ev_fixture_scene_runner"));
     const bad = await runner.advance("c_ghost");
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.error.code).toBe("BAD_CHOICE");
@@ -91,9 +91,9 @@ describe("SceneRunner walkthrough (sc_shen_neglect, through the provider seam)",
 
     const fired: GameState = {
       ...base,
-      eventLog: [{ eventId: "ev_shen_neglect", firedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } }],
+      eventLog: [{ eventId: "ev_fixture_scene_runner", firedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } }],
     };
-    const again = await runner.start(fired, "ev_shen_neglect");
+    const again = await runner.start(fired, "ev_fixture_scene_runner");
     expect(again.ok).toBe(false);
     if (!again.ok) expect(again.error.code).toBe("EVENT_ALREADY_FIRED");
   });
@@ -107,7 +107,7 @@ describe("quit drill (acceptance §13 #6)", () => {
     const snapshot = structuredClone(before);
 
     const runner = new SceneRunner(db, { provider: mockProvider });
-    unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
+    unwrap(await runner.start(store.getState(), "ev_fixture_scene_runner"));
     unwrap(await runner.advance("c_cold")); // effects accumulated in session
     runner.abandon();
 
@@ -116,7 +116,7 @@ describe("quit drill (acceptance §13 #6)", () => {
     expect(runner.getSession()).toBeNull();
 
     // re-entry replays identically
-    const replay = asFrame(unwrap(await runner.start(store.getState(), "ev_shen_neglect")));
+    const replay = asFrame(unwrap(await runner.start(store.getState(), "ev_fixture_scene_runner")));
     expect(replay.line.choices).toHaveLength(3);
   });
 
@@ -125,7 +125,7 @@ describe("quit drill (acceptance §13 #6)", () => {
     store.newGame(db);
     const runner = new SceneRunner(db, { provider: mockProvider });
 
-    unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
+    unwrap(await runner.start(store.getState(), "ev_fixture_scene_runner"));
     unwrap(await runner.advance("c_comfort"));
     const end = unwrap(await runner.advance());
     if (end.kind !== "end") throw new Error("expected end");
@@ -133,9 +133,9 @@ describe("quit drill (acceptance §13 #6)", () => {
     const commit = store.resolveEvent(db, end.eventId, end.effects);
     expect(commit.ok).toBe(true);
     const state = store.getState();
-    expect(state.memories["lu_huaijin"]?.entries).toHaveLength(2);
+    expect(state.memories["wenya"]?.entries).toHaveLength(2);
     expect(state.calendar.ap).toBe(4); // apCost 1 spent at commit (5 - 1 = 4)
-    expect(state.sceneHistory).toEqual(["sc_shen_neglect"]);
+    expect(state.sceneHistory).toEqual(["sc_fixture_scene_runner"]);
   });
 });
 
@@ -216,12 +216,12 @@ describe("SceneRunner (scripted-only)", () => {
   // 1. All line nodes use scripted provider with request.scripted set
   it("all line nodes use scripted provider with request.scripted set", async () => {
     // The mockProvider is a scripted provider. We verify it can service a real scene
-    // (ev_shen_neglect has line nodes) by confirming every yielded frame has a line
+    // (ev_fixture_scene_runner has line nodes) by confirming every yielded frame has a line
     // where meta.generated === false (scripted, not generative).
     const runner = new SceneRunner(db, { provider: mockProvider });
     const state = fresh();
 
-    const first = unwrap(await runner.start(state, "ev_shen_neglect"));
+    const first = unwrap(await runner.start(state, "ev_fixture_scene_runner"));
     if (first.kind !== "frame") throw new Error("expected frame");
     expect(first.frame.line.meta.generated).toBe(false);
     expect(first.frame.line.meta.degraded).toBe(false);
@@ -243,7 +243,7 @@ describe("SceneRunner (scripted-only)", () => {
     store.newGame(db);
     const runner = new SceneRunner(db, { provider: mockProvider });
 
-    unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
+    unwrap(await runner.start(store.getState(), "ev_fixture_scene_runner"));
     unwrap(await runner.advance("c_comfort"));
     const end = unwrap(await runner.advance());
     if (end.kind !== "end") throw new Error("expected end");
@@ -263,7 +263,7 @@ describe("SceneRunner (scripted-only)", () => {
     const stateBeforeAp = store.getState().calendar.ap;
 
     const runner = new SceneRunner(db, { provider: mockProvider });
-    unwrap(await runner.start(store.getState(), "ev_shen_neglect"));
+    unwrap(await runner.start(store.getState(), "ev_fixture_scene_runner"));
     // Advance partway to accumulate pending effects
     unwrap(await runner.advance("c_cold"));
     // Abandon without committing

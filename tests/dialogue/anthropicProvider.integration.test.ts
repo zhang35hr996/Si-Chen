@@ -2,13 +2,15 @@
 import { describe, it, expect } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import { assembleDialogueRequest, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
 import { createAnthropicProvider } from "../../src/engine/dialogue/providers/anthropicProvider";
 import { okTransport } from "./fixtures/anthropic";
 import type { ProposedClaim } from "../../src/engine/dialogue/claims";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+// shen_zhibai is now event_only; inject her so dialogue tests can read her rank from standing
+const state = withConsort(createNewGameState(db), db, "shen_zhibai");
 const SPEAKER = "shen_zhibai";
 const correctRank = state.standing[SPEAKER]!.rank;                                   // real value from state
 const wrongRank = Object.keys(db.ranks).find((r) => r !== correctRank)!;             // any other valid rank

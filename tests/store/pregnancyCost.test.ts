@@ -15,8 +15,9 @@ const at = makeGameTime(1, 5, "early");
 function withSovereignGestation(health: number) {
   const s = createNewGameState(db);
   // Must pick a consort (kind === "consort") with standing so pregnancy_transfer & set_consort_health validate.
+  // Also check generatedConsorts since story consorts are now event_only.
   const carrierId = Object.keys(s.standing).find(
-    (id) => s.standing[id]!.lifecycle !== "deceased" && db.characters[id]?.kind === "consort",
+    (id) => s.standing[id]!.lifecycle !== "deceased" && (db.characters[id] ?? s.generatedConsorts[id])?.kind === "consort",
   )!;
   s.resources.bloodline.pregnancy = { status: "carrying", candidateIds: [carrierId] };
   s.resources.bloodline.gestations = [{ carrier: "sovereign", conceivedAt: { year: 1, month: 3, period: "early", dayIndex: 60 } }];

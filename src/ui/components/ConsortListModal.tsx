@@ -94,7 +94,7 @@ export function ConsortListModal({
       bedchamberConfig(db).tiers,
     );
     const raised = heirs.filter((h) => h.fatherId === c.id || h.adoptiveFatherId === c.id);
-    const isEmpress = c.id === "shen_zhibai";
+    const isEmpress = st.rank === "huanghou";
     const lc = st.lifecycle;
     const confinement = activeConfinement(state, c.id);
     return (

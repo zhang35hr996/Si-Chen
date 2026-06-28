@@ -28,7 +28,15 @@ const db = loadRealContent();
  * 并将生成侍君降为才人（cairen）以避免干扰协理资格判断。
  */
 function mkState(): GameState {
-  const base = createNewGameState(db);
+  // shen_zhibai is now event_only; inject her as empress, remove generated empress
+  let base = createNewGameState(db);
+  const genEmpressId = Object.keys(base.standing).find((id) => base.standing[id]!.rank === "huanghou");
+  if (genEmpressId) {
+    const { [genEmpressId]: _st, ...restSt } = base.standing;
+    const { [genEmpressId]: _gc, ...restGc } = base.generatedConsorts;
+    base = { ...base, standing: restSt, generatedConsorts: restGc };
+  }
+  base = withConsort(base, db, "shen_zhibai");
   const s = withConsort(withConsort(base, db, "xu_qinghuan"), db, "lu_huaijin");
   const updatedStanding = { ...s.standing };
   for (const id of Object.keys(s.generatedConsorts)) {

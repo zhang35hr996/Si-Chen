@@ -323,8 +323,8 @@ export class GameStore {
   }
 
   /** Start a fresh playthrough from validated content (skeleton-plan §5). */
-  newGame(db: ContentDB): void {
-    this.state = createNewGameState(db);
+  newGame(db: ContentDB, rngSeed = 1): void {
+    this.state = createNewGameState(db, rngSeed);
     this.lastEffectReport = null;
     this.traceHistory.clear();
     this.emit();
