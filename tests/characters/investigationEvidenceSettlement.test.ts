@@ -8,6 +8,8 @@ import { createGameStore } from "../../src/store/gameStore";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { settleDueInvestigationTasks } from "../../src/engine/characters/haremInvestigation/settlement";
 import { fromTurnIndex } from "../../src/engine/calendar/time";
+import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
+import { createMemoryStorage } from "../../src/engine/save/storage";
 import { loadRealContent } from "../helpers/contentFixture";
 import type { GameState } from "../../src/engine/state/types";
 
@@ -135,6 +137,34 @@ describe("5B-2B2a: evidence-driven settlement", () => {
     const { state: after } = settleDueInvestigationTasks(db, state, at);
     const c = after.haremInvestigationCases.find((x) => x.id === caseId)!;
     expect(c.status).toBe("open");
+  });
+
+  it("EV-07: 结算后存档 round-trip — 线索(claims/sourceEvidenceNodeId)与进展通报存活且通过校验", () => {
+    const { store, taskId } = startedEvidenceCase();
+    const state = store.getState();
+    const task = state.haremInvestigationTasks[taskId]!;
+    const at = fromTurnIndex(task.dueAt.dayIndex);
+    const after = settleDueInvestigationTasks(db, state, at).state;
+
+    const storage = createMemoryStorage();
+    const saveData = createSaveData(db, after, "slot1");
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(saveData));
+    const loaded = readSlot(storage, db, "slot1");
+    if (!loaded.ok) console.error("readSlot error:", JSON.stringify(loaded.error));
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+
+    const restored = loaded.value.state;
+    // 进展通报存活
+    expect(restored.investigationPublicReports.some(
+      (r) => r.reportKind === "investigation_update" || r.reportKind === "investigation_final",
+    )).toBe(true);
+    // 线索存活（含可选 claims / sourceEvidenceNodeId 若已发现）
+    const lead = Object.values(restored.haremInvestigationLeads).find((l) => l.caseId === after.haremInvestigationCases[0]!.id)!;
+    expect(lead).toBeDefined();
+    const original = Object.values(after.haremInvestigationLeads).find((l) => l.id === lead.id)!;
+    expect(lead.sourceEvidenceNodeId).toBe(original.sourceEvidenceNodeId);
+    expect(lead.claims).toEqual(original.claims);
   });
 
   it("EV-06: 同一证据节点不重复发现（第二次同方法任务不会再产出同 node）", () => {
