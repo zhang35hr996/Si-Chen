@@ -39,6 +39,9 @@ export function SettingsMenu({
   const narrativeLog = state.narrativeLog ?? [];
 
   const speakerName = (speakerId: string): string => {
+    // 特殊发言人标签：旁白无名、玩家以「陛下」自称（不是 db.characters 里的角色）。
+    if (speakerId === "narrator") return "旁白";
+    if (speakerId === "player") return "陛下";
     const c = db.characters[speakerId] ?? state.generatedConsorts[speakerId];
     if (!c) return speakerId;
     const st = state.standing[speakerId];

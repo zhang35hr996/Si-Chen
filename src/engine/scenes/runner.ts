@@ -32,9 +32,16 @@ export interface SceneSession {
   cursorNodeId: string | null; // null = walked past the terminal node
   steps: number;
   selectedChoiceId?: string;
+  /** 已产出的可显示 frame 计数（从 0 起，每产出一个递增）。用于 UI 稳定去重身份。 */
+  frameSeq: number;
 }
 
 export interface DialogueFrame {
+  /**
+   * 该可显示 frame 的稳定序号（每次 start() 从 1 重新计数；provider 失败/重试/终态 commit 不递增；
+   * 等待玩家选择期间保持不变）。UI 用 `${eventId}:${frameSeq}` 作历史记录去重键。
+   */
+  frameSeq: number;
   line: DialogueLine;
   /** "choice": pick one of line.choices; "continue": advance() with no input. */
   awaiting: "choice" | "continue";
@@ -86,6 +93,7 @@ export class SceneRunner {
       pendingEffects: [],
       cursorNodeId: scene.startNodeId,
       steps: 0,
+      frameSeq: 0,
     };
     this.scene = scene;
     this.preState = state;
@@ -132,6 +140,11 @@ export class SceneRunner {
   private fail(error: GameError): Result<RunnerStep, GameError> {
     this.abandon(); // runtime backstop: session discarded, no AP/effects (plan §10 #7)
     return err(error);
+  }
+
+  /** 产出一个可显示 frame：递增 frameSeq 并打包。仅在真正向调用方返回 frame 时调用。 */
+  private frame(line: DialogueLine, awaiting: "choice" | "continue"): Result<RunnerStep, GameError> {
+    return ok({ kind: "frame", frame: { frameSeq: ++this.session!.frameSeq, line, awaiting } });
   }
 
   private async run(): Promise<Result<RunnerStep, GameError>> {
@@ -189,12 +202,12 @@ export class SceneRunner {
             const attached = this.attachChoices(narrationLine, narrationNext);
             if (!attached.ok) return this.fail(attached.error);
             this.lastLine = attached.value;
-            return ok({ kind: "frame", frame: { line: attached.value, awaiting: "choice" } });
+            return this.frame(attached.value, "choice");
           }
           session.cursorNodeId = node.next ?? null;
           this.awaiting = "continue";
           this.lastLine = narrationLine;
-          return ok({ kind: "frame", frame: { line: narrationLine, awaiting: "continue" } });
+          return this.frame(narrationLine, "continue");
         }
 
         case "line": {
@@ -209,18 +222,18 @@ export class SceneRunner {
           const produced = await produceDialogueTurn(this.db, this.dialogueRuntime.provider, request.value, this.preState!, toDialogueTurnOptions(this.dialogueRuntime));
           if (!produced.ok) return this.fail(produced.error);
 
-          let line = produced.value.line;
+          const line = produced.value.line;
           const nextNode = node.next ? this.nodes.get(node.next) : undefined;
           if (nextNode?.type === "choice") {
             const attached = this.attachChoices(line, nextNode);
             if (!attached.ok) return this.fail(attached.error);
             this.lastLine = attached.value;
-            return ok({ kind: "frame", frame: { line: attached.value, awaiting: "choice" } });
+            return this.frame(attached.value, "choice");
           }
           session.cursorNodeId = node.next ?? null;
           this.awaiting = "continue";
           this.lastLine = line;
-          return ok({ kind: "frame", frame: { line, awaiting: "continue" } });
+          return this.frame(line, "continue");
         }
 
         case "choice": {
@@ -233,7 +246,7 @@ export class SceneRunner {
           const attached = this.attachChoices(this.lastLine, node);
           if (!attached.ok) return this.fail(attached.error);
           this.lastLine = attached.value;
-          return ok({ kind: "frame", frame: { line: attached.value, awaiting: "choice" } });
+          return this.frame(attached.value, "choice");
         }
       }
     }

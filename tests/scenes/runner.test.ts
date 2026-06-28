@@ -58,6 +58,30 @@ describe("SceneRunner walkthrough (sc_fixture_scene_runner, through the provider
     expect(state.calendar.ap).toBe(5); // runner NEVER touches state — caller commits
   });
 
+  it("frameSeq: 每个可显示 frame 递增，每次 start() 重新从 1 计数", async () => {
+    const runner = new SceneRunner(db, { provider: mockProvider });
+    const first = asFrame(unwrap(await runner.start(fresh(), "ev_fixture_scene_runner")));
+    expect(first.frameSeq).toBe(1);
+    const second = asFrame(unwrap(await runner.advance("c_comfort")));
+    expect(second.frameSeq).toBe(2); // 第二个可显示 frame
+    const end = unwrap(await runner.advance());
+    expect(end.kind).toBe("end"); // 终态 commit 不是 frame，不计入 frameSeq
+
+    // 重新 start() → frameSeq 从 1 重新计数（去重键含 eventId，跨会话不冲突）
+    const restart = asFrame(unwrap(await runner.start(fresh(), "ev_fixture_scene_runner")));
+    expect(restart.frameSeq).toBe(1);
+  });
+
+  it("frameSeq: 无效选择不产出新 frame，frameSeq 不递增", async () => {
+    const runner = new SceneRunner(db, { provider: mockProvider });
+    const first = asFrame(unwrap(await runner.start(fresh(), "ev_fixture_scene_runner")));
+    expect(first.frameSeq).toBe(1);
+    const bad = await runner.advance("c_ghost"); // 无效选择被拒，不产出 frame
+    expect(bad.ok).toBe(false);
+    const retry = asFrame(unwrap(await runner.advance("c_comfort")));
+    expect(retry.frameSeq).toBe(2); // 仅成功产出的 frame 递增
+  });
+
   it("invalid choice id is rejected without advancing", async () => {
     const runner = new SceneRunner(db, { provider: mockProvider });
     unwrap(await runner.start(fresh(), "ev_fixture_scene_runner"));

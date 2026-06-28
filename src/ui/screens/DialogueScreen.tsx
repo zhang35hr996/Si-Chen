@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
-import { formatGameTime, formatShichen, timeOfDay } from "../../engine/calendar/time";
+import { formatGameTime, formatShichen, timeOfDay, toGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import type { EventEffect } from "../../engine/content/schemas";
 import { mockProvider } from "../../engine/dialogue/providers/mockProvider";
@@ -47,6 +47,31 @@ export function DialogueScreen({
   const runnerRef = useRef<SceneRunner | null>(null);
   const [frame, setFrame] = useState<DialogueFrame | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 历史对话去重集合：以 `${eventId}:${frameSeq}`（台词）/`…:choice:${id}`（玩家选择）为稳定键，
+  // 防 React StrictMode 双调用 / rerender 重复写入。只记录"实际显示/实际点击"的内容。
+  const recordedRef = useRef<Set<string>>(new Set());
+
+  // 记录实际显示给玩家的台词（含旁白）：每个新 frame 首次渲染即写入历史。
+  // 中途离开（quit/abandon）不影响已写入的条目——已显示的台词确实发生过。
+  useEffect(() => {
+    if (!frame) return;
+    const key = `${eventId}:${frame.frameSeq}`;
+    if (recordedRef.current.has(key)) return;
+    recordedRef.current.add(key);
+    store.appendNarrativeLog([
+      { at: toGameTime(store.getState().calendar), speakerId: frame.line.speakerId, lines: [frame.line.text] },
+    ]);
+    // 仅在 frameSeq 变化（新台词显示）时记录；store/eventId 在组件生命周期内稳定。
+  }, [frame?.frameSeq]);
+
+  // 记录玩家实际点击的选项（「（继续）」不是选项，不记）。
+  const recordPlayerChoice = (choiceId: string, text: string) => {
+    if (!frame) return;
+    const key = `${eventId}:${frame.frameSeq}:choice:${choiceId}`;
+    if (recordedRef.current.has(key)) return;
+    recordedRef.current.add(key);
+    store.appendNarrativeLog([{ at: toGameTime(store.getState().calendar), speakerId: "player", lines: [text] }]);
+  };
 
   const handleStep = (result: Result<RunnerStep, GameError>) => {
     if (!result.ok) {
@@ -150,7 +175,10 @@ export function DialogueScreen({
               <button
                 key={choice.id}
                 type="button"
-                onClick={() => void runnerRef.current?.advance(choice.id).then(handleStep)}
+                onClick={() => {
+                  recordPlayerChoice(choice.id, choice.text);
+                  void runnerRef.current?.advance(choice.id).then(handleStep);
+                }}
               >
                 {choice.text}
               </button>
