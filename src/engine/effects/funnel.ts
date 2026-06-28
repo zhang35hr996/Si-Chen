@@ -884,7 +884,12 @@ export function applyEffects(
       }
       case "heir_custody": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        const changedCustodian = heir.adoptiveFatherId !== effect.custodianId;
         heir.adoptiveFatherId = effect.custodianId;
+        if (changedCustodian) {
+          heir.custodianBond = 30;
+          heir.neglect = Math.max(0, heir.neglect - 10);
+        }
         // Derive legitimacy: custodian is current eligible empress (huanghou, alive, not confined, not cold-palace).
         const custSt = next.standing[effect.custodianId];
         if (custSt?.rank === "huanghou" && custSt.lifecycle !== "deceased" && !isConfined(next, effect.custodianId) && !isInColdPalace(next, effect.custodianId)) {

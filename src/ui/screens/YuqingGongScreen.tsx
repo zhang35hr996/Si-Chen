@@ -46,7 +46,7 @@ export function YuqingGongScreen({
         <section className="location-screen__roster">
           <h2>在居皇嗣</h2>
           {!isNight ? (
-            <p className="location-screen__empty">皇嗣已就寝，宜夜间前来探视。</p>
+            <p className="location-screen__empty">此时皇嗣尚未归宫，宜夜间前来探视。</p>
           ) : resident.length === 0 ? (
             <p className="location-screen__empty">尚无皇嗣迁居于此。</p>
           ) : (

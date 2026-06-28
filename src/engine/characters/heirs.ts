@@ -47,10 +47,10 @@ export function heirAgeMonths(heir: Heir, now: Pick<GameTime, "year" | "month">)
   return monthOrdinal(now) - monthOrdinal(heir.birthAt);
 }
 
-/** 成长阶段：[0,3岁)=infant；[3,5岁)=toddler；≥5岁=schooling（对话/UI 用途）。 */
+/** 成长阶段：[0,3岁)=infant；[3,enlightenmentAge)=toddler；≥enlightenmentAge=schooling。 */
 export function heirStage(heir: Heir, now: Pick<GameTime, "year">): HeirStage {
   const years = heirAge(heir, now);
-  if (years >= 5) return "schooling";
+  if (years >= enlightenmentAge(heir.sex)) return "schooling";
   if (years >= 3) return "toddler";
   return "infant";
 }
