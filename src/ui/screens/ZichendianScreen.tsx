@@ -41,6 +41,8 @@ import { SceneShell } from "../components/SceneShell";
 import { AudiencePrompt } from "../components/AudiencePrompt";
 import { PendingAudienceDrawer, type PendingAudienceViewItem } from "../components/PendingAudienceDrawer";
 import { ChengfengDispatch } from "../components/ChengfengDispatch";
+import { HaremInvestigationDrawer, type HaremInvestigationCaseView } from "../components/HaremInvestigationDrawer";
+import { isActiveCase } from "../../engine/characters/haremInvestigation/types";
 
 export interface ZichendianAudienceView {
   eventId: string;
@@ -106,6 +108,8 @@ export interface ZichendianScreenProps {
 
   /** 宫中情报历史（宫斗报告已读/未读汇总）。 */
   intrigueHistoryItems?: readonly IntrigueHistoryItem[];
+  /** 宫斗调查案件列表（Phase 5B-1B）。 */
+  investigationCases?: readonly HaremInvestigationCaseView[];
 }
 
 /** 宫中情报历史列表条目（App 层预计算，ZichendianScreen 只渲染）。 */
@@ -121,7 +125,8 @@ type ZichendianForeground =
   | { kind: "none" }
   | { kind: "pending-audience" }
   | { kind: "chengfeng" }
-  | { kind: "intrigue-history" };
+  | { kind: "intrigue-history" }
+  | { kind: "investigation-cases" };
 
 export function ZichendianScreen({
   background,
@@ -153,6 +158,7 @@ export function ZichendianScreen({
   onPhysician,
   onTransferHaremAdministration,
   intrigueHistoryItems = [],
+  investigationCases = [],
 }: ZichendianScreenProps) {
   const [foreground, setForeground] = useState<ZichendianForeground>({ kind: "none" });
   const reasonId = useId();
@@ -177,6 +183,7 @@ export function ZichendianScreen({
   const openPending = () => setForeground((f) => (f.kind === "none" ? { kind: "pending-audience" } : f));
   const openChengfeng = () => setForeground((f) => (f.kind === "none" ? { kind: "chengfeng" } : f));
   const openIntrigueHistory = () => setForeground((f) => (f.kind === "none" ? { kind: "intrigue-history" } : f));
+  const openInvestigationCases = () => setForeground((f) => (f.kind === "none" ? { kind: "investigation-cases" } : f));
   const closeForeground = () => setForeground({ kind: "none" });
 
   // 乘风谕令为业务交接：先关菜单，再在同一交互内发出对应回调（原子切换，便于父层接着开下一个业务面板）。
@@ -291,6 +298,14 @@ export function ZichendianScreen({
           宫中奏报 · {intrigueHistoryItems.length}
         </button>
       )}
+      {(() => {
+        const activeCount = investigationCases.filter((c) => isActiveCase(c.status)).length;
+        return (
+          <button type="button" className="action-btn" onClick={openInvestigationCases} disabled={sceneActionsLocked}>
+            宫中案件{activeCount > 0 ? ` · ${activeCount}` : ""}
+          </button>
+        );
+      })()}
       {showInterruptReason && (
         <span id={reasonId} role="note" className="zichendian-actions__reason">
           {interruptDisabledReason}
@@ -333,6 +348,9 @@ export function ZichendianScreen({
       )}
       {internalSurfacesAllowed && foreground.kind === "intrigue-history" && (
         <IntrigueHistoryDrawer items={intrigueHistoryItems} onClose={closeForeground} />
+      )}
+      {internalSurfacesAllowed && foreground.kind === "investigation-cases" && (
+        <HaremInvestigationDrawer cases={investigationCases} onClose={closeForeground} />
       )}
     </>
   );

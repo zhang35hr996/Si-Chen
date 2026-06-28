@@ -18,6 +18,7 @@ import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks, v
 import { validateHaremDisciplineLinks } from "../characters/haremDisciplineValidator";
 import { validatePeakFavor } from "../characters/peakFavorValidator";
 import { validateHaremIntrigueLinks } from "../characters/haremIntrigue/stateValidation";
+import { validateHaremInvestigationLinks } from "../characters/haremInvestigation/stateValidation";
 
 const nonEmpty = z.string().min(1);
 
@@ -993,6 +994,23 @@ export const gameStateSchema = z.strictObject({
     action: z.enum(["dismissed", "watching", "investigating", "summoned"]).optional(),
     linkedInvestigationId: z.string().optional(),
   })).default([]),
+  haremInvestigationCases: z.array(z.strictObject({
+    id: z.string().min(1),
+    source: z.strictObject({
+      reportId: z.string().min(1),
+      incidentId: z.string().min(1),
+    }),
+    openedAt: gameTimeSchema,
+    openedFromReportKind: z.enum(["anomaly", "rumor", "exposure"]),
+    status: z.enum(["open", "in_progress", "ready_for_review", "closed_unresolved", "closed_confirmed", "cancelled"]),
+    knownTargetIds: z.array(idSchema),
+    suspectIds: z.array(idSchema),
+    suspectedKinds: z.array(z.enum(["slander", "false_accusation", "steal_credit", "faction_pressure", "servant_subversion"])),
+    confidence: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
+    leadIds: z.array(z.string()),
+    closedAt: gameTimeSchema.optional(),
+    closureReason: z.enum(["player_cancelled", "insufficient_evidence", "culprit_confirmed"]).optional(),
+  })).default([]),
   settledHaremIntriguePeriods: z.array(z.string().regex(/^harem_intrigue_settlement:\d+:\d{2}$/)).default([]),
   haremDisciplineIncidents: z.array(z.strictObject({
     id: idSchema,
@@ -1093,6 +1111,11 @@ export const gameStateSchema = z.strictObject({
     ...validateColdPalaceMadnessLinks(data as Parameters<typeof validateColdPalaceMadnessLinks>[0]),
     ...validatePeakFavor(data as Parameters<typeof validatePeakFavor>[0]),
     ...validateHaremIntrigueLinks(data as Parameters<typeof validateHaremIntrigueLinks>[0]),
+    ...validateHaremInvestigationLinks({
+      haremIntrigueReports: (data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIntrigueReports,
+      haremInvestigationCases: (data as { haremInvestigationCases: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationCases"] }).haremInvestigationCases,
+      incidentIds: new Set((data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIncidents.map((i) => i.id)),
+    }),
   ];
   for (const e of errs) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });
