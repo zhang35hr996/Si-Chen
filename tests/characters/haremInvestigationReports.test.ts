@@ -9,9 +9,13 @@ import { presentHaremIntrigueReport, intrigueReportSummaryLine } from "../../src
 import type { GameState, HaremIntrigueReport } from "../../src/engine/state/types";
 import { makeGameTime, fromTurnIndex } from "../../src/engine/calendar/time";
 import { validateHaremInvestigationLinks } from "../../src/engine/characters/haremInvestigation/stateValidation";
+import { buildIntrigueConsequences } from "../../src/engine/characters/haremIntrigue/consequences";
+import { createGameStore } from "../../src/store/gameStore";
 import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import type { HaremScheme, HaremIncident } from "../../src/engine/state/types";
+import type { HaremIntriguePlan } from "../../src/engine/characters/haremIntrigue/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const AT = makeGameTime(1, 3, "early");
@@ -69,26 +73,27 @@ describe("settleDueInvestigationTasks: 生成调查通报", () => {
     expect(invReport?.status).toBe("unread");
   });
 
-  it("reach ready_for_review → investigation_final", () => {
+  it("confidence=confirmed → 案件必进 ready_for_review → 报告必为 investigation_final", () => {
     const s = makeStateWithCase();
     const caseId = s.haremInvestigationCases[0]!.id;
     const taskId = nextTaskId(1);
-    // Force case to ready_for_review via strong confidence
+    // confirmed 置信度 + in_progress → applyInvestigationLead 必然升为 ready_for_review
     const withTask: GameState = {
       ...s,
       haremInvestigationCases: s.haremInvestigationCases.map((c) =>
-        c.id === caseId ? { ...c, status: "in_progress" as const, confidence: "strong" } : c,
+        c.id === caseId ? { ...c, status: "in_progress" as const, confidence: "confirmed" as const } : c,
       ),
       haremInvestigationTasks: {
         [taskId]: { id: taskId, caseId, method: "quiet_inquiry", requestedAt: AT, dueAt: AT, status: "pending" },
       },
     };
     const result = settleDueInvestigationTasks({} as never, withTask, AT);
-    // After settlement, if case hit ready_for_review, report should be investigation_final
+    const settledCase = result.state.haremInvestigationCases.find((c) => c.id === caseId);
+    expect(settledCase?.status).toBe("ready_for_review");
     const finalReport = result.state.haremIntrigueReports.find((r) => r.reportKind === "investigation_final");
-    // May or may not be final depending on RNG; just verify no crash and report exists
+    expect(finalReport).toBeDefined();
     const updateReport = result.state.haremIntrigueReports.find((r) => r.reportKind === "investigation_update");
-    expect(finalReport ?? updateReport).toBeDefined();
+    expect(updateReport).toBeUndefined();
   });
 
   it("幂等：catch-up 不重复生成同一 task 的报告", () => {
@@ -280,38 +285,6 @@ describe("settleDueInvestigationTasks — not yet due", () => {
 
 // ── ready_for_review → investigation_final（确定性路径）────────────────
 
-describe("settleDueInvestigationTasks — ready_for_review produces investigation_final", () => {
-  it("案件进入 ready_for_review 后生成的报告一定是 investigation_final", () => {
-    // 构造已处于 ready_for_review 的案件，模拟任务结算后 applyInvestigationLead 不会降级
-    const s = makeStateWithCase();
-    const caseId = s.haremInvestigationCases[0]!.id;
-    const taskId = nextTaskId(1);
-    // 把案件直接设为 ready_for_review（确认状态）
-    const withTask: GameState = {
-      ...s,
-      haremInvestigationCases: s.haremInvestigationCases.map((c) =>
-        c.id === caseId
-          ? { ...c, status: "in_progress" as const, confidence: "confirmed" as const }
-          : c,
-      ),
-      haremInvestigationTasks: {
-        [taskId]: { id: taskId, caseId, method: "quiet_inquiry", requestedAt: AT, dueAt: AT, status: "pending" },
-      },
-    };
-    const result = settleDueInvestigationTasks({} as never, withTask, AT);
-    // confirmed 置信度 → applyInvestigationLead 应推进到 ready_for_review
-    const finalReport = result.state.haremIntrigueReports.find((r) => r.reportKind === "investigation_final");
-    const updateReport = result.state.haremIntrigueReports.find((r) => r.reportKind === "investigation_update");
-    // At minimum one report exists
-    expect(finalReport ?? updateReport).toBeDefined();
-    // If the case ended as ready_for_review, report must be investigation_final
-    const settledCase = result.state.haremInvestigationCases.find((c) => c.id === caseId);
-    if (settledCase?.status === "ready_for_review") {
-      expect(finalReport).toBeDefined();
-      expect(updateReport).toBeUndefined();
-    }
-  });
-});
 
 // ── source field fix (B1A) + validator differentiation (B1B) ──────────
 
@@ -369,75 +342,114 @@ describe("investigation_update/final report — source 字段与 validator 分�
     expect(reportErrors).toHaveLength(0);
   });
 
-  it("B1B: readSlot 使用真实存档（源报告经 createIntrigueInvestigationCase 建立的完整链）", () => {
+  it("B1B+round-trip: 调查通报通过全量 schema 校验并正常 readSlot", () => {
+    // 复用 haremInvestigationPersistence.test.ts 的完整 fixture 模式：
+    // resolved scheme → incident → source report → openHaremInvestigation → pending task
+    // → settleDueInvestigationTasks → investigation_update → createSaveData → readSlot
     const db = loadRealContent();
     const base = createNewGameState(db, 1);
-    // Use createIntrigueInvestigationCase which creates a properly linked report+case
-    // The source report's incidentId must be in haremIncidents for integrity to pass
-    // Build a synthetic but structurally valid state by modifying an existing incident
-    // (if any) — fallback: test only the report structure, not full readSlot
-    const hasIncidents = base.haremIncidents.length > 0;
-    if (!hasIncidents) {
-      // No incidents in fresh state — skip full readSlot test, just verify structure
-      return;
-    }
-    const firstIncident = base.haremIncidents[0]!;
-    const firstTargetId = firstIncident.targetId;
-    const firstActorId = firstIncident.actorId;
-    // Check if these characters are alive in standing
-    if (!(firstTargetId in base.standing) || !(firstActorId in base.standing)) return;
 
+    const ACTOR_ID = "cheng_feng";
+    const TARGET_ID = "lu_huaijin";
+    const actorSnapshot: HaremIntriguePlan["actorSnapshot"] = {
+      characterId: ACTOR_ID, rankId: "meiren", rankOrder: 100,
+      favor: 30, peakFavor: 50, affection: 50, fear: 40, ambition: 70, loyalty: 30,
+      personality: { scheming: 70, sociability: 40, compassion: 20, courage: 60, jealousy: 70, emotionalStability: 30, pride: 40, intelligence: 55 },
+      household: { servantOpinion: 50, livingStandard: 40, privateWealthLevel: 30 },
+    };
+    const targetSnapshot: HaremIntriguePlan["targetSnapshot"] = {
+      characterId: TARGET_ID, rankId: "guiren", rankOrder: 116,
+      favor: 60, peakFavor: 70, affection: 50, fear: 30, ambition: 40, loyalty: 60,
+      personality: { scheming: 30, sociability: 60, compassion: 60, courage: 40, jealousy: 30, emotionalStability: 60, pride: 50, intelligence: 50 },
+      household: { servantOpinion: 60, livingStandard: 50, privateWealthLevel: 20 },
+    };
+    const plan: HaremIntriguePlan = {
+      sourceKey: "harem_intrigue:1:03", plannedAt: AT,
+      year: 1, month: 3, actorId: ACTOR_ID, targetId: TARGET_ID,
+      kind: "slander", motive: "jealousy",
+      actorPropensity: 70, targetThreat: 60, priority: 65,
+      potency: 55, secrecy: 50, grievanceStrength: 0, factionConflict: false,
+      actorSnapshot, targetSnapshot,
+      rationale: ["high_jealousy", "favor_gap"],
+    };
+    const consequences = buildIntrigueConsequences(plan, true, false);
+    const schemeId = `scheme_rt_b1b_${ACTOR_ID}_${TARGET_ID}`;
+    const incidentId = `incident_${schemeId}`;
+    const reportId = `ireport_${incidentId}`;
+
+    const scheme: HaremScheme = {
+      id: schemeId, sourceKey: plan.sourceKey, plan,
+      status: "resolved", scheduledForYear: 1, scheduledForMonth: 3,
+      outcome: {
+        status: "resolved", resolvedAt: AT,
+        successRoll: 30, successThreshold: 60, success: true,
+        discovered: false, discoveryRoll: 80, discoveryThreshold: 50,
+        consequences,
+        knowledge: { actorKnowsOwnAction: true, targetKnowsInstigator: false, palacePublic: false },
+      },
+    };
+    const incident: HaremIncident = {
+      id: incidentId, schemeId, actorId: ACTOR_ID, targetId: TARGET_ID,
+      kind: "slander", success: true, observationLevel: "anomaly",
+      resolvedAt: AT, consequencesApplied: true,
+    };
     const sourceReport: HaremIntrigueReport = {
-      id: `ireport_rt_${firstIncident.id}`,
-      source: { incidentId: firstIncident.id },
-      reportKind: "anomaly",
-      createdAt: AT,
-      status: "unread",
-      knownTargetIds: [firstTargetId],
-      suspectedActorIds: [],
-      suspectedKinds: [],
-      knownOutcome: "unknown",
-      confidence: "tenuous",
-      summaryCode: "anomaly_observed",
+      id: reportId, source: { incidentId },
+      reportKind: "anomaly", createdAt: AT, status: "unread",
+      knownTargetIds: [TARGET_ID], suspectedActorIds: [],
+      suspectedKinds: [], knownOutcome: "unknown",
+      confidence: "tenuous", summaryCode: "anomaly_unexplained_harm",
     };
-    const s: GameState = {
+
+    const store = createGameStore();
+    store.loadState({
       ...base,
+      haremSchemes: [scheme],
+      haremIncidents: [incident],
       haremIntrigueReports: [...base.haremIntrigueReports, sourceReport],
-    };
-    const r = createIntrigueInvestigationCase(s, sourceReport.id, AT);
-    if (!r.ok) return; // setup failed — skip
-    const stateWithCase = r.value.state;
-    const caseId = stateWithCase.haremInvestigationCases.at(-1)!.id;
-    const taskId = nextTaskId(stateWithCase.haremInvestigationNextSeq);
-    const withTask: GameState = {
-      ...stateWithCase,
-      haremInvestigationCases: stateWithCase.haremInvestigationCases.map((c) =>
+      settledHaremIntriguePeriods: ["harem_intrigue_settlement:1:03"],
+    });
+
+    const openResult = store.openHaremInvestigation(reportId);
+    expect(openResult.ok).toBe(true);
+    if (!openResult.ok) throw new Error("openHaremInvestigation failed: " + JSON.stringify(openResult.error));
+    const caseId = openResult.value.caseId;
+
+    // Add a pending task due now
+    const taskId = nextTaskId(store.getState().haremInvestigationNextSeq);
+    const stateWithTask: GameState = {
+      ...store.getState(),
+      haremInvestigationCases: store.getState().haremInvestigationCases.map((c) =>
         c.id === caseId ? { ...c, status: "in_progress" as const } : c,
       ),
       haremInvestigationTasks: {
-        ...stateWithCase.haremInvestigationTasks,
+        ...store.getState().haremInvestigationTasks,
         [taskId]: { id: taskId, caseId, method: "quiet_inquiry", requestedAt: AT, dueAt: AT, status: "pending" },
       },
     };
-    const settled = settleDueInvestigationTasks({} as never, withTask, AT).state;
+    const settled = settleDueInvestigationTasks({} as never, stateWithTask, AT).state;
 
+    // Investigation report must be present
     const invReport = settled.haremIntrigueReports.find(
       (r) => r.reportKind === "investigation_update" || r.reportKind === "investigation_final",
     );
     expect(invReport).toBeDefined();
+    // source must only have incidentId (B1A)
+    expect(Object.keys(invReport!.source)).toEqual(["incidentId"]);
 
+    // Full round-trip
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, settled, "slot1")));
     const loaded = readSlot(storage, db, "slot1", { now: () => 1 });
     if (!loaded.ok) console.error("readSlot error:", JSON.stringify(loaded.error));
     expect(loaded.ok).toBe(true);
-    if (!loaded.ok) return;
+    if (!loaded.ok) throw new Error("readSlot failed: " + JSON.stringify(loaded.error));
 
     const roundTripped = loaded.value.state.haremIntrigueReports.find(
       (r) => r.reportKind === "investigation_update" || r.reportKind === "investigation_final",
     );
     expect(roundTripped).toBeDefined();
-    expect(roundTripped?.linkedInvestigationId).toBe(caseId);
-    expect(roundTripped?.source.incidentId).toBe(firstIncident.id);
+    expect(roundTripped!.linkedInvestigationId).toBe(caseId);
+    expect(roundTripped!.source.incidentId).toBe(incidentId);
   });
 });
