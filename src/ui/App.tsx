@@ -294,6 +294,14 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [namePetHeirIds, setNamePetHeirIds] = useState<string[]>([]);
   const namePetHeirId = namePetHeirIds[0] ?? null;
   const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine; record?: boolean }[]>([]);
+  // 渲染期派生的「会话/反应」重挂 key：每当 activeSession / reaction 切换为新对象即自增，作为
+  // DialogueScreen / ReactionScreen 的 React key，强制重挂——确保事件链/反应队列切换时组件、frame、
+  // 去重集合全部重建（修复跨事件首帧漏记、上一条反应台词串到下一说话人名下）。StrictMode 双渲染安全
+  // （比对 prev，相同对象不自增）。
+  const dialogueKeyRef = useRef(0);
+  const prevSessionRef = useRef<ActiveEventSession | null>(null);
+  const reactionKeyRef = useRef(0);
+  const prevReactionRef = useRef<typeof reaction>(null);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   // 国库与国情一致：浮层，任意画面可开，关闭后回到原处（不切 view）。
   const [storehouseOpen, setStorehouseOpen] = useState(false);
@@ -1866,6 +1874,16 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (beats.length > 0) { const [f, ...rest] = beats; setReaction(f!); setReactionQueue(rest); }
   };
 
+  // 派生重挂 key（渲染期，StrictMode 安全）：对象身份变化即自增。
+  if (prevSessionRef.current !== activeSession) {
+    prevSessionRef.current = activeSession;
+    if (activeSession) dialogueKeyRef.current += 1;
+  }
+  if (prevReactionRef.current !== reaction) {
+    prevReactionRef.current = reaction;
+    if (reaction) reactionKeyRef.current += 1;
+  }
+
   return (
     <>
       {notice && (
@@ -2489,6 +2507,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       )}
       {view === "event" && activeSession && (
         <DialogueScreen
+          key={dialogueKeyRef.current}
           db={activeSession.kind === "template" ? activeSession.runtimeDb : db}
           store={store}
           registry={registry}
@@ -2715,6 +2734,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       )}
       {reaction && (
         <ReactionScreen
+          key={reactionKeyRef.current}
           db={db}
           store={store}
           registry={registry}
