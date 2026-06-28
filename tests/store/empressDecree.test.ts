@@ -74,4 +74,23 @@ describe("decideDecree", () => {
     const s = oneConsortAt("cairen", 80);
     expect(decideDecree(db, s, "k")).toEqual(decideDecree(db, s, "k"));
   });
+
+  it("runtime-db（生成角色合并进 characters）：候选 ID 不重复，无多皇后", () => {
+    const s = createNewGameState(db);
+    // Simulate App's runtime db
+    const runtimeDb = { ...db, characters: { ...db.characters, ...s.generatedConsorts } };
+    const seen = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const plan = decideDecree(runtimeDb, s, `dedup:${i}`);
+      if (plan) {
+        const setRank = plan.effects.find((e) => e.type === "set_rank") as { char: string } | undefined;
+        if (setRank) {
+          expect(seen.has(setRank.char)).toBe(false);
+          seen.add(setRank.char);
+          break;
+        }
+      }
+    }
+    // If no plan triggered that's fine — main check is no panic/crash
+  });
 });

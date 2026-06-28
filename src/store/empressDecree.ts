@@ -1,6 +1,7 @@
 /** 皇后自行下旨升降「贵人及以下」侍君（纯逻辑，种子化确定性）。 */
 import { gestationRoll } from "../engine/characters/gestation";
 import { activeEmpressId, isEmpress } from "../engine/characters/empress";
+import { inPalaceConsorts } from "../engine/characters/presence";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import { isAssignableRank, type EventEffect } from "../engine/content/schemas";
@@ -47,13 +48,8 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
   const empressId = activeEmpressId(state);
   if (!empressId) return null;
 
-  const allConsorts = [
-    ...Object.values(db.characters),
-    ...Object.values(state.generatedConsorts),
-  ];
-  const candidates = allConsorts.filter((c) => {
-    if (c.kind !== "consort" || isEmpress(state, c.id)) return false;
-    if ("defaultLocation" in c && c.defaultLocation === "changmengong") return false;
+  const candidates = inPalaceConsorts(db, state).filter((c) => {
+    if (isEmpress(state, c.id)) return false;
     const st = state.standing[c.id];
     if (!st || st.lifecycle === "deceased") return false;
     const rank = db.ranks[st.rank];

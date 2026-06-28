@@ -1,6 +1,7 @@
 /** 太后系统纯逻辑（侍疾/敲打），种子化确定性。*/
 import { gestationRoll, gestationRollRaw } from "../engine/characters/gestation";
 import { isEmpress } from "../engine/characters/empress";
+import { inPalaceConsorts } from "../engine/characters/presence";
 import { canCharacterParticipate } from "../engine/characters/restrictions";
 import { isIll } from "../engine/characters/health";
 import { resolveDisplayName } from "../engine/characters/standing";
@@ -23,18 +24,13 @@ export interface ShizhiPlan {
 
 /** 在宫存活的侍君 + 皇后（含殿选侍君）。 */
 function attendantPool(db: ContentDB, state: GameState): string[] {
-  const isEligible = (id: string): boolean => {
-    const st = state.standing[id];
-    if (!st || st.lifecycle === "deceased") return false;
-    return canCharacterParticipate(state, id, "attend_taihou");
-  };
-  const story = Object.values(db.characters)
-    .filter((c) => c.kind === "consort" && c.defaultLocation !== "changmengong" && isEligible(c.id))
+  return inPalaceConsorts(db, state)
+    .filter((c) => {
+      const st = state.standing[c.id];
+      if (!st || st.lifecycle === "deceased") return false;
+      return canCharacterParticipate(state, c.id, "attend_taihou");
+    })
     .map((c) => c.id);
-  const generated = Object.values(state.generatedConsorts)
-    .filter((c) => c.kind === "consort" && isEligible(c.id))
-    .map((c) => c.id);
-  return [...story, ...generated];
 }
 
 /** 病中进慈宁宫遇侍君/皇后侍疾。seedKey 按旬钉死。无遭遇/无候选→null。 */
@@ -87,19 +83,14 @@ export interface RebukePlan {
 
 /** 候选：在宫存活侍君，排除皇后（含殿选侍君）。 */
 function rebukePool(db: ContentDB, state: GameState): { id: string; favor: number }[] {
-  const isEligible = (id: string): boolean => {
-    if (isEmpress(state, id)) return false;
-    const st = state.standing[id];
-    if (!st || st.lifecycle === "deceased") return false;
-    return canCharacterParticipate(state, id, "summoned_by_taihou");
-  };
-  const story = Object.values(db.characters)
-    .filter((c) => c.kind === "consort" && c.defaultLocation !== "changmengong" && isEligible(c.id))
+  return inPalaceConsorts(db, state)
+    .filter((c) => {
+      if (isEmpress(state, c.id)) return false;
+      const st = state.standing[c.id];
+      if (!st || st.lifecycle === "deceased") return false;
+      return canCharacterParticipate(state, c.id, "summoned_by_taihou");
+    })
     .map((c) => ({ id: c.id, favor: state.standing[c.id]?.favor ?? 0 }));
-  const generated = Object.values(state.generatedConsorts)
-    .filter((c) => c.kind === "consort" && isEligible(c.id))
-    .map((c) => ({ id: c.id, favor: state.standing[c.id]?.favor ?? 0 }));
-  return [...story, ...generated];
 }
 
 /** 每行动点 5% 敲打；病中不掷。按 favor 加权选人（宠高更易中）。无候选→null。 */

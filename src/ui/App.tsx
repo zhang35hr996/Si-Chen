@@ -945,7 +945,10 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   };
 
   const newGame = () => {
-    store.newGame(db);
+    const seedArray = new Uint32Array(1);
+    crypto.getRandomValues(seedArray);
+    const rngSeed = seedArray[0] || 1;
+    store.newGame(content.value, rngSeed);
     resetRollGuards();
     navDispatch({ type: "clear" }); // 新游戏清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });

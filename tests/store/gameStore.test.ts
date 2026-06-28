@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createLogger } from "../../src/engine/infra/logger";
 import { createGameStore } from "../../src/store/gameStore";
+import { loadGameContent } from "../../src/engine/content/viteSource";
 import type { GameState } from "../../src/engine/state/types";
 
 describe("GameStore", () => {
@@ -117,5 +118,44 @@ describe("GameStore.commitDialogueState", () => {
     const committed = store.commitDialogueState(snapshot, next);
     expect(committed).toBe(false); // race detected
     expect(store.getState().flags.async_result).toBeUndefined(); // stale result discarded
+  });
+});
+
+describe("GameStore.newGame — seed isolation", () => {
+  const content = loadGameContent();
+  const db = content.ok ? content.value : (() => { throw new Error("content"); })();
+
+  it("两次 newGame(seed=1, seed=2) 产生不同 rngSeed 并持久化进档", () => {
+    const store = createGameStore();
+    store.newGame(db, 1);
+    expect(store.getState().rngSeed).toBe(1);
+    store.newGame(db, 2);
+    expect(store.getState().rngSeed).toBe(2);
+  });
+
+  it("使用原始 content.value 开新档（App 的正确用法）：只有一位皇后且 ID 属于新 seed", () => {
+    const store = createGameStore();
+    store.newGame(db, 1);
+    expect(Object.keys(store.getState().generatedConsorts).length).toBeGreaterThan(0);
+
+    // App.tsx passes content.value (the clean DB), never the merged runtime db
+    store.newGame(db, 2);
+    const second = store.getState();
+
+    const empressEntries = Object.entries(second.standing).filter(([, st]) => st.rank === "huanghou");
+    expect(empressEntries).toHaveLength(1);
+    expect(empressEntries[0]![0]).toBe("generated_empress_2");
+    expect(Object.keys(second.standing).some((id) => id.includes("generated_empress_1"))).toBe(false);
+  });
+
+  it("runtime-db（生成角色合并进 characters）不应传给 newGame：会出现两位皇后（App 已修复此路径）", () => {
+    const store = createGameStore();
+    store.newGame(db, 1);
+    const first = store.getState();
+    const runtimeDb = { ...db, characters: { ...db.characters, ...first.generatedConsorts } };
+    store.newGame(runtimeDb, 2);
+    const second = store.getState();
+    const empressEntries = Object.entries(second.standing).filter(([, st]) => st.rank === "huanghou");
+    expect(empressEntries.length).toBeGreaterThan(1); // bug manifests; App now avoids this path
   });
 });

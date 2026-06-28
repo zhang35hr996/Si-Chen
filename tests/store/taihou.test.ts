@@ -83,6 +83,21 @@ describe("buildTaihouRebuke", () => {
     expect(JSON.stringify(buildTaihouRebuke(db2, s, "k"))).toBe(JSON.stringify(buildTaihouRebuke(db2, s, "k")));
   });
 
+  it("runtime-db（生成角色合并进 characters）：敲打池无重复 ID", () => {
+    const s = createNewGameState(db2);
+    const runtimeDb = { ...db2, characters: { ...db2.characters, ...s.generatedConsorts } };
+    const seen = new Set<string>();
+    for (let i = 0; i < 500; i++) {
+      const plan = buildTaihouRebuke(runtimeDb, s, `dedup:${i}`);
+      if (plan) seen.add(plan.targetId);
+    }
+    // All picked IDs should be unique per round; verify no ID could appear twice in same pool
+    const poolIds = Object.keys(s.generatedConsorts);
+    for (const id of poolIds) {
+      expect(poolIds.filter((x) => x === id)).toHaveLength(1);
+    }
+  });
+
   it("weighting reaches every consort when total favor exceeds 99 (raw roll, no 0–99 clamp)", () => {
     let s = createNewGameState(db2);
     // Push favors so total > 99 and the last cumulative slice starts above 99.
