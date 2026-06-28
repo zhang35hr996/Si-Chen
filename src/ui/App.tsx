@@ -104,7 +104,7 @@ import { audioController } from "./audio/AudioController";
 import { trackFor } from "./audio/trackFor";
 import { CourtyardScreen } from "./screens/CourtyardScreen";
 import { buildTravelBatch } from "../engine/map/travel";
-import { ShangshufangScreen } from "./screens/ShangshufangScreen";
+import { WenzhaodianScreen } from "./screens/WenzhaodianScreen";
 import { YuqingGongScreen } from "./screens/YuqingGongScreen";
 import { FengxiandianScreen } from "./screens/FengxiandianScreen";
 import { CiningGongScreen } from "./screens/CiningGongScreen";
@@ -1899,17 +1899,19 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         />
       )}
       {view === "wenzhaodian" && (
-        <ShangshufangScreen
+        <WenzhaodianScreen
           db={db}
           store={store}
           registry={registry}
           onOpenMap={() => {
-            setMapAtRoot(false); // open on the current board so 返回 climbs to 主图
+            setMapAtRoot(false);
             setView("map");
           }}
           onOpenSettings={() => setSettingsOpen(true)}
           onLesson={heirLesson}
           onTutorReport={tutorReport}
+          onOpenResources={() => setResourcePanelOpen(true)}
+          onOpenStorehouse={() => setStorehouseOpen(true)}
         />
       )}
       {view === "yuqing_gong" && (
