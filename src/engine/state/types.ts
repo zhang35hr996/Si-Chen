@@ -9,6 +9,7 @@ import type { CharacterContent } from "../content/schemas";
 import type { JusticeState, JusticeLinks } from "../justice/types";
 import type { HaremIntriguePlan, HaremIntrigueOutcome, HaremIntrigueKind } from "../characters/haremIntrigue/types";
 import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead } from "../characters/haremInvestigation/types";
+import type { InvestigationTruth, InvestigationIncident } from "../characters/haremInvestigation/truth/types";
 
 // ── Global resource pillars (scaffold values 0–100) ──────────────────
 // 皇帝(玩家本人)属性。明面: health/diligence/prestige/martial/statecraft；
@@ -1470,6 +1471,10 @@ export interface GameState {
   haremInvestigationLeads: Record<string, IntrigueInvestigationLead>;
   /** 调查任务/线索顺序 ID 计数器（itask_/ilead_ 共用同一序列）。 */
   haremInvestigationNextSeq: number;
+  /** 宫斗调查真相对应的事件记录（Phase 5B-2A）。绝不传入 Presenter。 */
+  investigationIncidents: InvestigationIncident[];
+  /** 宫斗事件后台真相层（Phase 5B-2A）。绝不传入 Presenter。 */
+  investigationTruths: InvestigationTruth[];
   /**
    * 已完成宫斗月度结算的期号集合（格式 "harem_intrigue_settlement:{year}:{MM}"）。
    * 无阴谋月份也需写入，避免重复规划。
