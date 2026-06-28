@@ -164,6 +164,19 @@ export function validateHaremInvestigationLinks(
     if (!caseIds.has(task.caseId)) {
       errors.push(stateError("INTRIGUE_TASK_ORPHAN", `haremInvestigationTasks[id=${task.id}]: caseId="${task.caseId}" 对应案件不存在`));
     }
+    // method 与 source.kind 必须匹配：旧方法只能在 legacy_intrigue 案件，证据方法只能在 investigation_incident 案件
+    const taskCase = haremInvestigationCases.find((c) => c.id === task.caseId);
+    if (taskCase) {
+      const legacyMethods = new Set(["question_target", "question_suspect", "quiet_inquiry"]);
+      const evidenceMethods = new Set(["medical_examination", "question_servants", "reconstruct_timeline", "trace_money", "search_quarters", "obtain_testimony"]);
+      const isLegacy = taskCase.source.kind === "legacy_intrigue";
+      if (isLegacy && evidenceMethods.has(task.method)) {
+        errors.push(stateError("INTRIGUE_TASK_METHOD_SOURCE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: legacy_intrigue 案件不允许证据方法 "${task.method}"`));
+      }
+      if (!isLegacy && legacyMethods.has(task.method)) {
+        errors.push(stateError("INTRIGUE_TASK_METHOD_SOURCE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: investigation_incident 案件不允许旧调查方法 "${task.method}"`));
+      }
+    }
     // pending task 不得有 resolvedAt / leadId
     if (task.status === "pending") {
       if (task.resolvedAt) {
@@ -173,7 +186,6 @@ export function validateHaremInvestigationLinks(
         errors.push(stateError("INTRIGUE_TASK_LIFECYCLE", `haremInvestigationTasks[id=${task.id}]: status=pending 但有 leadId`));
       }
       // pending task → case.status 必须是 in_progress（B2 integrity）
-      const taskCase = haremInvestigationCases.find((c) => c.id === task.caseId);
       if (taskCase && taskCase.status !== "in_progress") {
         errors.push(stateError("INTRIGUE_TASK_CASE_STATUS", `haremInvestigationTasks[id=${task.id}]: status=pending 但 case.status="${taskCase.status}"，期望 in_progress`));
       }

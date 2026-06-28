@@ -1185,8 +1185,8 @@ export const gameStateSchema = z.strictObject({
     claims: z.array(z.union([
       z.strictObject({ kind: z.literal("implicates_character"), characterId: idSchema, strength: z.enum(["weak", "moderate", "strong"]) }),
       z.strictObject({ kind: z.literal("exonerates_character"), characterId: idSchema, strength: z.enum(["weak", "moderate", "strong"]) }),
-      z.strictObject({ kind: z.literal("supports_cause"), causeType: z.string().min(1) }),
-      z.strictObject({ kind: z.literal("reveals_mechanism"), mechanism: z.string().min(1) }),
+      z.strictObject({ kind: z.literal("supports_cause"), causeType: investigationCauseTypeSchema }),
+      z.strictObject({ kind: z.literal("reveals_mechanism"), mechanism: investigationMethodSchema }),
       z.strictObject({ kind: z.literal("establishes_fact"), factCode: z.string().min(1) }),
     ])).optional(),
   })).default({}),

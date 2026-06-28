@@ -5,7 +5,9 @@
 import type { GameTime } from "../../calendar/time";
 import type { HaremIntrigueKind } from "../haremIntrigue/types";
 import type { HaremIntrigueReportConfidence } from "../../state/types";
-import type { HeirHealthSymptom, EvidenceDiscoveryAction } from "./truth/types";
+import type { HeirHealthSymptom, EvidenceDiscoveryAction, InvestigationCauseType, IncidentMechanism } from "./truth/types";
+
+export type { InvestigationCauseType, IncidentMechanism };
 
 export type { EvidenceDiscoveryAction };
 
@@ -163,13 +165,13 @@ export const INVESTIGATION_METHOD_DAYS: Record<InvestigationMethod, number> = {
   question_target: 1,
   question_suspect: 1,
   quiet_inquiry: 2,
-  // evidence-driven（1 旬 = 3 durationDays；2 旬 = 6）
-  medical_examination: 3,
-  question_servants: 3,
-  reconstruct_timeline: 3,
-  search_quarters: 3,
-  trace_money: 6,
-  obtain_testimony: 6,
+  // evidence-driven（dayIndex 本身即旬序号，1 = 一旬）
+  medical_examination: 1,
+  question_servants: 1,
+  reconstruct_timeline: 1,
+  search_quarters: 1,
+  trace_money: 2,
+  obtain_testimony: 2,
 };
 
 export type InvestigationTaskStatus = "pending" | "resolved" | "cancelled";
@@ -210,8 +212,8 @@ export function leadStrengthToConfidence(strength: InvestigationLeadStrength): H
 export type InvestigationLeadClaim =
   | { kind: "implicates_character"; characterId: string; strength: "weak" | "moderate" | "strong" }
   | { kind: "exonerates_character"; characterId: string; strength: "weak" | "moderate" | "strong" }
-  | { kind: "supports_cause"; causeType: string }
-  | { kind: "reveals_mechanism"; mechanism: string }
+  | { kind: "supports_cause"; causeType: InvestigationCauseType }
+  | { kind: "reveals_mechanism"; mechanism: IncidentMechanism }
   | { kind: "establishes_fact"; factCode: string };
 
 export interface IntrigueInvestigationLead {

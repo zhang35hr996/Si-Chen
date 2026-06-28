@@ -3,13 +3,13 @@
  * 纯函数：只读取玩家知识层，不读取 haremIncidents/haremSchemes 真相。
  */
 import type { GameState } from "../../state/types";
-import type { IntrigueInvestigationCase } from "./types";
+import type { EvidenceDiscoveryAction, IntrigueInvestigationCase } from "./types";
 import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS, isActiveCase } from "./types";
 import type { InvestigationMethod } from "./types";
 
 export interface AvailableInvestigationAction {
   method: InvestigationMethod;
-  /** question_target / question_suspect 时的候选对象列表；quiet_inquiry 为 undefined。 */
+  /** question_target / question_suspect / search_quarters / obtain_testimony 时的候选对象列表。 */
   subjectCandidateIds?: string[];
   apCost: number;
   durationDays: number;
@@ -23,10 +23,46 @@ function hasPendingTask(state: GameState, caseId: string): boolean {
   );
 }
 
-/** 给定角色 ID 是否仍存活（不是 deceased）。 */
-function isAlive(state: GameState, charId: string): boolean {
+/** 角色是否仍存活（在 standing 中且非 deceased）。不适用于皇嗣。 */
+function isAliveChar(state: GameState, charId: string): boolean {
   const st = state.standing[charId];
   return !!st && st.lifecycle !== "deceased";
+}
+
+/** 皇嗣是否仍存活（在 bloodline.heirs 中且 lifecycle=alive）。 */
+function isLivingHeir(state: GameState, heirId: string): boolean {
+  return state.resources.bloodline.heirs.some(
+    (heir) => heir.id === heirId && heir.lifecycle === "alive",
+  );
+}
+
+/**
+ * 计算指定证据方法的合法 subjectCandidateIds（UI 展示层与 Store 校验共用同一来源）。
+ * 返回 undefined 表示该方法不需要 subject。
+ */
+export function evidenceSubjectCandidates(
+  state: GameState,
+  c: IntrigueInvestigationCase,
+  method: EvidenceDiscoveryAction,
+): string[] | undefined {
+  switch (method) {
+    case "search_quarters":
+      return c.suspectIds.filter((id) => isAliveChar(state, id));
+    case "obtain_testimony": {
+      const publicReport = state.investigationPublicReports.find(
+        (r) => r.source.incidentId === c.source.incidentId && r.reportKind === "anomaly",
+      );
+      if (!publicReport || publicReport.reportKind !== "anomaly") return [];
+      const seen = new Set<string>();
+      return [...publicReport.accuserIds, ...publicReport.suspectedActorIds].filter((id) => {
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return isAliveChar(state, id);
+      });
+    }
+    default:
+      return undefined;
+  }
 }
 
 export function availableInvestigationActions(
@@ -54,8 +90,7 @@ function availableLegacyActions(
 ): AvailableInvestigationAction[] {
   const actions: AvailableInvestigationAction[] = [];
 
-  // 询问受害者：须有已知目标且目标仍存活
-  const aliveTargets = c.knownTargetIds.filter((id) => isAlive(state, id));
+  const aliveTargets = c.knownTargetIds.filter((id) => isAliveChar(state, id));
   if (aliveTargets.length > 0) {
     actions.push({
       method: "question_target",
@@ -65,8 +100,7 @@ function availableLegacyActions(
     });
   }
 
-  // 传问嫌疑人：须有嫌疑人且至少一人仍存活
-  const aliveSuspects = c.suspectIds.filter((id) => isAlive(state, id));
+  const aliveSuspects = c.suspectIds.filter((id) => isAliveChar(state, id));
   if (aliveSuspects.length > 0) {
     actions.push({
       method: "question_suspect",
@@ -76,7 +110,6 @@ function availableLegacyActions(
     });
   }
 
-  // 暗中查访：案件活跃即可
   actions.push({
     method: "quiet_inquiry",
     apCost: INVESTIGATION_METHOD_AP.quiet_inquiry,
@@ -92,9 +125,9 @@ function availableEvidenceActions(
 ): AvailableInvestigationAction[] {
   const actions: AvailableInvestigationAction[] = [];
 
-  // 查验脉案与药物：受害皇嗣仍存活时可用
-  const aliveTargets = c.knownTargetIds.filter((id) => isAlive(state, id));
-  if (aliveTargets.length > 0) {
+  // 查验脉案与药物：受害皇嗣仍存活时可用（皇嗣在 bloodline.heirs，不在 standing）
+  const aliveHeirTargets = c.knownTargetIds.filter((id) => isLivingHeir(state, id));
+  if (aliveHeirTargets.length > 0) {
     actions.push({
       method: "medical_examination",
       apCost: INVESTIGATION_METHOD_AP.medical_examination,
@@ -102,51 +135,29 @@ function availableEvidenceActions(
     });
   }
 
-  // 询问宫人：始终可用
-  actions.push({
-    method: "question_servants",
-    apCost: INVESTIGATION_METHOD_AP.question_servants,
-    durationDays: INVESTIGATION_METHOD_DAYS.question_servants,
-  });
+  // 询问宫人 / 重建事发时序 / 追查钱物流向：始终可用
+  for (const method of ["question_servants", "reconstruct_timeline", "trace_money"] as const) {
+    actions.push({
+      method,
+      apCost: INVESTIGATION_METHOD_AP[method],
+      durationDays: INVESTIGATION_METHOD_DAYS[method],
+    });
+  }
 
-  // 重建事发时序：始终可用
-  actions.push({
-    method: "reconstruct_timeline",
-    apCost: INVESTIGATION_METHOD_AP.reconstruct_timeline,
-    durationDays: INVESTIGATION_METHOD_DAYS.reconstruct_timeline,
-  });
-
-  // 追查钱物流向：始终可用
-  actions.push({
-    method: "trace_money",
-    apCost: INVESTIGATION_METHOD_AP.trace_money,
-    durationDays: INVESTIGATION_METHOD_DAYS.trace_money,
-  });
-
-  // 搜查住处：需选存活嫌疑人
-  const aliveSuspects = c.suspectIds.filter((id) => isAlive(state, id));
-  if (aliveSuspects.length > 0) {
+  // 搜查住处：候选来自存活嫌疑人（standing 角色）
+  const searchCandidates = evidenceSubjectCandidates(state, c, "search_quarters");
+  if (searchCandidates && searchCandidates.length > 0) {
     actions.push({
       method: "search_quarters",
-      subjectCandidateIds: aliveSuspects,
+      subjectCandidateIds: searchCandidates,
       apCost: INVESTIGATION_METHOD_AP.search_quarters,
       durationDays: INVESTIGATION_METHOD_DAYS.search_quarters,
     });
   }
 
-  // 获取关键证词：候选来自公开报告中已知人物（指控者 + 被指控者）
-  const publicReport = state.investigationPublicReports.find(
-    (r) => r.source.incidentId === c.source.incidentId && r.reportKind === "anomaly",
-  );
-  const testimonyCandidates: string[] = [];
-  if (publicReport && publicReport.reportKind === "anomaly") {
-    for (const id of [...publicReport.accuserIds, ...publicReport.suspectedActorIds]) {
-      if (!testimonyCandidates.includes(id) && isAlive(state, id)) {
-        testimonyCandidates.push(id);
-      }
-    }
-  }
-  if (testimonyCandidates.length > 0) {
+  // 获取关键证词：候选来自公开报告的指控者 + 被指控者（standing 角色）
+  const testimonyCandidates = evidenceSubjectCandidates(state, c, "obtain_testimony");
+  if (testimonyCandidates && testimonyCandidates.length > 0) {
     actions.push({
       method: "obtain_testimony",
       subjectCandidateIds: testimonyCandidates,
@@ -158,7 +169,13 @@ function availableEvidenceActions(
   return actions;
 }
 
-/** 验证指定案件是否可以接受新调查任务（单独暴露给 store 使用）。 */
+const LEGACY_METHODS = new Set<InvestigationMethod>(["question_target", "question_suspect", "quiet_inquiry"]);
+const EVIDENCE_METHODS = new Set<InvestigationMethod>([
+  "medical_examination", "question_servants", "reconstruct_timeline",
+  "trace_money", "search_quarters", "obtain_testimony",
+]);
+
+/** 验证指定案件是否可以接受新调查任务（供 Store 使用，与 availableInvestigationActions 共享校验逻辑）。 */
 export function validateCanStartTask(
   state: GameState,
   c: IntrigueInvestigationCase,
@@ -176,13 +193,10 @@ export function validateCanStartTask(
   }
 
   const isLegacy = c.source.kind === "legacy_intrigue";
-  const legacyMethods = new Set(["question_target", "question_suspect", "quiet_inquiry"]);
-  const evidenceMethods = new Set(["medical_examination", "question_servants", "reconstruct_timeline", "trace_money", "search_quarters", "obtain_testimony"]);
-
-  if (isLegacy && !legacyMethods.has(method)) {
+  if (isLegacy && !LEGACY_METHODS.has(method)) {
     return `案件 "${c.id}" 为宫斗案件，不支持证据调查方法 "${method}"`;
   }
-  if (!isLegacy && !evidenceMethods.has(method)) {
+  if (!isLegacy && !EVIDENCE_METHODS.has(method)) {
     return `案件 "${c.id}" 为证据驱动案件，不支持旧调查方法 "${method}"`;
   }
 
@@ -190,27 +204,28 @@ export function validateCanStartTask(
   if (method === "question_suspect") {
     if (!subjectId) return "传问嫌疑人须指定调查对象";
     if (!c.suspectIds.includes(subjectId)) return `"${subjectId}" 不在当前嫌疑人名单中`;
-    const alive = state.standing[subjectId];
-    if (!alive || alive.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法传问`;
+    if (!isAliveChar(state, subjectId)) return `"${subjectId}" 已不在人世，无法传问`;
   }
   if (method === "question_target") {
     if (!subjectId) return "询问受害者须指定具体询问对象";
     if (!c.knownTargetIds.includes(subjectId)) return `"${subjectId}" 不在受害者名单 knownTargetIds 中`;
-    const st = state.standing[subjectId];
-    if (!st || st.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法询问`;
+    if (!isAliveChar(state, subjectId)) return `"${subjectId}" 已不在人世，无法询问`;
   }
 
   // evidence 方法校验
-  if (method === "search_quarters") {
-    if (!subjectId) return "搜查住处须指定搜查对象";
-    if (!c.suspectIds.includes(subjectId)) return `"${subjectId}" 不在当前嫌疑人名单中`;
-    const alive = state.standing[subjectId];
-    if (!alive || alive.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法搜查`;
+  if (method === "medical_examination") {
+    // 须有存活皇嗣目标（皇嗣在 bloodline.heirs，不在 standing）
+    const aliveHeirs = c.knownTargetIds.filter((id) => isLivingHeir(state, id));
+    if (aliveHeirs.length === 0) return "受害皇嗣已不在人世，无法查验脉案";
   }
-  if (method === "obtain_testimony") {
-    if (!subjectId) return "获取证词须指定证人";
-    const st = state.standing[subjectId];
-    if (!st || st.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法获取证词`;
+  if (method === "search_quarters" || method === "obtain_testimony") {
+    if (!subjectId) return `${method === "search_quarters" ? "搜查住处" : "获取证词"}须指定具体对象`;
+    // 必须在从同一函数派生的候选名单中
+    const candidates = evidenceSubjectCandidates(state, c, method);
+    if (!candidates || !candidates.includes(subjectId)) {
+      return `"${subjectId}" 不在 ${method} 的合法候选名单中`;
+    }
   }
+
   return null; // OK
 }

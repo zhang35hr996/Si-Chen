@@ -23,8 +23,7 @@ import type { GameState } from "../../src/engine/state/types";
 import type { InvestigationTruth, HiddenEvidenceNode, HeirHealthAnomalyIncident } from "../../src/engine/characters/haremInvestigation/truth/types";
 import type { IntrigueInvestigationCase, InvestigationProgressPublicReport, HeirHealthAnomalyPublicReport } from "../../src/engine/characters/haremInvestigation/types";
 import { availableInvestigationActions } from "../../src/engine/characters/haremInvestigation/actions";
-import { resolveInvestigationTask, settleDueInvestigationTasks, nextLeadId, nextTaskId } from "../../src/engine/characters/haremInvestigation/settlement";
-import { createGameStore } from "../../src/store/gameStore";
+import { resolveInvestigationTask, settleDueInvestigationTasks, nextLeadId } from "../../src/engine/characters/haremInvestigation/settlement";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
 import { createMemoryStorage } from "../../src/engine/save/storage";
@@ -32,7 +31,6 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const AT = makeGameTime(1, 3, "early");
-const AT_LATER = makeGameTime(1, 3, "mid"); // 3 durationDays later (for decay)
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -136,7 +134,7 @@ function makeCase(overrides: Partial<IntrigueInvestigationCase> = {}): IntrigueI
     openedFromReportKind: "anomaly",
     status: "open",
     knownTargetIds: ["heir_ev_001"],
-    suspectIds: ["xu_qinghuan"],
+    suspectIds: [ACCUSED_ID],
     suspectedKinds: [],
     confidence: "tenuous",
     leadIds: [],
@@ -197,18 +195,40 @@ describe("availableInvestigationActions — evidence-driven", () => {
     expect(methods).toContain("question_servants");
     expect(methods).toContain("reconstruct_timeline");
     expect(methods).toContain("trace_money");
+    // medical_examination 需要皇嗣在 bloodline.heirs 且存活；
+    // 当前 case.knownTargetIds=["heir_ev_001"] 不在 heirs → 不出现
+    expect(methods).not.toContain("medical_examination");
   });
 
-  it("EV-02: search_quarters 需要存活嫌疑人（subjects = suspectIds）", () => {
+  it("EV-01b: 受害皇嗣存活时 medical_examination 出现", () => {
+    const base = makeStateWithCase();
+    // 借用已有皇嗣（若无则跳过），或用强转注入最小 fixture
+    const existingHeir = base.resources.bloodline.heirs.find((h) => h.lifecycle === "alive");
+    const heirId = existingHeir?.id ?? "heir_ev_001";
+    const stateWithHeir: GameState = existingHeir
+      ? {
+          ...base,
+          haremInvestigationCases: [makeCase({ knownTargetIds: [heirId] })],
+        }
+      : base; // no real heirs in new game — skip assertion
+    const actions = availableInvestigationActions(stateWithHeir, makeCase().id);
+    const methods = actions.map((a) => a.method);
+    if (existingHeir) {
+      // real heir in case's knownTargetIds → medical_examination should appear
+      expect(methods).toContain("medical_examination");
+    } else {
+      // no heirs in base state → medical_examination stays absent
+      expect(methods).not.toContain("medical_examination");
+    }
+  });
+
+  it("EV-02: search_quarters 返回存活嫌疑人作为候选（wei_sui 始终存活于 standing）", () => {
     const state = makeStateWithCase();
     const actions = availableInvestigationActions(state, makeCase().id);
     const sq = actions.find((a) => a.method === "search_quarters");
-    // suspect "accused_y" 存在但 standing 未必有，取决于新游戏状态
-    // 至少验证 search_quarters 只在有嫌疑人时出现
-    if (sq) {
-      expect(sq.subjectCandidateIds).toBeDefined();
-      expect(sq.subjectCandidateIds!.length).toBeGreaterThan(0);
-    }
+    // ACCUSED_ID="wei_sui" 是 spawnMode=auto 角色，始终在 standing 且存活
+    expect(sq).toBeDefined();
+    expect(sq!.subjectCandidateIds).toContain(ACCUSED_ID);
   });
 
   it("EV-03: in_progress 时无可用行动（已有 pending task）", () => {
@@ -291,52 +311,57 @@ describe("resolveEvidenceDrivenTask — 证据发现", () => {
   });
 
   it("EV-13: 已发现节点不重复（sourceEvidenceNodeId 去重）", () => {
-    // First discovery
-    const state = makeStateWithCase();
+    // difficulty=0, concealment=0 → effectiveDifficulty=clamp(0+0+0,5,95)=5；roll0to99>=5 几乎必然成功
+    const guaranteedState: GameState = {
+      ...makeStateWithCase(),
+      investigationTruths: [{
+        ...TRUTH,
+        concealment: 0,
+        evidenceNodes: [{ ...MEDICAL_NODE, difficulty: 0, decayPerPeriod: 0 }],
+      }],
+    };
     const task1 = makeTask("medical_examination");
-    const r1 = resolveInvestigationTask(state, task1, AT);
+    const r1 = resolveInvestigationTask(guaranteedState, task1, AT);
+    // 确定性：roll0to99 >= 5，virtually guaranteed
+    expect(r1.lead.sourceEvidenceNodeId).toBe("node_medical_001");
 
-    if (!r1.lead.sourceEvidenceNodeId) {
-      // Discovery didn't happen this time (high difficulty) — skip
-      return;
-    }
-
-    // Simulate state with that lead already registered
+    // Simulate state with that lead registered
     const stateAfter: GameState = {
-      ...state,
-      haremInvestigationLeads: {
-        [r1.lead.id]: r1.lead,
-      },
+      ...guaranteedState,
+      haremInvestigationLeads: { [r1.lead.id]: r1.lead },
       haremInvestigationCases: [makeCase({ leadIds: [r1.lead.id] })],
       haremInvestigationNextSeq: r1.nextSeq,
     };
 
-    // Second attempt at same method
+    // Second attempt: node already discovered → not re-discovered
     const task2 = { ...makeTask("medical_examination"), id: "itask_000002" };
     const r2 = resolveInvestigationTask(stateAfter, task2, AT);
-    // Should not discover the same node again
-    expect(r2.lead.sourceEvidenceNodeId).not.toBe(r1.lead.sourceEvidenceNodeId);
+    expect(r2.lead.summaryCode).toBe("evidence_no_new_findings");
+    expect(r2.lead.sourceEvidenceNodeId).toBeUndefined();
   });
 
   it("EV-14: misleading 节点产生 lead，但 lead 不含 misleading/culpritIds 字段", () => {
+    // difficulty=0, concealment=0 确保发现
     const stateOnlyMisleading: GameState = {
       ...makeStateWithCase(),
       investigationTruths: [{
         ...TRUTH,
-        evidenceNodes: [MISLEADING_NODE],
+        concealment: 0,
+        evidenceNodes: [{ ...MISLEADING_NODE, difficulty: 0, decayPerPeriod: 0 }],
       }],
     };
     const task = makeTask("question_servants");
     const result = resolveInvestigationTask(stateOnlyMisleading, task, AT);
-    // Lead may or may not contain claims, but must not expose misleading flag
+    // 确定性发现：roll>=5 必然成功
+    expect(result.lead.sourceEvidenceNodeId).toBe("node_misleading_001");
+    // lead 不得暴露后台 misleading/culpritIds
     expect(result.lead).not.toHaveProperty("misleading");
     expect(result.lead).not.toHaveProperty("culpritIds");
-    // claims should not mention internal truth fields
-    if (result.lead.claims) {
-      for (const cl of result.lead.claims) {
-        expect(cl).not.toHaveProperty("culpritRef");
-        expect(cl).not.toHaveProperty("isMisleading");
-      }
+    // claims 不含内部真相字段
+    expect(result.lead.claims).toBeDefined();
+    for (const cl of result.lead.claims!) {
+      expect(cl).not.toHaveProperty("culpritRef");
+      expect(cl).not.toHaveProperty("isMisleading");
     }
   });
 
@@ -553,7 +578,7 @@ describe("save round-trip — evidence-driven investigation", () => {
     const state: GameState = {
       ...makeStateWithCase(),
       haremInvestigationCases: [makeCase({ leadIds: [leadWithAllClaims.id] })],
-      haremInvestigationLeads: { [leadWithAllClaims.id]: leadWithAllClaims },
+      haremInvestigationLeads: { [leadWithAllClaims.id]: leadWithAllClaims } as Record<string, import("../../src/engine/characters/haremInvestigation/types").IntrigueInvestigationLead>,
       haremInvestigationNextSeq: 2,
     };
 
