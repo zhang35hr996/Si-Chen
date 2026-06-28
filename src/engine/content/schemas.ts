@@ -1007,6 +1007,12 @@ export const eventTemplateSchema = z.strictObject({
   choices: z.array(templateChoiceSchema).min(2).max(5),
   outcomes: z.array(templateOutcomeSchema).min(1),
   basePriority: z.number().int(),
+  /**
+   * 调度类别：ambient（普通随机事件，经过概率门和频率上限）；
+   * pending（年度/系统生成的待裁事件，只要条件满足就必须呈现，不计入 ambient 月度上限）。
+   * 缺省视为 ambient。
+   */
+  schedule: z.strictObject({ kind: z.enum(["ambient", "pending"]) }).optional(),
   /** LLM narrative brief 模板（预留，Phase 2 接入 LLM 渲染层）。 */
   narrativeBriefTemplate: z.string().optional(),
 });
