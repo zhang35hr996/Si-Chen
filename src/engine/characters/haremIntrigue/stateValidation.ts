@@ -74,9 +74,13 @@ export function validateHaremIntrigueLinks(
     }
   }
 
-  // settledHaremIntriguePeriods: no duplicates
+  // settledHaremIntriguePeriods: valid format + no duplicates
+  const PERIOD_RE = /^harem_intrigue_settlement:(\d+):(0[1-9]|1[0-2])$/;
   const seenPeriods = new Set<string>();
   for (const period of data.settledHaremIntriguePeriods) {
+    if (!PERIOD_RE.test(period)) {
+      errors.push(stateError("INTRIGUE_BAD_SOURCE_KEY", `settledHaremIntriguePeriods: 格式错误 "${period}"（期望 harem_intrigue_settlement:Y:MM，月份 01-12）`));
+    }
     if (seenPeriods.has(period)) {
       errors.push(stateError("INTRIGUE_DUP_SOURCE_KEY", `settledHaremIntriguePeriods: 重复期号 "${period}"`));
     }
@@ -109,6 +113,65 @@ export function validateHaremIntrigueLinks(
 
     if (incident.observationLevel === "exposed" && !incident.courtEventId) {
       errors.push(stateError("INTRIGUE_EXPOSED_NO_COURT_EVENT", `haremIncidents[id=${incident.id}]: observationLevel=exposed 但无 courtEventId`));
+    }
+  }
+
+  // Lifecycle: status ↔ outcome ↔ incident count + cross-field consistency
+  for (const scheme of data.haremSchemes) {
+    const incident = incidentBySchemeId.get(scheme.id);
+    const hasIncident = incident !== undefined;
+
+    if (scheme.status === "pending") {
+      if (scheme.outcome !== undefined) {
+        errors.push(stateError("INTRIGUE_PENDING_HAS_OUTCOME", `haremSchemes[id=${scheme.id}]: status=pending 但有 outcome`));
+      }
+      if (hasIncident) {
+        errors.push(stateError("INTRIGUE_PENDING_HAS_INCIDENT", `haremSchemes[id=${scheme.id}]: status=pending 但有 incident`));
+      }
+    } else if (scheme.status === "resolved") {
+      // Outcome status consistency (INTRIGUE_RESOLVED_NO_OUTCOME already checked above)
+      if (scheme.outcome && scheme.outcome.status !== "resolved") {
+        errors.push(stateError("INTRIGUE_STATUS_MISMATCH", `haremSchemes[id=${scheme.id}]: status=resolved 但 outcome.status="${scheme.outcome.status}"`));
+      }
+      if (!hasIncident) {
+        errors.push(stateError("INTRIGUE_RESOLVED_INCIDENT_COUNT", `haremSchemes[id=${scheme.id}]: status=resolved 需恰有 1 个 incident`));
+      } else {
+        // Cross-field: incident fields must match plan/outcome
+        if (incident!.actorId !== scheme.plan.actorId) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: actorId 与 plan 不一致`));
+        }
+        if (incident!.targetId !== scheme.plan.targetId) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: targetId 与 plan 不一致`));
+        }
+        if (incident!.kind !== scheme.plan.kind) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: kind="${incident!.kind}" 与 plan.kind="${scheme.plan.kind}" 不一致`));
+        }
+        if (scheme.outcome?.status === "resolved" && incident!.success !== scheme.outcome.success) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: success=${incident!.success} 与 outcome.success=${scheme.outcome.success} 不一致`));
+        }
+        if (!incident!.consequencesApplied) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: status=resolved 但 consequencesApplied=false`));
+        }
+      }
+    } else if (scheme.status === "cancelled") {
+      if (!scheme.outcome) {
+        errors.push(stateError("INTRIGUE_CANCELLED_NO_OUTCOME", `haremSchemes[id=${scheme.id}]: status=cancelled 但无 outcome`));
+      } else if (scheme.outcome.status !== "cancelled") {
+        errors.push(stateError("INTRIGUE_STATUS_MISMATCH", `haremSchemes[id=${scheme.id}]: status=cancelled 但 outcome.status="${scheme.outcome.status}"`));
+      }
+      if (!hasIncident) {
+        errors.push(stateError("INTRIGUE_CANCELLED_INCIDENT_COUNT", `haremSchemes[id=${scheme.id}]: status=cancelled 需恰有 1 个 incident`));
+      } else {
+        if (incident!.actorId !== scheme.plan.actorId) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: actorId 与 plan 不一致`));
+        }
+        if (incident!.targetId !== scheme.plan.targetId) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: targetId 与 plan 不一致`));
+        }
+        if (incident!.kind !== scheme.plan.kind) {
+          errors.push(stateError("INTRIGUE_INCIDENT_FIELD_MISMATCH", `haremIncidents[id=${incident!.id}]: kind="${incident!.kind}" 与 plan.kind="${scheme.plan.kind}" 不一致`));
+        }
+      }
     }
   }
 

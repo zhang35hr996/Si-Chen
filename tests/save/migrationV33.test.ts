@@ -20,6 +20,8 @@ import { checksumOf } from "../../src/engine/save/canonical";
 import { gameStateSchema } from "../../src/engine/save/stateSchema";
 import { loadRealContent } from "../helpers/contentFixture";
 import type { GameState } from "../../src/engine/state/types";
+import type { HaremIntriguePlan, HaremIntrigueKind } from "../../src/engine/characters/haremIntrigue/types";
+import { buildIntrigueConsequences } from "../../src/engine/characters/haremIntrigue/consequences";
 
 const db = loadRealContent();
 
@@ -36,76 +38,99 @@ const PERSONALITY = {
 };
 const HOUSEHOLD = { servantOpinion: 50, livingStandard: 40, privateWealthLevel: 30 };
 
-/** Minimal valid v32 HaremScheme (all required plan fields). */
+/** Build a minimal resolved outcome for a plan (success=false, discovered=false). */
+function makeResolvedOutcome(
+  plan: HaremIntriguePlan,
+  resolvedAt: typeof AT_Y1M3 = AT_Y1M3,
+): Record<string, unknown> {
+  return {
+    status: "resolved",
+    resolvedAt,
+    successRoll: 80,
+    successThreshold: 50,
+    success: false,
+    discoveryRoll: 80,
+    discoveryThreshold: 40,
+    discovered: false,
+    consequences: buildIntrigueConsequences(plan, false, false),
+    knowledge: { actorKnowsOwnAction: true, targetKnowsInstigator: false, palacePublic: false },
+  };
+}
+
+/** Minimal valid v32 HaremScheme (status=resolved with outcome to satisfy lifecycle invariants). */
 function makeMinimalScheme(id: string, actorId: string, targetId: string): Record<string, unknown> {
+  const plan: HaremIntriguePlan = {
+    sourceKey: "harem_intrigue:1:03",
+    plannedAt: AT_Y1M3,
+    year: 1,
+    month: 3,
+    actorId,
+    targetId,
+    kind: "slander",
+    motive: "jealousy",
+    actorPropensity: 70,
+    targetThreat: 60,
+    priority: 65,
+    potency: 55,
+    secrecy: 50,
+    grievanceStrength: 0,
+    factionConflict: false,
+    actorSnapshot: {
+      characterId: actorId,
+      rankId: "meiren",
+      rankOrder: 100,
+      favor: 30,
+      peakFavor: 50,
+      affection: 50,
+      fear: 40,
+      ambition: 70,
+      loyalty: 30,
+      personality: PERSONALITY,
+      household: HOUSEHOLD,
+    },
+    targetSnapshot: {
+      characterId: targetId,
+      rankId: "guiren",
+      rankOrder: 116,
+      favor: 60,
+      peakFavor: 70,
+      affection: 50,
+      fear: 30,
+      ambition: 40,
+      loyalty: 60,
+      personality: { ...PERSONALITY, scheming: 30, jealousy: 30, sociability: 60, emotionalStability: 60 },
+      household: { ...HOUSEHOLD, servantOpinion: 60 },
+    },
+    rationale: ["favor_gap"],
+  };
   return {
     id,
     sourceKey: "harem_intrigue:1:03",
     scheduledForYear: 1,
     scheduledForMonth: 3,
-    status: "pending",
-    plan: {
-      sourceKey: "harem_intrigue:1:03",
-      plannedAt: AT_Y1M3,
-      year: 1,
-      month: 3,
-      actorId,
-      targetId,
-      kind: "slander",
-      motive: "jealousy",
-      actorPropensity: 70,
-      targetThreat: 60,
-      priority: 65,
-      potency: 55,
-      secrecy: 50,
-      grievanceStrength: 0,
-      factionConflict: false,
-      actorSnapshot: {
-        characterId: actorId,
-        rankId: "meiren",
-        rankOrder: 100,
-        favor: 30,
-        peakFavor: 50,
-        affection: 50,
-        fear: 40,
-        ambition: 70,
-        loyalty: 30,
-        personality: PERSONALITY,
-        household: HOUSEHOLD,
-      },
-      targetSnapshot: {
-        characterId: targetId,
-        rankId: "guiren",
-        rankOrder: 116,
-        favor: 60,
-        peakFavor: 70,
-        affection: 50,
-        fear: 30,
-        ambition: 40,
-        loyalty: 60,
-        personality: { ...PERSONALITY, scheming: 30, jealousy: 30, sociability: 60, emotionalStability: 60 },
-        household: { ...HOUSEHOLD, servantOpinion: 60 },
-      },
-      rationale: ["favor_gap"],
-    },
+    status: "resolved",
+    plan,
+    outcome: makeResolvedOutcome(plan),
   };
 }
 
-/** Minimal v32 incident (includes discovered:bool, which migration converts to observationLevel). */
+/** Minimal v32 incident (includes discovered:bool, which migration converts to observationLevel).
+ *  Uses success=false to match the minimal resolved outcome (success=false). */
 function makeMinimalIncident(
   schemeId: string,
   actorId: string,
   targetId: string,
   discovered: boolean,
   resolvedAt: typeof AT_Y1M3 = AT_Y1M3,
+  kind: HaremIntrigueKind = "slander",
 ): Record<string, unknown> {
   return {
     id: `incident_${schemeId}`,
     schemeId,
-    kind: "slander",
+    kind,
     actorId,
     targetId,
-    success: true,
+    success: false,
     discovered,
     resolvedAt,
     consequencesApplied: true,
@@ -192,7 +217,7 @@ describe("save migration v32 → v33: haremIncidents.discovered → observationL
       },
     };
     const inc_a = makeMinimalIncident("scheme_a", "actor_001", "target_001", true);
-    const inc_b = makeMinimalIncident("scheme_b", "actor_001", "target_001", false, AT_Y1M2);
+    const inc_b = makeMinimalIncident("scheme_b", "actor_001", "target_001", false, AT_Y1M2, "steal_credit");
     const storage = createMemoryStorage();
     storage.set(
       `${SAVE_KEY_PREFIX}slot1`,
@@ -295,17 +320,15 @@ describe("save migration v32 → v33: pendingIntrigueNotifications → haremIntr
   });
 
   it("V33-08: success=false notification → knownOutcome='attempt_observed'", () => {
+    const basePlan = makeMinimalScheme("scheme_003", "actor_001", "target_001").plan as HaremIntriguePlan;
+    const plan003 = { ...basePlan, kind: "false_accusation" as const, motive: "resentment" as const };
     const scheme = {
       ...makeMinimalScheme("scheme_003", "actor_001", "target_001"),
-      plan: {
-        ...(makeMinimalScheme("scheme_003", "actor_001", "target_001").plan as Record<string, unknown>),
-        kind: "false_accusation",
-        motive: "resentment",
-      },
+      plan: plan003,
+      outcome: makeResolvedOutcome(plan003),
     };
     const incident = {
-      ...makeMinimalIncident("scheme_003", "actor_001", "target_001", true),
-      kind: "false_accusation",
+      ...makeMinimalIncident("scheme_003", "actor_001", "target_001", true, AT_Y1M3, "false_accusation"),
     };
     const storage = createMemoryStorage();
     storage.set(
