@@ -23,6 +23,7 @@ import type {
   IntrigueInvestigationLead,
   InvestigationLeadStrength,
 } from "./types";
+import { isActiveCase } from "./types";
 import { applyInvestigationLead } from "./leads";
 
 // ── 确定性 RNG ────────────────────────────────────────────────────────
@@ -152,22 +153,9 @@ export function resolveInvestigationTask(
           strength = "tenuous";
           summaryCode = "suspect_irrelevant_account";
         } else {
-          // 罕见：此人虽非主谋，但供出了另一个嫌疑人
-          // 候选池：在宫有身份（有 standing）、非受害者、非当前嫌疑人、非被问者本人
-          const possibleSuspects = Object.keys(state.standing).filter(
-            (id) =>
-              !c.suspectIds.includes(id) &&
-              !c.knownTargetIds.includes(id) &&
-              id !== subject &&
-              state.standing[id]?.lifecycle !== "deceased",
-          );
-          if (possibleSuspects.length > 0 && roll2 < 0.30) {
-            // roll2 已用于概率门；用 roll3 做索引以避免偏向第一项
-            const newSuspect = possibleSuspects[Math.floor(roll3 * possibleSuspects.length)];
-            implicatedIds = newSuspect ? [newSuspect] : [];
-            strength = "tenuous";
-          }
-          summaryCode = "suspect_implicated_other";
+          // 非主谋无不在场证明 → 供述无用，案件无变化
+          strength = "tenuous";
+          summaryCode = "suspect_inconclusive_account";
         }
       }
       break;
@@ -254,6 +242,19 @@ export function settleDueInvestigationTasks(
   const newLeads: IntrigueInvestigationLead[] = [];
 
   for (const task of dueTasks) {
+    // 防御：案件已取消或关闭 → 同步取消孤儿 pending task，不生成线索（B2 修复）
+    const taskCase = state.haremInvestigationCases.find((x) => x.id === task.caseId);
+    if (!taskCase || !isActiveCase(taskCase.status)) {
+      state = {
+        ...state,
+        haremInvestigationTasks: {
+          ...state.haremInvestigationTasks,
+          [task.id]: { ...task, status: "cancelled" as const },
+        },
+      };
+      continue;
+    }
+
     // 使用任务到期时刻作为结算时刻（pre-rollover semantics）
     const resolvedAt: GameTime = fromTurnIndex(task.dueAt.dayIndex);
 

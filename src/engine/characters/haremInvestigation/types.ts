@@ -66,6 +66,10 @@ export interface IntrigueInvestigationCase {
   confirmedCulpritId?: string;
 }
 
+/** 任务/线索 ID 格式正则（与 Zod schema 保持同步）。 */
+export const TASK_ID_REGEX = /^itask_\d{6}$/;
+export const LEAD_ID_REGEX = /^ilead_\d{6}$/;
+
 // ── 5B-2：调查任务 ────────────────────────────────────────────────────
 
 export type InvestigationMethod =

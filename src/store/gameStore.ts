@@ -1643,6 +1643,7 @@ export class GameStore {
     actionEffects: readonly EventEffect[],
     command: { type: "SPEND_AP"; amount: number } | { type: "SKIP_REMAINDER" },
     postAdvance: (s: GameState) => GameState,
+    preAdvance?: (s: GameState) => GameState,
   ): Result<TimedOutcome, GameError[]> {
     const collector = this.makeCollector();
     const beforeState = this.state;
@@ -1660,6 +1661,11 @@ export class GameStore {
         return err(a.error);
       }
       candidate = a.value;
+    }
+    if (preAdvance) {
+      const beforePre = candidate;
+      candidate = preAdvance(candidate);
+      collector?.capturePhaseScheduled("pre_advance_mutation", diffGameState(beforePre, candidate));
     }
     const advance = this.advanceCandidate(db, candidate, command, collector);
     if (!advance.ok) {
@@ -2799,17 +2805,18 @@ export class GameStore {
     const apCost = INVESTIGATION_METHOD_AP[method];
     const durationDays = INVESTIGATION_METHOD_DAYS[method];
 
-    let generatedTaskId = "";
+    // requestedAt 必须在扣 AP / 推进日历之前确定，否则会多延迟一旬（B1 修复）
+    const requestedAt = toGameTime(this.state.calendar);
+    const dueAt = fromTurnIndex(requestedAt.dayIndex + durationDays);
+    const taskId = nextTaskId(this.state.haremInvestigationNextSeq);
 
     const result = this.resolveTimedActionWithPostAdvance(
       db,
       [],
       { type: "SPEND_AP", amount: apCost },
+      (s) => s, // postAdvance: identity（task 已在 preAdvance 写入）
       (s) => {
-        const taskId = nextTaskId(s.haremInvestigationNextSeq);
-        generatedTaskId = taskId;
-        const requestedAt = toGameTime(s.calendar);
-        const dueAt = fromTurnIndex(requestedAt.dayIndex + durationDays);
+        // preAdvance：在扣 AP 之前写入 task，保证 requestedAt 为当前旬
         const newTask = {
           id: taskId,
           caseId,
@@ -2831,7 +2838,7 @@ export class GameStore {
       },
     );
     if (!result.ok) return err(result.error);
-    return ok({ taskId: generatedTaskId });
+    return ok({ taskId });
   }
 
   /**

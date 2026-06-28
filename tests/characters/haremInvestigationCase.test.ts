@@ -49,7 +49,8 @@ describe("createIntrigueInvestigationCase", () => {
     if (!result.ok) return;
     expect(result.value.caseId).toBe("icase_ireport_test_001");
     const c = result.value.state.haremInvestigationCases[0]!;
-    expect(c.status).toBe("open");
+    // exposure report with confidence=confirmed → immediately ready_for_review (H1 fix)
+    expect(c.status).toBe("ready_for_review");
     expect(c.openedFromReportKind).toBe("exposure");
     expect(c.knownTargetIds).toEqual(["lu_huaijin"]);
     expect(c.suspectIds).toEqual(["bai_zhuying"]);
@@ -142,6 +143,7 @@ describe("createIntrigueInvestigationCase", () => {
       haremInvestigationCases: r.value.state.haremInvestigationCases,
       haremInvestigationTasks: r.value.state.haremInvestigationTasks,
       haremInvestigationLeads: r.value.state.haremInvestigationLeads,
+      haremInvestigationNextSeq: r.value.state.haremInvestigationNextSeq,
       incidentIds: new Set(["incident_001"]),
     });
     expect(errors).toEqual([]);
@@ -223,7 +225,7 @@ describe("validateHaremInvestigationLinks", () => {
     reports: HaremIntrigueReport[],
     cases: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationCases"],
     incidentIds = new Set(["incident_001"]),
-  ) => validateHaremInvestigationLinks({ haremIntrigueReports: reports, haremInvestigationCases: cases, haremInvestigationTasks: {}, haremInvestigationLeads: {}, incidentIds });
+  ) => validateHaremInvestigationLinks({ haremIntrigueReports: reports, haremInvestigationCases: cases, haremInvestigationTasks: {}, haremInvestigationLeads: {}, haremInvestigationNextSeq: 1, incidentIds });
 
   it("empty arrays → no errors", () => {
     expect(makeInput([], [])).toEqual([]);

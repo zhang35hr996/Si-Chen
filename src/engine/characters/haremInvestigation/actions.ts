@@ -9,7 +9,7 @@ import type { InvestigationMethod } from "./types";
 
 export interface AvailableInvestigationAction {
   method: InvestigationMethod;
-  /** question_suspect 时的候选对象列表（其余方法为 undefined）。 */
+  /** question_target / question_suspect 时的候选对象列表；quiet_inquiry 为 undefined。 */
   subjectCandidateIds?: string[];
   apCost: number;
   durationDays: number;
@@ -44,11 +44,12 @@ export function availableInvestigationActions(
 
   const actions: AvailableInvestigationAction[] = [];
 
-  // 询问受害者：须有已知目标且目标仍存活
+  // 询问受害者：须有已知目标且目标仍存活（H3：返回候选列表）
   const aliveTargets = c.knownTargetIds.filter((id) => isAlive(state, id));
   if (aliveTargets.length > 0) {
     actions.push({
       method: "question_target",
+      subjectCandidateIds: aliveTargets,
       apCost: INVESTIGATION_METHOD_AP.question_target,
       durationDays: INVESTIGATION_METHOD_DAYS.question_target,
     });
@@ -98,11 +99,10 @@ export function validateCanStartTask(
     if (!alive || alive.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法传问`;
   }
   if (method === "question_target") {
-    const aliveTargets = c.knownTargetIds.filter((id) => {
-      const st = state.standing[id];
-      return !!st && st.lifecycle !== "deceased";
-    });
-    if (aliveTargets.length === 0) return "无存活受害者可询问";
+    if (!subjectId) return "询问受害者须指定具体询问对象";
+    if (!c.knownTargetIds.includes(subjectId)) return `"${subjectId}" 不在受害者名单 knownTargetIds 中`;
+    const st = state.standing[subjectId];
+    if (!st || st.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法询问`;
   }
   return null; // OK
 }

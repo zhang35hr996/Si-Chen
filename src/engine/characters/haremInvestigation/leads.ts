@@ -51,9 +51,9 @@ export function applyInvestigationLead(
   // 置信度：取当前与线索强度的最大值
   const newConfidence = maxConfidence(c.confidence, leadStrengthToConfidence(lead.strength));
 
-  // 状态升级：strong 或 confirmed → ready_for_review（仅当 in_progress 时）
+  // 状态升级：合并后置信度达到 strong/confirmed → ready_for_review（H1 修复：依据 newConfidence 而非 lead.strength）
   const nextStatus =
-    (lead.strength === "strong" || lead.strength === "confirmed") &&
+    (newConfidence === "strong" || newConfidence === "confirmed") &&
     (c.status === "in_progress" || c.status === "open")
       ? "ready_for_review"
       : c.status;

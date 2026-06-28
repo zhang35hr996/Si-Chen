@@ -58,7 +58,8 @@ export function createIntrigueInvestigationCase(
     },
     openedAt: at,
     openedFromReportKind: report.reportKind as InvestigatableReportKind,
-    status: "open",
+    // exposure/confirmed 报告立案时直接进入 ready_for_review（H1 修复）
+    status: report.confidence === "confirmed" ? "ready_for_review" : "open",
     knownTargetIds: [...report.knownTargetIds],
     suspectIds: [...report.suspectedActorIds],
     suspectedKinds: [...report.suspectedKinds],
@@ -98,10 +99,19 @@ export function cancelIntrigueInvestigationCase(
     return err([stateError("INTRIGUE_CASE_CREATE_FAILED", `haremInvestigationCases: case "${caseId}" not found`)]);
   }
   const c = state.haremInvestigationCases[idx]!;
-  if (c.status !== "open" && c.status !== "in_progress") {
+  if (c.status !== "open" && c.status !== "in_progress" && c.status !== "ready_for_review") {
     return err([stateError("INTRIGUE_CASE_CREATE_FAILED", `case "${caseId}" status="${c.status}" cannot be cancelled`)]);
   }
   const updated = [...state.haremInvestigationCases];
   updated[idx] = { ...c, status: "cancelled", closedAt: at, closureReason: "player_cancelled" };
-  return ok({ ...state, haremInvestigationCases: updated });
+
+  // 原子取消该案件所有 pending 任务，防止 settlement 继续生成线索（B2 修复）
+  const cancelledTasks = Object.fromEntries(
+    Object.entries(state.haremInvestigationTasks).map(([id, task]) =>
+      task.caseId === caseId && task.status === "pending"
+        ? [id, { ...task, status: "cancelled" as const }]
+        : [id, task],
+    ),
+  );
+  return ok({ ...state, haremInvestigationCases: updated, haremInvestigationTasks: cancelledTasks });
 }

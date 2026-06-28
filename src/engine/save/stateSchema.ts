@@ -1140,6 +1140,7 @@ export const gameStateSchema = z.strictObject({
       haremInvestigationCases: (data as { haremInvestigationCases: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationCases"] }).haremInvestigationCases,
       haremInvestigationTasks: (data as { haremInvestigationTasks: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationTasks"] }).haremInvestigationTasks,
       haremInvestigationLeads: (data as { haremInvestigationLeads: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationLeads"] }).haremInvestigationLeads,
+      haremInvestigationNextSeq: (data as { haremInvestigationNextSeq: number }).haremInvestigationNextSeq,
       incidentIds: new Set((data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIncidents.map((i) => i.id)),
     }),
   ];
