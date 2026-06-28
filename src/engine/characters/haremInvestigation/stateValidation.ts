@@ -5,7 +5,7 @@
 import { stateError, type GameError } from "../../infra/errors";
 import type { HaremIntrigueReport } from "../../state/types";
 import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead, InvestigationPublicReport } from "./types";
-import { isActiveCase } from "./types";
+import { isActiveCase, EVIDENCE_INVESTIGATION_METHODS, LEGACY_INVESTIGATION_METHODS } from "./types";
 import type { HeirHealthAnomalyIncident } from "./truth/types";
 
 const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation_final"]);
@@ -163,6 +163,17 @@ export function validateHaremInvestigationLinks(
     // caseId 必须存在
     if (!caseIds.has(task.caseId)) {
       errors.push(stateError("INTRIGUE_TASK_ORPHAN", `haremInvestigationTasks[id=${task.id}]: caseId="${task.caseId}" 对应案件不存在`));
+    }
+    // 5B-2B2a：调查方法必须与案件来源匹配（两套模型不得混用）
+    const taskCase = haremInvestigationCases.find((c) => c.id === task.caseId);
+    if (taskCase) {
+      const isEvidence = taskCase.source.kind === "investigation_incident";
+      if (isEvidence && !EVIDENCE_INVESTIGATION_METHODS.has(task.method)) {
+        errors.push(stateError("INTRIGUE_TASK_METHOD_SOURCE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: method="${task.method}" 不适用于证据驱动案件`));
+      }
+      if (!isEvidence && !LEGACY_INVESTIGATION_METHODS.has(task.method)) {
+        errors.push(stateError("INTRIGUE_TASK_METHOD_SOURCE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: method="${task.method}" 不适用于旧宫斗案件`));
+      }
     }
     // pending task 不得有 resolvedAt / leadId
     if (task.status === "pending") {
