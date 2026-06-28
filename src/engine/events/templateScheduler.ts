@@ -5,8 +5,12 @@
  *   time_advance   → 30% ambient 触发率；同一行动日最多 1 个 ambient；同月最多 3 个 ambient
  *   location_enter → 100%（子地点主动点击，已有 eligible 就触发）
  *   pending 模板   → 100%，不参与概率门，不计入 ambient 月度上限
+ *
+ * 计数器（templateEventsResolvedOnDay / InMonth）只统计 time_advance ambient 模板，
+ * 不统计 pending / location_enter / 其他 checkpoint 的模板。
  */
-import type { GameState } from "../state/types";
+import type { ContentDB } from "../content/loader";
+import type { GameState, TemplateEventRecord } from "../state/types";
 import type { RngFn } from "./templateEngine";
 import type { Checkpoint } from "./engine";
 
@@ -26,18 +30,45 @@ function getPolicy(checkpoint: Checkpoint): TemplateSchedulePolicy {
   return POLICIES[checkpoint] ?? { checkpoint, triggerChance: 0, maxAmbientPerDay: 0, maxAmbientPerMonth: 0 };
 }
 
-/** 当日已 resolved 的 ambient 模板事件数量（从 records 派生，无额外 state）。 */
-export function templateEventsResolvedOnDay(state: GameState, dayIndex: number): number {
+/** 判断某条记录是否计入 time_advance ambient 上限（pending 和 location_enter 不计入）。 */
+function countsTowardAmbientLimit(db: ContentDB, record: TemplateEventRecord): boolean {
+  const template = db.templates[record.templateId];
+  if (!template) return false;
+  return (
+    (template.schedule?.kind ?? "ambient") === "ambient" &&
+    template.checkpoint === "time_advance"
+  );
+}
+
+/** 当日已 resolved 的 time_advance ambient 模板事件数量。 */
+export function templateEventsResolvedOnDay(
+  db: ContentDB,
+  state: GameState,
+  dayIndex: number,
+): number {
   return Object.values(state.templateEventRecords).filter(
-    (r) => r.status === "resolved" && r.resolvedAt !== undefined && r.resolvedAt.dayIndex === dayIndex,
+    (r) =>
+      r.status === "resolved" &&
+      r.resolvedAt !== undefined &&
+      r.resolvedAt.dayIndex === dayIndex &&
+      countsTowardAmbientLimit(db, r),
   ).length;
 }
 
-/** 当月已 resolved 的 ambient 模板事件数量（从 records 派生）。 */
-export function templateEventsResolvedInMonth(state: GameState, year: number, month: number): number {
+/** 当月已 resolved 的 time_advance ambient 模板事件数量。 */
+export function templateEventsResolvedInMonth(
+  db: ContentDB,
+  state: GameState,
+  year: number,
+  month: number,
+): number {
   return Object.values(state.templateEventRecords).filter(
-    (r) => r.status === "resolved" && r.resolvedAt !== undefined &&
-           r.resolvedAt.year === year && r.resolvedAt.month === month,
+    (r) =>
+      r.status === "resolved" &&
+      r.resolvedAt !== undefined &&
+      r.resolvedAt.year === year &&
+      r.resolvedAt.month === month &&
+      countsTowardAmbientLimit(db, r),
   ).length;
 }
 
@@ -60,9 +91,10 @@ export interface ScheduleDiagnostic {
 /**
  * 决定是否为 ambient 模板触发。对 pending 模板调用时始终返回 true（并记录原因）。
  * @param kind  - 当前候选模板的 schedule.kind（缺省 "ambient"）
- * @param rng   - 与 planTemplateEventStart 同批的确定性 RNG
+ * @param rng   - 确定性 RNG（仅在真正需要概率滚动时消耗一次）
  */
 export function shouldTriggerTemplate(
+  db: ContentDB,
   state: GameState,
   checkpoint: Checkpoint,
   kind: "ambient" | "pending",
@@ -77,7 +109,7 @@ export function shouldTriggerTemplate(
     };
   }
 
-  // location_enter 子地点主动点击 → 100%，不受日/月上限（子地点已是主动选择）
+  // location_enter 子地点主动点击 → 100%，不受日/月上限
   if (checkpoint === "location_enter") {
     return {
       passed: true,
@@ -85,8 +117,8 @@ export function shouldTriggerTemplate(
     };
   }
 
-  // 日上限
-  const todayCount = templateEventsResolvedOnDay(state, state.calendar.dayIndex);
+  // 日上限（只统计 time_advance ambient）
+  const todayCount = templateEventsResolvedOnDay(db, state, state.calendar.dayIndex);
   if (todayCount >= policy.maxAmbientPerDay) {
     return {
       passed: false,
@@ -95,7 +127,7 @@ export function shouldTriggerTemplate(
   }
 
   // 月上限
-  const monthCount = templateEventsResolvedInMonth(state, state.calendar.year, state.calendar.month);
+  const monthCount = templateEventsResolvedInMonth(db, state, state.calendar.year, state.calendar.month);
   if (monthCount >= policy.maxAmbientPerMonth) {
     return {
       passed: false,

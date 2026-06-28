@@ -160,11 +160,21 @@ function buildCandidatePool(
   } else if (role.pool === "court_official_active") {
     // 只选择在 db.characters 中有完整角色内容的官员，确保可作为 SceneRunner speaker。
     // 运行时动态生成的官员（official_fam_* 等）尚无 voice/expressions，暂不支持模板对话。
+    const ids = new Set<string>();
+    // 1. authored official：在 standing 中存在（不含 deceased）。
+    for (const [charId, char] of Object.entries(db.characters)) {
+      if (char.kind !== "official") continue;
+      const st = state.standing[charId];
+      if (!st || st.lifecycle === "deceased") continue;
+      ids.add(charId);
+    }
+    // 2. world-gen 官员中同时有 db.characters 定义的。
     for (const [officialId, official] of Object.entries(state.officials ?? {})) {
       if (official.status !== "active") continue;
       if (!db.characters[officialId]) continue;
-      result.push(officialId);
+      ids.add(officialId);
     }
+    result.push(...ids);
   } else if (role.pool === "empress_or_harem_admin") {
     const admin = state.haremAdministration;
     if (admin.mode === "empress") {

@@ -11,11 +11,11 @@ import { maybeScheduleBirthdayRitual } from "../../src/engine/events/ritualSched
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 import { makeGameTime } from "../../src/engine/calendar/time";
-import type { GameState } from "../../src/engine/state/types";
+import type { FlagValue, GameState } from "../../src/engine/state/types";
 
 const db = loadRealContent();
 
-function stateAt(year: number, month: number, period: "early" | "mid" | "late", flags: Record<string, unknown> = {}): GameState {
+function stateAt(year: number, month: number, period: "early" | "mid" | "late", flags: Record<string, FlagValue> = {}): GameState {
   const base = createNewGameState(db);
   const cal = makeGameTime(year, month, period);
   return { ...base, calendar: { ...base.calendar, ...cal }, flags: { ...base.flags, ...flags } };

@@ -4,9 +4,6 @@
   "category": "ritual",
   "checkpoint": "time_advance",
   "apCost": 1,
-  "cooldown": {
-    "actionDays": 360
-  },
   "triggerCondition": {
     "all": [
       {

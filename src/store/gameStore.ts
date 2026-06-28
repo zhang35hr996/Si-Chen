@@ -1523,12 +1523,19 @@ export class GameStore {
       return err(settled.error);
     }
 
+    // resolvedAt 使用事件实际发生时刻（pre-rollover），避免扣完最后一个 AP 触发跨旬后计入下一旬。
+    const lastLogEntry = engineState.eventLog.at(-1);
+    const resolvedAt =
+      lastLogEntry?.eventId === instanceId
+        ? lastLogEntry.firedAt
+        : toGameTime(beforeState.calendar);
+
     // record 与其他变更同批次写入 — 不二次 emit
     const resolvedRecord: TemplateEventRecord = {
       ...record,
       status: "resolved",
       selectedChoiceId,
-      resolvedAt: toGameTime(settled.value.state.calendar),
+      resolvedAt,
     };
     const finalState: GameState = {
       ...settled.value.state,
