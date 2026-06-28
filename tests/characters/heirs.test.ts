@@ -6,6 +6,9 @@ import {
 } from "../../src/engine/characters/heirs";
 import type { Heir } from "../../src/engine/state/types";
 
+const defaultPersonality = { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 };
+const defaultPortraitVariants = { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" };
+
 const heir = (over: Partial<Heir>): Heir => ({
   id: "heir_000001",
   sex: "daughter",
@@ -15,7 +18,15 @@ const heir = (over: Partial<Heir>): Heir => ({
   favor: 50,
   legitimate: true,
   petName: "",
-  education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
+  education: { scholarship: 5, martial: 5, virtue: 5 },
+  health: 60, talent: 50, diligence: 50,
+  personality: defaultPersonality,
+  interests: [],
+  imperialFear: 20,
+  neglect: 40,
+  custodianBond: 0,
+  portraitVariants: defaultPortraitVariants,
+  ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
   ...over,
 });
 
@@ -85,17 +96,29 @@ describe("centennialDue", () => {
 });
 
 describe("isEnrolled", () => {
-  it("true at 5 周岁", () => {
+  it("皇子（女）5 岁开蒙", () => {
     const born = makeGameTime(1, 1, "early");
-    expect(isEnrolled(heir({ birthAt: born }), makeGameTime(5, 1, "early"))).toBe(false); // 4 岁
-    expect(isEnrolled(heir({ birthAt: born }), makeGameTime(6, 1, "early"))).toBe(true); // 5 岁
+    expect(isEnrolled(heir({ birthAt: born, sex: "daughter" }), makeGameTime(5, 1, "early"))).toBe(false); // 4 岁
+    expect(isEnrolled(heir({ birthAt: born, sex: "daughter" }), makeGameTime(6, 1, "early"))).toBe(true); // 5 岁
+  });
+
+  it("皇郎（男）7 岁开蒙", () => {
+    const born = makeGameTime(1, 1, "early");
+    const sonVariants = { baby: "boy_baby1", kid: "boy_kid1", child: "boy_child1", teen: "boy_teen1" };
+    expect(isEnrolled(heir({ birthAt: born, sex: "son", portraitVariants: sonVariants }), makeGameTime(7, 1, "early"))).toBe(false); // 6 岁
+    expect(isEnrolled(heir({ birthAt: born, sex: "son", portraitVariants: sonVariants }), makeGameTime(8, 1, "early"))).toBe(true); // 7 岁
   });
 });
 
 describe("heirPortraitSet", () => {
-  it("baby set under schooling, school set when enrolled", () => {
+  it("returns portraitVariants key matching appearance stage", () => {
     const born = makeGameTime(1, 1, "early");
-    expect(heirPortraitSet(heir({ birthAt: born }), makeGameTime(2, 1, "early"))).toBe("child_baby");
-    expect(heirPortraitSet(heir({ birthAt: born }), makeGameTime(6, 1, "early"))).toBe("child_school");
+    const variants = { baby: "girl_baby1", kid: "girl_kid2", child: "girl_child3", teen: "girl_teen4" };
+    const h = heir({ birthAt: born, portraitVariants: variants });
+    expect(heirPortraitSet(h, makeGameTime(1, 1, "early"))).toBe("girl_baby1"); // 0 岁→baby
+    expect(heirPortraitSet(h, makeGameTime(2, 1, "early"))).toBe("girl_kid2");  // 1 岁→kid
+    expect(heirPortraitSet(h, makeGameTime(9, 1, "early"))).toBe("girl_child3"); // 8 岁→child
+    expect(heirPortraitSet(h, makeGameTime(13, 1, "early"))).toBe("girl_teen4"); // 12 岁→teen
+    expect(heirPortraitSet(h, makeGameTime(19, 1, "early"))).toBe("girl_teen4"); // 18 岁→adult→falls back to teen
   });
 });

@@ -18,6 +18,9 @@ function makeHeir(id: string, lifecycle: "alive" | "deceased"): Heir {
     education: { scholarship: 0, martial: 0, virtue: 0 },
     health: 80, talent: 50, diligence: 50, ambition: 50, closeness: 50, support: 50,
     faction: "none", lifecycle,
+    personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+    interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+    portraitVariants: { baby: "boy_baby1", kid: "boy_kid1", child: "boy_child1", teen: "boy_teen1" },
     ...(lifecycle === "deceased" ? { deceasedAt: { year: 1, month: 2, period: "early", dayIndex: 30 } } : {}),
   };
 }

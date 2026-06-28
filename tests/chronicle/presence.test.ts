@@ -10,7 +10,11 @@ function heir(over: Partial<Heir>): Heir {
     birthAt: makeGameTime(1, 2, "early"), favor: 50, legitimate: true, petName: "",
     education: { scholarship: 5, martial: 5, virtue: 5 },
     health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20,
-    faction: "none", lifecycle: "alive", ...over,
+    faction: "none", lifecycle: "alive",
+    personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+    interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+    portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" },
+    ...over,
   };
 }
 

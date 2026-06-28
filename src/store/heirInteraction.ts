@@ -8,7 +8,7 @@ import type { GameState, Heir } from "../engine/state/types";
 export interface HeirInteractionPlan {
   effects: EventEffect[];
   lines: string[];
-  portraitSet: "child_baby" | "child_school";
+  portraitSet: string;
   speakerName: string;
 }
 

@@ -74,6 +74,9 @@ describe("bestow 赏赐", () => {
       id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
       birthAt: state.calendar, favor: 50, legitimate: true, petName: "", education: { scholarship: 0, martial: 0, virtue: 0 },
       health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 40, support: 20, faction: "none", lifecycle: "alive",
+      personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+      interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+      portraitVariants: { baby: "boy_baby1", kid: "boy_kid1", child: "boy_child1", teen: "boy_teen1" },
     });
     const r = bestow(state, db, fine.id, { kind: "heir", id: "heir_000001" });
     expect(r.ok).toBe(true);

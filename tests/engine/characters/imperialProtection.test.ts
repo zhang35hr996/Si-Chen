@@ -189,6 +189,9 @@ function makeHeir(overrides: Partial<Heir> & { fatherId: string | null }): Heir 
     support: 30,
     faction: "none",
     lifecycle: "alive",
+    personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+    interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+    portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" },
     ...rest,
   };
 }

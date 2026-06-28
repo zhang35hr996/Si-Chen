@@ -18,12 +18,14 @@ export function YuqingGongScreen({
 }) {
   const state = useGameState(store);
   const location = db.locations["yuqing_gong"]!;
-  const background = registry.resolveVariant(location.backgroundKey, timeOfDay(state.calendar), "background");
+  const tod = timeOfDay(state.calendar);
+  const background = registry.resolveVariant(location.backgroundKey, tod, "background");
   const resident = [
     ...listHeirsBySex(state.resources.bloodline.heirs, "daughter"),
     ...listHeirsBySex(state.resources.bloodline.heirs, "son"),
   ].filter((r) => residesInYuqing(r.heir, state.calendar));
   const canAct = state.calendar.ap >= 1;
+  const isNight = tod === "night";
 
   return (
     <GameShell
@@ -43,7 +45,9 @@ export function YuqingGongScreen({
         </section>
         <section className="location-screen__roster">
           <h2>在居皇嗣</h2>
-          {resident.length === 0 ? (
+          {!isNight ? (
+            <p className="location-screen__empty">此时皇嗣尚未归宫，宜夜间前来探视。</p>
+          ) : resident.length === 0 ? (
             <p className="location-screen__empty">尚无皇嗣迁居于此。</p>
           ) : (
             resident.map(({ heir, name }) => (

@@ -39,17 +39,35 @@ export function nextHeirId(currentCount: number): string {
 
 export type HeirStage = "infant" | "toddler" | "schooling";
 
+/** 外观阶段（五档，与教育/居住阶段独立）。 */
+export type HeirAppearanceStage = "baby" | "kid" | "child" | "teen" | "adult";
+
 /** 月龄：按 monthOrdinal 差（出生当月为 0）。 */
 export function heirAgeMonths(heir: Heir, now: Pick<GameTime, "year" | "month">): number {
   return monthOrdinal(now) - monthOrdinal(heir.birthAt);
 }
 
-/** 成长阶段：[0,3岁)=infant；[3,5岁)=toddler；≥5岁=schooling。 */
+/** 成长阶段：[0,3岁)=infant；[3,enlightenmentAge)=toddler；≥enlightenmentAge=schooling。 */
 export function heirStage(heir: Heir, now: Pick<GameTime, "year">): HeirStage {
   const years = heirAge(heir, now);
-  if (years >= 5) return "schooling";
+  if (years >= enlightenmentAge(heir.sex)) return "schooling";
   if (years >= 3) return "toddler";
   return "infant";
+}
+
+/** 外观阶段：baby=0岁；kid=1–7岁；child=8–11岁；teen=12–17岁；adult=18岁+。 */
+export function heirAppearanceStage(heir: Heir, now: Pick<GameTime, "year">): HeirAppearanceStage {
+  const age = heirAge(heir, now);
+  if (age >= 18) return "adult";
+  if (age >= 12) return "teen";
+  if (age >= 8) return "child";
+  if (age >= 1) return "kid";
+  return "baby";
+}
+
+/** 开蒙年龄（按性别）：皇子（女）5 岁，皇郎（男）7 岁。 */
+export function enlightenmentAge(sex: HeirSex): number {
+  return sex === "daughter" ? 5 : 7;
 }
 
 /** 百日宴待办：满 3 月龄且尚未赐正名。 */
@@ -57,9 +75,9 @@ export function centennialDue(heir: Heir, now: Pick<GameTime, "year" | "month">)
   return heir.givenName === undefined && heirAgeMonths(heir, now) >= 3;
 }
 
-/** 是否已开蒙（≥5 周岁，可入文昭殿）。 */
+/** 是否已开蒙（皇子≥5岁，皇郎≥7岁，可入文昭殿）。 */
 export function isEnrolled(heir: Heir, now: Pick<GameTime, "year">): boolean {
-  return heirStage(heir, now) === "schooling";
+  return heirAge(heir, now) >= enlightenmentAge(heir.sex);
 }
 
 /** 迁居毓庆宫的年龄门槛：皇子（女）满 5 岁、皇郎（男）满 7 岁。 */
@@ -70,7 +88,9 @@ export function residesInYuqing(heir: Heir, now: Pick<GameTime, "year">): boolea
   return heirAge(heir, now) >= YUQING_MOVE_AGE[heir.sex];
 }
 
-/** 阶段→立绘 portraitSet（婴幼共用襁褓立绘，开蒙后换学童立绘）。 */
-export function heirPortraitSet(heir: Heir, now: Pick<GameTime, "year">): "child_baby" | "child_school" {
-  return heirStage(heir, now) === "schooling" ? "child_school" : "child_baby";
+/** 当前外观阶段的立绘集 id（来自出生时固定的 portraitVariants）。 */
+export function heirPortraitSet(heir: Heir, now: Pick<GameTime, "year">): string {
+  const stage = heirAppearanceStage(heir, now);
+  const key = stage === "adult" ? "teen" : stage;
+  return heir.portraitVariants[key];
 }
