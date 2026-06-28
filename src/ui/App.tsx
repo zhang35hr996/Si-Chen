@@ -81,7 +81,7 @@ import { toDialogueTurnOptions, type DialogueRuntimeDeps } from "../engine/dialo
 import { deriveConverseSceneContext, type ConverseSceneContext } from "./converseScene";
 import type { DialogueLine } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
-import { buildHeirAudienceAction, resolveHeirLessonPerformance } from "../store/heirAudience";
+import { buildHeirAudienceAction, resolveHeirLessonPerformance, buildHeirLessonResponseReaction } from "../store/heirAudience";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
 import { buildProvinceTribute, buildMinisterTribute } from "../store/tribute";
@@ -1175,7 +1175,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     setChildReaction(plan);
   };
 
-  // 紫宸殿·皇嗣叙话/陪玩（耗 1 行动点）。
+  // 紫宸殿·皇嗣叙话/陪玩（耗 1 行动点）；互动结束即清除召见态，一次召见仅一次互动。
   const heirAudience = (action: "talk" | "play") => {
     const heirId = summonedHeirId;
     if (!heirId) return;
@@ -1187,6 +1187,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
+    setSummonedHeirId(null);
+    setHeirLessonPending(null);
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
     setChildReaction(plan);
@@ -1201,11 +1203,13 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     setHeirLessonPending({ subject: result.subject, performance: result.performance, reportLines: result.reportLines });
   };
 
-  // 紫宸殿·应对功课（耗 1 行动点）：褒扬/训斥/按察。
+  // 紫宸殿·应对功课（耗 1 行动点）：褒扬/训诫/不置可否；应对后结束召见。
   const heirLessonResponse = (response: "praise" | "admonish" | "neutral") => {
     const heirId = summonedHeirId;
     if (!heirId || !heirLessonPending) return;
     const { subject, performance } = heirLessonPending;
+    // 先构造反应台词（需要召见前的 state）
+    const reactionPlan = buildHeirLessonResponseReaction(store.getState(), heirId, performance, response);
     const before = store.getState().calendar;
     const effects: import("../engine/content/schemas").EventEffect[] = [
       { type: "heir_lesson_response", heirId, subject, performance, response },
@@ -1215,9 +1219,11 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
     const decreeBeats = rollActionBeats(before, 1);
     doAutosave();
+    setSummonedHeirId(null);
     setHeirLessonPending(null);
     if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
     pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
+    if (reactionPlan) setChildReaction(reactionPlan);
   };
 
   // 上书房·问功课（耗 1 行动点）：轮换一科 + 宠爱。行动先于时间。
@@ -2022,8 +2028,16 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               summonedHeir={summonedHeirView}
               onTalkHeir={summonedHeirId ? () => heirAudience("talk") : undefined}
               onTalkHeirDisabledReason={summonedHeirId && !canHeirAction ? "行动力不足" : undefined}
-              onPlayHeir={summonedHeirId ? () => heirAudience("play") : undefined}
-              onPlayHeirDisabledReason={summonedHeirId && !canHeirAction ? "行动力不足" : undefined}
+              onPlayHeir={
+                summonedHeirId && summonedHeirView?.stage !== "schooling"
+                  ? () => heirAudience("play")
+                  : undefined
+              }
+              onPlayHeirDisabledReason={
+                summonedHeirId && summonedHeirView?.stage !== "schooling" && !canHeirAction
+                  ? "行动力不足"
+                  : undefined
+              }
               onAskLessonHeir={summonedHeirView?.stage === "schooling" ? heirAskLesson : undefined}
               onAskLessonHeirDisabledReason={summonedHeirView?.stage === "schooling" && !canHeirAction ? "行动力不足" : undefined}
               onDismissSummonedHeir={summonedHeirId ? () => {

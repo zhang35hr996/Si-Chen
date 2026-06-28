@@ -6,6 +6,7 @@ import type { GameState, Heir } from "../../src/engine/state/types";
 import {
   buildHeirAudienceAction,
   resolveHeirLessonPerformance,
+  buildHeirLessonResponseReaction,
 } from "../../src/store/heirAudience";
 
 const content = loadGameContent();
@@ -168,5 +169,61 @@ describe("resolveHeirLessonPerformance", () => {
     const result = resolveHeirLessonPerformance(makeState(), HEIR_ID);
     // age 5, daughter → kid → girl_kid1
     expect(result!.portraitSet).toBe("girl_kid1");
+  });
+
+  it("high guile does NOT change performance rating", () => {
+    const base = makeState({ guile: 10, education: { scholarship: 20, martial: 20, virtue: 20 } });
+    const highGuile = makeState({ guile: 90, education: { scholarship: 20, martial: 20, virtue: 20 } });
+    const rBase = resolveHeirLessonPerformance(base, HEIR_ID);
+    const rHigh = resolveHeirLessonPerformance(highGuile, HEIR_ID);
+    expect(rBase!.performance).toBe(rHigh!.performance);
+  });
+
+  it("high guile changes reportLines", () => {
+    const base = makeState({ guile: 10 });
+    const highGuile = makeState({ guile: 90 });
+    const rBase = resolveHeirLessonPerformance(base, HEIR_ID);
+    const rHigh = resolveHeirLessonPerformance(highGuile, HEIR_ID);
+    // Only different when performance is not excellent — ensure we force a non-excellent scenario
+    if (rBase!.performance !== "excellent") {
+      expect(rBase!.reportLines.join("")).not.toBe(rHigh!.reportLines.join(""));
+    }
+  });
+});
+
+// ── buildHeirLessonResponseReaction ──────────────────────────────────────────
+
+describe("buildHeirLessonResponseReaction", () => {
+  it("returns null for unknown heir", () => {
+    expect(buildHeirLessonResponseReaction(makeState(), "ghost", "good", "praise")).toBeNull();
+  });
+
+  it("returns reaction for alive enrolled heir", () => {
+    const plan = buildHeirLessonResponseReaction(makeState(), HEIR_ID, "excellent", "praise");
+    expect(plan).not.toBeNull();
+    expect(plan!.lines.length).toBeGreaterThan(0);
+    expect(plan!.effects).toEqual([]);
+  });
+
+  it("praise+excellent lines differ from admonish lines", () => {
+    const praise = buildHeirLessonResponseReaction(makeState(), HEIR_ID, "excellent", "praise");
+    const admonish = buildHeirLessonResponseReaction(makeState(), HEIR_ID, "excellent", "admonish");
+    expect(praise!.lines.join("")).not.toBe(admonish!.lines.join(""));
+  });
+
+  it("neutral lines differ from praise lines", () => {
+    const praise = buildHeirLessonResponseReaction(makeState(), HEIR_ID, "good", "praise");
+    const neutral = buildHeirLessonResponseReaction(makeState(), HEIR_ID, "good", "neutral");
+    expect(praise!.lines.join("")).not.toBe(neutral!.lines.join(""));
+  });
+
+  it("high imperialFear changes admonish lines", () => {
+    const highFear = buildHeirLessonResponseReaction(
+      makeState({ imperialFear: 80 }), HEIR_ID, "poor", "admonish",
+    );
+    const lowFear = buildHeirLessonResponseReaction(
+      makeState({ imperialFear: 5 }), HEIR_ID, "poor", "admonish",
+    );
+    expect(highFear!.lines.join("")).not.toBe(lowFear!.lines.join(""));
   });
 });

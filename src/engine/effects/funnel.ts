@@ -921,6 +921,7 @@ export function applyEffects(
           heir.favor = clampPct(heir.favor + 1);
           heir.closeness = clampPct(heir.closeness + 1);
         }
+        heir.neglect = Math.max(0, heir.neglect - 6);
         heir.lastImperialInteractionAt = now;
         break;
       }

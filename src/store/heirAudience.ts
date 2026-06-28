@@ -176,9 +176,6 @@ export function resolveHeirLessonPerformance(
   // Deterministic noise in range [-10, +10]
   const noise = (gestationRollRaw(seed + ":noise") % 21) - 10;
 
-  // Guile lets heir mask poor performance: partial boost to displayed score but not real skill
-  const guileBoost = guile >= 65 ? 5 : 0;
-
   const score =
     subjectValue * 0.45 +
     talent * 0.20 +
@@ -186,8 +183,7 @@ export function resolveHeirLessonPerformance(
     curiosity * 0.10 +
     restraint * 0.05 -
     neglect * 0.15 +
-    noise +
-    guileBoost;
+    noise;
 
   const performance: HeirLessonResult["performance"] =
     score >= 75 ? "excellent" :
@@ -200,11 +196,11 @@ export function resolveHeirLessonPerformance(
     excellent: "出色", good: "稳健", mixed: "尚可", poor: "欠佳",
   };
 
+  const maskedWeakness = guile >= 65 && performance !== "excellent";
+
   const reportLines = [
     `陛下考较${name}的${SUBJECT_LABEL[subject]}，${name}${
-      guile >= 65 && performance !== "excellent"
-        ? "思路灵活，应答间巧妙回避了不熟之处，"
-        : ""
+      maskedWeakness ? "思路灵活，应答间巧妙回避了不熟之处，" : ""
     }表现${perfLabel[performance]}。`,
     performance === "excellent"
       ? `${name}引经据典，条理清晰，先生在旁亦频频点头，颇为赞许。`
@@ -219,6 +215,98 @@ export function resolveHeirLessonPerformance(
     subject,
     performance,
     reportLines,
+    portraitSet: heirPortraitSet(heir, state.calendar),
+    speakerName: name,
+  };
+}
+
+// ── buildHeirLessonResponseReaction ──────────────────────────────────────────
+
+/** 功课应对结束后的皇嗣反应台词（由父层在应用 effect 前构造，以便清除召见态后仍可播放）。 */
+export function buildHeirLessonResponseReaction(
+  state: GameState,
+  heirId: string,
+  performance: HeirLessonResult["performance"],
+  response: "praise" | "admonish" | "neutral",
+): HeirAudiencePlan | null {
+  const heir = state.resources.bloodline.heirs.find((h) => h.id === heirId);
+  if (!heir || heir.lifecycle !== "alive") return null;
+
+  const name = displayName(state, heir);
+  const { assertiveness, guile } = heir.personality;
+  const { imperialFear, closeness } = heir;
+
+  const highFear = imperialFear >= 60;
+  const highAssert = assertiveness >= 65;
+  const highGuile = guile >= 65;
+  const highClose = closeness >= 60;
+
+  let lines: string[];
+
+  if (response === "praise") {
+    if (performance === "excellent") {
+      lines = highAssert
+        ? [
+            `${name}从容谢恩，眉间却仍难掩几分自得，显然也知自己答得出色。`,
+          ]
+        : highClose
+        ? [
+            `${name}展颜一笑，低声道："儿臣不敢当，往后还要更加用功。"言辞谦逊，眼中却有掩不住的喜色。`,
+          ]
+        : [
+            `${name}恭谨谢恩，应答有礼，举止稳重，颇见涵养。`,
+          ];
+    } else if (highGuile) {
+      lines = [
+        `${name}欠身谢恩，面上没有慌乱，从容道："多谢陛下鼓励，儿臣仍需精进。"`,
+      ];
+    } else if (highFear) {
+      lines = [
+        `${name}受宠若惊，连声道谢，低头的姿态仍带着小心翼翼，须臾才抬起脸来，显得有些不知所措。`,
+      ];
+    } else {
+      lines = [
+        `${name}谢了恩，轻轻抬起头来，嘴角微弯，显然在竭力压住心中的高兴。`,
+      ];
+    }
+  } else if (response === "admonish") {
+    if (highAssert && !highFear) {
+      lines = [
+        `${name}低头领训，神色平静，却隐约透出一丝不服，退下时步子依旧沉稳，没有半分委屈的模样。`,
+      ];
+    } else if (highFear) {
+      lines = [
+        `${name}脸色一白，连声请罪，答应回去加倍温习，声音已带了几分哽咽，不敢抬头。`,
+      ];
+    } else if (performance === "excellent") {
+      lines = [
+        `${name}显然没料到会受训，愣了片刻，随即低头应是，神情间有些茫然，却不敢辩解。`,
+      ];
+    } else {
+      lines = [
+        `${name}垂首领训，认了过失，应承会加倍用功，态度恭顺，只是眉头微微皱着，显见是心里不好受。`,
+      ];
+    }
+  } else {
+    // neutral
+    if (highFear) {
+      lines = [
+        `${name}摸不准陛下心意，退下时仍显得惴惴不安，回头望了一眼，神色颇为忐忑。`,
+      ];
+    } else if (highAssert) {
+      lines = [
+        `${name}施礼告退，神情平静，似是早已预料到这样的结果，并不因此懈怠或慌乱。`,
+      ];
+    } else {
+      lines = [
+        `${name}恭谨退下，面上波澜不惊，只是走出几步后，悄悄松了口气。`,
+      ];
+    }
+  }
+
+  return {
+    effects: [],
+    lines,
     portraitSet: heirPortraitSet(heir, state.calendar),
     speakerName: name,
   };

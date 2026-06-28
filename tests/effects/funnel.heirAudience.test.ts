@@ -156,6 +156,29 @@ describe("funnel: heir_lesson_response — admonish", () => {
   });
 });
 
+describe("funnel: heir_lesson_response — neglect", () => {
+  it("reduces neglect by 6 for all response types", () => {
+    const base = 30;
+    for (const response of ["praise", "admonish", "neutral"] as const) {
+      const r = applyEffects(db, heirState({ neglect: base }), [
+        { type: "heir_lesson_response", heirId: HEIR_ID, subject: "scholarship", performance: "good", response },
+      ]);
+      expect(r.ok).toBe(true);
+      if (!r.ok) continue;
+      expect(r.value.resources.bloodline.heirs[0]!.neglect).toBe(base - 6);
+    }
+  });
+
+  it("clamps neglect floor at 0", () => {
+    const r = applyEffects(db, heirState({ neglect: 3 }), [
+      { type: "heir_lesson_response", heirId: HEIR_ID, subject: "virtue", performance: "mixed", response: "neutral" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.resources.bloodline.heirs[0]!.neglect).toBe(0);
+  });
+});
+
 describe("funnel: heir_lesson_response — neutral", () => {
   it("applies favor+1, closeness+1", () => {
     const r = applyEffects(db, heirState({ favor: 50, closeness: 50 }), [

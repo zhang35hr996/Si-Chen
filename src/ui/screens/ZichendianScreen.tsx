@@ -312,7 +312,7 @@ export function ZichendianScreen({
                     onClick={() => onHeirLessonResponse?.("admonish")}
                     disabled={summonedActionsLocked}
                   >
-                    训斥
+                    训诫
                   </button>
                   <button
                     type="button"
@@ -320,7 +320,7 @@ export function ZichendianScreen({
                     onClick={() => onHeirLessonResponse?.("neutral")}
                     disabled={summonedActionsLocked}
                   >
-                    按察
+                    不置可否
                   </button>
                 </div>
               </div>
@@ -334,7 +334,7 @@ export function ZichendianScreen({
                     disabled={summonedActionsLocked || Boolean(onTalkHeirDisabledReason)}
                     title={onTalkHeirDisabledReason}
                   >
-                    叙话
+                    {summonedHeir.stage === "schooling" ? "交谈" : "说说话"}
                   </button>
                 )}
                 {onPlayHeir && (
@@ -345,7 +345,7 @@ export function ZichendianScreen({
                     disabled={summonedActionsLocked || Boolean(onPlayHeirDisabledReason)}
                     title={onPlayHeirDisabledReason}
                   >
-                    陪玩
+                    陪着玩
                   </button>
                 )}
                 {summonedHeir.stage === "schooling" && onAskLessonHeir && (
@@ -356,7 +356,7 @@ export function ZichendianScreen({
                     disabled={summonedActionsLocked || Boolean(onAskLessonHeirDisabledReason)}
                     title={onAskLessonHeirDisabledReason}
                   >
-                    询功课
+                    询问功课
                   </button>
                 )}
                 {onDismissSummonedHeir && (
