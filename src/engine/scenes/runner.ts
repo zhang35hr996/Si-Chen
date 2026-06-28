@@ -142,9 +142,16 @@ export class SceneRunner {
     return err(error);
   }
 
-  /** 产出一个可显示 frame：递增 frameSeq 并打包。仅在真正向调用方返回 frame 时调用。 */
-  private frame(line: DialogueLine, awaiting: "choice" | "continue"): Result<RunnerStep, GameError> {
-    return ok({ kind: "frame", frame: { frameSeq: ++this.session!.frameSeq, line, awaiting } });
+  /**
+   * 产出一个可显示 frame：递增 frameSeq 并打包。仅在真正向调用方返回 frame 时调用。
+   * 入参 `session` 是本次 run() 起始捕获的 session；若期间发生 abandon()（异步等待中玩家离开/
+   * 事件被替换，this.session 已置 null 或换新），则不产出 frame、不触碰已失效 session。
+   */
+  private frame(session: SceneSession, line: DialogueLine, awaiting: "choice" | "continue"): Result<RunnerStep, GameError> {
+    if (this.session !== session) {
+      return err(stateError("NO_SESSION", "scene was abandoned before the frame was produced"));
+    }
+    return ok({ kind: "frame", frame: { frameSeq: ++session.frameSeq, line, awaiting } });
   }
 
   private async run(): Promise<Result<RunnerStep, GameError>> {
@@ -202,12 +209,12 @@ export class SceneRunner {
             const attached = this.attachChoices(narrationLine, narrationNext);
             if (!attached.ok) return this.fail(attached.error);
             this.lastLine = attached.value;
-            return this.frame(attached.value, "choice");
+            return this.frame(session, attached.value, "choice");
           }
           session.cursorNodeId = node.next ?? null;
           this.awaiting = "continue";
           this.lastLine = narrationLine;
-          return this.frame(narrationLine, "continue");
+          return this.frame(session, narrationLine, "continue");
         }
 
         case "line": {
@@ -220,6 +227,10 @@ export class SceneRunner {
           );
           if (!request.ok) return this.fail(request.error);
           const produced = await produceDialogueTurn(this.db, this.dialogueRuntime.provider, request.value, this.preState!, toDialogueTurnOptions(this.dialogueRuntime));
+          // 异步等待期间已 abandon（玩家离开/事件被替换）：直接退出，绝不改实例态、绝不 abandon 可能已开始的新 session。
+          if (this.session !== session) {
+            return err(stateError("NO_SESSION", "scene was abandoned during provider await"));
+          }
           if (!produced.ok) return this.fail(produced.error);
 
           const line = produced.value.line;
@@ -228,12 +239,12 @@ export class SceneRunner {
             const attached = this.attachChoices(line, nextNode);
             if (!attached.ok) return this.fail(attached.error);
             this.lastLine = attached.value;
-            return this.frame(attached.value, "choice");
+            return this.frame(session, attached.value, "choice");
           }
           session.cursorNodeId = node.next ?? null;
           this.awaiting = "continue";
           this.lastLine = line;
-          return this.frame(line, "continue");
+          return this.frame(session, line, "continue");
         }
 
         case "choice": {
@@ -246,7 +257,7 @@ export class SceneRunner {
           const attached = this.attachChoices(this.lastLine, node);
           if (!attached.ok) return this.fail(attached.error);
           this.lastLine = attached.value;
-          return this.frame(attached.value, "choice");
+          return this.frame(session, attached.value, "choice");
         }
       }
     }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ContentDB } from "../../src/engine/content/loader";
 import type { SceneContent } from "../../src/engine/content/schemas";
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
+import type { DialogueProvider } from "../../src/engine/dialogue/types";
 import { SceneRunner, type RunnerStep } from "../../src/engine/scenes/runner";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { createLogger } from "../../src/engine/infra/logger";
@@ -80,6 +81,26 @@ describe("SceneRunner walkthrough (sc_fixture_scene_runner, through the provider
     expect(bad.ok).toBe(false);
     const retry = asFrame(unwrap(await runner.advance("c_comfort")));
     expect(retry.frameSeq).toBe(2); // 仅成功产出的 frame 递增
+  });
+
+  it("P2: provider 等待期间 abandon — resolve 后不抛异常、不产出 frame、session 保持已弃置", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    const deferredProvider: DialogueProvider = {
+      ...mockProvider,
+      async generate(request) {
+        await gate; // 卡住直到测试放行
+        return mockProvider.generate(request);
+      },
+    };
+    const runner = new SceneRunner(db, { provider: deferredProvider });
+    const startPromise = runner.start(fresh(), "ev_fixture_scene_runner");
+    runner.abandon(); // 等待期间玩家离开
+    release(); // provider resolve
+    const result = await startPromise;
+    expect(result.ok).toBe(false); // 不产出 frame
+    if (!result.ok) expect(result.error.code).toBe("NO_SESSION");
+    expect(runner.getSession()).toBeNull(); // 仍是已弃置
   });
 
   it("invalid choice id is rejected without advancing", async () => {

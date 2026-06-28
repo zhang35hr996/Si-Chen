@@ -356,3 +356,53 @@ describe("failure-path interruption notice", () => {
     });
   });
 });
+
+// ── 6. 反应队列切换（重挂）生命周期 — #122 P1b ───────────────────────────────
+// App 用变化的 React key 强制重挂 ReactionScreen，故新 beat/回合时 index/scriptedLine/
+// 去重集合全部重建，不会串用上一条反应的本地状态。下面用变化的 key 模拟 App 行为。
+
+describe("反应队列切换（重挂）生命周期 — P1b", () => {
+  // ReactionScreen scripted 路径需 speaker 在 db.characters 内（App 传入合并了 generatedConsorts 的 runtime db）。
+  const mergedDb = () => ({ ...db, characters: { ...db.characters, ...store.getState().generatedConsorts } });
+  const consortIds = () =>
+    Object.keys(store.getState().generatedConsorts).filter((id) => !id.startsWith("generated_empress_"));
+
+  it("scripted A → 重挂 scripted B：各记本说话人，B 不串用 A 的旧台词", async () => {
+    const mdb = mergedDb();
+    const [a, b] = consortIds();
+    const { rerender } = render(
+      <ReactionScreen key={1} db={mdb} store={store} registry={makeRegistry()} speakerId={a!} lines={["甲在此问安。"]} onDone={vi.fn()} />,
+    );
+    await waitFor(() => expect((store.getState().narrativeLog ?? []).some((e) => e.speakerId === a)).toBe(true));
+    rerender(
+      <ReactionScreen key={2} db={mdb} store={store} registry={makeRegistry()} speakerId={b!} lines={["乙在此告退。"]} onDone={vi.fn()} />,
+    );
+    await waitFor(() => expect((store.getState().narrativeLog ?? []).some((e) => e.speakerId === b)).toBe(true));
+
+    const log = store.getState().narrativeLog ?? [];
+    expect(log.filter((e) => e.speakerId === a)).toHaveLength(1);
+    expect(log.filter((e) => e.speakerId === b)).toHaveLength(1);
+    const bEntry = log.find((e) => e.speakerId === b)!;
+    expect(bEntry.lines.join()).toContain("乙"); // B 记的是 B 的台词
+    expect(bEntry.lines.join()).not.toContain("甲"); // 不串用 A 的旧台词
+  });
+
+  it("record:false 中断 → 重挂正常 beat：中断提示永不入史", async () => {
+    const mdb = mergedDb();
+    const a = consortIds()[0]!;
+    const interruptLine: DialogueLine = {
+      speakerId: a, speakerName: "X", text: "（对话暂时中断）", expression: "neutral",
+      choices: [], meta: { generated: true, degraded: false },
+    };
+    const { rerender } = render(
+      <ReactionScreen key={1} db={mdb} store={store} registry={makeRegistry()} speakerId={a} lines={[interruptLine.text]} generatedLine={interruptLine} record={false} onDone={vi.fn()} />,
+    );
+    rerender(
+      <ReactionScreen key={2} db={mdb} store={store} registry={makeRegistry()} speakerId={a} lines={["正常台词在此。"]} onDone={vi.fn()} />,
+    );
+    await waitFor(() => expect((store.getState().narrativeLog ?? []).some((e) => e.lines.includes("正常台词在此。"))).toBe(true));
+
+    const log = store.getState().narrativeLog ?? [];
+    expect(log.some((e) => e.lines.includes("（对话暂时中断）"))).toBe(false); // 中断提示不入史
+  });
+});
