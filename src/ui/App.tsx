@@ -81,6 +81,7 @@ import { toDialogueTurnOptions, type DialogueRuntimeDeps } from "../engine/dialo
 import { deriveConverseSceneContext, type ConverseSceneContext } from "./converseScene";
 import type { DialogueLine } from "../engine/dialogue/types";
 import { buildHeirSummon, buildHeirLesson, buildTutorReport, type HeirInteractionPlan } from "../store/heirInteraction";
+import { buildHeirAudienceAction, resolveHeirLessonPerformance, buildHeirLessonResponseReaction } from "../store/heirAudience";
 import { buildEmpressDecree, type DecreeReaction } from "../store/empressDecree";
 import { buildChengFengGossip, chengFengHaremGreeting } from "../store/chengFeng";
 import { buildProvinceTribute, buildMinisterTribute } from "../store/tribute";
@@ -113,16 +114,15 @@ import { BedchamberModal } from "./components/BedchamberModal";
 import { BedchamberPicker } from "./components/BedchamberPicker";
 import { JingshifangModal } from "./components/JingshifangModal";
 import { HeirListModal } from "./components/HeirListModal";
-import { HeirSummonPicker, buildHeirSummonReaction } from "./components/HeirSummonPicker";
+import { HeirSummonPicker } from "./components/HeirSummonPicker";
 import { ConsortListModal } from "./components/ConsortListModal";
 import { HeirNameModal } from "./components/HeirNameModal";
-import { centennialDue } from "../engine/characters/heirs";
+import { centennialDue, heirStage, heirPortraitSet, heirAge, listHeirsBySex } from "../engine/characters/heirs";
 import { randomPetName } from "../engine/characters/heirNames";
 import { PhysicianModal } from "./components/PhysicianModal";
 import { courtPhysician } from "../engine/characters/taiyi";
 import { planPhysicianVisit, buildConsultOptions, physicianVisitedThisMonth, type PhysicianSubject } from "../store/physician";
 import { livingConsortIds } from "../store/healthRoster";
-import { heirPortraitSet, heirAge, listHeirsBySex } from "../engine/characters/heirs";
 import { SuccessorModal } from "./components/SuccessorModal";
 import { BedchamberScene } from "./screens/BedchamberScene";
 import type { BedchamberMode, ChamberId } from "../engine/state/types";
@@ -264,6 +264,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   // Never saved to GameState or localStorage.
   const [recentKnowledge, setRecentKnowledge] = useState<DialogueKnowledgeDiagnostic | undefined>(undefined);
   const [summonedConsortId, setSummonedConsortId] = useState<string | null>(null);
+  const [summonedHeirId, setSummonedHeirId] = useState<string | null>(null);
+  const [heirLessonPending, setHeirLessonPending] = useState<import("./screens/ZichendianScreen").ZichendianHeirLessonView | null>(null);
   const [physicianReaction, setPhysicianReaction] = useState<{ portraitSet: string; speakerName: string; lines: string[] } | null>(null);
   const [physicianConsortPickerOpen, setPhysicianConsortPickerOpen] = useState(false);
   const [physicianHeirPickerOpen, setPhysicianHeirPickerOpen] = useState(false);
@@ -334,6 +336,16 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       setSummonedConsortId(null);
     }
   }, [reactiveState.standing, summonedConsortId]);
+
+  // 死者视图清理：被召见的皇嗣若在健康 tick 中身故，清除召见态。
+  useEffect(() => {
+    if (!summonedHeirId) return;
+    const heir = reactiveState.resources.bloodline.heirs.find((h) => h.id === summonedHeirId);
+    if (!heir || heir.lifecycle === "deceased") {
+      setSummonedHeirId(null);
+      setHeirLessonPending(null);
+    }
+  }, [reactiveState.resources.bloodline.heirs, summonedHeirId]);
 
   if (!content.ok || !manifest.success) {
     const errors = [
@@ -1167,6 +1179,57 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     setChildReaction(plan);
   };
 
+  // 紫宸殿·皇嗣叙话/陪玩（耗 1 行动点）；互动结束即清除召见态，一次召见仅一次互动。
+  const heirAudience = (action: "talk" | "play") => {
+    const heirId = summonedHeirId;
+    if (!heirId) return;
+    const plan = buildHeirAudienceAction(store.getState(), heirId, action);
+    if (!plan) return;
+    const before = store.getState().calendar;
+    const settled = store.resolveTimedAction(db, plan.effects, { type: "SPEND_AP", amount: 1 });
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+    const decreeBeats = rollActionBeats(before, 1);
+    doAutosave();
+    setSummonedHeirId(null);
+    setHeirLessonPending(null);
+    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
+    setChildReaction(plan);
+  };
+
+  // 紫宸殿·询功课（不耗行动力，仅计算并显示成绩供选择应对方式）。
+  const heirAskLesson = () => {
+    const heirId = summonedHeirId;
+    if (!heirId) return;
+    const result = resolveHeirLessonPerformance(store.getState(), heirId);
+    if (!result) return;
+    setHeirLessonPending({ subject: result.subject, performance: result.performance, reportLines: result.reportLines });
+  };
+
+  // 紫宸殿·应对功课（耗 1 行动点）：褒扬/训诫/不置可否；应对后结束召见。
+  const heirLessonResponse = (response: "praise" | "admonish" | "neutral") => {
+    const heirId = summonedHeirId;
+    if (!heirId || !heirLessonPending) return;
+    const { subject, performance } = heirLessonPending;
+    // 先构造反应台词（需要召见前的 state）
+    const reactionPlan = buildHeirLessonResponseReaction(store.getState(), heirId, performance, response);
+    const before = store.getState().calendar;
+    const effects: import("../engine/content/schemas").EventEffect[] = [
+      { type: "heir_lesson_response", heirId, subject, performance, response },
+    ];
+    const settled = store.resolveTimedAction(db, effects, { type: "SPEND_AP", amount: 1 });
+    if (!settled.ok) return;
+    if (settled.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return; }
+    const decreeBeats = rollActionBeats(before, 1);
+    doAutosave();
+    setSummonedHeirId(null);
+    setHeirLessonPending(null);
+    if (decreeBeats.length) setReactionQueue((q) => [...q, ...decreeBeats]);
+    pendingReactionDispatch({ type: "begin", request: settled.value.rolledOver ? stationaryRequest() : null });
+    if (reactionPlan) setChildReaction(reactionPlan);
+  };
+
   // 上书房·问功课（耗 1 行动点）：轮换一科 + 宠爱。行动先于时间。
   const heirLesson = (heirId: string) => {
     const plan = buildHeirLesson(db, store.getState(), heirId);
@@ -1907,13 +1970,32 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         const deferredQueue = getDeferredAudienceQueue(db, liveState, "zichendian");
         const activeItem = selectActiveAudience(queue);
         const summonedView = summonedConsortId ? summonedConsortToView(db, liveState, registry, summonedConsortId) : undefined;
+        // 被召见皇嗣临场视图。
+        const summonedHeirView = (() => {
+          if (!summonedHeirId) return undefined;
+          const heir = liveState.resources.bloodline.heirs.find((h) => h.id === summonedHeirId);
+          if (!heir || heir.lifecycle !== "alive") return undefined;
+          const rows = listHeirsBySex(liveState.resources.bloodline.heirs, heir.sex);
+          const row = rows.find((r) => r.heir.id === summonedHeirId);
+          const displayName = row
+            ? (heir.givenName ? `${row.name}·${heir.givenName}` : heir.petName ? `${row.name}·${heir.petName}` : row.name)
+            : "皇嗣";
+          const portraitKey = heirPortraitSet(heir, liveState.calendar);
+          return {
+            heirId: summonedHeirId,
+            name: displayName,
+            portraitSrc: registry.portrait(portraitKey, "neutral").url,
+            stage: heirStage(heir, liveState.calendar),
+          };
+        })();
         // 召见侍君 / 乘风召见妃嫔：开既有选人盘的 summon 模式（不套 canBedchamber 侍寝门槛——此路通向叙话/临场，
         // 非即时侍寝）；盘内仍按 canSummon 过滤不可召见者；选中后 onPick 置 summonedConsortId。
         const summonConsortPicker = () => { setFlipMode("summon"); setFlipOpen(true); };
         // 离开紫宸殿：清召见态，按既有非根地图行为开当前宫城板（返回可逐级回主图）。
-        const leaveZichendian = () => { setSummonedConsortId(null); setMapAtRoot(false); setView("map"); };
+        const leaveZichendian = () => { setSummonedConsortId(null); setSummonedHeirId(null); setHeirLessonPending(null); setMapAtRoot(false); setView("map"); };
         // 叙话需 1 行动点：AP 不足时叙话禁用并显原因（不暴露「可点却静默无效」按钮）。
         const canConverseSummoned = summonedConsortId !== null && liveState.calendar.ap >= 1;
+        const canHeirAction = summonedHeirId !== null && liveState.calendar.ap >= 1;
         return (
           <GameShell
             calendar={liveState.calendar}
@@ -1947,6 +2029,27 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                 setSummonedConsortId(null);
                 if (id) beginBedchamber(id);
               } : undefined}
+              summonedHeir={summonedHeirView}
+              onTalkHeir={summonedHeirId ? () => heirAudience("talk") : undefined}
+              onTalkHeirDisabledReason={summonedHeirId && !canHeirAction ? "行动力不足" : undefined}
+              onPlayHeir={
+                summonedHeirId && summonedHeirView?.stage !== "schooling"
+                  ? () => heirAudience("play")
+                  : undefined
+              }
+              onPlayHeirDisabledReason={
+                summonedHeirId && summonedHeirView?.stage !== "schooling" && !canHeirAction
+                  ? "行动力不足"
+                  : undefined
+              }
+              onAskLessonHeir={summonedHeirView?.stage === "schooling" ? heirAskLesson : undefined}
+              onAskLessonHeirDisabledReason={summonedHeirView?.stage === "schooling" && !canHeirAction ? "行动力不足" : undefined}
+              onDismissSummonedHeir={summonedHeirId ? () => {
+                setSummonedHeirId(null);
+                setHeirLessonPending(null);
+              } : undefined}
+              heirLessonPending={heirLessonPending ?? undefined}
+              onHeirLessonResponse={summonedHeirId && heirLessonPending ? heirLessonResponse : undefined}
               interruptible={!zichendianBusy}
               busy={zichendianBusy}
               onAdmitAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
@@ -2748,12 +2851,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         <HeirSummonPicker
           db={db}
           state={liveState}
-          registry={registry}
           onClose={() => setHeirSummonPickerOpen(false)}
-          onPick={(result) => {
+          onPick={({ heirId }) => {
             setHeirSummonPickerOpen(false);
-            const rx = buildHeirSummonReaction(result);
-            setReaction({ speakerId: rx.speakerId, lines: rx.lines });
+            setSummonedConsortId(null);
+            setSummonedHeirId(heirId);
+            setHeirLessonPending(null);
           }}
         />
       )}
