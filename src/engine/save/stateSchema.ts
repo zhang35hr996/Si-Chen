@@ -913,6 +913,11 @@ export const gameStateSchema = z.strictObject({
   })).default([]),
   justice: justiceStateSchema,
   settledQuarterlyPeriods: z.array(z.string()).default([]),
+  narrativeLog: z.array(z.object({
+    at: gameTimeSchema,
+    speakerId: z.string(),
+    lines: z.array(z.string()),
+  })).optional(),
   rngSeed: z.number(),
 }).superRefine((data, ctx) => {
   const errs = [

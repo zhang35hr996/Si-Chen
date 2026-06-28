@@ -3,6 +3,7 @@ import { useState } from "react";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
 import { byRankDesc } from "../../engine/characters/presence";
 import { canSummon } from "../../store/bedchamber";
+import { isInColdPalace } from "../../engine/characters/coldPalace";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState } from "../../engine/state/types";
 
@@ -29,8 +30,19 @@ export function JingshifangModal({
   };
   const fatherText = fatherCandidates.map(name).join(" 或 ");
 
-  const living = Object.values(db.characters)
-    .filter((c) => c.kind === "consort" && canSummon(state, c.id))
+  // 候选承嗣范围：在宫、未故、未禁足、不在冷宫的侍君（含 canSummon 限制）。
+  // canSummon 已通过 canCharacterParticipate("normal_summon") 检查冷宫，此处显式再加 isInColdPalace
+  // 作为防御层，确保后宫规则变化时不会遗漏。
+  const living = [
+    ...Object.values(db.characters),
+    ...Object.values(state.generatedConsorts),
+  ]
+    .filter(
+      (c) =>
+        c.kind === "consort" &&
+        !isInColdPalace(state, c.id) &&
+        canSummon(state, c.id),
+    )
     .sort(byRankDesc(db, state))
     .map((c) => c.id);
 

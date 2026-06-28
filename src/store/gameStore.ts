@@ -28,7 +28,8 @@ import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
 import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
-import type { GameState, PendingDaxuan } from "../engine/state/types";
+import type { GameState, NarrativeEntry, PendingDaxuan } from "../engine/state/types";
+import { NARRATIVE_LOG_MAX } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { planHealthChange } from "./health";
 import { assignOfficialPost } from "../engine/officials/assign";
@@ -611,6 +612,16 @@ export class GameStore {
     if (next !== this.state) {
       this.tracedSet(next, { kind: "action", sourceId: "recordOvernight", label: `recordOvernight: ${charId}` });
     }
+  }
+
+  /** 追加对话历史日志条目（不经效果漏斗；append-only，超出上限时从头删除）。 */
+  appendNarrativeLog(entries: NarrativeEntry[]): void {
+    if (entries.length === 0) return;
+    const current = this.state.narrativeLog ?? [];
+    const merged = [...current, ...entries];
+    const trimmed = merged.length > NARRATIVE_LOG_MAX ? merged.slice(merged.length - NARRATIVE_LOG_MAX) : merged;
+    this.state = { ...this.state, narrativeLog: trimmed };
+    // 不触发 tracedSet（避免污染 undo 历史）；autosave 会在下一次正式操作时持久化。
   }
 
   /** 在局部候选 state 上依次落库一批秀男；任一失败即整批回退（返回 err，调用方不得 emit）。 */

@@ -172,10 +172,23 @@ const TRAIT_POOL = [
   { display: "娴雅", reactionTraits: ["status_conscious", "discreet"] },
 ] as const satisfies readonly { display: string; reactionTraits: readonly CanonicalReactionTrait[] }[];
 const LIKES_POOL = ["玉器", "香料", "古籍", "骏马", "茶饮", "花木", "字画", "珠玉", "琴谱", "棋具"];
-const PORTRAIT_SETS = ["consort1", "consort2", "consort3", "consort4", "consort5", "consort6"];
+const FALLBACK_PORTRAIT_SETS = ["consort1", "consort2", "consort3", "consort4", "consort5", "consort6"];
 
 function pick<T>(pool: readonly T[], seed: string): T {
   return pool[gestationRollRaw(seed) % pool.length]!;
+}
+
+/**
+ * 枚举当前 DB 中全部正式 consort 角色所用的 portraitSet，去重排序。
+ * 供殿选候选秀男随机立绘时使用——避免写死枚举池，新增 portraitSet 自动纳入。
+ */
+export function availableConsortPortraitSets(db: ContentDB): readonly string[] {
+  const sets = new Set<string>();
+  for (const c of Object.values(db.characters)) {
+    if (c.kind === "consort" && c.portraitSet) sets.add(c.portraitSet);
+  }
+  const sorted = [...sets].sort();
+  return sorted.length > 0 ? sorted : FALLBACK_PORTRAIT_SETS;
 }
 
 /** 候选秀男（生成态，未落库）。 */
@@ -193,6 +206,7 @@ export interface Candidate {
 export function generateCandidates(db: ContentDB, state: GameState, year: number): Candidate[] {
   const base = `daxuan:gen:${year}`;
   const count = 8 + (gestationRollRaw(`${base}:n`) % 5); // 8–12
+  const portraitSets = availableConsortPortraitSets(db);
   // 世家候选只能出自「在任且有有效官职」的官员（避免从已故/告老者中抽人）。
   const activeOfficials = getActiveSeatedOfficials(state, db);
   const out: Candidate[] = [];
@@ -305,7 +319,7 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
         speechStyle: "语气谨慎，言辞守礼。",
       },
       defaultLocation: "chuxiu_gong",
-      portraitSet: pick(PORTRAIT_SETS, `${seed}:portrait`),
+      portraitSet: pick(portraitSets, `${seed}:portrait`),
       expressions: ["neutral"],
       voice: { register: "formal", quirks: [], tabooTopics: [] },
       initialMemories: [],
