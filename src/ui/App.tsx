@@ -1085,7 +1085,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (r.ok) doAutosave();
   };
 
-  // 御书房·行动：批阅奏折（耗 2 行动点，提升朝堂资源）。前朝奏折已并入此入口。
+  // 御书房·行动：批阅奏折（耗 2 行动点，提升朝堂资源）。人事奏折与前朝奏折已并入此入口。
   const reviewMemorials = () => {
     if (store.getState().calendar.ap < 2) return; // 行动点不足
     const applied = store.applyEffects(db, [
@@ -1098,14 +1098,16 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (!spend.ok) return;
     if (sovereignDied) { onSovereignDeath(); return; }
     doAutosave();
+    const pendingPersonnel = getPendingPersonnelDecisions(store.getState());
     const pendingCourt = getPendingMemorials(store.getState());
     const own: DecreeReaction[] = spend.value.rolledOver
       ? []
       : [{ speakerId: "wei_sui", lines: ["奏折已批阅毕。陛下勤政忧国，朝野称颂，圣威日隆。"] }];
     playReactions([...own, ...decreeBeats], spend.value.rolledOver ? stationaryRequest() : null);
-    // 前朝奏折并入：批阅结束后若有前朝待批奏折，自动跳转前朝奏折屏处理（不重复扣行动点）。
-    if (pendingCourt.length > 0 && !spend.value.rolledOver) {
-      setView("courtMemorials");
+    // 并入人事奏折与前朝奏折：按「人事 → 前朝」优先序跳转（只跳一屏，离开时再检查另一屏）。
+    if (!spend.value.rolledOver) {
+      if (pendingPersonnel.length > 0) setView("personnelDecisions");
+      else if (pendingCourt.length > 0) setView("courtMemorials");
     }
   };
 
@@ -1420,7 +1422,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (!spend.ok) return;
     if (sovereignDied) { onSovereignDeath(); return; }
     store.recordOvernight(db, charId, spend.value.rolledOver);
-    setSummonedConsortId(null);
+    // 不清除 summonedConsortId：叙话后侍君仍在殿内，直到玩家主动让其告退。
     doAutosave();
 
     // Generative path: assemble request, snapshot expected state, produce turn, CAS。
@@ -1898,11 +1900,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               }}
               onAdmitPendingAudience={(eventId) => startEvent(eventId, { kind: "zichendian" })}
               onReviewMemorials={reviewMemorials}
-              memorialTotalCount={getPendingMemorials(liveState).length}
-              onReviewPersonnel={() => setView("personnelDecisions")}
-              personnelDecisionCount={getPendingPersonnelDecisions(liveState).length}
+              memorialTotalCount={getPendingMemorials(liveState).length + getPendingPersonnelDecisions(liveState).length}
               onSummonConsort={summonConsortPicker}
-              onSummonHeir={liveState.resources.bloodline.heirs.some((h) => h.lifecycle === "alive") ? () => setHeirSummonPickerOpen(true) : undefined}
+              onSummonHeir={() => setHeirSummonPickerOpen(true)}
               onRest={restAlone}
               onLeave={leaveZichendian}
               onManageRank={() => { setConsortListReturnId(null); setConsortListOpen(true); }}
@@ -2081,13 +2081,22 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           calendar={liveState.calendar}
           crumbs={breadcrumbFor(db, "zichendian")}
           pregnancyMonth={sovereignGestationDisplay(liveState)?.month ?? undefined}
-          onBack={() => setView("zichendian")}
+          onBack={() => {
+            // 离开人事奏折屏后若有前朝奏折待批，顺序跳转；否则回紫宸殿。
+            const pendingCourt = getPendingMemorials(store.getState());
+            if (pendingCourt.length > 0) setView("courtMemorials");
+            else setView("zichendian");
+          }}
           onOpenResources={() => setResourcePanelOpen(true)}
           onOpenStorehouse={() => setStorehouseOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           className="location-shell"
         >
-          <PersonnelDecisionsScreen db={db} store={store} onBack={() => setView("zichendian")} onCommitted={doAutosave} />
+          <PersonnelDecisionsScreen db={db} store={store} onBack={() => {
+            const pendingCourt = getPendingMemorials(store.getState());
+            if (pendingCourt.length > 0) setView("courtMemorials");
+            else setView("zichendian");
+          }} onCommitted={doAutosave} />
         </GameShell>
       )}
       {view === "courtMemorials" && (
