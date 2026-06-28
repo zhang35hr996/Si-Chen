@@ -256,6 +256,54 @@ describe("B. eligibleCustodiansForHeir", () => {
   });
 });
 
+// ── B-recustody. 嫡出皇嗣在抚养人失效后允许重新指定 ────────────────────────────
+
+describe("B-recustody. 嫡出皇嗣重新抚养", () => {
+  it("现抚养人有效 → 嫡出皇嗣仍锁定（空池）", () => {
+    const state = createNewGameState(db);
+    const empressId = findEmpressId(state);
+    const heir = baseHeir({ legitimate: true, adoptiveFatherId: empressId });
+    addHeirToState(state, heir);
+    expect(eligibleCustodiansForHeir(db, state, heir)).toHaveLength(0);
+  });
+
+  it("现抚养人已故 → 解锁重新指定（非空池）", () => {
+    const state = createNewGameState(db);
+    const empressId = findEmpressId(state);
+    const heir = baseHeir({ legitimate: true, adoptiveFatherId: empressId });
+    addHeirToState(state, heir);
+    (state.standing[empressId] as { lifecycle: string }).lifecycle = "deceased";
+    expect(eligibleCustodiansForHeir(db, state, heir).length).toBeGreaterThan(0);
+  });
+
+  it("无抚养人(missing) → 仍锁定（退化态，保持 B1 不变量）", () => {
+    const state = createNewGameState(db);
+    const heir = baseHeir({ legitimate: true }); // no adoptiveFatherId
+    addHeirToState(state, heir);
+    expect(eligibleCustodiansForHeir(db, state, heir)).toHaveLength(0);
+  });
+
+  it("养父已故后重新指定 → 成功且皇嗣仍嫡出、新抚养人不必皇后", () => {
+    const state = createNewGameState(db);
+    const empressId = findEmpressId(state);
+    const heir = baseHeir({ sex: "son", legitimate: true, adoptiveFatherId: empressId });
+    addHeirToState(state, heir);
+    (state.standing[empressId] as { lifecycle: string }).lifecycle = "deceased";
+
+    const pool = eligibleCustodiansForHeir(db, state, heir);
+    const nonEmpress = pool.find((c) => c.id !== empressId && c.kind === "consort");
+    expect(nonEmpress).toBeDefined();
+    expect(nonEmpress!.becomesLegitimate).toBe(false); // 已嫡出，不再「转嫡」
+
+    const result = resolveHeirCustodyTransfer(db, state, { heirId: heir.id, toCustodianId: nonEmpress!.id, source: "fengxiandian" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const updated = result.value.state.resources.bloodline.heirs.find((h) => h.id === heir.id);
+    expect(updated?.adoptiveFatherId).toBe(nonEmpress!.id);
+    expect(updated?.legitimate).toBe(true); // 仍嫡出
+  });
+});
+
 // ── C. planHeirCustodyTransfer — validation ───────────────────────────────────
 
 describe("C. planHeirCustodyTransfer – validation", () => {

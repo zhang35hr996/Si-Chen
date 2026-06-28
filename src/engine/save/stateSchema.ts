@@ -1270,6 +1270,7 @@ export const gameStateSchema = z.strictObject({
   })).default([]),
   justice: justiceStateSchema,
   settledQuarterlyPeriods: z.array(z.string()).default([]),
+  settledHeirUpbringingMonths: z.array(z.string()).default([]),
   narrativeLog: z.array(z.object({
     at: gameTimeSchema,
     speakerId: z.string(),

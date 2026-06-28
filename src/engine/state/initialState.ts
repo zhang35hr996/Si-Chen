@@ -92,6 +92,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     templateEventRecords: {},
     justice: createEmptyJusticeState(),
     settledQuarterlyPeriods: [],
+    settledHeirUpbringingMonths: [],
     emotionalConditions: [],
     mentionLog: [],
     eventReactionLog: [],

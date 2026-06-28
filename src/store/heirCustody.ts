@@ -11,6 +11,17 @@
  */
 import { isConfined } from "../engine/characters/confinement";
 import { isInColdPalace } from "../engine/characters/coldPalace";
+import {
+  resolveCustodianAvailability,
+  custodianUnlocksRecustody,
+} from "../engine/characters/custodianAvailability";
+export {
+  resolveCustodianAvailability,
+  custodianCanCareNow,
+  custodianUnlocksRecustody,
+  type CustodianAvailability,
+  type CustodianAvailabilityResult,
+} from "../engine/characters/custodianAvailability";
 import { appendCourtEvent } from "../engine/chronicle/append";
 import { applyEffects } from "../engine/effects/funnel";
 import { stateError, type GameError } from "../engine/infra/errors";
@@ -73,14 +84,20 @@ export function currentEligibleEmpress(db: ContentDB, state: GameState): Charact
 
 /**
  * 按皇嗣计算合法候选抚养人池。
- * 已是当前抚养人者排除。非嫡皇嗣 + lifecycle===alive 方有候选；嫡出/死亡返回空。
+ * 已是当前抚养人者排除。lifecycle===alive 方有候选。
+ * 嫡出皇嗣仅在现抚养人**身故或入冷宫**（造成死锁）时才解锁重新指定；否则锁定（返回空）。
  */
 export function eligibleCustodiansForHeir(
   db: ContentDB,
   state: GameState,
   heir: Heir,
 ): CustodianCandidate[] {
-  if (!heir || heir.lifecycle !== "alive" || heir.legitimate) return [];
+  if (!heir || heir.lifecycle !== "alive") return [];
+  if (heir.legitimate) {
+    const { availability } = resolveCustodianAvailability(db, state, heir);
+    if (!custodianUnlocksRecustody(availability)) return [];
+    // 现抚养人身故/入冷宫 → 解锁重新指定（皇嗣保持嫡出，新抚养人不必皇后）。
+  }
 
   const guirenOrder = db.ranks["guiren"]?.order ?? 116;
   const changzaiOrder = db.ranks["changzai"]?.order ?? 84;
@@ -119,7 +136,9 @@ export function eligibleCustodiansForHeir(
     if (heir.sex === "daughter" && rank.order < guirenOrder) continue;
     if (heir.sex === "son" && rank.order <= changzaiOrder) continue;
 
-    const becomesLegitimate = empress !== null && c.id === empress.id;
+    // 已嫡出皇嗣（解锁重指定）保持嫡出，不再因新抚养人是皇后而「转嫡」；
+    // 仅庶出皇嗣交由当前皇后抚养时 becomesLegitimate。
+    const becomesLegitimate = !heir.legitimate && empress !== null && c.id === empress.id;
     const displayName = resolveDisplayName(c, st, rank);
 
     candidates.push({ id: c.id, kind: "consort", displayName, rankId: st.rank, becomesLegitimate });
@@ -218,7 +237,13 @@ export function planHeirCustodyTransfer(
   const heir = state.resources.bloodline.heirs.find((h) => h.id === heirId);
   if (!heir) return err([stateError("INVALID_HEIR", `皇嗣 "${heirId}" 不存在`)]);
   if (heir.lifecycle !== "alive") return err([stateError("INVALID_HEIR", `该皇嗣已故`)]);
-  if (heir.legitimate) return err([stateError("LEGITIMATE_LOCKED", "嫡出皇嗣的抚养归属已定，不可在奉先殿更改。")]);
+  // 嫡出皇嗣的抚养归属已定，仅当现抚养人**永久失效**（已故/无）时才解锁重新指定。
+  if (heir.legitimate) {
+    const { availability } = resolveCustodianAvailability(db, state, heir);
+    if (!custodianUnlocksRecustody(availability)) {
+      return err([stateError("LEGITIMATE_LOCKED", "嫡出皇嗣的抚养归属已定，不可在奉先殿更改。")]);
+    }
+  }
 
   // Same custodian
   if (toCustodianId === heir.adoptiveFatherId) {
