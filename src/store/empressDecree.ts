@@ -44,9 +44,16 @@ export function adjacentHaremRank(db: ContentDB, currentRankId: string, dir: Dir
 
 /** 选人 + 方向 + 相邻位分（不含概率门）。无合法懿旨返回 null。 */
 export function decideDecree(db: ContentDB, state: GameState, seedKey: string): DecreePlan | null {
-  const candidates = Object.values(db.characters).filter((c) => {
+  const empressId = activeEmpressId(state);
+  if (!empressId) return null;
+
+  const allConsorts = [
+    ...Object.values(db.characters),
+    ...Object.values(state.generatedConsorts),
+  ];
+  const candidates = allConsorts.filter((c) => {
     if (c.kind !== "consort" || isEmpress(state, c.id)) return false;
-    if (c.defaultLocation === "changmengong") return false;
+    if ("defaultLocation" in c && c.defaultLocation === "changmengong") return false;
     const st = state.standing[c.id];
     if (!st || st.lifecycle === "deceased") return false;
     const rank = db.ranks[st.rank];
@@ -67,7 +74,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
   const summary = dir === "promote" ? `皇后下旨晋我为${targetName}` : `皇后下旨贬我为${targetName}`;
 
   const effects: EventEffect[] = [
-    { type: "set_rank", char: pick.id, rank: targetId, authority: { kind: "harem_administrator", actorId: activeEmpressId(state) ?? "shen_zhibai", office: "empress" as const } },
+    { type: "set_rank", char: pick.id, rank: targetId, authority: { kind: "harem_administrator", actorId: empressId, office: "empress" as const } },
     {
       type: "memory",
       char: pick.id,
@@ -76,7 +83,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
         summary,
         strength: dir === "demote" ? 70 : 55,
         retention: dir === "demote" ? "permanent" : "slow",
-        subjectIds: [activeEmpressId(state) ?? "shen_zhibai", pick.id],
+        subjectIds: [empressId, pick.id],
         perspective: "target",
         triggerTags: ["empress", dir],
         unresolved: dir === "demote",

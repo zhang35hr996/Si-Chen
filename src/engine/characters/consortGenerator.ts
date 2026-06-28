@@ -310,7 +310,7 @@ export function generateInitialConsorts(
     [palaces[i], palaces[j]] = [palaces[j]!, palaces[i]!];
   }
 
-  // Deterministic shuffle of portrait pool: 同批侍君不复用同一张立绘。
+  // Deterministic shuffle of portrait pool: 皇后取 [0]，普通侍君按序取后续，整批无重复立绘。
   const portraits = [...PORTRAIT_POOL];
   for (let i = portraits.length - 1; i > 0; i--) {
     const j = seededRoll(`${prefix}:portshuf:${i}`, i + 1);
@@ -326,7 +326,7 @@ export function generateInitialConsorts(
   const { surname: empressSurname, givenName: empressGiven } = pickName(
     empressPrefix, "name", usedSurnames, usedFullNames,
   );
-  const empressPortraitSet = PORTRAIT_POOL[seededRoll(`${empressPrefix}:portrait`, PORTRAIT_POOL.length)]!;
+  const empressPortraitSet = portraits[0]!; // 从同批洗牌后的池首取，保证与普通侍君不重复
   const [eApLo, eApHi] = empressArchetype.appearanceRange;
   const [eNuLo, eNuHi] = empressArchetype.nurtureRange;
   const empressAppearance = seededRange(`${empressPrefix}:appear`, eApLo, eApHi);
@@ -526,7 +526,7 @@ export function generateInitialConsorts(
         speechStyle: archetype.speechStyle,
       },
       defaultLocation: residence,
-      portraitSet: portraits[i] ?? PORTRAIT_POOL[0]!,
+      portraitSet: portraits[i + 1] ?? PORTRAIT_POOL[0]!, // portraits[0] is reserved for empress
       expressions: ["neutral"],
       voice: {
         register: seededRoll(`${p}:voice`, 2) === 0 ? "formal" : "casual",

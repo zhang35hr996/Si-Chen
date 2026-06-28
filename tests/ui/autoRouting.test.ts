@@ -12,9 +12,9 @@ import type { GameEventContent } from "../../src/engine/content/schemas";
 import { pickAutoStartEvent } from "../../src/engine/events/router";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
-import { loadRealContent } from "../helpers/contentFixture";
+import { loadTestContent } from "../helpers/testContentFixture";
 
-const db = loadRealContent();
+const db = loadTestContent();
 const at = (locationId: string): GameState => ({ ...createNewGameState(db), playerLocation: locationId });
 const locOf = (s: GameState) => db.locations[s.playerLocation];
 

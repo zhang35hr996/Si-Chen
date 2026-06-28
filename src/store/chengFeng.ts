@@ -4,9 +4,10 @@
  */
 import { gestationRoll } from "../engine/characters/gestation";
 import { activeEmpressId, isEmpress } from "../engine/characters/empress";
+import { inPalaceConsorts } from "../engine/characters/presence";
 import { resolveDisplayName } from "../engine/characters/standing";
+import type { CharacterContent, EventEffect } from "../engine/content/schemas";
 import type { ContentDB } from "../engine/content/loader";
-import type { EventEffect } from "../engine/content/schemas";
 import type { GameState } from "../engine/state/types";
 import type { DecreeReaction } from "./empressDecree";
 
@@ -17,20 +18,15 @@ export interface GossipPlan {
   beat: DecreeReaction;
 }
 
-/** 取活跃侍君（不在冷宫、不在长门宫、未亡故）。 */
-function activeConsorts(db: ContentDB, state: GameState) {
-  return Object.values(db.characters).filter((c) => {
-    if (c.kind !== "consort" || isEmpress(state, c.id)) return false;
-    if (c.defaultLocation === "changmengong") return false;
-    const st = state.standing[c.id];
-    return !st || st.lifecycle !== "deceased";
-  });
+/** 取活跃侍君（在宫存活、不是皇后、不在冷宫/长门宫）。含殿选侍君。 */
+function activeConsorts(db: ContentDB, state: GameState): CharacterContent[] {
+  return inPalaceConsorts(db, state).filter((c) => !isEmpress(state, c.id));
 }
 
 /** 取位分较高的侍君（order >= 120 算高位）。 */
 function highRankedConsorts(db: ContentDB, state: GameState) {
   return activeConsorts(db, state).filter((c) => {
-    const st = state.standing[c.id] ?? c.initialStanding;
+    const st = state.standing[c.id];
     if (!st) return false;
     const rank = db.ranks[st.rank];
     return rank && rank.domain === "harem" && rank.order >= 120;
@@ -40,7 +36,7 @@ function highRankedConsorts(db: ContentDB, state: GameState) {
 /** 取位分较低的侍君（order < 120）。 */
 function lowRankedConsorts(db: ContentDB, state: GameState) {
   return activeConsorts(db, state).filter((c) => {
-    const st = state.standing[c.id] ?? c.initialStanding;
+    const st = state.standing[c.id];
     if (!st) return false;
     const rank = db.ranks[st.rank];
     return rank && rank.domain === "harem" && rank.order < 120;
@@ -53,16 +49,14 @@ function pickOne<T>(arr: T[], seed: number): T | undefined {
 }
 
 function displayName(db: ContentDB, state: GameState, charId: string): string {
-  const c = db.characters[charId];
+  const c = db.characters[charId] ?? state.generatedConsorts[charId];
   if (!c) return charId;
-  const st = state.standing[charId] ?? c.initialStanding;
+  const st = state.standing[charId];
   return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
 }
 
 function rankName(db: ContentDB, state: GameState, charId: string): string {
-  const c = db.characters[charId];
-  if (!c) return "";
-  const st = state.standing[charId] ?? c.initialStanding;
+  const st = state.standing[charId];
   if (!st) return "";
   return db.ranks[st.rank]?.name ?? "";
 }
@@ -133,7 +127,8 @@ function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): Goss
 
   const nameB = displayName(db, state, charB.id);
   const rankB = rankName(db, state, charB.id);
-  const empressId = activeEmpressId(state) ?? "shen_zhibai";
+  const empressId = activeEmpressId(state);
+  if (!empressId) return null;
 
   const line = `陛下，听闻皇后殿下斥责${nameB}在宫中言行失仪，冒犯尊上，训诫了一番。${nameB}领训之后回宫，臣瞧着神色有些难看。`;
 

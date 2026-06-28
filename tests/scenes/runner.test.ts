@@ -9,9 +9,9 @@ import { createGameStore } from "../../src/store/gameStore";
 import type { GameState } from "../../src/engine/state/types";
 import type { GameError } from "../../src/engine/infra/errors";
 import type { Result } from "../../src/engine/infra/result";
-import { loadRealContent } from "../helpers/contentFixture";
+import { loadTestContent } from "../helpers/testContentFixture";
 
-const db = loadRealContent();
+const db = loadTestContent();
 const fresh = (): GameState => createNewGameState(db);
 
 const unwrap = (r: Result<RunnerStep, GameError>): RunnerStep => {

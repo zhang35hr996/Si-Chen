@@ -14,9 +14,9 @@ import { SceneRunner } from "../../src/engine/scenes/runner";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { createLogger } from "../../src/engine/infra/logger";
 import { createGameStore, type GameStore } from "../../src/store/gameStore";
-import { loadRealContent } from "../helpers/contentFixture";
+import { loadTestContent } from "../helpers/testContentFixture";
 
-const db = loadRealContent();
+const db = loadTestContent();
 
 const startedStore = (): GameStore => {
   const store = createGameStore({ logger: createLogger({ now: () => 0 }) });

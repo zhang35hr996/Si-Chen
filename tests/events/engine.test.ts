@@ -4,9 +4,9 @@ import type { GameEventContent } from "../../src/engine/content/schemas";
 import { getEligibleEvents, pickNextEvent } from "../../src/engine/events/engine";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
-import { loadRealContent } from "../helpers/contentFixture";
+import { loadTestContent } from "../helpers/testContentFixture";
 
-const db = loadRealContent();
+const db = loadTestContent();
 const fresh = (): GameState => createNewGameState(db); // at yushufang
 
 const at = (locationId: string): GameState => ({ ...fresh(), playerLocation: locationId });

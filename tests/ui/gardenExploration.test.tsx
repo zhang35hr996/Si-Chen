@@ -60,7 +60,7 @@ describe("GardenOverviewScreen — overview", () => {
         {...base}
         presentBar={[{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔" }]}
         selectedId="lu_huaijin"
-        focusedCharacter={{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔", isConsort: true, actionable: true, portraitSrc: "/p.png" }}
+        focusedCharacter={{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔", isConsort: true, isEmpress: false, actionable: true, portraitSrc: "/p.png" }}
         onViewProfile={() => {}}
       />,
     );
@@ -111,7 +111,7 @@ describe("GardenOverviewScreen — sub-area", () => {
         activeSubArea={subAreas[0]}
         presentBar={[{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔" }]}
         selectedId="lu_huaijin"
-        focusedCharacter={{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔", isConsort: true, actionable: true, portraitSrc: "/p.png" }}
+        focusedCharacter={{ id: "lu_huaijin", name: "陆怀瑾", role: "嫔", isConsort: true, isEmpress: false, actionable: true, portraitSrc: "/p.png" }}
         onConverse={() => {}}
         onViewProfile={() => {}}
       />,

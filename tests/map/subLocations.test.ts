@@ -4,9 +4,9 @@ import type { GameEventContent } from "../../src/engine/content/schemas";
 import { pickSubLocationEvent, subLocationEventAffordable, eventPinnedSubLocations } from "../../src/engine/map/subLocations";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
-import { loadRealContent } from "../helpers/contentFixture";
+import { loadTestContent } from "../helpers/testContentFixture";
 
-const db = loadRealContent();
+const db = loadTestContent();
 const at = (locationId: string): GameState => ({ ...createNewGameState(db), playerLocation: locationId });
 
 const mkEvent = (patch: Partial<GameEventContent>): GameEventContent =>

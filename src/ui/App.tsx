@@ -1080,14 +1080,17 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       const heirsNow = store.getState().resources.bloodline.heirs;
       setNamePetHeirIds(collectNewbornIds(beforeCount, heirsNow));
     }
+    const empressForBirth = activeEmpressId(store.getState());
     if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && !isEmpress(store.getState(), plan.bearer)) {
-      setReaction({
-        speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai",
-        lines: ["恭喜陛下喜得麟儿。立功侍君劳苦功高，可愿晋升以彰圣眷？"],
-      });
+      if (empressForBirth) {
+        setReaction({
+          speakerId: empressForBirth,
+          lines: ["恭喜陛下喜得麟儿。立功侍君劳苦功高，可愿晋升以彰圣眷？"],
+        });
+      }
       setPostBirthPromoteId(plan.bearer);
-    } else if (plan.bearerOutcome === "safe") {
-      setReaction({ speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai", lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
+    } else if (plan.bearerOutcome === "safe" && empressForBirth) {
+      setReaction({ speakerId: empressForBirth, lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
     }
   };
 
@@ -2589,9 +2592,11 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               east_annex: "东偏殿", west_annex: "西偏殿",
             };
             const chamberName = CHAMBER_LABELS[assignment.chamberId] ?? assignment.chamberId;
-            setReaction({ speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai", lines: [`那么${cur.name}就先住${palaceName}的${chamberName}吧。`] });
+            const empressForRoom = activeEmpressId(store.getState());
+            if (empressForRoom) setReaction({ speakerId: empressForRoom, lines: [`那么${cur.name}就先住${palaceName}的${chamberName}吧。`] });
           } else {
-            setReaction({ speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai", lines: [`宫中的宫室还需要洒扫，${cur.name}先暂住储秀宫吧。`] });
+            const empressForRoom = activeEmpressId(store.getState());
+            if (empressForRoom) setReaction({ speakerId: empressForRoom, lines: [`宫中的宫室还需要洒扫，${cur.name}先暂住储秀宫吧。`] });
           }
           advance();
         };

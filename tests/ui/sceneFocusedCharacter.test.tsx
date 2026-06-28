@@ -10,6 +10,7 @@ const consort = (patch: Partial<FocusedCharacterView> = {}): FocusedCharacterVie
   role: "嫔",
   portraitSrc: "/p/lu.png",
   isConsort: true,
+  isEmpress: false,
   actionable: true,
   ...patch,
 });

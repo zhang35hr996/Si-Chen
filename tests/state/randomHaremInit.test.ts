@@ -30,10 +30,6 @@ const STORY_CONSORT_IDS = ["lu_huaijin", "xu_qinghuan", "wenya", "shen_zhibai"];
 const TIER2_RANKS = new Set(["xianfu", "liangfu", "defu", "fu"]);
 const VALID_RANK_IDS = new Set(db.world.ranks.map((r) => r.id));
 
-function generatedConsortIds(state: ReturnType<typeof createNewGameState>): string[] {
-  return Object.keys(state.generatedConsorts);
-}
-
 function regularGeneratedIds(state: ReturnType<typeof createNewGameState>): string[] {
   return Object.keys(state.generatedConsorts).filter((id) => !id.startsWith("generated_empress_"));
 }
