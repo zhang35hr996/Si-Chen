@@ -184,7 +184,7 @@ describe("save migration v33 → v34: heir personality backfill", () => {
     if (!loaded.ok) return;
     const heir = loaded.value.state.resources.bloodline.heirs[0]!;
     expect(heir.portraitVariants.baby).toBe("boy_baby1");
-    expect(heir.portraitVariants.kid).toMatch(/^boy_kid[1-4]$/);
+    expect(heir.portraitVariants.kid).toMatch(/^boy_kid[1-3]$/);
     expect(heir.portraitVariants.child).toMatch(/^boy_child[1-4]$/);
     expect(heir.portraitVariants.teen).toMatch(/^boy_teen[1-3]$/);
   });

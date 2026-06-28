@@ -69,7 +69,6 @@
     "portrait.boy_kid1.neutral": { "path": "portraits/boy/kid1.png", "kind": "portrait", "placeholder": false },
     "portrait.boy_kid2.neutral": { "path": "portraits/boy/kid2.png", "kind": "portrait", "placeholder": false },
     "portrait.boy_kid3.neutral": { "path": "portraits/boy/kid3.png", "kind": "portrait", "placeholder": false },
-    "portrait.boy_kid4.neutral": { "path": "portraits/boy/kid4.png", "kind": "portrait", "placeholder": false },
     "portrait.boy_child1.neutral": { "path": "portraits/boy/child1.png", "kind": "portrait", "placeholder": false },
     "portrait.boy_child2.neutral": { "path": "portraits/boy/child2.png", "kind": "portrait", "placeholder": false },
     "portrait.boy_child3.neutral": { "path": "portraits/boy/child3.png", "kind": "portrait", "placeholder": false },

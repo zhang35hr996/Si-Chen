@@ -38,7 +38,7 @@ describe("checkManifest", () => {
     const manifest = realManifest();
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(result.errors).toEqual([]);
-    expect(result.entryCount).toBe(134); // 109 + 25 新增皇嗣四阶段立绘（girl×13 + boy×12）
+    expect(result.entryCount).toBe(133); // 109 + 24 新增皇嗣四阶段立绘（girl×13 + boy×11）
     expect(result.placeholderCount).toBe(0); // all consort portraits now have real art
   });
 

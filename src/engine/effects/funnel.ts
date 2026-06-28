@@ -798,10 +798,11 @@ export function applyEffects(
             const roll = (key: string, max: number) => gestationRollRaw(`${seed}:${id}:${key}`) % max;
             const trait = (key: string) => 20 + roll(key, 61); // 20–80
             const sexPrefix = sex === "daughter" ? "girl" : "boy";
+            const kidMax = sex === "daughter" ? 4 : 3;
             const teenMax = sex === "daughter" ? 4 : 3;
             const portraitVariants = {
               baby: `${sexPrefix}_baby1`,
-              kid: `${sexPrefix}_kid${1 + roll("portrait:kid", 4)}`,
+              kid: `${sexPrefix}_kid${1 + roll("portrait:kid", kidMax)}`,
               child: `${sexPrefix}_child${1 + roll("portrait:child", 4)}`,
               teen: `${sexPrefix}_teen${1 + roll("portrait:teen", teenMax)}`,
             };
