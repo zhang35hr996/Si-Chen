@@ -221,7 +221,7 @@ describe("synthesizeEventContent", () => {
 // ── synthesizeSceneContent ────────────────────────────────────────────
 
 describe("synthesizeSceneContent", () => {
-  it("creates a scene with opening line, choice node, and outcome nodes", () => {
+  it("creates a scene with opening node, choice node, and outcome nodes", () => {
     const charId = consortId();
     const state = fresh();
     const template = baseTemplate();
@@ -248,8 +248,9 @@ describe("synthesizeSceneContent", () => {
     const scene = synthesizeSceneContent(db, state, template, instance, "yuhuayuan");
 
     const openNode = scene.nodes.find((n) => n.id === "n_open");
-    expect(openNode?.type).toBe("line");
-    if (openNode?.type === "line") {
+    // mode:"narration" → type:"narration" (no speaker field)
+    expect(openNode?.type).toBe("narration");
+    if (openNode?.type === "narration") {
       // {protagonist} should be replaced with the character's actual name
       expect(openNode.text).not.toContain("{protagonist}");
     }

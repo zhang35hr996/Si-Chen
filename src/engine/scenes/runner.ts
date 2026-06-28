@@ -171,6 +171,29 @@ export class SceneRunner {
             : node.ifFalse;
           continue;
 
+        case "narration": {
+          // 旁白节点：直接产生 frame，不经过 DialogueProvider / speaker 校验。
+          const narrationLine: DialogueLine = {
+            speakerId: "narrator",
+            speakerName: "",
+            text: node.text,
+            expression: "neutral",
+            choices: [],
+            meta: { generated: false, degraded: false },
+          };
+          const narrationNext = node.next ? this.nodes.get(node.next) : undefined;
+          if (narrationNext?.type === "choice") {
+            const attached = this.attachChoices(narrationLine, narrationNext);
+            if (!attached.ok) return this.fail(attached.error);
+            this.lastLine = attached.value;
+            return ok({ kind: "frame", frame: { line: attached.value, awaiting: "choice" } });
+          }
+          session.cursorNodeId = node.next ?? null;
+          this.awaiting = "continue";
+          this.lastLine = narrationLine;
+          return ok({ kind: "frame", frame: { line: narrationLine, awaiting: "continue" } });
+        }
+
         case "line": {
           const request = assembleDialogueRequest(
             this.db,

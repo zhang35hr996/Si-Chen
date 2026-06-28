@@ -166,20 +166,20 @@ export function synthesizeSceneContent(
 
   const nodes: SceneNode[] = [];
 
-  // 开场段：旁白用 "narrator"，对话用 speakerRole 对应的实际 charId
+  // 开场段：narration mode → narration 节点（无 speaker）；dialogue mode → line 节点
   const opening = template.openingNarration;
-  const openSpeaker =
-    opening.mode === "narration"
-      ? "narrator"
-      : (participants[opening.speakerRole] ?? opening.speakerRole);
   const openText = substituteRoles(opening.text, nameMap);
-  nodes.push({
-    type: "line",
-    id: "n_open",
-    speaker: openSpeaker,
-    text: openText,
-    next: "n_choice",
-  });
+  if (opening.mode === "narration") {
+    nodes.push({ type: "narration", id: "n_open", text: openText, next: "n_choice" });
+  } else {
+    nodes.push({
+      type: "line",
+      id: "n_open",
+      speaker: participants[opening.speakerRole] ?? opening.speakerRole,
+      text: openText,
+      next: "n_choice",
+    });
+  }
 
   // 选项节点
   nodes.push({

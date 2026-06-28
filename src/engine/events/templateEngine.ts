@@ -158,8 +158,11 @@ function buildCandidatePool(
       result.push(charId);
     }
   } else if (role.pool === "court_official_active") {
+    // 只选择在 db.characters 中有完整角色内容的官员，确保可作为 SceneRunner speaker。
+    // 运行时动态生成的官员（official_fam_* 等）尚无 voice/expressions，暂不支持模板对话。
     for (const [officialId, official] of Object.entries(state.officials ?? {})) {
       if (official.status !== "active") continue;
+      if (!db.characters[officialId]) continue;
       result.push(officialId);
     }
   } else if (role.pool === "empress_or_harem_admin") {

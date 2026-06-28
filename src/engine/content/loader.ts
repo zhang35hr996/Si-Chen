@@ -625,6 +625,8 @@ function checkSceneGraph(scene: SceneContent, source: string, errors: GameError[
     switch (node.type) {
       case "line":
         return node.next ? [node.next] : [];
+      case "narration":
+        return node.next ? [node.next] : [];
       case "choice":
         return node.choices.map((c) => c.next);
       case "branch":

@@ -763,6 +763,13 @@ export const sceneNodeSchema = z.union([
     expression: nonEmpty.optional(),
     next: idSchema.optional(), // no next = terminal
   }),
+  // narration: 无说话人的旁白节点，SceneRunner 直接产生 frame，不经过 DialogueProvider。
+  z.strictObject({
+    type: z.literal("narration"),
+    id: idSchema,
+    text: z.string().min(1).max(600),
+    next: idSchema.optional(),
+  }),
   z.strictObject({
     type: z.literal("choice"),
     id: idSchema,

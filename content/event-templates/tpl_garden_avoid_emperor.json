@@ -23,8 +23,8 @@
   "presentation": {
     "mode": "exploration",
     "hostLocationId": "yuhuayuan",
-    "subLocationId": "zhujing",
-    "eventHint": "竹径尽头，有人影见到陛下后悄然转向。"
+    "subLocationId": "tuixiushan",
+    "eventHint": "山径之间，有人影见到陛下后悄然转向。"
   },
   "hiddenTruthCandidates": [
     { "id": "ashamed_of_punishment", "description": "因受罚而不愿见驾", "weight": 3 },
@@ -35,7 +35,7 @@
   ],
   "openingNarration": {
     "mode": "narration",
-    "text": "陛下远远瞥见竹径间{consort}的背影——对方显然也看见了陛下，却悄然转身，往另一条小径走去。"
+    "text": "陛下远远瞥见山径间{consort}的背影——对方显然也看见了陛下，却悄然转身，往另一条小道走去。"
   },
   "choices": [
     { "id": "call_back", "text": "命他回来", "tone": "neutral" },
@@ -59,7 +59,7 @@
           "forRole": "consort",
           "entry": {
             "kind": "episodic",
-            "summary": "陛下在竹径命我回来，我没有来得及躲开。",
+            "summary": "陛下在山径命我回来，我没有来得及躲开。",
             "strength": 65,
             "retention": "slow",
             "subjectIds": ["player", "consort"],

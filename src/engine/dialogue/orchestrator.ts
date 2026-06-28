@@ -64,7 +64,8 @@ export function assembleDialogueRequest(
   options: DialogueAssemblyOptions = {},
 ): Result<DialogueRequest, GameError> {
   const targetId = options.targetId ?? "player";
-  const character = db.characters[speakerId];
+  // 动态生成的侍君（殿选）存在于 state.generatedConsorts，而非 db.characters
+  const character = db.characters[speakerId] ?? state.generatedConsorts?.[speakerId];
   if (!character) {
     return err(aiError("BAD_SPEAKER", `unknown speaker "${speakerId}"`));
   }
