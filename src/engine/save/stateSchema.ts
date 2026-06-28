@@ -19,7 +19,7 @@ import { validateHaremDisciplineLinks } from "../characters/haremDisciplineValid
 import { validatePeakFavor } from "../characters/peakFavorValidator";
 import { validateCompanionWorld } from "../characters/companionValidator";
 import { validateHaremIntrigueLinks } from "../characters/haremIntrigue/stateValidation";
-import { validateHaremInvestigationLinks } from "../characters/haremInvestigation/stateValidation";
+import { validateHaremInvestigationLinks, validateInvestigationPublicReports } from "../characters/haremInvestigation/stateValidation";
 import { validateInvestigationIncidents, validateInvestigationTruths } from "../characters/haremInvestigation/truth/stateValidation";
 
 const nonEmpty = z.string().min(1);
@@ -1347,6 +1347,11 @@ export const gameStateSchema = z.strictObject({
         ...Object.keys((data as { standing: Record<string, unknown> }).standing),
         ...Object.keys((data as { generatedConsorts: Record<string, unknown> }).generatedConsorts),
       ]),
+    }),
+    ...validateInvestigationPublicReports({
+      reports: (data as { investigationPublicReports: Parameters<typeof validateInvestigationPublicReports>[0]["reports"] }).investigationPublicReports,
+      incidents: (data as { investigationIncidents: Parameters<typeof validateInvestigationPublicReports>[0]["incidents"] }).investigationIncidents,
+      cases: (data as { haremInvestigationCases: Parameters<typeof validateInvestigationPublicReports>[0]["cases"] }).haremInvestigationCases,
     }),
   ];
   for (const e of errs) {

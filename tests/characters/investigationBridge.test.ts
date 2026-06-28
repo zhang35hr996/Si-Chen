@@ -16,6 +16,7 @@ import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { createHeirHealthAnomalyBundle } from "../../src/engine/characters/haremInvestigation/createAnomalyBundle";
 import { createInvestigationCaseFromAnomalyReport } from "../../src/engine/characters/haremInvestigation/createCaseFromAnomaly";
+import { availableInvestigationActions } from "../../src/engine/characters/haremInvestigation/actions";
 import { loadRealContent } from "../helpers/contentFixture";
 import { toGameTime } from "../../src/engine/calendar/time";
 import type { GameState } from "../../src/engine/state/types";
@@ -116,6 +117,32 @@ describe("5B-2B1: anomaly bundle generation", () => {
     if (r2.ok) return;
     expect(r2.error[0]!.code).toBe("INCONSISTENT_INVESTIGATION_STATE");
   });
+
+  it("IB-12: 同皇嗣同月不同 symptom → OCCURRENCE_CONFLICT，不静默吞掉", () => {
+    const r1 = createHeirHealthAnomalyBundle(makeState(), PARAMS);
+    if (!r1.ok) throw new Error();
+    // 同 victimHeirId / 同月，但 symptom 不同 → 另一桩事件
+    const r2 = createHeirHealthAnomalyBundle(r1.value.state, { ...PARAMS, symptom: "convulsions" });
+    expect(r2.ok).toBe(false);
+    if (r2.ok) return;
+    expect(r2.error[0]!.code).toBe("INVESTIGATION_OCCURRENCE_CONFLICT");
+    // 原 bundle 未被覆盖
+    expect(r1.value.state.investigationIncidents).toHaveLength(1);
+  });
+
+  it("IB-13: 同键但 accuser/initiallyAccused 不同 → OCCURRENCE_CONFLICT", () => {
+    const r1 = createHeirHealthAnomalyBundle(makeState(), PARAMS);
+    if (!r1.ok) throw new Error();
+    const r2 = createHeirHealthAnomalyBundle(r1.value.state, { ...PARAMS, accuserIds: ["other_accuser"] });
+    expect(r2.ok).toBe(false);
+    if (r2.ok) return;
+    expect(r2.error[0]!.code).toBe("INVESTIGATION_OCCURRENCE_CONFLICT");
+
+    const r3 = createHeirHealthAnomalyBundle(r1.value.state, { ...PARAMS, initiallyAccusedIds: ["someone_else"] });
+    expect(r3.ok).toBe(false);
+    if (r3.ok) return;
+    expect(r3.error[0]!.code).toBe("INVESTIGATION_OCCURRENCE_CONFLICT");
+  });
 });
 
 describe("5B-2B1: open case from anomaly report", () => {
@@ -165,6 +192,18 @@ describe("5B-2B1: open case from anomaly report", () => {
     expect(r.error[0]!.code).toBe("INVESTIGATION_PUBLIC_REPORT_NOT_FOUND");
   });
 
+  it("IB-14: 报告指向缺失 incident → 立案前即报 ORPHAN_INCIDENT，不建案", () => {
+    const r1 = createHeirHealthAnomalyBundle(makeState(), PARAMS);
+    if (!r1.ok) throw new Error();
+    // 人为损坏：删除底层 incident，保留公开报告
+    const broken: GameState = { ...r1.value.state, investigationIncidents: [] };
+    const at = toGameTime(broken.calendar);
+    const r2 = createInvestigationCaseFromAnomalyReport(broken, r1.value.reportId, at);
+    expect(r2.ok).toBe(false);
+    if (r2.ok) return;
+    expect(r2.error[0]!.code).toBe("INVESTIGATION_REPORT_ORPHAN_INCIDENT");
+  });
+
   it("IB-08: 含 incident+truth+report+case 的存档 round-trip 通过 schema 校验", () => {
     const storage = createMemoryStorage();
     const store = createGameStore();
@@ -181,6 +220,39 @@ describe("5B-2B1: open case from anomaly report", () => {
     if (!loaded.ok) return;
     expect(loaded.value.state.investigationPublicReports).toHaveLength(1);
     expect(loaded.value.state.haremInvestigationCases[0]!.source.kind).toBe("investigation_incident");
+  });
+});
+
+describe("5B-2B1: investigation_incident 暂禁旧任务结算", () => {
+  it("IB-10: investigation_incident 案件无任何可用旧调查行动", () => {
+    const store = createGameStore();
+    store.loadState(makeState());
+    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    if (!made.ok) return;
+    const opened = store.openInvestigationFromAnomalyReport(made.value.reportId);
+    if (!opened.ok) return;
+    const actions = availableInvestigationActions(store.getState(), opened.value.caseId);
+    expect(actions).toEqual([]);
+  });
+
+  it("IB-11: 直接 startHaremInvestigationTask → 报错，不扣 AP，不建 task，案件保持 open", () => {
+    const store = createGameStore();
+    store.loadState(makeState());
+    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    if (!made.ok) return;
+    const opened = store.openInvestigationFromAnomalyReport(made.value.reportId);
+    if (!opened.ok) return;
+
+    const apBefore = store.getState().calendar.ap;
+    const r = store.startHaremInvestigationTask(db, opened.value.caseId, "quiet_inquiry");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error[0]!.code).toBe("INTRIGUE_TASK_INVALID");
+
+    expect(store.getState().calendar.ap).toBe(apBefore);
+    expect(Object.keys(store.getState().haremInvestigationTasks)).toHaveLength(0);
+    const caseObj = store.getState().haremInvestigationCases.find((c) => c.id === opened.value.caseId);
+    expect(caseObj!.status).toBe("open");
   });
 });
 

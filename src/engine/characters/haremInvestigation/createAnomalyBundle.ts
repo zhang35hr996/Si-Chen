@@ -40,6 +40,10 @@ export interface HeirHealthAnomalyBundle {
   reportId: string;
 }
 
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 /**
  * 原子创建皇嗣异常 incident + 后台真相 + 公开报告。
  *
@@ -69,6 +73,25 @@ export function createHeirHealthAnomalyBundle(
     (existingReport !== undefined ? 1 : 0);
 
   if (presentCount === 3) {
+    // 幂等仅当新参数与既有事件完全一致。ID 仅由 {year, month, victimHeirId}
+    // 派生，粒度为「每名皇嗣每月至多一个健康异常」；若同键但参数不同，说明是
+    // 另一桩不同事件，绝不能当作重复调用静默吞掉 —— 报冲突。
+    const inc = existingIncident!;
+    const sameOccurrence =
+      inc.symptom === params.symptom &&
+      inc.custodianId === params.custodianId &&
+      arraysEqual(inc.accuserIds, params.accuserIds) &&
+      arraysEqual(inc.initiallyAccusedIds, params.initiallyAccusedIds) &&
+      arraysEqual(inc.publicFactCodes, params.publicFactCodes);
+    if (!sameOccurrence) {
+      return err([
+        stateError(
+          "INVESTIGATION_OCCURRENCE_CONFLICT",
+          `A different heir-health anomaly already exists for occurrence key "${sourceKey}" (victim=${params.victimHeirId}, month=${state.calendar.year}-${month}). 每名皇嗣每月至多一个健康异常。`,
+          { context: { incidentId, sourceKey } },
+        ),
+      ]);
+    }
     return ok({ state, incidentId, truthId, reportId });
   }
   if (presentCount !== 0) {

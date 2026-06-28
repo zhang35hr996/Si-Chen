@@ -22,6 +22,12 @@ export function createInvestigationCaseFromAnomalyReport(
     return err([stateError("INVESTIGATION_PUBLIC_REPORT_NOT_FOUND", `investigationPublicReports: report "${reportId}" not found`)]);
   }
 
+  // 写状态前确认底层 incident 存在，避免先建出孤儿案件、直到存档校验才失败
+  const incident = state.investigationIncidents.find((i) => i.id === report.source.incidentId);
+  if (!incident) {
+    return err([stateError("INVESTIGATION_REPORT_ORPHAN_INCIDENT", `investigationPublicReports[id=${reportId}]: source.incidentId="${report.source.incidentId}" 在 investigationIncidents 中不存在，无法立案`)]);
+  }
+
   // 幂等：报告已链接到现有案件 → 返回已有 caseId
   if (report.linkedInvestigationId) {
     const existing = state.haremInvestigationCases.find((c) => c.id === report.linkedInvestigationId);
