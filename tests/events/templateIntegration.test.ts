@@ -184,11 +184,80 @@ describe("template event pipeline — narration opening", () => {
   });
 });
 
+describe("template event pipeline — dynamic consort (殿选侍君)", () => {
+  it("所有静态侍君 deceased 时选人落到 generatedConsorts，SceneRunner 回应台词不崩溃", async () => {
+    const baseState = createNewGameState(db);
+
+    // 取第一个静态侍君的内容作为殿选侍君的内容底板（必须找 consort 类型角色）
+    const staticId = Object.keys(baseState.standing).find(
+      (id) => db.characters[id]?.kind === "consort",
+    )!;
+    const staticContent = db.characters[staticId]!;
+    const staticStanding = baseState.standing[staticId]!;
+
+    const dynId = "dyn_test_consort_01";
+    // 殿选侍君只存在于 state.generatedConsorts，不在 db.characters
+    const dynContent = {
+      ...staticContent,
+      id: dynId,
+      profile: { ...staticContent.profile, name: "殿选侍君甲", surname: "甲" },
+    };
+
+    // 所有静态侍君标记 deceased，只留殿选侍君可选
+    const deadStanding = Object.fromEntries(
+      Object.entries(baseState.standing).map(([id, st]) => [id, { ...st, lifecycle: "deceased" as const }]),
+    );
+
+    const state = {
+      ...baseState,
+      standing: {
+        ...deadStanding,
+        [dynId]: { ...staticStanding, lifecycle: undefined },
+      },
+      generatedConsorts: { [dynId]: dynContent },
+    };
+
+    const plan = planTemplateEventMaterialization(
+      db, state, NARRATION_TEMPLATE, "yuhuayuan", seededRng(11),
+      toGameTime(state.calendar),
+    );
+    expect(plan).not.toBeNull();
+    if (!plan) return;
+
+    // 选出的参与者必须是殿选侍君
+    expect(plan.instance.participants["protagonist"]).toBe(dynId);
+
+    const rdb = createRuntimeDB(db);
+    injectTemplateContent(rdb, plan.event, plan.scene);
+
+    const patchedState = {
+      ...state,
+      templateEventNextSeq: plan.nextStatePatch.templateEventNextSeq,
+      templateEventRecords: {
+        ...state.templateEventRecords,
+        [plan.nextStatePatch.newRecord.id]: plan.nextStatePatch.newRecord,
+      },
+    };
+
+    const runner = new SceneRunner(rdb, { provider: mockProvider });
+    const first = await runner.start(patchedState, plan.instance.instanceId);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    // 选 greet → 触发 responseLine，走 finalizeLine(generatedConsorts) 路径
+    const afterChoice = await runner.advance("greet");
+    expect(afterChoice.ok).toBe(true);
+    if (!afterChoice.ok) return;
+    expect(afterChoice.value.kind).toBe("frame");
+    if (afterChoice.value.kind !== "frame") return;
+    // 回应台词 speakerId 应为殿选侍君 ID
+    expect(afterChoice.value.frame.line.speakerId).toBe(dynId);
+    expect(afterChoice.value.frame.line.text).toBe("陛下万安。");
+  });
+});
+
 describe("template event pipeline — dialogue opening (via db.characters speaker)", () => {
   it("dialogue mode opening 产生 line 节点，speaker = 实际 charId", async () => {
-    const consortIds = Object.keys(createNewGameState(db).standing);
-    const firstConsortId = consortIds[0]!;
-
     const dialogueTemplate: EventTemplate = {
       ...NARRATION_TEMPLATE,
       id: "tpl_integration_dialogue",
