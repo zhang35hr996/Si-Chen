@@ -160,9 +160,9 @@ export interface RoyalResidence {
 
 ```ts
 const characterParentageSchema = z.strictObject({
-  biologicalMotherId: z.string().min(1),
+  biologicalMotherId: idSchema,                       // SOVEREIGN_PERSON_ID 满足 idSchema
   biologicalFatherId: z.union([idSchema, z.null()]),
-  legalMotherId: z.string().min(1),
+  legalMotherId: idSchema,
   legalFatherId: z.union([idSchema, z.null()]),
   activeAdoptionRecordId: z.string().regex(/^adopt_\d{6}$/).optional(),
 });
@@ -170,9 +170,9 @@ const characterParentageSchema = z.strictObject({
 const adoptionRecordSchema = z.strictObject({
   id: z.string().regex(/^adopt_\d{6}$/),
   childId: idSchema,
-  previousLegalMotherId: z.string().min(1),
+  previousLegalMotherId: idSchema,
   previousLegalFatherId: z.union([idSchema, z.null()]),
-  newLegalMotherId: z.string().min(1),
+  newLegalMotherId: idSchema,
   newLegalFatherId: z.union([idSchema, z.null()]),
   fromResidenceId: z.string().regex(/^res_\d{6}$/).optional(),
   toResidenceId: z.string().regex(/^res_\d{6}$/).optional(),
@@ -234,10 +234,10 @@ Expected: 全绿。
 
 - [ ] **Step 8: Commit**
 
+> Step 7 改动的 fixture 必须一并提交，否则破坏「每 task 一个完整 green commit」。用 `git add -A`。
+
 ```bash
-git add src/engine/state/types.ts src/engine/save/stateSchema.ts \
-  src/engine/state/initialState.ts src/engine/state/newGame.ts \
-  tests/state/parentageContainers.test.ts
+git add -A
 git commit -m "feat(parentage): 新增 parentage/adoptionRecords/royalResidences 容器与类型"
 ```
 
@@ -275,39 +275,40 @@ import { SOVEREIGN_PERSON_ID, type GameState } from "../../../src/engine/state/t
 
 function withParentage(): GameState {
   const s = createInitialState();
-  // 人工构造 bio/legal 分歧：child A 生身父 shen，法统父 xie（模拟未来过继）。
+  // 人工构造 bio/legal 分歧：heir_a 生身父 shen_zhibai，法统父 xie_minglang（模拟未来过继）。
   s.parentage = {
-    A: { biologicalMotherId: SOVEREIGN_PERSON_ID, biologicalFatherId: "shen",
-         legalMotherId: SOVEREIGN_PERSON_ID, legalFatherId: "xie" },
-    B: { biologicalMotherId: SOVEREIGN_PERSON_ID, biologicalFatherId: null,
-         legalMotherId: SOVEREIGN_PERSON_ID, legalFatherId: null },
-    A1: { biologicalMotherId: "A", biologicalFatherId: "x",
-          legalMotherId: "A", legalFatherId: "x" },
+    heir_a: { biologicalMotherId: SOVEREIGN_PERSON_ID, biologicalFatherId: "shen_zhibai",
+              legalMotherId: SOVEREIGN_PERSON_ID, legalFatherId: "xie_minglang" },
+    heir_b: { biologicalMotherId: SOVEREIGN_PERSON_ID, biologicalFatherId: null,
+              legalMotherId: SOVEREIGN_PERSON_ID, legalFatherId: null },
+    heir_a1: { biologicalMotherId: "heir_a", biologicalFatherId: "consort_x",
+               legalMotherId: "heir_a", legalFatherId: "consort_x" },
   };
   return s;
 }
 
 describe("parentage selectors", () => {
   it("getBiologicalParents 返回 ParentPair（含 null father）", () => {
-    expect(getBiologicalParents(withParentage(), "B"))
+    expect(getBiologicalParents(withParentage(), "heir_b"))
       .toEqual({ motherId: SOVEREIGN_PERSON_ID, fatherId: null });
   });
   it("bio 与 legal 链可区分", () => {
     const s = withParentage();
-    expect(getBiologicalParents(s, "A")!.fatherId).toBe("shen");
-    expect(getLegalParents(s, "A")!.fatherId).toBe("xie");
+    expect(getBiologicalParents(s, "heir_a")!.fatherId).toBe("shen_zhibai");
+    expect(getLegalParents(s, "heir_a")!.fatherId).toBe("xie_minglang");
   });
   it("无记录返回 undefined", () => {
-    expect(getBiologicalParents(withParentage(), "ZZZ")).toBeUndefined();
+    expect(getBiologicalParents(withParentage(), "unknown_child")).toBeUndefined();
   });
   it("getLegalChildren 按 id 升序", () => {
-    expect(getLegalChildren(withParentage(), SOVEREIGN_PERSON_ID)).toEqual(["A", "B"]);
+    expect(getLegalChildren(withParentage(), SOVEREIGN_PERSON_ID)).toEqual(["heir_a", "heir_b"]);
   });
   it("getLegalDescendants 世代 BFS", () => {
-    expect(getLegalDescendants(withParentage(), SOVEREIGN_PERSON_ID)).toEqual(["A", "B", "A1"]);
+    expect(getLegalDescendants(withParentage(), SOVEREIGN_PERSON_ID)).toEqual(["heir_a", "heir_b", "heir_a1"]);
   });
   it("getBiologicalAncestors 母系优先、带 visited 防环", () => {
-    expect(getBiologicalAncestors(withParentage(), "A1")).toEqual(["A", "x", SOVEREIGN_PERSON_ID, "shen"]);
+    expect(getBiologicalAncestors(withParentage(), "heir_a1"))
+      .toEqual(["heir_a", "consort_x", SOVEREIGN_PERSON_ID, "shen_zhibai"]);
   });
 });
 ```
@@ -415,8 +416,8 @@ git commit -m "feat(parentage): bio/legal 两链纯查询 selectors"
 
 **Files:**
 - Create: `src/engine/characters/parentage/establishBirthParentage.ts`
-- Modify: `src/engine/effects/funnel.ts`（`case "birth"` 内，每名出生 heir 后写 parentage）
-- Test: `tests/characters/parentage/establishBirthParentage.test.ts`、`tests/effects/birthParentage.test.ts`
+- Modify: `src/engine/effects/funnel.ts`（`case "birth"` 内，每名出生 heir 经 `establishBirthParentage` 写 parentage）
+- Test: `tests/characters/parentage/establishBirthParentage.test.ts`（新建，单元）；`tests/effects/funnel.birth.test.ts`（**修改既有文件**，集成）
 
 **Interfaces:**
 - Consumes: `CharacterParentage`、`SOVEREIGN_PERSON_ID`（Task 1）、`Result`/`stateError`（既有）
@@ -500,61 +501,78 @@ export function establishBirthParentage(
 Run: `npx vitest run tests/characters/parentage/establishBirthParentage.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Write failing integration test for birth wiring**
+- [ ] **Step 5: Add real assertions to existing `tests/effects/funnel.birth.test.ts`**
+
+不新建占位测试。在该文件顶部加入：
+```ts
+import { buildBirthParentage } from "../../src/engine/characters/parentage/establishBirthParentage";
+```
+并在既有用例中加入断言（沿用文件已有的 `applyEffects` / `consortCarrying()` / `baseBirth` 样板与 `fatherId`，下面的 `<bornHeirId>`/`<fatherId>` 按该文件实际值替换）：
 
 ```ts
-// tests/effects/birthParentage.test.ts
-import { describe, it, expect } from "vitest";
-import { buildBirthParentage } from "../../src/engine/characters/parentage/establishBirthParentage";
-// 复用既有 birth effect 测试搭建方式（参考 tests 中现有 birth 用例的 applyEffects 入口）。
-// 断言：birth effect 结算后，新生 heir 的 id 在 state.parentage 中且 = buildBirthParentage(effect.fatherId)。
-// 双生：两条独立 parentage（两 key）。child_dies/both：无 heir、无 parentage。
-it("birth effect 为每名新生 heir 写 parentage（含双生）", () => {
-  // 见现有 birth 测试以获得 applyEffects + birth effect 构造样板；
-  // 关键断言：
-  //   const ids = Object.keys(after.parentage);
-  //   expect(ids.length).toBe(出生存活数);
-  //   ids.forEach(id => expect(after.parentage[id]).toEqual(buildBirthParentage(after... .fatherId)));
-  expect(buildBirthParentage("c1").legalFatherId).toBe("c1"); // 占位锚点，替换为真实 applyEffects 断言
+// safe 用例（既有 it 内追加）：存活 1 名 → 1 条 parentage = buildBirthParentage(fatherId)
+const ids = Object.keys(r.value.parentage);
+expect(ids.length).toBe(1);
+expect(r.value.parentage[ids[0]!]).toEqual(buildBirthParentage(baseBirth.fatherId));
+
+// child_dies / both 用例（既有 it 内追加）：无 heir → parentage 仍为空
+expect(r.value.parentage).toEqual({});
+```
+新增两个用例：
+```ts
+it("self-pregnancy birth → parentage father 为 null", () => {
+  // 构造 carrier:"sovereign"、fatherId:null 的 birth effect（参考文件中 self-preg 样板）
+  const r = applyEffects(db, /* self-preg carrying state */, [{ ...baseBirth, bearer: "sovereign", fatherId: null, bearerOutcome: "safe" }]);
+  const id = Object.keys(r.value.parentage)[0]!;
+  expect(r.value.parentage[id]!.biologicalFatherId).toBeNull();
+  expect(r.value.parentage[id]!.legalFatherId).toBeNull();
+});
+
+it("twin birth → 两条不同 key 的 parentage", () => {
+  const r = applyEffects(db, consortCarrying(), [{ ...baseBirth, twinSex: "son", twinFavor: 50, bearerOutcome: "safe" }]);
+  expect(Object.keys(r.value.parentage).length).toBe(2);
 });
 ```
 
-> 实现者：打开任一现有 birth effect 测试（`grep -rln '"birth"' tests`）复制其 `applyEffects` 调用样板，替换上面的占位断言为真实的「存活数 == parentage 键数」「双生两键」「child_dies 零键」三个用例。
+- [ ] **Step 6: Run to verify new assertions fail**
 
-- [ ] **Step 6: Wire into `funnel.ts` `case "birth"`**
+Run: `npx vitest run tests/effects/funnel.birth.test.ts`
+Expected: FAIL（birth 尚未写 parentage → `parentage` 为空）
 
-在 `case "birth"` 中，`makeHeir` 改为返回 id 以便登记 parentage；最小改动方式——在 `bl.heirs.push(...)` 后立即写 parentage：
+- [ ] **Step 7: Wire into `funnel.ts` `case "birth"` via the single write entry**
+
+`case "birth"` 顶部 import：`import { establishBirthParentage } from "../characters/parentage/establishBirthParentage";`（文件顶部）。`makeHeir` 改为先入 heirs，再经唯一写入口建 parentage（**不**直接赋值 `next.parentage[...]`）：
 
 ```ts
           const pushHeir = (sex: typeof effect.sex, favor: number) => {
             const heir = makeHeir(sex, favor);
             bl.heirs.push(heir);
-            next.parentage[heir.id] = {
-              biologicalMotherId: "sovereign",
-              biologicalFatherId: effect.fatherId,
-              legalMotherId: "sovereign",
-              legalFatherId: effect.fatherId,
-            };
+            const res = establishBirthParentage(next, { childId: heir.id, biologicalFatherId: effect.fatherId });
+            if (!res.ok) return res;          // 新 id 不可能撞，仍按 Result 通道传播
+            next.parentage = res.value.parentage;
+            return undefined;
           };
-          pushHeir(effect.sex, effect.favor);
+          const e1 = pushHeir(effect.sex, effect.favor);
+          if (e1) return e1;
           if (effect.twinSex !== undefined && effect.twinFavor !== undefined) {
-            pushHeir(effect.twinSex, effect.twinFavor);
+            const e2 = pushHeir(effect.twinSex, effect.twinFavor);
+            if (e2) return e2;
           }
 ```
 
-（删除原 `bl.heirs.push(makeHeir(...))` 两行。`effect.fatherId` 为 `string | null`，与 `Heir.fatherId` 一致，满足镜像不变量。`child_dies`/`both` 分支因 `childSurvives=false` 不进入此块，故无悬空 parentage。**不**设默认 custodian。）
+（删除原 `bl.heirs.push(makeHeir(...))` 两行。`effect.fatherId: string | null` 与 `Heir.fatherId` 一致，满足镜像不变量；`establishBirthParentage` 内部硬编码 `SOVEREIGN_PERSON_ID`，故 birth case 不再硬编码 `"sovereign"`。`child_dies`/`both` 因 `childSurvives=false` 不进入此块。**不**设默认 custodian。`applyEffects` 返回 `Result<GameState, GameError[]>`，故 `return res`（Err）类型相容。）
 
-- [ ] **Step 7: Run tests + typecheck**
+- [ ] **Step 8: Run tests + typecheck**
 
-Run: `npx vitest run tests/effects/birthParentage.test.ts tests/characters/parentage && npx tsc --noEmit`
+Run: `npx vitest run tests/effects/funnel.birth.test.ts tests/characters/parentage && npx tsc --noEmit`
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add src/engine/characters/parentage/establishBirthParentage.ts src/engine/effects/funnel.ts \
-  tests/characters/parentage/establishBirthParentage.test.ts tests/effects/birthParentage.test.ts
-git commit -m "feat(parentage): 出生流程建立 parentage（legal=bio，母=sovereign，含双生）"
+  tests/characters/parentage/establishBirthParentage.test.ts tests/effects/funnel.birth.test.ts
+git commit -m "feat(parentage): 出生经唯一写入口建立 parentage（legal=bio，母=sovereign，含双生）"
 ```
 
 ---
@@ -566,8 +584,8 @@ git commit -m "feat(parentage): 出生流程建立 parentage（legal=bio，母=s
 - Modify: `src/engine/save/stateSchema.ts`（heir schema 同步；reject-both 校验）
 - Modify: `src/engine/characters/parentage/parentageSelectors.ts`（加 `getCurrentCustodian`）
 - Modify (rename 消费者，以 grep 为准): `src/engine/effects/funnel.ts`、`src/engine/characters/custodianAvailability.ts`、`src/engine/characters/companionReconciliation.ts`、`src/store/heirCustody.ts`、`src/ui/components/HeirListModal.tsx`、`src/ui/components/HeirSummonPicker.tsx`、`src/ui/components/CharacterProfileDrawer.tsx`、`src/ui/components/ConsortListModal.tsx`、`src/ui/screens/FengxiandianScreen.tsx`、`src/engine/content/schemas.ts`
-- Rename: `src/store/adoption.ts` → `src/store/fosterFather.ts`（API/测试同步）
-- Test: `tests/characters/parentage/getCurrentCustodian.test.ts`、`tests/characters/heirUpbringingRename.test.ts`
+- Rename: `src/store/adoption.ts` → `src/store/fosterFather.ts`（API + 测试同步改抚养语义）
+- Test: `tests/characters/parentage/getCurrentCustodian.test.ts`（新建）；`tests/characters/heirUpbringingSettlement.test.ts`（**改既有 fixture**）；`tests/store/heirCustody.test.ts` 或 funnel custody 测试（**加皇后抚养≠过继用例**）
 
 **Interfaces:**
 - Produces: `getCurrentCustodian(state, childId): string | undefined`（读 `Heir.custodianId`，仅登记查询，不判资格）
@@ -622,7 +640,7 @@ export function getCurrentCustodian(state: GameState, childId: string): string |
 }
 ```
 
-- [ ] **Step 6: Rewrite all consumers (grep-driven)**
+- [ ] **Step 6: Rewrite all `adoptiveFatherId` consumers (grep-driven)**
 
 Run: `grep -rn "adoptiveFatherId" src` — 逐处改写：
 - 读取语境（取当前抚养人）→ `getCurrentCustodian(state, heir.id)` 或直接 `heir.custodianId`（同一 heir 对象内）。
@@ -632,34 +650,54 @@ Run: `grep -rn "adoptiveFatherId" src` — 逐处改写：
 
 Run: `grep -rn "\"adoptive\"" src` — faction 比较/赋值改 `"custodian"`。
 
-- [ ] **Step 7: Rename `store/adoption.ts` → `store/fosterFather.ts`**
+- [ ] **Step 7: Audit `heir.fatherId` business reads（验收 #5）**
+
+Run: `grep -rn "heir\.fatherId\|\.fatherId" src` — 所有**亲缘语义**读取改走 `getBiologicalParents(state, heir.id)?.fatherId`。已知必改两处：
+- `src/store/adoption.ts`（即将改名）`bioFatherAvailable`：`heir.fatherId === null` → 用 `getBiologicalParents(state, heir.id)?.fatherId ?? null`。
+- `src/store/heirCustody.ts:190` `toChar.id === heir.fatherId`（「是否生父」判断）→ `toChar.id === getBiologicalParents(state, heir.id)?.fatherId`。
+
+仅允许保留 `heir.fatherId` 直读的语境：出生写镜像、migration legacy 读取、validation 镜像比较。
+
+- [ ] **Step 8: Rename `store/adoption.ts` → `store/fosterFather.ts`（API 同步抚养语义）**
 
 ```bash
 git mv src/store/adoption.ts src/store/fosterFather.ts
 ```
-更新其 `heir.fatherId` 读取改走 `getBiologicalParents(state, heir.id)?.fatherId`（`bioFatherAvailable` 内）；导入方 `grep -rn "store/adoption" src tests` 改路径；若有 `tests/**/adoption.test.ts` 一并 `git mv` 改名并改 import。（函数名 `eligibleAdoptiveFathers` 等可保留——它们是「养父/抚养」语义；仅释放文件名 "adoption"。）
+按 spec 同步改 API（释放「adoption」名给 Slice D）：`eligibleAdoptiveFathers` → `eligibleFosterFathers`；`buildAdoptionReaction` → `buildFosterFatherReaction`；`bioFatherAvailable` 名称无歧义，保留。导入方 `grep -rn "store/adoption\|eligibleAdoptiveFathers\|buildAdoptionReaction" src tests` 全部改路径/改名。若存在 `tests/**/adoption*.test.ts`，`git mv` 为 `fosterFather*.test.ts` 并改 import/调用名。
 
-- [ ] **Step 8: Monthly upbringing rename regression test**
+- [ ] **Step 9: 改 `heirUpbringingSettlement.test.ts` fixture（rename 回归，验收 #4）**
 
+不新建测试。在 `tests/characters/heirUpbringingSettlement.test.ts` 把 `makeHeir`/fixture 里的 `adoptiveFatherId: "..."` 改为 `custodianId: "..."`，**保留**现有 `neglect`/`custodianBond`/`careOutcome` 结果断言不变（证明行为不变）。补一条正向断言：
 ```ts
-// tests/characters/heirUpbringingRename.test.ts
-// 取一名带 custodian 的 heir，跑 heirUpbringingSettlement.ts 的月度结算入口，
-// 断言 neglect / custodianBond 的 delta 与 rename 前一致（黄金值快照）。
-// 实现者：grep -rln "heirUpbringingSettlement\|resolveCustodianAvailability" src tests 找到现有结算测试样板复用。
+// 带 custodian 的 heir 不应判为无人照料
+expect(c.careOutcome).not.toBe("no_effective_custodian");
 ```
 
-- [ ] **Step 9: Run full suite + typecheck + grep gate**
+- [ ] **Step 10: 加皇后抚养≠过继用例（验收 #15）**
+
+在 `tests/store/heirCustody.test.ts`（或现有 funnel custody 测试）加用例：把某 heir 抚养权 `heir_custody` 转给当朝皇后，断言：
+```ts
+const beforeLegal = before.parentage[heirId]!.legalFatherId;
+// ...apply heir_custody → empress...
+expect(afterHeir.legitimate).toBe(true);
+expect(after.parentage[heirId]!.legalFatherId).toBe(beforeLegal); // 法统父不变
+expect(after.adoptionRecords).toEqual({});                        // 不生成过继记录
+```
+
+- [ ] **Step 11: Run full suite + typecheck + grep gate**
 
 Run: `npx tsc --noEmit && npx vitest run`
 Expected: 全绿。
 Run: `grep -rn "adoptiveFatherId" src ; grep -rn "\"adoptive\"" src`
 Expected: **无输出**（迁移在 Task 5 才引入合法的 legacy 读取）。
+Run: `grep -rn "heir\.fatherId" src`
+Expected: 仅出生写镜像 / migration / validation 镜像比较三类语境。
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add -A
-git commit -m "refactor(parentage): adoptiveFatherId→custodianId / faction adoptive→custodian 全仓迁移；adoption.ts→fosterFather.ts"
+git commit -m "refactor(parentage): adoptiveFatherId→custodianId / faction adoptive→custodian 全仓迁移；adoption.ts→fosterFather.ts；fatherId 读取改走 selector"
 ```
 
 ---
@@ -731,7 +769,9 @@ Expected: FAIL（`SAVE_FORMAT_VERSION` 仍 38；`MIGRATIONS[38]` 未定义）
     const bl = ((state["resources"] as any)?.["bloodline"]) as { heirs?: any[] } | undefined;
     const parentage: Record<string, unknown> = (state["parentage"] as any) ?? {};
     for (const heir of bl?.heirs ?? []) {
-      const fatherId = heir.fatherId ?? null;
+      // 不做 `?? null` fallback：null=自孕、undefined=损坏。原值原样保留——
+      // 若坏档 fatherId 为 undefined，迁移后 required schema 拒绝并 quarantine（绝不静默修成自孕）。
+      const fatherId = heir["fatherId"];
       parentage[heir.id] = {
         biologicalMotherId: "sovereign", biologicalFatherId: fatherId,
         legalMotherId: "sovereign", legalFatherId: fatherId,
@@ -771,7 +811,7 @@ git commit -m "feat(parentage): v38→v39 迁移回填 parentage 并消歧 custo
 - Test: `tests/save/parentageValidation.test.ts`
 
 **Interfaces:**
-- Consumes: `GameState`、`ContentDB`（cross-check 阶段可见 db）、`getLegalChildren`/`getBiologicalAncestors`
+- Consumes: `GameState`、`ContentDB`（cross-check 阶段可见 db）。环检测用本文件独立 `hasCycle`（三色 DFS），**不**复用防环 selector。
 - Produces: `validateParentage(state, db): GameError[]`（空数组=通过）
 
 - [ ] **Step 1: Write failing test**
@@ -804,6 +844,32 @@ describe("validateParentage", () => {
     const s = stateWithHeir({ heir_000001: { biologicalMotherId: "sovereign", biologicalFatherId: "heir_000001", legalMotherId: "sovereign", legalFatherId: "heir_000001" }, }, { id: "heir_000001", fatherId: "heir_000001" });
     expect(validateParentage(s, db).map(e => e.code)).toContain("PARENTAGE_SELF_REFERENCE");
   });
+  it("biological 环 a→b→a → 失败", () => {
+    const s = createInitialState();
+    s.parentage = {
+      heir_a: { biologicalMotherId: "heir_b", biologicalFatherId: null, legalMotherId: "heir_b", legalFatherId: null },
+      heir_b: { biologicalMotherId: "heir_a", biologicalFatherId: null, legalMotherId: "heir_a", legalFatherId: null },
+    } as any;
+    expect(validateParentage(s, db).map(e => e.code)).toContain("PARENTAGE_BIO_CYCLE");
+  });
+  it("legal 环 a→b→c→a → 失败", () => {
+    const s = createInitialState();
+    s.parentage = {
+      heir_a: { biologicalMotherId: "sovereign", biologicalFatherId: null, legalMotherId: "heir_c", legalFatherId: null },
+      heir_b: { biologicalMotherId: "sovereign", biologicalFatherId: null, legalMotherId: "heir_a", legalFatherId: null },
+      heir_c: { biologicalMotherId: "sovereign", biologicalFatherId: null, legalMotherId: "heir_b", legalFatherId: null },
+    } as any;
+    expect(validateParentage(s, db).map(e => e.code)).toContain("PARENTAGE_LEGAL_CYCLE");
+  });
+  it("合法共享祖先不是环 → 通过", () => {
+    const s = createInitialState();
+    s.resources.bloodline.heirs.push({ id: "heir_a", fatherId: "c1" } as any, { id: "heir_b", fatherId: "c1" } as any);
+    s.parentage = {
+      heir_a: { biologicalMotherId: "sovereign", biologicalFatherId: "c1", legalMotherId: "sovereign", legalFatherId: "c1" },
+      heir_b: { biologicalMotherId: "sovereign", biologicalFatherId: "c1", legalMotherId: "sovereign", legalFatherId: "c1" },
+    } as any;
+    expect(validateParentage(s, db)).toEqual([]);
+  });
   it("sovereign 引用合法、无环 → 通过", () => {
     const s = stateWithHeir({ heir_000001: { biologicalMotherId: "sovereign", biologicalFatherId: "c1", legalMotherId: "sovereign", legalFatherId: "c1" } });
     expect(validateParentage(s, db)).toEqual([]);
@@ -828,7 +894,29 @@ Expected: FAIL（模块不存在）
 import type { GameState, PersonId } from "../state/types";
 import { SOVEREIGN_PERSON_ID } from "../state/types";
 import { stateError, type GameError } from "../infra/errors";
-import { getBiologicalAncestors, getLegalDescendants } from "../characters/parentage/parentageSelectors";
+
+// 独立三色 DFS——**不**复用带 visited 防环的 selector：那些 selector 永远不把起点放进结果，
+// 故 `ancestors(x).includes(x)` 恒为 false，无法识别环。这里用 visiting/done 标记真正检测环。
+function hasCycle(state: GameState, link: "biological" | "legal"): boolean {
+  const mark = new Map<PersonId, "visiting" | "done">();
+  const visit = (id: PersonId): boolean => {
+    if (mark.get(id) === "visiting") return true;
+    if (mark.get(id) === "done") return false;
+    mark.set(id, "visiting");
+    const p = state.parentage[id];
+    if (p) {
+      const parents = link === "biological"
+        ? [p.biologicalMotherId, p.biologicalFatherId]
+        : [p.legalMotherId, p.legalFatherId];
+      for (const parentId of parents) {
+        if (parentId !== null && state.parentage[parentId] && visit(parentId)) return true;
+      }
+    }
+    mark.set(id, "done");
+    return false;
+  };
+  return Object.keys(state.parentage).some(visit);
+}
 
 export function validateParentage(state: GameState, db: { characters: Record<string, unknown> }): GameError[] {
   const errs: GameError[] = [];
@@ -859,17 +947,9 @@ export function validateParentage(state: GameState, db: { characters: Record<str
     }
   }
 
-  // 3. 无环（bio + legal）：祖先/后代里出现自身即环
-  for (const childId of Object.keys(state.parentage)) {
-    if (getBiologicalAncestors(state, childId).includes(childId)) {
-      errs.push(stateError("PARENTAGE_BIO_CYCLE", `bio cycle at ${childId}`, { char: childId }));
-    }
-  }
-  for (const id of new Set([SOVEREIGN_PERSON_ID, ...Object.keys(state.parentage)])) {
-    if (getLegalDescendants(state, id).includes(id)) {
-      errs.push(stateError("PARENTAGE_LEGAL_CYCLE", `legal cycle at ${id}`, { char: id }));
-    }
-  }
+  // 3. 无环（bio + legal）：独立三色 DFS（见 hasCycle 注释）
+  if (hasCycle(state, "biological")) errs.push(stateError("PARENTAGE_BIO_CYCLE", "biological parentage cycle", {}));
+  if (hasCycle(state, "legal")) errs.push(stateError("PARENTAGE_LEGAL_CYCLE", "legal parentage cycle", {}));
 
   // 4. AdoptionRecord 双向不变量
   for (const [k, r] of Object.entries(state.adoptionRecords)) {
@@ -933,11 +1013,11 @@ git commit -m "feat(parentage): cross-link validation（镜像/自指/无环/过
 | 1,11,12 出生/双生/自孕 parentage | Task 3 |
 | 2 legal=bio 两组相等 | Task 3 + Task 6(镜像) |
 | 3,9,16,19 迁移/round-trip/grep | Task 5 + Task 4 |
-| 4 抚养行为不变 | Task 4 (Step 8 回归) |
-| 5 不依赖 fatherId | Task 4 (消费者改写) |
+| 4 抚养行为不变 | Task 4 (Step 9：改 heirUpbringingSettlement fixture，保留结果断言) |
+| 5 不依赖 fatherId | Task 4 (Step 6 消费者改写 + Step 7 fatherId 审计) |
 | 6 重复建立失败 | Task 3 |
-| 7,13,14,21,22 validation | Task 6 |
+| 7,13,14,21,22 validation（含 bio/legal 环） | Task 6 (三色 DFS hasCycle) |
 | 8,20 双链 selector | Task 2 |
 | 10,18 空容器/constructor | Task 1 |
-| 15 皇后抚养≠过继 | Task 4 回归 + Task 6（无 AdoptionRecord 生成） |
-| 17 adoption.ts 改名 | Task 4 (Step 7) |
+| 15 皇后抚养≠过继 | Task 4 (Step 10 显式用例：legitimate=true、legalFatherId 不变、adoptionRecords 空) |
+| 17 adoption.ts→fosterFather + API 改名 | Task 4 (Step 8) |
