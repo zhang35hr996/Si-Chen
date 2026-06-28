@@ -33,6 +33,9 @@ function dyingHeir(year: number): Heir {
     faction: "none",
     lifecycle: "alive",
     healthStatus: "critical",
+    personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+    interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+    portraitVariants: { baby: "boy_baby1", kid: "boy_kid1", child: "boy_child1", teen: "boy_teen1" },
   };
 }
 

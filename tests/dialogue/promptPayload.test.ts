@@ -398,6 +398,9 @@ describe("resolvePromptEntityName", () => {
       health: 100, talent: 50, diligence: 50,
       ambition: 10, closeness: 50, support: 50, faction: "none" as const,
       lifecycle: "alive" as const,
+      personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+      interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+      portraitVariants: { baby: "boy_baby1", kid: "boy_kid1", child: "boy_child1", teen: "boy_teen1" },
     };
     s.resources.bloodline.heirs.push(heir);
     const d = makeMinimalDB();
@@ -414,6 +417,9 @@ describe("resolvePromptEntityName", () => {
       health: 100, talent: 50, diligence: 50,
       ambition: 10, closeness: 50, support: 50, faction: "none" as const,
       lifecycle: "alive" as const,
+      personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+      interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+      portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" },
     };
     s.resources.bloodline.heirs.push(heir);
     const d = makeMinimalDB();

@@ -14,6 +14,9 @@ function heirWithFavor(favor: number): GameState {
     id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
     birthAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
     favor, legitimate: true, petName: "团团", education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
+    personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+    interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
+    portraitVariants: { baby: "boy_baby1", kid: "boy_kid1", child: "boy_child1", teen: "boy_teen1" },
   });
   return s;
 }
