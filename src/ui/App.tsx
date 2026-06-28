@@ -1991,6 +1991,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                 return liveState.haremInvestigationCases.map((c): HaremInvestigationCaseView => ({
                   id: c.id,
                   status: c.status,
+                  openedAt: c.openedAt,
                   presentation: presentHaremInvestigationCase(c, resolveName),
                 }));
               })()}

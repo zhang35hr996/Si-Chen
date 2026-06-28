@@ -9,11 +9,21 @@ import type { HaremInvestigationPresentation } from "../haremInvestigationPresen
 import { CASE_STATUS_LABELS } from "../haremInvestigationPresenter";
 import type { IntrigueInvestigationStatus } from "../../engine/characters/haremInvestigation/types";
 import { isActiveCase } from "../../engine/characters/haremInvestigation/types";
+import type { GameTime } from "../../engine/calendar/time";
 
 export interface HaremInvestigationCaseView {
   id: string;
   presentation: HaremInvestigationPresentation;
   status: IntrigueInvestigationStatus;
+  openedAt: GameTime;
+}
+
+const PERIOD_ORDER = { early: 0, mid: 1, late: 2 } as const;
+
+function compareGameTimeDesc(a: GameTime, b: GameTime): number {
+  if (a.year !== b.year) return b.year - a.year;
+  if (a.month !== b.month) return b.month - a.month;
+  return PERIOD_ORDER[b.period] - PERIOD_ORDER[a.period];
 }
 
 export function HaremInvestigationDrawer({
@@ -27,14 +37,12 @@ export function HaremInvestigationDrawer({
 
   const selected = selectedId !== null ? cases.find((c) => c.id === selectedId) : undefined;
 
-  // 排序：活跃优先，同组按 openedAtLabel 倒序（字典序逆推时间，格式"元年N月X旬"可能不完全稳定
-  // 但 5B-1 没有 openedAt timestamp 展示接口，用 label 近似即可）
+  // 排序：活跃优先，同组按 openedAt 数值倒序（新案在前）
   const sorted = [...cases].sort((a, b) => {
     const aActive = isActiveCase(a.status) ? 0 : 1;
     const bActive = isActiveCase(b.status) ? 0 : 1;
     if (aActive !== bActive) return aActive - bActive;
-    // 同组：openedAtLabel 倒序（字符串比较）
-    return b.presentation.openedAtLabel.localeCompare(a.presentation.openedAtLabel, "zh");
+    return compareGameTimeDesc(a.openedAt, b.openedAt);
   });
 
   return (

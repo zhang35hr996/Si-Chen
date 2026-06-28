@@ -169,37 +169,97 @@ describe("haremInvestigation: save round-trip", () => {
     expect(unread).toHaveLength(0);
   });
 
-  it("anomaly 报告立案后：案件无嫌疑人，openedFromReportKind=anomaly", () => {
-    const store = createGameStore();
-    // anomaly 报告：suspectedActorIds 为空
+  it("anomaly 报告立案 → createSaveData → readSlot：无嫌疑人知识边界完整保留", () => {
+    // observationLevel="anomaly" 不需要 courtEventId（只有 exposed 需要）
+    const anomalySuccess = false;
+    const anomalyDiscovered = false;
+    const anomalyConsequences = buildIntrigueConsequences(PLAN, anomalySuccess, anomalyDiscovered);
+
+    const anomalySchemeId = `scheme_anomaly_1_03`;
+    const anomalyIncidentId = `incident_${anomalySchemeId}`;
+    const anomalyReportId = `ireport_${anomalyIncidentId}`;
+
+    const anomalyScheme: HaremScheme = {
+      id: anomalySchemeId,
+      sourceKey: "harem_intrigue:1:03",
+      plan: PLAN,
+      status: "resolved",
+      scheduledForYear: 1,
+      scheduledForMonth: 3,
+      outcome: {
+        status: "resolved",
+        resolvedAt: AT,
+        successRoll: 70, successThreshold: 60,
+        success: anomalySuccess, discovered: anomalyDiscovered,
+        discoveryRoll: 80, discoveryThreshold: 50,
+        consequences: anomalyConsequences,
+        knowledge: {
+          actorKnowsOwnAction: true,
+          targetKnowsInstigator: false,
+          palacePublic: false,
+        },
+      },
+    };
+
+    const anomalyIncident: HaremIncident = {
+      id: anomalyIncidentId,
+      schemeId: anomalySchemeId,
+      actorId: ACTOR_ID,
+      targetId: TARGET_ID,
+      kind: "slander",
+      success: anomalySuccess,
+      observationLevel: "anomaly",
+      resolvedAt: AT,
+      consequencesApplied: true,
+    };
+
+    const anomalyReport: HaremIntrigueReport = {
+      id: anomalyReportId,
+      source: { incidentId: anomalyIncidentId },
+      reportKind: "anomaly",
+      createdAt: AT,
+      status: "unread",
+      knownTargetIds: [TARGET_ID],
+      suspectedActorIds: [],
+      suspectedKinds: [],
+      knownOutcome: "harm_observed",
+      confidence: "tenuous",
+      summaryCode: "anomaly_unexplained_harm",
+    };
+
     const anomalyState: GameState = {
       ...base,
-      haremIntrigueReports: [{
-        id: "ireport_anomaly_001",
-        source: { incidentId: "incident_anomaly_001" },
-        reportKind: "anomaly",
-        createdAt: AT,
-        status: "unread",
-        knownTargetIds: [TARGET_ID],
-        suspectedActorIds: [],
-        suspectedKinds: [],
-        knownOutcome: "harm_observed",
-        confidence: "tenuous",
-        summaryCode: "anomaly_unexplained_harm",
-      }],
+      haremSchemes: [anomalyScheme],
+      haremIncidents: [anomalyIncident],
+      haremIntrigueReports: [anomalyReport],
+      settledHaremIntriguePeriods: ["harem_intrigue_settlement:1:03"],
     };
+
+    const storage = createMemoryStorage();
+    const store = createGameStore();
     store.loadState(anomalyState);
-    const r = store.openHaremInvestigation("ireport_anomaly_001");
+
+    const r = store.openHaremInvestigation(anomalyReportId);
+    if (!r.ok) console.error("anomaly openHaremInvestigation failed:", JSON.stringify(r.error));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const c = store.getState().haremInvestigationCases[0]!;
-    expect(c.suspectIds).toEqual([]);
-    expect(c.openedFromReportKind).toBe("anomaly");
-    // 验证案件在 store 存档 JSON 中字段齐全
+
     const saveData = createSaveData(db, store.getState(), "slot1");
-    const raw = saveData.state as unknown as Record<string, unknown>;
-    const cases = raw["haremInvestigationCases"] as unknown[];
-    expect(cases).toHaveLength(1);
-    expect(saveData.formatVersion).toBe(35);
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(saveData));
+    const loaded = readSlot(storage, db, "slot1");
+    if (!loaded.ok) console.error("anomaly readSlot error:", JSON.stringify(loaded.error));
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+
+    const restoredCase = loaded.value.state.haremInvestigationCases.find((c) => c.id === r.value.caseId);
+    expect(restoredCase).toBeDefined();
+    expect(restoredCase?.suspectIds).toEqual([]);
+    expect(restoredCase?.suspectedKinds).toEqual([]);
+    expect(restoredCase?.openedFromReportKind).toBe("anomaly");
+
+    // 双向链接完整
+    const restoredReport = loaded.value.state.haremIntrigueReports.find((rp) => rp.id === anomalyReportId);
+    expect(restoredReport?.linkedInvestigationId).toBe(r.value.caseId);
+    expect(restoredCase?.source.reportId).toBe(anomalyReportId);
   });
 });
