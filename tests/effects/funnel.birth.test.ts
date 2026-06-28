@@ -169,6 +169,48 @@ describe("funnel: birth", () => {
     expect(errs.some((e) => e.message.includes("twinSex") && e.message.includes("twinFavor"))).toBe(true);
   });
 
+  it("生成侍君（generated_consort_*）在原始 ContentDB 下可作 bearer/father 通过 birth 校验并生产", () => {
+    // 关键：全程用原始 content.value（未合并 generatedConsorts），模拟生产结算路径。
+    const s0 = createNewGameState(db, 1);
+    const carrierId = Object.keys(s0.generatedConsorts).find(
+      (id) => !id.startsWith("generated_empress_") && s0.standing[id]?.lifecycle !== "deceased",
+    )!;
+    expect(carrierId).toBeDefined();
+    expect(db.characters[carrierId]).toBeUndefined(); // 确认不在内容库
+
+    // 帝王自孕 → carry → 承养给生成侍君
+    const a = applyEffects(db, s0, [{ type: "pregnancy", op: "begin" }]);
+    if (!a.ok) throw new Error("begin");
+    const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "carry" }]);
+    if (!b.ok) throw new Error("carry");
+    const c = applyEffects(db, b.value, [{ type: "pregnancy_transfer", carrierId, atMonth: 3 }]);
+    if (!c.ok) throw new Error("transfer");
+    const carrying = c.value;
+
+    // birth：bearer 与 fatherId 都是生成侍君；校验应接受（旧实现只查 db.characters 会拒绝）
+    const birth = {
+      type: "birth" as const,
+      sex: "son" as const,
+      fatherId: carrierId,
+      bearer: carrierId,
+      legitimate: false,
+      favor: 30,
+      recoverUntilMonth: 18,
+      bearerOutcome: "safe" as const,
+    };
+    expect(validateEffects(db, carrying, [birth])).toEqual([]);
+
+    const r = applyEffects(db, carrying, [birth]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const heirs = r.value.resources.bloodline.heirs;
+    expect(heirs).toHaveLength(1);
+    expect(heirs[0]!.bearer).toBe(carrierId);
+    expect(heirs[0]!.fatherId).toBe(carrierId);
+    expect(r.value.standing[carrierId]!.lifecycle).toBe("delivered");
+    expect(r.value.resources.bloodline.gestations).toEqual([]);
+  });
+
   it("assigns monotonic heir ids across sequential safe births", () => {
     const first = applyEffects(db, consortCarrying(), [{ ...baseBirth, bearerOutcome: "safe" }]);
     expect(first.ok).toBe(true);
