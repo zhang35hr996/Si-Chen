@@ -296,12 +296,6 @@ export function validateEffects(
         }
         break;
       }
-      case "heir_summon": {
-        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
-          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
-        }
-        break;
-      }
       case "heir_educate": {
         if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
           bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
@@ -590,7 +584,6 @@ function describeEffect(effect: EventEffect): string {
     case "heir_designate": return `heir_designate [${effect.charIds.join(",")}]`;
     case "heir_candidate": return `heir_candidate ${effect.char} op=${effect.op}`;
     case "heir_name": return `heir_name ${effect.heirId} ${effect.field}="${effect.name}"`;
-    case "heir_summon": return `heir_summon ${effect.heirId}`;
     case "heir_audience": return `heir_audience ${effect.heirId} ${effect.action}`;
     case "heir_lesson_response": return `heir_lesson_response ${effect.heirId} ${effect.subject} ${effect.performance} → ${effect.response}`;
     case "heir_educate": return `heir_educate ${effect.heirId} ${effect.subject}`;
@@ -884,11 +877,6 @@ export function applyEffects(
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         if (effect.field === "pet") heir.petName = effect.name;
         else heir.givenName = effect.name;
-        break;
-      }
-      case "heir_summon": {
-        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        heir.favor = clampPct(heir.favor + 20);
         break;
       }
       case "heir_audience": {

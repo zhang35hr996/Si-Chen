@@ -1,4 +1,4 @@
-/** 毓庆宫：未成年皇嗣居所（皇子≥5、皇郎≥7 迁居于此）。列出在居皇嗣，可「召见」（heir_summon）。1 AP。 */
+/** 毓庆宫：未成年皇嗣居所（皇子≥5、皇郎≥7 迁居于此）。夜间展示在居皇嗣名册，日间提示皇嗣不在。 */
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
 import { heirAge, listHeirsBySex, residesInYuqing } from "../../engine/characters/heirs";
@@ -10,11 +10,11 @@ import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 export function YuqingGongScreen({
-  db, store, registry, onOpenMap, onOpenSettings, onSummon, onOpenResources, onOpenStorehouse,
+  db, store, registry, onOpenMap, onOpenSettings, onOpenResources, onOpenStorehouse,
 }: {
   db: ContentDB; store: GameStore; registry: AssetRegistry;
   onOpenMap: () => void; onOpenSettings: () => void;
-  onSummon: (heirId: string) => void; onOpenResources?: () => void; onOpenStorehouse?: () => void;
+  onOpenResources?: () => void; onOpenStorehouse?: () => void;
 }) {
   const state = useGameState(store);
   const location = db.locations["yuqing_gong"]!;
@@ -24,7 +24,6 @@ export function YuqingGongScreen({
     ...listHeirsBySex(state.resources.bloodline.heirs, "daughter"),
     ...listHeirsBySex(state.resources.bloodline.heirs, "son"),
   ].filter((r) => residesInYuqing(r.heir, state.calendar));
-  const canAct = state.calendar.ap >= 1;
   const isNight = tod === "night";
 
   return (
@@ -53,7 +52,6 @@ export function YuqingGongScreen({
             resident.map(({ heir, name }) => (
               <div key={heir.id} className="roster-row">
                 <span>{name}{heir.givenName ? `·${heir.givenName}` : ""}　{heirAge(heir, state.calendar)}岁</span>
-                <button type="button" disabled={!canAct} onClick={() => onSummon(heir.id)}>召见</button>
               </div>
             ))
           )}

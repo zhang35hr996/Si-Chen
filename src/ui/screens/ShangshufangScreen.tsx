@@ -14,7 +14,8 @@ export function ShangshufangScreen({
 }: {
   db: ContentDB; store: GameStore; registry: AssetRegistry;
   onOpenMap: () => void; onOpenSettings: () => void;
-  onLesson: (heirId: string) => void; onTutorReport: (heirId: string) => void;
+  onLesson: (heirId: string, subject: "scholarship" | "martial" | "virtue") => void;
+  onTutorReport: (heirId: string) => void;
 }) {
   const state = useGameState(store);
   const location = db.locations["wenzhaodian"]!;
@@ -44,7 +45,7 @@ export function ShangshufangScreen({
             enrolled.map(({ heir, name }) => (
               <div key={heir.id} className="roster-row">
                 <span>{name}{heir.givenName ? `·${heir.givenName}` : ""}</span>
-                <button type="button" disabled={!canAct} onClick={() => onLesson(heir.id)}>问功课</button>
+                <button type="button" disabled={!canAct} onClick={() => onLesson(heir.id, "scholarship")}>问功课</button>
                 <button type="button" disabled={!canAct} onClick={() => onTutorReport(heir.id)}>问先生</button>
               </div>
             ))
