@@ -36,6 +36,11 @@ export function availableInvestigationActions(
   const c = state.haremInvestigationCases.find((x) => x.id === caseId);
   if (!c) return [];
 
+  // 5B-2B1 临时封锁：证据驱动事件族（investigation_incident）的调查行动尚未接入
+  // （留待 5B-2B2）。在此之前，禁止此类案件启动旧结算器任务，避免读取不到旧
+  // haremIncidents 真相而生成错误线索（误排除嫌疑人 / 凭空抬高置信度）。
+  if (c.source.kind === "investigation_incident") return [];
+
   // 已关闭/取消/待裁定（裁定后才关闭）→ 不允许新任务
   if (!isActiveCase(c.status) || c.status === "ready_for_review") return [];
 
@@ -83,6 +88,10 @@ export function validateCanStartTask(
   method: InvestigationMethod,
   subjectId?: string,
 ): string | null {
+  // 5B-2B1 临时封锁：证据驱动事件族的证据调查尚未接入（留待 5B-2B2）
+  if (c.source.kind === "investigation_incident") {
+    return `案件 "${c.id}" 的证据调查尚未接入，暂不能下令`;
+  }
   if (!isActiveCase(c.status)) {
     return `案件 "${c.id}" 状态 "${c.status}" 不允许新增调查任务`;
   }

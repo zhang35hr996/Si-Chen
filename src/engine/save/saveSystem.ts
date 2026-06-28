@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 37;
+export const SAVE_FORMAT_VERSION = 38;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -713,6 +713,26 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       state["investigationTruths"] = [];
     }
     return { ...env, formatVersion: 37, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+
+  // v37 → v38: 隐藏真相与调查执行层接轨（Phase 5B-2B1）。
+  // 新增 investigationPublicReports 字段；为存量案件 source 补判别字段 kind="legacy_intrigue"。
+  37: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (!Array.isArray(state["investigationPublicReports"])) {
+      state["investigationPublicReports"] = [];
+    }
+    if (Array.isArray(state["haremInvestigationCases"])) {
+      state["haremInvestigationCases"] = (state["haremInvestigationCases"] as Record<string, unknown>[]).map((c) => {
+        const source = c["source"] as Record<string, unknown> | undefined;
+        if (source && typeof source["kind"] !== "string") {
+          return { ...c, source: { kind: "legacy_intrigue", ...source } };
+        }
+        return c;
+      });
+    }
+    return { ...env, formatVersion: 38, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

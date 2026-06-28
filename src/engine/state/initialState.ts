@@ -83,6 +83,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     haremInvestigationNextSeq: 1,
     investigationIncidents: [],
     investigationTruths: [],
+    investigationPublicReports: [],
     settledHaremIntriguePeriods: [],
     haremDisciplineIncidents: [],
     royalRelatives: {},

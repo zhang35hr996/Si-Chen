@@ -53,6 +53,7 @@ export function createIntrigueInvestigationCase(
   const newCase: IntrigueInvestigationCase = {
     id: caseId,
     source: {
+      kind: "legacy_intrigue",
       reportId: report.id,
       incidentId: report.source.incidentId,
     },

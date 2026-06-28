@@ -165,6 +165,7 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     haremInvestigationNextSeq: 1,
     investigationIncidents: [],
     investigationTruths: [],
+    investigationPublicReports: [],
     settledHaremIntriguePeriods: [],
     haremDisciplineIncidents: [],
     royalRelatives: {},

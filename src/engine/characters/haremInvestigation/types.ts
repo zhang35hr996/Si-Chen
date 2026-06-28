@@ -5,6 +5,7 @@
 import type { GameTime } from "../../calendar/time";
 import type { HaremIntrigueKind } from "../haremIntrigue/types";
 import type { HaremIntrigueReportConfidence } from "../../state/types";
+import type { HeirHealthSymptom } from "./truth/types";
 
 /** 可立案的报告种类（排除调查进行中的中间报告）。 */
 export type InvestigatableReportKind = "anomaly" | "rumor" | "exposure";
@@ -29,17 +30,26 @@ export function isActiveCase(status: IntrigueInvestigationStatus): boolean {
   return status === "open" || status === "in_progress" || status === "ready_for_review";
 }
 
-/** 案件来源：以报告和 incident 为桥梁，不直接暴露 schemeId。 */
-export interface IntrigueInvestigationSource {
-  reportId: string;
-  incidentId: string;
-}
+/**
+ * 案件来源：以报告和 incident 为桥梁，不直接暴露 schemeId。
+ *
+ * 判别联合，按事件族区分调查模型（5B-2B）：
+ *   - legacy_intrigue：旧宫斗报告，结算读取 haremIncidents.actorId/kind。
+ *   - investigation_incident：皇嗣异常等新事件族，结算读取 InvestigationTruth.evidenceNodes。
+ * 两个分支均保留 incidentId 字段，旧结算器 `c.source.incidentId` 读取不变。
+ */
+export type InvestigationCaseSource =
+  | { kind: "legacy_intrigue"; reportId: string; incidentId: string }
+  | { kind: "investigation_incident"; reportId: string; incidentId: string };
+
+/** @deprecated 5B-2B 起改用 InvestigationCaseSource 判别联合。保留别名以兼容引用。 */
+export type IntrigueInvestigationSource = InvestigationCaseSource;
 
 export interface IntrigueInvestigationCase {
   /** "icase_{reportId}" */
   id: string;
 
-  source: IntrigueInvestigationSource;
+  source: InvestigationCaseSource;
 
   openedAt: GameTime;
   /** 立案时的报告种类（只允许可立案种类）。 */
@@ -64,6 +74,41 @@ export interface IntrigueInvestigationCase {
   closureReason?: "player_cancelled" | "insufficient_evidence" | "culprit_confirmed";
   /** 玩家在 closed_confirmed 状态时指认的主谋 ID。 */
   confirmedCulpritId?: string;
+}
+
+// ── 5B-2B：皇嗣异常公开报告（玩家可见层） ──────────────────────────────
+//
+// 由 HeirHealthAnomalyIncident 脱敏生成，是玩家立案的入口。
+// 严格知识边界：只携带公开信息（受害皇嗣、症状、公开指控人/被指控者、
+// 现场公开事实），绝不包含 causeType / culpritIds / method / motive /
+// evidenceNodes 等任何 InvestigationTruth 后台字段。
+
+export type InvestigationPublicReportStatus = "unread" | "acknowledged" | "investigating";
+
+export interface InvestigationPublicReport {
+  /** "iarep_{incidentId}" */
+  id: string;
+  source: { kind: "investigation_incident"; incidentId: string };
+  reportKind: "anomaly";
+  eventFamily: "heir_health_anomaly";
+
+  createdAt: GameTime;
+  status: InvestigationPublicReportStatus;
+
+  /** 受影响皇嗣（公开已知）。 */
+  knownTargetIds: string[];
+  /** 公开被指控者（来自 incident.initiallyAccusedIds，非后台真凶）。 */
+  suspectedActorIds: string[];
+  confidence: HaremIntrigueReportConfidence;
+
+  symptomCode: HeirHealthSymptom;
+  publicFactCodes: string[];
+  /** 公开指控人（来自 incident.accuserIds）。 */
+  accuserIds: string[];
+
+  acknowledgedAt?: GameTime;
+  /** 立案后链接的案件 ID，用于幂等立案。 */
+  linkedInvestigationId?: string;
 }
 
 /** 任务/线索 ID 格式正则（与 Zod schema 保持同步）。 */
