@@ -1,10 +1,10 @@
 /**
- * 调查案件集合级链接完整性校验（Phase 5B-1A）。
+ * 调查案件集合级链接完整性校验（Phase 5B-1A + 5B-2）。
  * 在 stateSchema superRefine 中调用。
  */
 import { stateError, type GameError } from "../../infra/errors";
 import type { HaremIntrigueReport } from "../../state/types";
-import type { IntrigueInvestigationCase } from "./types";
+import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead } from "./types";
 import { isActiveCase } from "./types";
 
 const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation_final"]);
@@ -12,6 +12,9 @@ const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation
 export interface HaremInvestigationValidationInput {
   haremIntrigueReports: HaremIntrigueReport[];
   haremInvestigationCases: IntrigueInvestigationCase[];
+  haremInvestigationTasks: Record<string, IntrigueInvestigationTask>;
+  haremInvestigationLeads: Record<string, IntrigueInvestigationLead>;
+  haremInvestigationNextSeq: number;
   incidentIds: Set<string>;
 }
 
@@ -19,7 +22,7 @@ export function validateHaremInvestigationLinks(
   data: HaremInvestigationValidationInput,
 ): GameError[] {
   const errors: GameError[] = [];
-  const { haremIntrigueReports, haremInvestigationCases, incidentIds } = data;
+  const { haremIntrigueReports, haremInvestigationCases, haremInvestigationTasks, haremInvestigationLeads, haremInvestigationNextSeq, incidentIds } = data;
 
   const reportById = new Map(haremIntrigueReports.map((r) => [r.id, r]));
   const caseIds = new Set<string>();
@@ -93,6 +96,116 @@ export function validateHaremInvestigationLinks(
         errors.push(stateError("INTRIGUE_CASE_LIFECYCLE", `haremInvestigationCases[id=${c.id}]: status=${c.status} 但无 closureReason`));
       }
     }
+  }
+
+  // ── case.leadIds 双向链接 + B3 confirmedCulpritId ──────────────────
+  for (const c of haremInvestigationCases) {
+    // leadIds 中每个 ID 必须在 haremInvestigationLeads 中存在
+    for (const lid of c.leadIds) {
+      const lead = haremInvestigationLeads[lid];
+      if (!lead) {
+        errors.push(stateError("INTRIGUE_LEAD_MISSING", `haremInvestigationCases[id=${c.id}]: leadId="${lid}" 在 haremInvestigationLeads 中不存在`));
+      } else if (lead.caseId !== c.id) {
+        errors.push(stateError("INTRIGUE_LEAD_CASE_MISMATCH", `haremInvestigationLeads[id=${lid}]: caseId="${lead.caseId}" 与 case.id="${c.id}" 不一致`));
+      }
+    }
+
+    // B3：closed_confirmed → 必须有 confirmedCulpritId；confirmedCulpritId 必须在 suspectIds 中
+    if (c.status === "closed_confirmed") {
+      if (!c.confirmedCulpritId) {
+        errors.push(stateError("INTRIGUE_CASE_MISSING_CULPRIT", `haremInvestigationCases[id=${c.id}]: status=closed_confirmed 但无 confirmedCulpritId`));
+      } else if (!c.suspectIds.includes(c.confirmedCulpritId)) {
+        errors.push(stateError("INTRIGUE_CASE_CULPRIT_NOT_SUSPECT", `haremInvestigationCases[id=${c.id}]: confirmedCulpritId="${c.confirmedCulpritId}" 不在 suspectIds 中`));
+      }
+    } else if (c.confirmedCulpritId) {
+      errors.push(stateError("INTRIGUE_CASE_CULPRIT_WRONG_STATUS", `haremInvestigationCases[id=${c.id}]: status=${c.status} 不得有 confirmedCulpritId`));
+    }
+
+    // B2：in_progress 案件 → 恰好 1 个 pending task
+    if (c.status === "in_progress") {
+      const pendingCount = Object.values(haremInvestigationTasks).filter(
+        (t) => t.caseId === c.id && t.status === "pending",
+      ).length;
+      if (pendingCount !== 1) {
+        errors.push(stateError("INTRIGUE_CASE_PENDING_TASK_COUNT", `haremInvestigationCases[id=${c.id}]: status=in_progress 但 pending task 数量=${pendingCount}，期望 1`));
+      }
+    }
+  }
+
+  // ── Task 完整性校验 ────────────────────────────────────────────────
+  for (const [key, task] of Object.entries(haremInvestigationTasks)) {
+    // Record key 必须等于对象内部 id
+    if (key !== task.id) {
+      errors.push(stateError("INTRIGUE_TASK_KEY_MISMATCH", `haremInvestigationTasks: key="${key}" 与 task.id="${task.id}" 不一致`));
+    }
+    // caseId 必须存在
+    if (!caseIds.has(task.caseId)) {
+      errors.push(stateError("INTRIGUE_TASK_ORPHAN", `haremInvestigationTasks[id=${task.id}]: caseId="${task.caseId}" 对应案件不存在`));
+    }
+    // pending task 不得有 resolvedAt / leadId
+    if (task.status === "pending") {
+      if (task.resolvedAt) {
+        errors.push(stateError("INTRIGUE_TASK_LIFECYCLE", `haremInvestigationTasks[id=${task.id}]: status=pending 但有 resolvedAt`));
+      }
+      if (task.leadId) {
+        errors.push(stateError("INTRIGUE_TASK_LIFECYCLE", `haremInvestigationTasks[id=${task.id}]: status=pending 但有 leadId`));
+      }
+      // pending task → case.status 必须是 in_progress（B2 integrity）
+      const taskCase = haremInvestigationCases.find((c) => c.id === task.caseId);
+      if (taskCase && taskCase.status !== "in_progress") {
+        errors.push(stateError("INTRIGUE_TASK_CASE_STATUS", `haremInvestigationTasks[id=${task.id}]: status=pending 但 case.status="${taskCase.status}"，期望 in_progress`));
+      }
+    }
+    // resolved task → 必须有 resolvedAt + leadId
+    if (task.status === "resolved") {
+      if (!task.resolvedAt) {
+        errors.push(stateError("INTRIGUE_TASK_LIFECYCLE", `haremInvestigationTasks[id=${task.id}]: status=resolved 但无 resolvedAt`));
+      }
+      if (!task.leadId) {
+        errors.push(stateError("INTRIGUE_TASK_LIFECYCLE", `haremInvestigationTasks[id=${task.id}]: status=resolved 但无 leadId`));
+      }
+      if (task.leadId && !haremInvestigationLeads[task.leadId]) {
+        errors.push(stateError("INTRIGUE_TASK_ORPHAN_LEAD", `haremInvestigationTasks[id=${task.id}]: leadId="${task.leadId}" 对应线索不存在`));
+      }
+      // task.leadId 对应的 lead.caseId 必须等于 task.caseId
+      if (task.leadId) {
+        const linkedLead = haremInvestigationLeads[task.leadId];
+        if (linkedLead && linkedLead.caseId !== task.caseId) {
+          errors.push(stateError("INTRIGUE_TASK_LEAD_CASE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: leadId="${task.leadId}" 的 lead.caseId="${linkedLead.caseId}" 与 task.caseId="${task.caseId}" 不一致`));
+        }
+      }
+    }
+  }
+
+  // ── Lead 完整性校验 ───────────────────────────────────────────────
+  for (const [key, lead] of Object.entries(haremInvestigationLeads)) {
+    // Record key 必须等于对象内部 id
+    if (key !== lead.id) {
+      errors.push(stateError("INTRIGUE_LEAD_KEY_MISMATCH", `haremInvestigationLeads: key="${key}" 与 lead.id="${lead.id}" 不一致`));
+    }
+    // lead.caseId 必须存在
+    if (!caseIds.has(lead.caseId)) {
+      errors.push(stateError("INTRIGUE_LEAD_ORPHAN", `haremInvestigationLeads[id=${lead.id}]: caseId="${lead.caseId}" 对应案件不存在`));
+    }
+    // lead.id 必须出现在其 case.leadIds 中（反向引用）
+    const parentCase = haremInvestigationCases.find((c) => c.id === lead.caseId);
+    if (parentCase && !parentCase.leadIds.includes(lead.id)) {
+      errors.push(stateError("INTRIGUE_LEAD_NOT_IN_CASE", `haremInvestigationLeads[id=${lead.id}]: 未出现在 case[id=${lead.caseId}].leadIds 中`));
+    }
+  }
+
+
+  // ── haremInvestigationNextSeq 下界校验 ───────────────────────────
+  // nextSeq 必须严格大于已有 task/lead 中最大序号
+  const extractSeq = (id: string): number => {
+    const m = id.match(/(\d{6})$/);
+    return m ? parseInt(m[1]!, 10) : 0;
+  };
+  const maxTaskSeq = Math.max(0, ...Object.keys(haremInvestigationTasks).map(extractSeq));
+  const maxLeadSeq = Math.max(0, ...Object.keys(haremInvestigationLeads).map(extractSeq));
+  const maxUsedSeq = Math.max(maxTaskSeq, maxLeadSeq);
+  if (haremInvestigationNextSeq <= maxUsedSeq) {
+    errors.push(stateError("INTRIGUE_SEQ_TOO_LOW", `haremInvestigationNextSeq=${haremInvestigationNextSeq} 必须大于已使用最大序号 ${maxUsedSeq}`));
   }
 
   // Report ↔ Case 双向链接

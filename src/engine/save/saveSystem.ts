@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 35;
+export const SAVE_FORMAT_VERSION = 36;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -683,6 +683,23 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       state["haremInvestigationCases"] = [];
     }
     return { ...env, formatVersion: 35, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+
+  // v35 → v36: 调查任务与线索持久化（Phase 5B-2）。
+  // 新增 haremInvestigationTasks / haremInvestigationLeads / haremInvestigationNextSeq。
+  35: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (typeof state["haremInvestigationTasks"] !== "object" || Array.isArray(state["haremInvestigationTasks"])) {
+      state["haremInvestigationTasks"] = {};
+    }
+    if (typeof state["haremInvestigationLeads"] !== "object" || Array.isArray(state["haremInvestigationLeads"])) {
+      state["haremInvestigationLeads"] = {};
+    }
+    if (typeof state["haremInvestigationNextSeq"] !== "number") {
+      state["haremInvestigationNextSeq"] = 1;
+    }
+    return { ...env, formatVersion: 36, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

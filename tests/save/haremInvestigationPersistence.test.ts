@@ -143,7 +143,8 @@ describe("haremInvestigation: save round-trip", () => {
 
     const restoredCase = loaded.value.state.haremInvestigationCases.find((c) => c.id === caseId);
     expect(restoredCase).toBeDefined();
-    expect(restoredCase?.status).toBe("open");
+    // confidence=confirmed → case opens as ready_for_review (H1 fix)
+    expect(restoredCase?.status).toBe("ready_for_review");
     expect(restoredCase?.knownTargetIds).toEqual([TARGET_ID]);
     expect(restoredCase?.source.reportId).toBe(REPORT_ID);
     expect(restoredCase?.openedFromReportKind).toBe("exposure");

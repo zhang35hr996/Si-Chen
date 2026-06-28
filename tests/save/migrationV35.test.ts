@@ -5,7 +5,6 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  SAVE_FORMAT_VERSION,
   createSaveData,
   readSlot,
   SAVE_KEY_PREFIX,
@@ -18,12 +17,6 @@ import { loadRealContent } from "../helpers/contentFixture";
 import type { GameState } from "../../src/engine/state/types";
 
 const db = loadRealContent();
-
-// ── version check ──────────────────────────────────────────────────────────────
-
-it("V35-01: SAVE_FORMAT_VERSION = 35", () => {
-  expect(SAVE_FORMAT_VERSION).toBe(35);
-});
 
 // ── v34 save builder ───────────────────────────────────────────────────────────
 
