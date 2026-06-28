@@ -244,13 +244,17 @@ const CONSORT_PALACES: readonly string[] = [
 ];
 
 // ── Portrait pool ─────────────────────────────────────────────────────────────
-// 复用已有立绘集；注册表对不存在的 portraitSet 会回退到剪影，不会出错。
+// 侍君立绘统一编号（consort1–consort33，跳过 consort31 因文件名含特殊字符）。
+// 每位生成侍君从池中确定性随机取一张；同号可被多人复用。
 
 const PORTRAIT_POOL: readonly string[] = [
-  "lu_huaijin",
-  "xu_qinghuan",
-  "wenya",
-  "shen_zhibai",
+  "consort1",  "consort2",  "consort3",  "consort4",  "consort5",
+  "consort6",  "consort7",  "consort8",  "consort9",  "consort10",
+  "consort11", "consort12", "consort13", "consort14", "consort15",
+  "consort16", "consort17", "consort18", "consort19", "consort20",
+  "consort21", "consort22", "consort23", "consort24", "consort25",
+  "consort26", "consort27", "consort28", "consort29", "consort30",
+  "consort32", "consort33",
 ];
 
 // ── Likes pool ────────────────────────────────────────────────────────────────
@@ -397,7 +401,7 @@ export function generateInitialConsorts(
         speechStyle: archetype.speechStyle,
       },
       defaultLocation: residence,
-      portraitSet: PORTRAIT_POOL[i % PORTRAIT_POOL.length]!,
+      portraitSet: PORTRAIT_POOL[seededRoll(`${p}:portrait`, PORTRAIT_POOL.length)]!,
       expressions: ["neutral"],
       voice: {
         register: seededRoll(`${p}:voice`, 2) === 0 ? "formal" : "casual",
