@@ -77,6 +77,7 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     haremSchemes: [],
     haremIncidents: [],
     haremIntrigueReports: [],
+    haremInvestigationCases: [],
     settledHaremIntriguePeriods: [],
     haremDisciplineIncidents: [],
     templateEventNextSeq: 0,
