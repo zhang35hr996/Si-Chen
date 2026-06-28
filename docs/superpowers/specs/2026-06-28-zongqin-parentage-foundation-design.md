@@ -39,7 +39,7 @@
 > **`state.parentage` 是所有「已建模父母—子女关系」生身亲缘与法统亲缘的唯一权威来源。**
 > `Heir` 字段、人物详情、宗亲府列表、`kinship` 图中的相关字段都只能是**投影或派生索引**，不得反向修改 `parentage`。
 
-**权威范围（重要）**：Slice A 的完整性约束**仅要求每个 `Heir` 具备 parentage**。现有其他人物池（`familyMembers` / `officials` / `generatedConsorts` / `officialCandidates`）暂**不**要求具备 parentage——它们尚非「真实宗亲家庭成员」。未来某切片在这些人物成为真实宗亲家庭成员时再为其接入 parentage。把权威说成「所有角色」会与实际 validation（仅校验 Heir）冲突。
+**权威范围（重要）**：Slice A 的完整性约束**仅要求每个 `Heir` 具备 parentage**。现有其他人物池——`state.royalRelatives`（宗室/伴读，无 parentage 字段）、`familyMembers` / `officials` / `generatedConsorts` / `officialCandidates`——暂**不**要求具备 parentage：它们尚非「真实宗亲家庭成员」。未来某切片在这些人物成为真实宗亲家庭成员时再为其接入 parentage。把权威说成「所有角色」会与实际 validation（仅校验 Heir）冲突。
 
 为什么不扩展现有 `kinship` 图：`kinship` 适合表达广义关系（姊妹、配偶、姻亲、伴读、过继后的法统亲属……），但**父母身份**有更严格的不变量（生身永不可覆盖、法统可因过继变化、二者可并存、婚配沿血缘链、继承沿法统链）。拆成多条边易出现缺边/重复边/双向不同步/过继误删生身边/查询漏 `lineage` 条件。故 `kinship` 仅作后续查询索引，不作亲缘身份的唯一存储。
 
@@ -181,9 +181,11 @@ v38：`heir.custodianId = legacyHeir.adoptiveFatherId; delete heir.adoptiveFathe
 
 **验收口径（不靠手工清单，靠 grep）：** 除 v38 迁移读取旧存档、以及历史设计文档外，运行时代码、runtime/content schema、测试 fixture/工厂、chronicle 文案、当前系统文档中**不得再出现** `adoptiveFatherId`。实现者以 `grep -rn adoptiveFatherId src tests docs content` 为唯一真相驱动改写。当前已知消费面（2026-06-28 sweep，可能随主分支变化，实现时须重跑）：
 
-- 引擎/存档：`src/engine/effects/funnel.ts`、`src/engine/content/schemas.ts`、`src/engine/save/saveSystem.ts`、`src/engine/save/stateSchema.ts`、`src/engine/state/types.ts`
+- 引擎/存档：`src/engine/effects/funnel.ts`、`src/engine/content/schemas.ts`、`src/engine/save/saveSystem.ts`、`src/engine/save/stateSchema.ts`、`src/engine/state/types.ts`、`src/engine/characters/companionReconciliation.ts`（line 124 `heir.adoptiveFatherId`）
 - store：`src/store/heirCustody.ts`、`src/store/adoption.ts`（见下）
 - UI：`src/ui/components/HeirListModal.tsx`、`src/ui/components/HeirSummonPicker.tsx`、`src/ui/components/CharacterProfileDrawer.tsx`、`src/ui/components/ConsortListModal.tsx`、`src/ui/screens/FengxiandianScreen.tsx`
+
+> 注：`main` 推进会改变此清单——`companionReconciliation.ts` 即在首轮 sweep 后才并入 `main`。故实现时**以重跑 grep 为准**，不可信赖本清单。
 
 **`src/store/adoption.ts` 必须改名/迁移。** 它实际实现的是 *择养父*（抚养关系：`eligibleAdoptiveFathers` / `bioFatherAvailable` / `buildAdoptionReaction`，且直接读 `heir.fatherId`），**不是**奉先殿宗祧过继。继续占用 "adoption" 名会与 Slice D 正式过继领域撞名。Slice A 将其重命名为抚养语义（如 `src/store/fosterFather.ts`，确切文件名留给 plan），相应 API（`eligibleAdoptiveFathers` 等）与 `tests/.../adoption.test.ts` 同步改名；其 `heir.fatherId` 读取改走 `getBiologicalParents`/`bioFather` selector。
 
@@ -363,4 +365,4 @@ if (heir.faction === "adoptive") heir.faction = "custodian";
 
 抚养关系历史（`GuardianshipRecord`）、承养/孕育历史实体（`GestationRecord`）、独立宗支实体（`LineageBranch`）、宗亲府生命周期、奉先殿过继命令（`adoptIntoHousehold`/`revokeAdoption`）、撤销/替换过继、法统变化事件与政治后果、京城导航与府邸 UI。各自由首个需要它的切片引入。
 
-**人物池接入**：现有人物池（`familyMembers` / `officials` / `generatedConsorts` / `officialCandidates`）接入 parentage、以及正式「宗亲家庭成员」模型的整合/替换，**不属于** Slice A——待这些人物成为真实宗亲家庭成员的切片再处理。Slice A 的 parentage 完整性约束只覆盖 `Heir`。
+**人物池接入**：`state.royalRelatives` 与正式「宗亲家庭成员」模型的整合/替换，以及现有人物池（`familyMembers` / `officials` / `generatedConsorts` / `officialCandidates`）接入 parentage，**不属于** Slice A——待这些人物成为真实宗亲家庭成员的切片再处理。Slice A 的 parentage 完整性约束只覆盖 `Heir`。
