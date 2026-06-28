@@ -310,6 +310,18 @@ export const eventEffectSchema = z.union([
     custodianId: idSchema,
     // makeLegitimate is intentionally absent — derived at apply time by engine rule.
   }),
+  z.strictObject({
+    type: z.literal("heir_audience"),
+    heirId: nonEmpty,
+    action: z.enum(["talk", "play"]),
+  }),
+  z.strictObject({
+    type: z.literal("heir_lesson_response"),
+    heirId: nonEmpty,
+    subject: z.enum(["scholarship", "martial", "virtue"]),
+    performance: z.enum(["excellent", "good", "mixed", "poor"]),
+    response: z.enum(["praise", "admonish", "neutral"]),
+  }),
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
   z.strictObject({ type: z.literal("heir_died"), heirId: nonEmpty }),
   z.strictObject({

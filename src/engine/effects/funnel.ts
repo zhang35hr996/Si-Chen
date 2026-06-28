@@ -308,6 +308,18 @@ export function validateEffects(
         }
         break;
       }
+      case "heir_audience": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
+      case "heir_lesson_response": {
+        if (!state.resources.bloodline.heirs.some((h) => h.id === e.heirId)) {
+          bad(index, "BAD_EFFECT_TARGET", `unknown heir "${e.heirId}"`, { heir: e.heirId });
+        }
+        break;
+      }
       case "heir_custody": {
         const heir = state.resources.bloodline.heirs.find((h) => h.id === e.heirId);
         if (!heir) {
@@ -579,6 +591,8 @@ function describeEffect(effect: EventEffect): string {
     case "heir_candidate": return `heir_candidate ${effect.char} op=${effect.op}`;
     case "heir_name": return `heir_name ${effect.heirId} ${effect.field}="${effect.name}"`;
     case "heir_summon": return `heir_summon ${effect.heirId}`;
+    case "heir_audience": return `heir_audience ${effect.heirId} ${effect.action}`;
+    case "heir_lesson_response": return `heir_lesson_response ${effect.heirId} ${effect.subject} ${effect.performance} → ${effect.response}`;
     case "heir_educate": return `heir_educate ${effect.heirId} ${effect.subject}`;
     case "heir_custody": return `heir_custody ${effect.heirId} → ${effect.custodianId}`;
     case "child_favor": return `child_favor ${effect.heirId} ${effect.delta >= 0 ? "+" : ""}${effect.delta}`;
@@ -875,6 +889,39 @@ export function applyEffects(
       case "heir_summon": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
         heir.favor = clampPct(heir.favor + 20);
+        break;
+      }
+      case "heir_audience": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        if (effect.action === "talk") {
+          heir.favor = clampPct(heir.favor + 2);
+          heir.closeness = clampPct(heir.closeness + 3);
+          heir.imperialFear = clampPct(heir.imperialFear - 2);
+          heir.neglect = Math.max(0, heir.neglect - 8);
+        } else {
+          heir.favor = clampPct(heir.favor + 4);
+          heir.closeness = clampPct(heir.closeness + 4);
+          heir.imperialFear = clampPct(heir.imperialFear - 3);
+          heir.neglect = Math.max(0, heir.neglect - 10);
+        }
+        heir.lastImperialInteractionAt = now;
+        break;
+      }
+      case "heir_lesson_response": {
+        const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
+        if (effect.response === "praise") {
+          heir.favor = clampPct(heir.favor + 3);
+          heir.closeness = clampPct(heir.closeness + 2);
+          heir.imperialFear = clampPct(heir.imperialFear - 3);
+          if (effect.performance === "excellent") heir.diligence = clampPct(heir.diligence + 1);
+        } else if (effect.response === "admonish") {
+          heir.imperialFear = clampPct(heir.imperialFear + 5);
+          heir.closeness = clampPct(heir.closeness - 3);
+        } else {
+          heir.favor = clampPct(heir.favor + 1);
+          heir.closeness = clampPct(heir.closeness + 1);
+        }
+        heir.lastImperialInteractionAt = now;
         break;
       }
       case "heir_educate": {

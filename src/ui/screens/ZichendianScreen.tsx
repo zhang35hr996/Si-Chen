@@ -59,6 +59,22 @@ export interface ZichendianSummonedView {
   portraitSrc?: string;
 }
 
+/** 被召见皇嗣临场展示数据（App 层预计算）。 */
+export interface ZichendianSummonedHeirView {
+  heirId: string;
+  name: string;
+  portraitSrc?: string;
+  /** 控制按钮组：infant/toddler 无功课按钮，schooling 有。 */
+  stage: "infant" | "toddler" | "schooling";
+}
+
+/** 询功课后的结果面板（App 层提前计算，屏内仅渲染）。 */
+export interface ZichendianHeirLessonView {
+  subject: "scholarship" | "martial" | "virtue";
+  performance: "excellent" | "good" | "mixed" | "poor";
+  reportLines: string[];
+}
+
 export interface ZichendianScreenProps {
   background: string;
   backgroundPosition?: string;
@@ -76,6 +92,23 @@ export interface ZichendianScreenProps {
   summonedConverseDisabledReason?: string;
   /** 被召见侍君的「告退」结束入口（可选；提供时渲染告退按钮，由父层清 summoned 态）。 */
   onDismissSummonedConsort?: () => void;
+
+  /** 被召见皇嗣临场数据（与 summonedConsort 互斥）。 */
+  summonedHeir?: ZichendianSummonedHeirView;
+  /** 皇嗣叙话（消耗行动力）。 */
+  onTalkHeir?: () => void;
+  onTalkHeirDisabledReason?: string;
+  /** 皇嗣陪玩（消耗行动力）。 */
+  onPlayHeir?: () => void;
+  onPlayHeirDisabledReason?: string;
+  /** 询功课（仅 schooling；消耗行动力；返回 heirLessonPending 面板）。 */
+  onAskLessonHeir?: () => void;
+  onAskLessonHeirDisabledReason?: string;
+  /** 皇嗣告退。 */
+  onDismissSummonedHeir?: () => void;
+  /** 询功课结果面板（App 层置入后显示三按钮；清空后回到主按钮组）。 */
+  heirLessonPending?: ZichendianHeirLessonView;
+  onHeirLessonResponse?: (response: "praise" | "admonish" | "neutral") => void;
 
   /** 当前场景是否可被打断而传乘风；false → 传乘风入口禁用并显 interruptDisabledReason。透传给乘风，不在屏内重算。 */
   interruptible: boolean;
@@ -136,6 +169,16 @@ export function ZichendianScreen({
   summonedConverseDisabledReason,
   onDismissSummonedConsort,
   onBedchamberSummonedConsort,
+  summonedHeir,
+  onTalkHeir,
+  onTalkHeirDisabledReason,
+  onPlayHeir,
+  onPlayHeirDisabledReason,
+  onAskLessonHeir,
+  onAskLessonHeirDisabledReason,
+  onDismissSummonedHeir,
+  heirLessonPending,
+  onHeirLessonResponse,
   interruptible,
   interruptDisabledReason,
   busy = false,
@@ -157,8 +200,8 @@ export function ZichendianScreen({
   const [foreground, setForeground] = useState<ZichendianForeground>({ kind: "none" });
   const reasonId = useId();
 
-  // 召见侍君临场也是一次独占会话：侍君在前，候见提示/抽屉/乘风及六个常规动作一律让位，仅留叙话/告退收场。
-  const summonedSessionActive = summonedConsort !== undefined;
+  // 召见侍君或皇嗣临场都是独占会话：候见提示/抽屉/乘风及常规动作一律让位。
+  const summonedSessionActive = summonedConsort !== undefined || summonedHeir !== undefined;
 
   // busy（外部业务面板）或召见会话进行中：屏内不得再持有任何前景对话。立即用渲染门控（见下），
   // 并在二者任一接管时重置陈旧的本地前景，避免「旧内部对话 + 新外部模态/召见临场」同帧并存。
@@ -237,6 +280,102 @@ export function ZichendianScreen({
               )}
             </div>
           )}
+          </div>
+        </div>
+      )}
+      {summonedHeir && (
+        <div className="zichendian-summoned">
+          {summonedHeir.portraitSrc && (
+            <img className="zichendian-summoned__portrait" src={summonedHeir.portraitSrc} alt={summonedHeir.name} />
+          )}
+          <div className="zichendian-summoned__caption">
+            <p className="zichendian-summoned__who">
+              <span className="zichendian-summoned__name">{summonedHeir.name}</span>
+            </p>
+            {heirLessonPending ? (
+              <div className="zichendian-summoned__lesson">
+                {heirLessonPending.reportLines.map((line, i) => (
+                  <p key={i} className="zichendian-summoned__lesson-line">{line}</p>
+                ))}
+                <div className="zichendian-summoned__actions">
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={() => onHeirLessonResponse?.("praise")}
+                    disabled={summonedActionsLocked}
+                  >
+                    褒扬
+                  </button>
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={() => onHeirLessonResponse?.("admonish")}
+                    disabled={summonedActionsLocked}
+                  >
+                    训斥
+                  </button>
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={() => onHeirLessonResponse?.("neutral")}
+                    disabled={summonedActionsLocked}
+                  >
+                    按察
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="zichendian-summoned__actions">
+                {onTalkHeir && (
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={onTalkHeir}
+                    disabled={summonedActionsLocked || Boolean(onTalkHeirDisabledReason)}
+                    title={onTalkHeirDisabledReason}
+                  >
+                    叙话
+                  </button>
+                )}
+                {onPlayHeir && (
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={onPlayHeir}
+                    disabled={summonedActionsLocked || Boolean(onPlayHeirDisabledReason)}
+                    title={onPlayHeirDisabledReason}
+                  >
+                    陪玩
+                  </button>
+                )}
+                {summonedHeir.stage === "schooling" && onAskLessonHeir && (
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={onAskLessonHeir}
+                    disabled={summonedActionsLocked || Boolean(onAskLessonHeirDisabledReason)}
+                    title={onAskLessonHeirDisabledReason}
+                  >
+                    询功课
+                  </button>
+                )}
+                {onDismissSummonedHeir && (
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={onDismissSummonedHeir}
+                    disabled={summonedActionsLocked}
+                  >
+                    告退
+                  </button>
+                )}
+                {(onTalkHeirDisabledReason || onPlayHeirDisabledReason) && (
+                  <span className="zichendian-summoned__reason" role="note">
+                    {onTalkHeirDisabledReason ?? onPlayHeirDisabledReason}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
