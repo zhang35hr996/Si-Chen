@@ -4,18 +4,43 @@
   "category": "garden_encounter",
   "checkpoint": "location_enter",
   "apCost": 1,
-  "cooldown": { "actionDays": 20 },
-  "triggerCondition": { "atLocation": "yuhuayuan" },
+  "cooldown": {
+    "actionDays": 20
+  },
+  "triggerCondition": {
+    "atLocation": "yuhuayuan"
+  },
   "participantRoles": [
     {
       "roleId": "protagonist",
       "pool": "consort_alive_active",
-      "exclude": ["carrying_late", "candidate"],
+      "exclude": [
+        "carrying_late",
+        "candidate"
+      ],
       "weightFactors": [
-        { "type": "attr_high", "attr": "affection", "threshold": 55, "weight": 3 },
-        { "type": "attr_low", "attr": "favor", "threshold": 30, "weight": 4 },
-        { "type": "attr_high", "attr": "jealousy", "threshold": 60, "weight": 2 },
-        { "type": "has_grievance", "weight": 3 }
+        {
+          "type": "attr_high",
+          "attr": "affection",
+          "threshold": 55,
+          "weight": 3
+        },
+        {
+          "type": "attr_low",
+          "attr": "favor",
+          "threshold": 30,
+          "weight": 4
+        },
+        {
+          "type": "attr_high",
+          "attr": "jealousy",
+          "threshold": 60,
+          "weight": 2
+        },
+        {
+          "type": "has_grievance",
+          "weight": 3
+        }
       ]
     }
   ],
@@ -27,22 +52,62 @@
     "eventHint": "太液池畔，有人久立未动。"
   },
   "hiddenTruthCandidates": [
-    { "id": "true_coincidence", "description": "确实偶然经过", "weight": 1 },
-    { "id": "deliberate_wait", "description": "已连续数日来此等候", "weight": 4 },
-    { "id": "heard_from_servant", "description": "从宫人口中得知皇帝会经过", "weight": 3 },
-    { "id": "avoiding_others", "description": "原本想独处，却碰见皇帝", "weight": 1 },
-    { "id": "hiding_distress", "description": "刚哭过，在此整理仪容", "weight": 2 }
+    {
+      "id": "true_coincidence",
+      "description": "确实偶然经过",
+      "weight": 1
+    },
+    {
+      "id": "deliberate_wait",
+      "description": "已连续数日来此等候",
+      "weight": 4
+    },
+    {
+      "id": "heard_from_servant",
+      "description": "从宫人口中得知皇帝会经过",
+      "weight": 3
+    },
+    {
+      "id": "avoiding_others",
+      "description": "原本想独处，却碰见皇帝",
+      "weight": 1
+    },
+    {
+      "id": "hiding_distress",
+      "description": "刚哭过，在此整理仪容",
+      "weight": 2
+    }
   ],
   "openingNarration": {
     "mode": "narration",
     "text": "{protagonist}在太液池畔缓缓行走，见到陛下后神色间有一瞬不自然的欢喜，随即恢复端然。"
   },
   "choices": [
-    { "id": "stay_talk", "text": "留下与他说话", "tone": "friendly" },
-    { "id": "ask_wait", "text": "问他是否特意在此等候", "tone": "neutral" },
-    { "id": "walk_together", "text": "邀他同行一程", "tone": "friendly" },
-    { "id": "brief_chat", "text": "只作寻常寒暄", "tone": "neutral" },
-    { "id": "pass_by", "text": "不作停留", "tone": "guarded" }
+    {
+      "id": "stay_talk",
+      "text": "留下与他说话",
+      "tone": "friendly"
+    },
+    {
+      "id": "ask_wait",
+      "text": "问他是否特意在此等候",
+      "tone": "neutral"
+    },
+    {
+      "id": "walk_together",
+      "text": "邀他同行一程",
+      "tone": "friendly"
+    },
+    {
+      "id": "brief_chat",
+      "text": "只作寻常寒暄",
+      "tone": "neutral"
+    },
+    {
+      "id": "pass_by",
+      "text": "不作停留",
+      "tone": "guarded"
+    }
   ],
   "outcomes": [
     {
@@ -53,8 +118,17 @@
         "expression": "smile"
       },
       "effects": [
-        { "type": "favor", "role": "protagonist", "delta": 2 },
-        { "type": "adjust_consort_attr", "role": "protagonist", "field": "affection", "delta": 3 }
+        {
+          "type": "favor",
+          "role": "protagonist",
+          "delta": 2
+        },
+        {
+          "type": "adjust_consort_attr",
+          "role": "protagonist",
+          "field": "affection",
+          "delta": 3
+        }
       ],
       "memories": [
         {
@@ -64,11 +138,21 @@
             "summary": "陛下在太液池畔停下来与我说话，未曾催促离去。",
             "strength": 65,
             "retention": "slow",
-            "subjectIds": ["player", "protagonist"],
+            "subjectIds": [
+              "player",
+              "protagonist"
+            ],
             "perspective": "witness",
-            "triggerTags": ["yuhuayuan", "comfort", "encounter"],
+            "triggerTags": [
+              "yuhuayuan",
+              "comfort",
+              "encounter"
+            ],
             "unresolved": false,
-            "emotions": { "joy": 50, "relief": 30 }
+            "emotions": {
+              "joy": 50,
+              "relief": 30
+            }
           }
         }
       ]
@@ -81,7 +165,12 @@
         "expression": "frown"
       },
       "effects": [
-        { "type": "adjust_consort_attr", "role": "protagonist", "field": "fear", "delta": 1 }
+        {
+          "type": "adjust_consort_attr",
+          "role": "protagonist",
+          "field": "fear",
+          "delta": 1
+        }
       ],
       "memories": [
         {
@@ -91,11 +180,21 @@
             "summary": "陛下问我是否特意候驾，我没有承认。",
             "strength": 60,
             "retention": "slow",
-            "subjectIds": ["player", "protagonist"],
+            "subjectIds": [
+              "player",
+              "protagonist"
+            ],
             "perspective": "witness",
-            "triggerTags": ["yuhuayuan", "scrutiny", "encounter"],
+            "triggerTags": [
+              "yuhuayuan",
+              "scrutiny",
+              "encounter"
+            ],
             "unresolved": true,
-            "emotions": { "shame": 30, "fear": 20 }
+            "emotions": {
+              "shame": 30,
+              "fear": 20
+            }
           }
         }
       ]
@@ -108,8 +207,17 @@
         "expression": "smile"
       },
       "effects": [
-        { "type": "favor", "role": "protagonist", "delta": 3 },
-        { "type": "adjust_consort_attr", "role": "protagonist", "field": "affection", "delta": 2 }
+        {
+          "type": "favor",
+          "role": "protagonist",
+          "delta": 3
+        },
+        {
+          "type": "adjust_consort_attr",
+          "role": "protagonist",
+          "field": "affection",
+          "delta": 2
+        }
       ],
       "memories": [
         {
@@ -119,11 +227,20 @@
             "summary": "陛下邀我在御花园同行一程。那一段路，我记了很久。",
             "strength": 75,
             "retention": "permanent",
-            "subjectIds": ["player", "protagonist"],
+            "subjectIds": [
+              "player",
+              "protagonist"
+            ],
             "perspective": "witness",
-            "triggerTags": ["yuhuayuan", "together", "encounter"],
+            "triggerTags": [
+              "yuhuayuan",
+              "together",
+              "encounter"
+            ],
             "unresolved": false,
-            "emotions": { "joy": 60 }
+            "emotions": {
+              "joy": 60
+            }
           }
         }
       ]
@@ -146,7 +263,12 @@
         "expression": "frown"
       },
       "effects": [
-        { "type": "adjust_consort_attr", "role": "protagonist", "field": "affection", "delta": -1 }
+        {
+          "type": "adjust_consort_attr",
+          "role": "protagonist",
+          "field": "affection",
+          "delta": -1
+        }
       ],
       "memories": [
         {
@@ -156,16 +278,28 @@
             "summary": "在太液池偶遇陛下，陛下未曾停留。",
             "strength": 55,
             "retention": "slow",
-            "subjectIds": ["player", "protagonist"],
+            "subjectIds": [
+              "player",
+              "protagonist"
+            ],
             "perspective": "witness",
-            "triggerTags": ["yuhuayuan", "neglect", "encounter"],
+            "triggerTags": [
+              "yuhuayuan",
+              "neglect",
+              "encounter"
+            ],
             "unresolved": true,
-            "emotions": { "grief": 35 }
+            "emotions": {
+              "grief": 35
+            }
           }
         }
       ]
     }
   ],
   "basePriority": 40,
-  "narrativeBriefTemplate": "场景类型：御花园偶遇。说话人：{protagonist}，当前恩宠与情意见上下文。隐藏真相：{hiddenTruth}。台词须自然，不得自述恩宠数值，不得提出册封或怀孕。"
+  "narrativeBriefTemplate": "场景类型：御花园偶遇。说话人：{protagonist}，当前恩宠与情意见上下文。隐藏真相：{hiddenTruth}。台词须自然，不得自述恩宠数值，不得提出册封或怀孕。",
+  "schedule": {
+    "kind": "ambient"
+  }
 }

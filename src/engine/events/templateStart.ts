@@ -18,6 +18,7 @@ import { fnv1a64Hex } from "../save/canonical";
 import type { GameState, TemplateEventRecord } from "../state/types";
 import type { Checkpoint } from "./engine";
 import { getEligibleTemplates, instantiateTemplate, type EligibleTemplate, type RngFn } from "./templateEngine";
+import { shouldTriggerTemplate, type ScheduleDiagnostic } from "./templateScheduler";
 import { createRuntimeDB, injectInstance, type RuntimeContentDB } from "./templateSynth";
 
 export interface TemplateEventStartPlan {
@@ -29,6 +30,8 @@ export interface TemplateEventStartPlan {
     templateEventNextSeq: number;
     newRecord: TemplateEventRecord;
   };
+  /** 调度诊断（可传入 trace，不进 GameState）。 */
+  scheduleDiagnostic: ScheduleDiagnostic;
 }
 
 /** fnv1a64Hex 种子派生线性同余 RNG。 */
@@ -46,8 +49,19 @@ function planFromEligible(
   eligible: readonly EligibleTemplate[],
   locationId: string,
   seedStr: string,
+  checkpoint: Checkpoint,
 ): TemplateEventStartPlan | null {
   const rng = makeSeededRng(seedStr);
+
+  // 第一个候选的调度门（按 pending/ambient 分类）。
+  // 子地点点击（location_enter）100% 通过；time_advance 走概率门。
+  const firstEligible = eligible.find(({ affordable }) => affordable);
+  if (!firstEligible) return null;
+
+  const kind = firstEligible.template.schedule?.kind ?? "ambient";
+  const { passed, diagnostic } = shouldTriggerTemplate(state, checkpoint, kind, rng);
+  if (!passed) return null;
+
   for (const { template, affordable } of eligible) {
     if (!affordable) continue;
     const instance = instantiateTemplate(db, state, template, rng, state.templateEventNextSeq);
@@ -67,6 +81,7 @@ function planFromEligible(
       instanceId: instance.instanceId,
       templateId: instance.templateId,
       runtimeDb,
+      scheduleDiagnostic: diagnostic,
       statePatch: { templateEventNextSeq: state.templateEventNextSeq + 1, newRecord },
     };
   }
@@ -88,7 +103,7 @@ export function planTemplateEventStart(
     return mode === undefined || mode === "auto_on_enter";
   });
   const seedStr = `template:${state.rngSeed}:${checkpoint}:${state.calendar.dayIndex}:${state.playerLocation}:${state.templateEventNextSeq}`;
-  return planFromEligible(db, state, eligible, state.playerLocation, seedStr);
+  return planFromEligible(db, state, eligible, state.playerLocation, seedStr, checkpoint);
 }
 
 /**
@@ -108,5 +123,5 @@ export function planSubLocationTemplateStart(
       template.presentation.subLocationId === subLocationId,
   );
   const seedStr = `template:${state.rngSeed}:location_enter:${state.calendar.dayIndex}:${locationId}:${subLocationId}:${state.templateEventNextSeq}`;
-  return planFromEligible(db, state, eligible, locationId, seedStr);
+  return planFromEligible(db, state, eligible, locationId, seedStr, "location_enter");
 }

@@ -42,6 +42,7 @@ import { resolvePersonnelDecision } from "../engine/officials/personnelDecisionR
 import { generateAnnualPersonnelEvents, generateFamilyImplication } from "../engine/officials/personnelDecisions";
 import { maybeGenerateAnnualDisaster, maybeGenerateAnnualTreasuryMemorial, maybeGenerateAnnualMilitaryAssessment, resolveMemorial as resolveMemorialEngine } from "../engine/court/memorials";
 import { settleQuarterlyTreasury } from "../engine/court/quarterlySettlement";
+import { maybeScheduleBirthdayRitual } from "../engine/events/ritualSchedule";
 import { applyTreasuryTransaction } from "../engine/court/treasuryLedger";
 import type { PersonnelDecisionResolution } from "../engine/state/types";
 import { appointOfficialCandidate } from "../engine/officials/appointment";
@@ -1815,6 +1816,15 @@ export class GameStore {
       const beforeMilitary = candidate;
       candidate = maybeGenerateAnnualMilitaryAssessment(candidate, db, toGameTime(candidate.calendar));
       collector?.capturePhaseScheduled("annual_military_assessment", diffGameState(beforeMilitary, candidate));
+    }
+
+    // 八月上旬（含 catch-up）→ 万寿节筹办：设 ritual_birthday_pending，年度幂等。
+    {
+      const beforeBirthday = candidate;
+      candidate = maybeScheduleBirthdayRitual(candidate);
+      if (candidate !== beforeBirthday) {
+        collector?.capturePhaseScheduled("birthday_ritual_schedule", diffGameState(beforeBirthday, candidate));
+      }
     }
 
     // 二月（或其后首次推进，含本月内首次推进的 catch-up）→ 候补池增龄/退出 + 生成本年科举。

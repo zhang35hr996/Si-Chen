@@ -4,53 +4,132 @@
   "category": "harem_conflict",
   "checkpoint": "time_advance",
   "apCost": 1,
-  "cooldown": { "actionDays": 45 },
+  "cooldown": {
+    "actionDays": 45
+  },
   "triggerCondition": {
     "all": [
-      { "monthAtLeast": 2 }
+      {
+        "monthAtLeast": 2
+      }
     ]
   },
   "participantRoles": [
     {
       "roleId": "higher_rank",
       "pool": "consort_alive_active",
-      "exclude": ["candidate", "carrying_late"],
+      "exclude": [
+        "candidate",
+        "carrying_late"
+      ],
       "weightFactors": [
-        { "type": "attr_low", "attr": "favor", "threshold": 35, "weight": 3 },
-        { "type": "attr_high", "attr": "pride", "threshold": 60, "weight": 3 }
+        {
+          "type": "attr_low",
+          "attr": "favor",
+          "threshold": 35,
+          "weight": 3
+        },
+        {
+          "type": "attr_high",
+          "attr": "pride",
+          "threshold": 60,
+          "weight": 3
+        }
       ]
     },
     {
       "roleId": "lower_rank",
       "pool": "consort_alive_active",
-      "exclude": ["candidate", "carrying_late"],
+      "exclude": [
+        "candidate",
+        "carrying_late"
+      ],
       "weightFactors": [
-        { "type": "attr_high", "attr": "favor", "threshold": 60, "weight": 4 },
-        { "type": "attr_high", "attr": "ambition", "threshold": 55, "weight": 3 },
-        { "type": "attr_high", "attr": "pride", "threshold": 65, "weight": 2 }
+        {
+          "type": "attr_high",
+          "attr": "favor",
+          "threshold": 60,
+          "weight": 4
+        },
+        {
+          "type": "attr_high",
+          "attr": "ambition",
+          "threshold": 55,
+          "weight": 3
+        },
+        {
+          "type": "attr_high",
+          "attr": "pride",
+          "threshold": 65,
+          "weight": 2
+        }
       ]
     }
   ],
   "participantConstraints": [
-    { "type": "rank_higher_than", "higherRole": "higher_rank", "lowerRole": "lower_rank" }
+    {
+      "type": "rank_higher_than",
+      "higherRole": "higher_rank",
+      "lowerRole": "lower_rank"
+    }
   ],
   "hiddenTruthCandidates": [
-    { "id": "lower_deliberate", "description": "恩宠较高的低位侍君故意不让步", "weight": 3 },
-    { "id": "higher_insisting", "description": "高位失宠者刻意维护礼制", "weight": 3 },
-    { "id": "servants_first", "description": "双方宫人先发生争执，主子被卷入", "weight": 2 },
-    { "id": "misunderstanding", "description": "一方根本无意争执，另一方过度解读", "weight": 2 },
-    { "id": "third_party_instigated", "description": "第三名侍君暗中挑拨", "weight": 2 }
+    {
+      "id": "lower_deliberate",
+      "description": "恩宠较高的低位侍君故意不让步",
+      "weight": 3
+    },
+    {
+      "id": "higher_insisting",
+      "description": "高位失宠者刻意维护礼制",
+      "weight": 3
+    },
+    {
+      "id": "servants_first",
+      "description": "双方宫人先发生争执，主子被卷入",
+      "weight": 2
+    },
+    {
+      "id": "misunderstanding",
+      "description": "一方根本无意争执，另一方过度解读",
+      "weight": 2
+    },
+    {
+      "id": "third_party_instigated",
+      "description": "第三名侍君暗中挑拨",
+      "weight": 2
+    }
   ],
   "openingNarration": {
     "mode": "narration",
     "text": "宫人禀报：{higher_rank}与{lower_rank}在请安时，因谁先行、谁先受礼起了争执。双方都称自己只是按规矩行事，互不相让。"
   },
   "choices": [
-    { "id": "by_rank", "text": "严格按位分裁定", "tone": "neutral" },
-    { "id": "by_seniority", "text": "按入宫资历调解", "tone": "neutral" },
-    { "id": "scold_both", "text": "斥责双方小题大做", "tone": "hostile" },
-    { "id": "punish_instigator", "text": "只处罚先挑衅者", "tone": "neutral" },
-    { "id": "defer_empress", "text": "交六宫主理依宫规处理", "tone": "guarded" }
+    {
+      "id": "by_rank",
+      "text": "严格按位分裁定",
+      "tone": "neutral"
+    },
+    {
+      "id": "by_seniority",
+      "text": "按入宫资历调解",
+      "tone": "neutral"
+    },
+    {
+      "id": "scold_both",
+      "text": "斥责双方小题大做",
+      "tone": "hostile"
+    },
+    {
+      "id": "punish_instigator",
+      "text": "只处罚先挑衅者",
+      "tone": "neutral"
+    },
+    {
+      "id": "defer_empress",
+      "text": "交六宫主理依宫规处理",
+      "tone": "guarded"
+    }
   ],
   "outcomes": [
     {
@@ -61,8 +140,18 @@
         "expression": "neutral"
       },
       "effects": [
-        { "type": "adjust_consort_attr", "role": "lower_rank", "field": "affection", "delta": -2 },
-        { "type": "adjust_consort_attr", "role": "lower_rank", "field": "ambition", "delta": 1 }
+        {
+          "type": "adjust_consort_attr",
+          "role": "lower_rank",
+          "field": "affection",
+          "delta": -2
+        },
+        {
+          "type": "adjust_consort_attr",
+          "role": "lower_rank",
+          "field": "ambition",
+          "delta": 1
+        }
       ],
       "memories": [
         {
@@ -72,11 +161,22 @@
             "summary": "陛下裁定按位分行礼，纵然我恩宠更盛，也须向{higher_rank}先致礼。",
             "strength": 60,
             "retention": "slow",
-            "subjectIds": ["player", "lower_rank", "higher_rank"],
+            "subjectIds": [
+              "player",
+              "lower_rank",
+              "higher_rank"
+            ],
             "perspective": "target",
-            "triggerTags": ["greeting", "rank", "dispute"],
+            "triggerTags": [
+              "greeting",
+              "rank",
+              "dispute"
+            ],
             "unresolved": true,
-            "emotions": { "anger": 30, "grief": 20 }
+            "emotions": {
+              "anger": 30,
+              "grief": 20
+            }
           }
         }
       ]
@@ -99,8 +199,18 @@
         "expression": "worried"
       },
       "effects": [
-        { "type": "adjust_consort_attr", "role": "higher_rank", "field": "fear", "delta": 2 },
-        { "type": "adjust_consort_attr", "role": "lower_rank", "field": "fear", "delta": 2 }
+        {
+          "type": "adjust_consort_attr",
+          "role": "higher_rank",
+          "field": "fear",
+          "delta": 2
+        },
+        {
+          "type": "adjust_consort_attr",
+          "role": "lower_rank",
+          "field": "fear",
+          "delta": 2
+        }
       ],
       "memories": [
         {
@@ -110,11 +220,21 @@
             "summary": "为请安次序之事被陛下当面斥责。",
             "strength": 65,
             "retention": "slow",
-            "subjectIds": ["player", "higher_rank"],
+            "subjectIds": [
+              "player",
+              "higher_rank"
+            ],
             "perspective": "target",
-            "triggerTags": ["greeting", "scolded", "dispute"],
+            "triggerTags": [
+              "greeting",
+              "scolded",
+              "dispute"
+            ],
             "unresolved": true,
-            "emotions": { "shame": 40, "fear": 25 }
+            "emotions": {
+              "shame": 40,
+              "fear": 25
+            }
           }
         },
         {
@@ -124,11 +244,21 @@
             "summary": "为请安次序之事被陛下当面斥责。",
             "strength": 65,
             "retention": "slow",
-            "subjectIds": ["player", "lower_rank"],
+            "subjectIds": [
+              "player",
+              "lower_rank"
+            ],
             "perspective": "target",
-            "triggerTags": ["greeting", "scolded", "dispute"],
+            "triggerTags": [
+              "greeting",
+              "scolded",
+              "dispute"
+            ],
             "unresolved": true,
-            "emotions": { "shame": 40, "fear": 25 }
+            "emotions": {
+              "shame": 40,
+              "fear": 25
+            }
           }
         }
       ]
@@ -141,7 +271,12 @@
         "expression": "neutral"
       },
       "effects": [
-        { "type": "adjust_consort_attr", "role": "lower_rank", "field": "fear", "delta": 3 }
+        {
+          "type": "adjust_consort_attr",
+          "role": "lower_rank",
+          "field": "fear",
+          "delta": 3
+        }
       ],
       "memories": [
         {
@@ -151,11 +286,21 @@
             "summary": "陛下认定我是先挑衅者，给了处罚。",
             "strength": 70,
             "retention": "slow",
-            "subjectIds": ["player", "lower_rank"],
+            "subjectIds": [
+              "player",
+              "lower_rank"
+            ],
             "perspective": "target",
-            "triggerTags": ["greeting", "punished", "dispute"],
+            "triggerTags": [
+              "greeting",
+              "punished",
+              "dispute"
+            ],
             "unresolved": true,
-            "emotions": { "anger": 35, "fear": 30 }
+            "emotions": {
+              "anger": 35,
+              "fear": 30
+            }
           }
         }
       ]
@@ -172,5 +317,8 @@
     }
   ],
   "basePriority": 42,
-  "narrativeBriefTemplate": "场景类型：六宫礼制纷争。{higher_rank}与{lower_rank}因请安次序起争执。隐藏真相：{hiddenTruth}。双方应克制有礼，不得公开吵架，除非性格极不稳定。"
+  "narrativeBriefTemplate": "场景类型：六宫礼制纷争。{higher_rank}与{lower_rank}因请安次序起争执。隐藏真相：{hiddenTruth}。双方应克制有礼，不得公开吵架，除非性格极不稳定。",
+  "schedule": {
+    "kind": "ambient"
+  }
 }

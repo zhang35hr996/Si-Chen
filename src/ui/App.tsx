@@ -40,6 +40,7 @@ import {
   planSubLocationTemplateStart,
   type TemplateEventStartPlan,
 } from "../engine/events/templateStart";
+import { previewSubLocationTemplate } from "../engine/events/templatePreview";
 import type { RuntimeContentDB } from "../engine/events/templateSynth";
 import { assetError, stateError } from "../engine/infra/errors";
 
@@ -2110,8 +2111,25 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         const subAreas: GardenSubAreaView[] = (loc.subLocations ?? []).map((sa) => {
           const ev = pickSubLocationEvent(db, liveState, "yuhuayuan", sa.id);
           const sbg = registry.resolveVariant(sa.backgroundKey, timeOfDay(liveState.calendar), "background");
-          const hint = ev?.presentation?.mode === "exploration" ? ev.presentation.eventHint : undefined;
-          const affordable = ev ? subLocationEventAffordable(liveState, ev) : undefined;
+          if (ev) {
+            // 静态事件优先：hint 和 affordable 均以静态事件为准
+            const hint = ev.presentation?.mode === "exploration" ? ev.presentation.eventHint : undefined;
+            const affordable = subLocationEventAffordable(liveState, ev);
+            return {
+              id: sa.id,
+              name: sa.name,
+              description: sa.description,
+              background: sbg.url,
+              isFallbackBackground: sbg.isFallback,
+              backgroundPosition: sa.backgroundPosition,
+              hasEvent: true,
+              eventHint: hint,
+              eventAffordable: affordable,
+              eventReason: affordable === false ? `行动力不足（需 ${ev.apCost} 行动点）。` : undefined,
+            };
+          }
+          // 无静态事件时：查询模板线索预览（只读，不实例化）
+          const preview = previewSubLocationTemplate(db, liveState, "yuhuayuan", sa.id);
           return {
             id: sa.id,
             name: sa.name,
@@ -2119,10 +2137,10 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             background: sbg.url,
             isFallbackBackground: sbg.isFallback,
             backgroundPosition: sa.backgroundPosition,
-            hasEvent: ev !== null,
-            eventHint: hint,
-            eventAffordable: affordable,
-            eventReason: ev && affordable === false ? `行动力不足（需 ${ev.apCost} 行动点）。` : undefined,
+            hasEvent: preview !== null,
+            eventHint: preview?.eventHint,
+            eventAffordable: preview?.affordable,
+            eventReason: preview && !preview.affordable ? `行动力不足。` : undefined,
           };
         });
         const activeSub = gardenSubLocationId ? subAreas.find((s) => s.id === gardenSubLocationId) ?? null : null;

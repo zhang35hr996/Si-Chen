@@ -29,6 +29,7 @@ function makeAutoTemplate(id: string): EventTemplate {
     ],
     participantConstraints: [],
     presentation: { mode: "auto_on_enter" },
+    schedule: { kind: "pending" as const },
     hiddenTruthCandidates: [{ id: "truth_a", description: "a", weight: 1 }],
     openingNarration: { mode: "narration", text: "test narration" },
     choices: [
