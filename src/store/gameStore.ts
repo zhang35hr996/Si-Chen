@@ -95,6 +95,10 @@ import {
 } from "../engine/characters/haremDisciplineResolver";
 import { settleHaremIntrigue } from "../engine/characters/haremIntrigueSettlement";
 import { createIntrigueInvestigationCase, cancelIntrigueInvestigationCase } from "../engine/characters/haremInvestigation/createCase";
+import { availableInvestigationActions, validateCanStartTask } from "../engine/characters/haremInvestigation/actions";
+import { settleDueInvestigationTasks, nextTaskId } from "../engine/characters/haremInvestigation/settlement";
+import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS } from "../engine/characters/haremInvestigation/types";
+import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -1883,6 +1887,14 @@ export class GameStore {
       collector?.capturePhaseScheduled("harem_intrigue_settlement", diffGameState(beforeIntrigue, candidate));
     }
 
+    // 5-mid-inv) 调查任务结算（Phase 5B-2）。每次时间推进后均运行（按行动日计算，不限 monthChanged）。
+    {
+      const beforeInv = candidate;
+      const invResult = settleDueInvestigationTasks(db, candidate, toGameTime(candidate.calendar));
+      candidate = invResult.state;
+      collector?.capturePhaseScheduled("investigation_task_settlement", diffGameState(beforeInv, candidate));
+    }
+
     // 5) Cold-palace incident generation (月度；replay-stable).
     if (monthChanged) {
       // 5a) Critical-illness incidents — health ≤ CRITICAL_HEALTH_THRESHOLD (PUNISH-4D).
@@ -2762,6 +2774,114 @@ export class GameStore {
     this.state = result.value;
     this.emit();
     return ok(undefined);
+  }
+
+  /**
+   * 开始一个调查任务：校验 → 扣 AP → 写入 task → 更新案件状态。
+   * 通过 resolveTimedActionWithPostAdvance 原子提交，AP 不足时完整回滚。
+   */
+  startHaremInvestigationTask(
+    db: ContentDB,
+    caseId: string,
+    method: InvestigationMethod,
+    subjectId?: string,
+  ): Result<{ taskId: string }, GameError[]> {
+    const c = this.state.haremInvestigationCases.find((x) => x.id === caseId);
+    if (!c) {
+      return err([stateError("INTRIGUE_CASE_NOT_FOUND", `haremInvestigationCases: case "${caseId}" not found`)]);
+    }
+
+    const validationError = validateCanStartTask(this.state, c, method, subjectId);
+    if (validationError) {
+      return err([stateError("INTRIGUE_TASK_INVALID", validationError)]);
+    }
+
+    const apCost = INVESTIGATION_METHOD_AP[method];
+    const durationDays = INVESTIGATION_METHOD_DAYS[method];
+
+    let generatedTaskId = "";
+
+    const result = this.resolveTimedActionWithPostAdvance(
+      db,
+      [],
+      { type: "SPEND_AP", amount: apCost },
+      (s) => {
+        const taskId = nextTaskId(s.haremInvestigationNextSeq);
+        generatedTaskId = taskId;
+        const requestedAt = toGameTime(s.calendar);
+        const dueAt = fromTurnIndex(requestedAt.dayIndex + durationDays);
+        const newTask = {
+          id: taskId,
+          caseId,
+          method,
+          subjectId,
+          requestedAt,
+          dueAt,
+          status: "pending" as const,
+        };
+        const caseIdx = s.haremInvestigationCases.findIndex((x) => x.id === caseId);
+        const updatedCases = [...s.haremInvestigationCases];
+        updatedCases[caseIdx] = { ...c, status: "in_progress" };
+        return {
+          ...s,
+          haremInvestigationTasks: { ...s.haremInvestigationTasks, [taskId]: newTask },
+          haremInvestigationNextSeq: s.haremInvestigationNextSeq + 1,
+          haremInvestigationCases: updatedCases,
+        };
+      },
+    );
+    if (!result.ok) return err(result.error);
+    return ok({ taskId: generatedTaskId });
+  }
+
+  /**
+   * 裁定调查结果：确认主谋 / 结案不明 / 继续调查。
+   * 只在 ready_for_review 状态且满足约束时允许。
+   */
+  reviewHaremInvestigation(
+    caseId: string,
+    decision:
+      | { type: "continue" }
+      | { type: "close_unresolved" }
+      | { type: "confirm"; suspectId: string },
+  ): Result<void, GameError[]> {
+    const at = toGameTime(this.state.calendar);
+    const c = this.state.haremInvestigationCases.find((x) => x.id === caseId);
+    if (!c) {
+      return err([stateError("INTRIGUE_CASE_NOT_FOUND", `haremInvestigationCases: case "${caseId}" not found`)]);
+    }
+    if (c.status !== "ready_for_review") {
+      return err([stateError("INTRIGUE_CASE_WRONG_STATUS", `案件 "${caseId}" 状态 "${c.status}" 不可裁定，须为 ready_for_review`)]);
+    }
+
+    const idx = this.state.haremInvestigationCases.findIndex((x) => x.id === caseId);
+    let updated: typeof c;
+
+    if (decision.type === "continue") {
+      updated = { ...c, status: "open" };
+    } else if (decision.type === "close_unresolved") {
+      updated = { ...c, status: "closed_unresolved", closedAt: at, closureReason: "insufficient_evidence" };
+    } else {
+      // confirm
+      if (c.confidence !== "confirmed") {
+        return err([stateError("INTRIGUE_CASE_CONFIRM_REQUIRES_CONFIRMED", `案件 "${caseId}" 置信度 "${c.confidence}" 须为 confirmed 才能确认主谋`)]);
+      }
+      if (!c.suspectIds.includes(decision.suspectId)) {
+        return err([stateError("INTRIGUE_CASE_SUSPECT_NOT_FOUND", `"${decision.suspectId}" 不在当前嫌疑人名单 suspectIds 中`)]);
+      }
+      updated = { ...c, status: "closed_confirmed", closedAt: at, closureReason: "culprit_confirmed" };
+    }
+
+    const cases = [...this.state.haremInvestigationCases];
+    cases[idx] = updated;
+    this.state = { ...this.state, haremInvestigationCases: cases };
+    this.emit();
+    return ok(undefined);
+  }
+
+  /** 仅暴露供 UI 使用，不写 state。 */
+  getAvailableInvestigationActions(caseId: string) {
+    return availableInvestigationActions(this.state, caseId);
   }
 
   acknowledgeHaremAdminReview(reviewId: string): boolean {

@@ -140,6 +140,8 @@ describe("createIntrigueInvestigationCase", () => {
     const errors = validateHaremInvestigationLinks({
       haremIntrigueReports: r.value.state.haremIntrigueReports,
       haremInvestigationCases: r.value.state.haremInvestigationCases,
+      haremInvestigationTasks: r.value.state.haremInvestigationTasks,
+      haremInvestigationLeads: r.value.state.haremInvestigationLeads,
       incidentIds: new Set(["incident_001"]),
     });
     expect(errors).toEqual([]);
@@ -221,7 +223,7 @@ describe("validateHaremInvestigationLinks", () => {
     reports: HaremIntrigueReport[],
     cases: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationCases"],
     incidentIds = new Set(["incident_001"]),
-  ) => validateHaremInvestigationLinks({ haremIntrigueReports: reports, haremInvestigationCases: cases, incidentIds });
+  ) => validateHaremInvestigationLinks({ haremIntrigueReports: reports, haremInvestigationCases: cases, haremInvestigationTasks: {}, haremInvestigationLeads: {}, incidentIds });
 
   it("empty arrays → no errors", () => {
     expect(makeInput([], [])).toEqual([]);

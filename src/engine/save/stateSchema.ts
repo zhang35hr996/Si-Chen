@@ -1011,6 +1011,29 @@ export const gameStateSchema = z.strictObject({
     closedAt: gameTimeSchema.optional(),
     closureReason: z.enum(["player_cancelled", "insufficient_evidence", "culprit_confirmed"]).optional(),
   })).default([]),
+  haremInvestigationTasks: z.record(z.string(), z.strictObject({
+    id: z.string().min(1),
+    caseId: z.string().min(1),
+    method: z.enum(["question_target", "question_suspect", "quiet_inquiry"]),
+    subjectId: idSchema.optional(),
+    requestedAt: gameTimeSchema,
+    dueAt: gameTimeSchema,
+    status: z.enum(["pending", "resolved", "cancelled"]),
+    resolvedAt: gameTimeSchema.optional(),
+    leadId: z.string().optional(),
+  })).default({}),
+  haremInvestigationLeads: z.record(z.string(), z.strictObject({
+    id: z.string().min(1),
+    caseId: z.string().min(1),
+    discoveredAt: gameTimeSchema,
+    method: z.enum(["question_target", "question_suspect", "quiet_inquiry"]),
+    summaryCode: z.string().min(1),
+    strength: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
+    implicatedIds: z.array(idSchema),
+    clearedIds: z.array(idSchema),
+    revealedKinds: z.array(z.enum(["slander", "false_accusation", "steal_credit", "faction_pressure", "servant_subversion"])),
+  })).default({}),
+  haremInvestigationNextSeq: z.number().int().min(1).default(1),
   settledHaremIntriguePeriods: z.array(z.string().regex(/^harem_intrigue_settlement:\d+:\d{2}$/)).default([]),
   haremDisciplineIncidents: z.array(z.strictObject({
     id: idSchema,
@@ -1114,6 +1137,8 @@ export const gameStateSchema = z.strictObject({
     ...validateHaremInvestigationLinks({
       haremIntrigueReports: (data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIntrigueReports,
       haremInvestigationCases: (data as { haremInvestigationCases: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationCases"] }).haremInvestigationCases,
+      haremInvestigationTasks: (data as { haremInvestigationTasks: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationTasks"] }).haremInvestigationTasks,
+      haremInvestigationLeads: (data as { haremInvestigationLeads: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationLeads"] }).haremInvestigationLeads,
       incidentIds: new Set((data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIncidents.map((i) => i.id)),
     }),
   ];

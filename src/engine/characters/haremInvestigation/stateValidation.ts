@@ -1,10 +1,10 @@
 /**
- * 调查案件集合级链接完整性校验（Phase 5B-1A）。
+ * 调查案件集合级链接完整性校验（Phase 5B-1A + 5B-2）。
  * 在 stateSchema superRefine 中调用。
  */
 import { stateError, type GameError } from "../../infra/errors";
 import type { HaremIntrigueReport } from "../../state/types";
-import type { IntrigueInvestigationCase } from "./types";
+import type { IntrigueInvestigationCase, IntrigueInvestigationTask, IntrigueInvestigationLead } from "./types";
 import { isActiveCase } from "./types";
 
 const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation_final"]);
@@ -12,6 +12,8 @@ const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation
 export interface HaremInvestigationValidationInput {
   haremIntrigueReports: HaremIntrigueReport[];
   haremInvestigationCases: IntrigueInvestigationCase[];
+  haremInvestigationTasks: Record<string, IntrigueInvestigationTask>;
+  haremInvestigationLeads: Record<string, IntrigueInvestigationLead>;
   incidentIds: Set<string>;
 }
 
@@ -19,7 +21,7 @@ export function validateHaremInvestigationLinks(
   data: HaremInvestigationValidationInput,
 ): GameError[] {
   const errors: GameError[] = [];
-  const { haremIntrigueReports, haremInvestigationCases, incidentIds } = data;
+  const { haremIntrigueReports, haremInvestigationCases, haremInvestigationTasks, haremInvestigationLeads, incidentIds } = data;
 
   const reportById = new Map(haremIntrigueReports.map((r) => [r.id, r]));
   const caseIds = new Set<string>();
@@ -92,6 +94,23 @@ export function validateHaremInvestigationLinks(
       if (!c.closureReason) {
         errors.push(stateError("INTRIGUE_CASE_LIFECYCLE", `haremInvestigationCases[id=${c.id}]: status=${c.status} 但无 closureReason`));
       }
+    }
+  }
+
+  // Task 孤儿校验：task.caseId 必须指向存在的案件
+  for (const task of Object.values(haremInvestigationTasks)) {
+    if (!caseIds.has(task.caseId)) {
+      errors.push(stateError("INTRIGUE_TASK_ORPHAN", `haremInvestigationTasks[id=${task.id}]: caseId="${task.caseId}" 对应案件不存在`));
+    }
+    if (task.leadId && !haremInvestigationLeads[task.leadId]) {
+      errors.push(stateError("INTRIGUE_TASK_ORPHAN_LEAD", `haremInvestigationTasks[id=${task.id}]: leadId="${task.leadId}" 对应线索不存在`));
+    }
+  }
+
+  // Lead 孤儿校验：lead.caseId 必须指向存在的案件
+  for (const lead of Object.values(haremInvestigationLeads)) {
+    if (!caseIds.has(lead.caseId)) {
+      errors.push(stateError("INTRIGUE_LEAD_ORPHAN", `haremInvestigationLeads[id=${lead.id}]: caseId="${lead.caseId}" 对应案件不存在`));
     }
   }
 
