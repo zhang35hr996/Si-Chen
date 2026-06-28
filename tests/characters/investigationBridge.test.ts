@@ -88,11 +88,12 @@ describe("5B-2B1: anomaly bundle generation", () => {
     // 公开字段来自 incident，不来自 truth
     expect(report.knownTargetIds).toEqual(["heir_001"]);
     expect(report.suspectedActorIds).toEqual(["lu_huaijin"]); // = initiallyAccusedIds
+    expect(report.reportKind).toBe("anomaly");
+    expect(report.status).toBe("unread");
+    if (report.reportKind !== "anomaly") throw new Error("expected anomaly report");
     expect(report.accuserIds).toEqual(["bai_zhuying"]);
     expect(report.symptomCode).toBe("hysteria");
     expect(report.publicFactCodes).toEqual(["heir_fell_ill"]);
-    expect(report.status).toBe("unread");
-    expect(report.reportKind).toBe("anomaly");
   });
 
   it("IB-03: 同参数重复调用幂等，state 仍各一", () => {
@@ -167,7 +168,8 @@ describe("5B-2B1: open case from anomaly report", () => {
     const report = store.getState().investigationPublicReports.find((rr) => rr.id === reportId);
     expect(report!.status).toBe("investigating");
     expect(report!.linkedInvestigationId).toBe(opened.value.caseId);
-    expect(report!.acknowledgedAt).toBeDefined();
+    if (report?.reportKind !== "anomaly") throw new Error("expected anomaly report");
+    expect(report.acknowledgedAt).toBeDefined();
   });
 
   it("IB-06: 重复立案幂等，仅一个案件", () => {
@@ -223,8 +225,8 @@ describe("5B-2B1: open case from anomaly report", () => {
   });
 });
 
-describe("5B-2B1: investigation_incident 暂禁旧任务结算", () => {
-  it("IB-10: investigation_incident 案件无任何可用旧调查行动", () => {
+describe("5B-2B2A: investigation_incident 案件使用证据调查行动", () => {
+  it("IB-10: investigation_incident 案件返回证据调查行动（不再封锁）", () => {
     const store = createGameStore();
     store.loadState(makeState());
     const made = store.createHeirHealthAnomalyIncident(PARAMS);
@@ -232,10 +234,18 @@ describe("5B-2B1: investigation_incident 暂禁旧任务结算", () => {
     const opened = store.openInvestigationFromAnomalyReport(made.value.reportId);
     if (!opened.ok) return;
     const actions = availableInvestigationActions(store.getState(), opened.value.caseId);
-    expect(actions).toEqual([]);
+    const methods = actions.map((a) => a.method);
+    // 不返回旧宫斗方法
+    expect(methods).not.toContain("question_target");
+    expect(methods).not.toContain("question_suspect");
+    expect(methods).not.toContain("quiet_inquiry");
+    // 返回证据调查方法（始终可用的三种）
+    expect(methods).toContain("question_servants");
+    expect(methods).toContain("reconstruct_timeline");
+    expect(methods).toContain("trace_money");
   });
 
-  it("IB-11: 直接 startHaremInvestigationTask → 报错，不扣 AP，不建 task，案件保持 open", () => {
+  it("IB-11: investigation_incident 案件不接受旧调查方法 → 报错", () => {
     const store = createGameStore();
     store.loadState(makeState());
     const made = store.createHeirHealthAnomalyIncident(PARAMS);

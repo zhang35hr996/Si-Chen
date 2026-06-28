@@ -20,7 +20,7 @@ import {
   hashStr,
 } from "./truth/truthResolver";
 import type { HeirHealthAnomalyIncident, HeirHealthSymptom } from "./truth/types";
-import type { InvestigationPublicReport } from "./types";
+import type { HeirHealthAnomalyPublicReport } from "./types";
 
 export interface HeirHealthAnomalyBundleParams {
   victimHeirId: string;
@@ -121,7 +121,7 @@ export function createHeirHealthAnomalyBundle(
   const truth = resolveInvestigationTruth(context, state.rngSeed);
 
   // 脱敏公开报告：只取 incident 公开字段，绝不读取 truth
-  const report: InvestigationPublicReport = {
+  const report: HeirHealthAnomalyPublicReport = {
     id: reportId,
     source: { kind: "investigation_incident", incidentId },
     reportKind: "anomaly",

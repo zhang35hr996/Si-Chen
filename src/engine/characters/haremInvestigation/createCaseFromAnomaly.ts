@@ -17,10 +17,14 @@ export function createInvestigationCaseFromAnomalyReport(
   reportId: string,
   at: GameTime,
 ): Result<{ state: GameState; caseId: string }, GameError[]> {
-  const report = state.investigationPublicReports.find((r) => r.id === reportId);
-  if (!report) {
+  const _r = state.investigationPublicReports.find((r) => r.id === reportId);
+  if (!_r) {
     return err([stateError("INVESTIGATION_PUBLIC_REPORT_NOT_FOUND", `investigationPublicReports: report "${reportId}" not found`)]);
   }
+  if (_r.reportKind !== "anomaly") {
+    return err([stateError("INVESTIGATION_PUBLIC_REPORT_NOT_FOUND", `investigationPublicReports: report "${reportId}" reportKind="${_r.reportKind}" is not an anomaly report`)]);
+  }
+  const report = _r;
 
   // 写状态前确认底层 incident 存在，避免先建出孤儿案件、直到存档校验才失败
   const incident = state.investigationIncidents.find((i) => i.id === report.source.incidentId);
@@ -64,7 +68,7 @@ export function createInvestigationCaseFromAnomalyReport(
   };
 
   const updatedReports = state.investigationPublicReports.map((r) =>
-    r.id === reportId
+    r.id === reportId && r.reportKind === "anomaly"
       ? { ...r, status: "investigating" as const, acknowledgedAt, linkedInvestigationId: caseId }
       : r,
   );

@@ -305,55 +305,74 @@ export function validateInvestigationPublicReports(
     const incident = incidentById.get(r.source.incidentId);
     if (!incident) {
       errors.push(stateError("INVESTIGATION_REPORT_ORPHAN_INCIDENT", `investigationPublicReports[id=${r.id}]: source.incidentId="${r.source.incidentId}" 在 investigationIncidents 中不存在`));
+    }
+
+    if (r.reportKind === "anomaly") {
+      // 皇嗣异常报告：与 incident 字段一致性（脱敏映射不得篡改公开事实）
+      if (incident) {
+        if (r.eventFamily !== incident.eventFamily) {
+          errors.push(stateError("INVESTIGATION_REPORT_FAMILY_MISMATCH", `investigationPublicReports[id=${r.id}]: eventFamily="${r.eventFamily}" 与 incident="${incident.eventFamily}" 不一致`));
+        }
+        if (r.symptomCode !== incident.symptom) {
+          errors.push(stateError("INVESTIGATION_REPORT_SYMPTOM_MISMATCH", `investigationPublicReports[id=${r.id}]: symptomCode="${r.symptomCode}" 与 incident.symptom="${incident.symptom}" 不一致`));
+        }
+        if (!arrEq(r.knownTargetIds, [incident.victimHeirId])) {
+          errors.push(stateError("INVESTIGATION_REPORT_TARGET_MISMATCH", `investigationPublicReports[id=${r.id}]: knownTargetIds 必须恰为 [incident.victimHeirId="${incident.victimHeirId}"]`));
+        }
+        if (!arrEq(r.accuserIds, incident.accuserIds)) {
+          errors.push(stateError("INVESTIGATION_REPORT_ACCUSER_MISMATCH", `investigationPublicReports[id=${r.id}]: accuserIds 与 incident.accuserIds 不一致`));
+        }
+        if (!arrEq(r.suspectedActorIds, incident.initiallyAccusedIds)) {
+          errors.push(stateError("INVESTIGATION_REPORT_ACCUSED_MISMATCH", `investigationPublicReports[id=${r.id}]: suspectedActorIds 必须等于 incident.initiallyAccusedIds`));
+        }
+      }
+
+      // anomaly 生命周期
+      switch (r.status) {
+        case "unread":
+          if (r.acknowledgedAt) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=unread 不得有 acknowledgedAt`));
+          if (r.linkedInvestigationId) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=unread 不得有 linkedInvestigationId`));
+          break;
+        case "acknowledged":
+          if (!r.acknowledgedAt) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=acknowledged 必须有 acknowledgedAt`));
+          if (r.linkedInvestigationId) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=acknowledged 不得有 linkedInvestigationId`));
+          break;
+        case "investigating":
+          if (!r.acknowledgedAt) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=investigating 必须有 acknowledgedAt`));
+          if (!r.linkedInvestigationId) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=investigating 必须有 linkedInvestigationId`));
+          break;
+      }
+
+      // anomaly 反向链接
+      if (r.linkedInvestigationId) {
+        const linkedCase = caseById.get(r.linkedInvestigationId);
+        if (!linkedCase) {
+          errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: linkedInvestigationId="${r.linkedInvestigationId}" 对应 case 不存在`));
+        } else {
+          if (linkedCase.source.kind !== "investigation_incident") {
+            errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: 链接案件 source.kind="${linkedCase.source.kind}"，期望 investigation_incident`));
+          }
+          if (linkedCase.source.reportId !== r.id) {
+            errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: case.source.reportId="${linkedCase.source.reportId}" 与 report.id 不一致`));
+          }
+          if (linkedCase.source.incidentId !== r.source.incidentId) {
+            errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: case.source.incidentId="${linkedCase.source.incidentId}" 与 report.source.incidentId 不一致`));
+          }
+        }
+      }
     } else {
-      // 与 incident 字段一致性（脱敏映射不得篡改公开事实）
-      if (r.eventFamily !== incident.eventFamily) {
-        errors.push(stateError("INVESTIGATION_REPORT_FAMILY_MISMATCH", `investigationPublicReports[id=${r.id}]: eventFamily="${r.eventFamily}" 与 incident="${incident.eventFamily}" 不一致`));
-      }
-      if (r.symptomCode !== incident.symptom) {
-        errors.push(stateError("INVESTIGATION_REPORT_SYMPTOM_MISMATCH", `investigationPublicReports[id=${r.id}]: symptomCode="${r.symptomCode}" 与 incident.symptom="${incident.symptom}" 不一致`));
-      }
-      if (!arrEq(r.knownTargetIds, [incident.victimHeirId])) {
-        errors.push(stateError("INVESTIGATION_REPORT_TARGET_MISMATCH", `investigationPublicReports[id=${r.id}]: knownTargetIds 必须恰为 [incident.victimHeirId="${incident.victimHeirId}"]`));
-      }
-      if (!arrEq(r.accuserIds, incident.accuserIds)) {
-        errors.push(stateError("INVESTIGATION_REPORT_ACCUSER_MISMATCH", `investigationPublicReports[id=${r.id}]: accuserIds 与 incident.accuserIds 不一致`));
-      }
-      if (!arrEq(r.suspectedActorIds, incident.initiallyAccusedIds)) {
-        errors.push(stateError("INVESTIGATION_REPORT_ACCUSED_MISMATCH", `investigationPublicReports[id=${r.id}]: suspectedActorIds 必须等于 incident.initiallyAccusedIds`));
-      }
-    }
-
-    // 生命周期不变量
-    switch (r.status) {
-      case "unread":
-        if (r.acknowledgedAt) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=unread 不得有 acknowledgedAt`));
-        if (r.linkedInvestigationId) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=unread 不得有 linkedInvestigationId`));
-        break;
-      case "acknowledged":
-        if (!r.acknowledgedAt) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=acknowledged 必须有 acknowledgedAt`));
-        if (r.linkedInvestigationId) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=acknowledged 不得有 linkedInvestigationId`));
-        break;
-      case "investigating":
-        if (!r.acknowledgedAt) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=investigating 必须有 acknowledgedAt`));
-        if (!r.linkedInvestigationId) errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: status=investigating 必须有 linkedInvestigationId`));
-        break;
-    }
-
-    // 反向链接：linkedInvestigationId → case 一致性
-    if (r.linkedInvestigationId) {
-      const linkedCase = caseById.get(r.linkedInvestigationId);
-      if (!linkedCase) {
-        errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: linkedInvestigationId="${r.linkedInvestigationId}" 对应 case 不存在`));
+      // 调查进展通报（investigation_update / investigation_final）
+      // linkedInvestigationId 始终必须存在（schema 也已 required）
+      if (!r.linkedInvestigationId) {
+        errors.push(stateError("INVESTIGATION_REPORT_LIFECYCLE", `investigationPublicReports[id=${r.id}]: 进展通报必须有 linkedInvestigationId`));
       } else {
-        if (linkedCase.source.kind !== "investigation_incident") {
-          errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: 链接案件 source.kind="${linkedCase.source.kind}"，期望 investigation_incident`));
-        }
-        if (linkedCase.source.reportId !== r.id) {
-          errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: case.source.reportId="${linkedCase.source.reportId}" 与 report.id 不一致`));
-        }
-        if (linkedCase.source.incidentId !== r.source.incidentId) {
-          errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: case.source.incidentId="${linkedCase.source.incidentId}" 与 report.source.incidentId 不一致`));
+        const linkedCase = caseById.get(r.linkedInvestigationId);
+        if (!linkedCase) {
+          errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: linkedInvestigationId="${r.linkedInvestigationId}" 对应 case 不存在`));
+        } else {
+          if (linkedCase.source.incidentId !== r.source.incidentId) {
+            errors.push(stateError("INVESTIGATION_REPORT_BROKEN_LINK", `investigationPublicReports[id=${r.id}]: case.source.incidentId 与 report.source.incidentId 不一致`));
+          }
         }
       }
     }
