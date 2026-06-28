@@ -167,6 +167,13 @@ export function validateHaremInvestigationLinks(
       if (task.leadId && !haremInvestigationLeads[task.leadId]) {
         errors.push(stateError("INTRIGUE_TASK_ORPHAN_LEAD", `haremInvestigationTasks[id=${task.id}]: leadId="${task.leadId}" 对应线索不存在`));
       }
+      // task.leadId 对应的 lead.caseId 必须等于 task.caseId
+      if (task.leadId) {
+        const linkedLead = haremInvestigationLeads[task.leadId];
+        if (linkedLead && linkedLead.caseId !== task.caseId) {
+          errors.push(stateError("INTRIGUE_TASK_LEAD_CASE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: leadId="${task.leadId}" 的 lead.caseId="${linkedLead.caseId}" 与 task.caseId="${task.caseId}" 不一致`));
+        }
+      }
     }
   }
 
@@ -179,6 +186,11 @@ export function validateHaremInvestigationLinks(
     // lead.caseId 必须存在
     if (!caseIds.has(lead.caseId)) {
       errors.push(stateError("INTRIGUE_LEAD_ORPHAN", `haremInvestigationLeads[id=${lead.id}]: caseId="${lead.caseId}" 对应案件不存在`));
+    }
+    // lead.id 必须出现在其 case.leadIds 中（反向引用）
+    const parentCase = haremInvestigationCases.find((c) => c.id === lead.caseId);
+    if (parentCase && !parentCase.leadIds.includes(lead.id)) {
+      errors.push(stateError("INTRIGUE_LEAD_NOT_IN_CASE", `haremInvestigationLeads[id=${lead.id}]: 未出现在 case[id=${lead.caseId}].leadIds 中`));
     }
   }
 

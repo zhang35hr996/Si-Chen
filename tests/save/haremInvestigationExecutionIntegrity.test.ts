@@ -234,4 +234,31 @@ describe("validateHaremInvestigationLinks — execution integrity", () => {
     const errs = validateHaremInvestigationLinks({ ...makeInput(s), haremInvestigationCases: cases });
     expect(errs.some((e) => e.code === "INTRIGUE_LEAD_MISSING")).toBe(true);
   });
+
+  it("resolved task leadId points to lead with different caseId → INTRIGUE_TASK_LEAD_CASE_MISMATCH", () => {
+    const s = makeBaseState();
+    const wrongCaseLead = { ...BASE_LEAD, id: "ilead_000001", caseId: "icase_other" };
+    const input = {
+      ...makeInput(s),
+      haremInvestigationTasks: {
+        "itask_000001": { ...BASE_TASK, status: "resolved" as const, resolvedAt: AT2, leadId: "ilead_000001" },
+      },
+      haremInvestigationLeads: { "ilead_000001": wrongCaseLead },
+      haremInvestigationNextSeq: 2,
+    };
+    const errs = validateHaremInvestigationLinks(input);
+    expect(errs.some((e) => e.code === "INTRIGUE_TASK_LEAD_CASE_MISMATCH")).toBe(true);
+  });
+
+  it("lead exists but is not in case.leadIds → INTRIGUE_LEAD_NOT_IN_CASE", () => {
+    const s = makeBaseState();
+    // lead points to correct case, but case.leadIds doesn't include it
+    const input = {
+      ...makeInput(s),
+      haremInvestigationLeads: { "ilead_000001": BASE_LEAD },
+      haremInvestigationNextSeq: 2,
+    };
+    const errs = validateHaremInvestigationLinks(input);
+    expect(errs.some((e) => e.code === "INTRIGUE_LEAD_NOT_IN_CASE")).toBe(true);
+  });
 });
