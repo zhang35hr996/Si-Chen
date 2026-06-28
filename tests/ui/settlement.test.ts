@@ -161,8 +161,8 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     // pendingDaxuan must be able to drain after an event clears activeEventId even while view still reads
     // "event"; the atomic gate keys on activeEventId (state), never on a "view === \"event\"" string.
     const expr = appSrc.match(/const atomicFlowInProgress =([\s\S]*?);/)?.[1] ?? "";
-    expect(expr).toContain("activeEventId !== null"); // events gate by state, not view
-    expect(expr).not.toContain('view === "event"'); // never view-gated on event → no deadlock when activeEventId clears
+    expect(expr).toContain("activeSession !== null"); // events gate by state, not view
+    expect(expr).not.toContain('view === "event"'); // never view-gated on event → no deadlock when activeSession clears
   });
 
   it("rollover completers route through the settlement seam, and completion uses completeAutoCheckpoint", () => {
@@ -204,13 +204,13 @@ describe("App settlement wiring source contract (no jsdom)", () => {
   // ── Blocker 3: atomic-flow gating (state-based, not stale view strings) ──
   it("atomicFlowInProgress gates on event/court/dianxuan/shop/gift/dialogue state, not a stale view string", () => {
     const block = appSrc.slice(appSrc.indexOf("const atomicFlowInProgress"), appSrc.indexOf("const atomicFlowInProgress") + 700);
-    expect(block).toContain("activeEventId !== null");
+    expect(block).toContain("activeSession !== null");
     expect(block).toContain("court !== null");
     expect(block).toContain("dianxuan !== null");
     expect(block).toContain("shopId !== null");
     expect(block).toContain("giftItemId !== null");
     expect(block).toContain("dialogueInFlight");
-    expect(block).not.toMatch(/view === "event"/); // replaced by activeEventId !== null (avoids deadlock)
+    expect(block).not.toMatch(/view === "event"/); // replaced by activeSession !== null (avoids deadlock)
   });
 
   it("generative dialogue is in-flight-guarded with a unique op token cleared only by its owner", () => {

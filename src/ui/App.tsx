@@ -35,6 +35,12 @@ import { assetManifestSchema } from "../engine/assets/manifest";
 import { AssetRegistry } from "../engine/assets/registry";
 import { loadGameContent } from "../engine/content/viteSource";
 import { pickAutoStartEvent } from "../engine/events/router";
+import {
+  planTemplateEventStart,
+  planSubLocationTemplateStart,
+  type TemplateEventStartPlan,
+} from "../engine/events/templateStart";
+import type { RuntimeContentDB } from "../engine/events/templateSynth";
 import { assetError, stateError } from "../engine/infra/errors";
 
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
@@ -189,8 +195,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         : new AssetRegistry({ version: 1, entries: {} }, { logger }),
     [manifest, logger],
   );
+  type ActiveEventSession =
+    | { kind: "static"; eventId: string }
+    | { kind: "template"; eventId: string; instanceId: string; templateId: string; runtimeDb: RuntimeContentDB };
+
   const [view, setView] = useState<View>("title");
-  const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<ActiveEventSession | null>(null);
   const [court, setCourt] = useState<CourtSession | null>(null);
   // 宣政殿朝议结果（真实快照 diff）；非空 = 结果态。朝议前快照存 ref（不入存档）。
   const [courtResult, setCourtResult] = useState<CourtMetricsDiff | null>(null);
@@ -342,7 +352,20 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       return;
     }
     navDispatch({ type: "playerStart", target: returnTarget }); // 覆盖旧 target + 重置 chainDepth
-    setActiveEventId(eventId);
+    setActiveSession({ kind: "static", eventId });
+    setView("event");
+  };
+
+  const startTemplateEvent = (plan: TemplateEventStartPlan, returnTarget: EventReturnTarget) => {
+    store.beginTemplateEvent(plan.statePatch);
+    navDispatch({ type: "playerStart", target: returnTarget });
+    setActiveSession({
+      kind: "template",
+      eventId: plan.eventId,
+      instanceId: plan.instanceId,
+      templateId: plan.templateId,
+      runtimeDb: plan.runtimeDb,
+    });
     setView("event");
   };
 
@@ -1223,13 +1246,13 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
 
   // ── 时间推进后全局中断结算（§ post-time-advance settlement）────────────────
   // 场内原子过场（对话/反应/侍寝/初夜/封赏/场景/朝会/商铺/进贡/赏赐/生成式对话/殿选 prompt）须先结束，全局中断才呈现。
-  // 用状态而非 view 字符串判定：事件结束时 activeEventId 先置 null（view 可能仍是 "event"），避免结算死锁。
+  // 用状态而非 view 字符串判定：事件结束时 activeSession 先置 null（view 可能仍是 "event"），避免结算死锁。
   const atomicFlowInProgress =
     reaction !== null || childReaction !== null || physicianReaction !== null ||
     firstNightPromptId !== null || namePetHeirId !== null ||
     bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
     prompt !== null || daxuanPrompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
-    activeEventId !== null || court !== null || dianxuan !== null ||
+    activeSession !== null || court !== null || dianxuan !== null ||
     shopId !== null || view === "shop" || dialogueInFlight ||
     view === "title" || view === "coronation"; // 标题/登基（开局前）不呈现全局中断
   // 同一时刻只呈现一个全局中断（确定性优先级）；场内过场进行中时一律不呈现。
@@ -1344,7 +1367,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         // 事件场景转旬产生的 time_advance：留在当前链（chainAdvance，不重置 chainDepth、不消费返回上下文）。
         if (canChain(navState)) {
           navDispatch({ type: "chainAdvance" });
-          setActiveEventId(event.id);
+          setActiveSession({ kind: "static", eventId: event.id });
           setView("event");
         } else {
           logger?.logGameError(
@@ -1357,6 +1380,31 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
         }
       } else {
         startEvent(event.id, request.returnTarget); // 新链
+      }
+      return;
+    }
+    // 静态事件未命中时，尝试模板事件（优先级低于静态）。
+    const timeTemplate = t.timeAdvance ? planTemplateEventStart(db, state, "time_advance") : null;
+    const locationTemplate = !timeTemplate && t.locationEnter ? planTemplateEventStart(db, state, "location_enter") : null;
+    const templatePlan = timeTemplate ?? locationTemplate;
+    if (templatePlan) {
+      if (request.dispatch === "continue_chain") {
+        if (canChain(navState)) {
+          navDispatch({ type: "chainAdvance" });
+          store.beginTemplateEvent(templatePlan.statePatch);
+          setActiveSession({ kind: "template", eventId: templatePlan.eventId, instanceId: templatePlan.instanceId, templateId: templatePlan.templateId, runtimeDb: templatePlan.runtimeDb });
+          setView("event");
+        } else {
+          logger?.logGameError(
+            stateError("EVENT_CHAIN_LIMIT", `template time_advance chain capped at ${MAX_EVENT_CHAIN}`, {
+              severity: "warn",
+              context: { deferred: templatePlan.eventId },
+            }),
+          );
+          restoreReturn();
+        }
+      } else {
+        startTemplateEvent(templatePlan, request.returnTarget);
       }
       return;
     }
@@ -1974,6 +2022,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             startEvent(ev.id, { kind: "garden", subLocationId: subId });
             return;
           }
+          // 静态探索事件未命中时，尝试模板 exploration 事件。
+          const tPlan = planSubLocationTemplateStart(db, store.getState(), "yuhuayuan", subId);
+          if (tPlan) {
+            startTemplateEvent(tPlan, { kind: "garden", subLocationId: subId });
+            return;
+          }
           setGardenSubLocationId(subId);
         };
         return (
@@ -2205,20 +2259,27 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           onInterveneColdPalace={(charId) => setColdPalaceInterventionTarget(charId)}
         />
       )}
-      {view === "event" && activeEventId && (
+      {view === "event" && activeSession && (
         <DialogueScreen
-          db={db}
+          db={activeSession.kind === "template" ? activeSession.runtimeDb : db}
           store={store}
           registry={registry}
-          eventId={activeEventId}
+          eventId={activeSession.eventId}
           logger={logger}
+          onCommit={activeSession.kind === "template"
+            ? (_eid, effects, selectedChoiceId) =>
+                store.resolveTemplateEvent(activeSession.runtimeDb, activeSession.instanceId, selectedChoiceId ?? "", effects)
+            : undefined}
           onDone={(committed, rolledOver) => {
-            const completedEventId = activeEventId; // 快照：清 activeEventId 前留存，供清账判定
-            setActiveEventId(null);
+            const session = activeSession; // 快照：清 activeSession 前留存
+            const completedEventId = session?.eventId ?? null;
+            setActiveSession(null);
             if (!committed) {
-              // 弃场：若链内前序事件已留下待结算（pendingTimeSettlement），不得消费/恢复导航上下文——
-              // activeEventId 已清，交由既有结算 effect 排空并最终恢复一次；否则立即恢复。
+              // 弃场：模板事件需清 generated record；静态事件无额外动作。
+              // 若链内前序事件已留下待结算（pendingTimeSettlement），不得消费/恢复导航上下文——
+              // activeSession 已清，交由既有结算 effect 排空并最终恢复一次；否则立即恢复。
               // 弃场绝不清候见账（仅打开未提交 ≠ 候见完成）。
+              if (session?.kind === "template") store.abandonTemplateEvent(session.instanceId);
               const abandonPlan = eventSceneCompletionPlan({
                 committed: false,
                 rolledOver: false,
@@ -2258,8 +2319,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               });
             }
             if (plan.startSceneEnd) {
-              navDispatch({ type: "chainAdvance" }); // 续接 scene_end：继承 target、不重置、不消费；结算（若有）由 activeEventId 守住不排空
-              setActiveEventId(pick!.id);
+              navDispatch({ type: "chainAdvance" }); // 续接 scene_end：继承 target、不重置、不消费；结算（若有）由 activeSession 守住不排空
+              setActiveSession({ kind: "static", eventId: pick!.id });
               return;
             }
             if (pick && !canChain(navState)) {

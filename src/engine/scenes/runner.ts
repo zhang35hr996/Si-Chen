@@ -31,6 +31,7 @@ export interface SceneSession {
   pendingEffects: EventEffect[];
   cursorNodeId: string | null; // null = walked past the terminal node
   steps: number;
+  selectedChoiceId?: string;
 }
 
 export interface DialogueFrame {
@@ -41,7 +42,7 @@ export interface DialogueFrame {
 
 export type RunnerStep =
   | { kind: "frame"; frame: DialogueFrame }
-  | { kind: "end"; eventId: string; effects: EventEffect[] };
+  | { kind: "end"; eventId: string; effects: EventEffect[]; selectedChoiceId?: string };
 
 type ChoiceNode = Extract<SceneNode, { type: "choice" }>;
 
@@ -104,6 +105,7 @@ export class SceneRunner {
       if (!choice) {
         return err(stateError("BAD_CHOICE", `choice "${choiceId ?? "(none)"}" is not available`));
       }
+      this.session.selectedChoiceId = choiceId;
       this.session.cursorNodeId = choice.next;
       this.choiceNode = null;
     }
@@ -140,6 +142,7 @@ export class SceneRunner {
           kind: "end",
           eventId: session.eventId,
           effects: session.pendingEffects,
+          selectedChoiceId: session.selectedChoiceId,
         };
         this.abandon(); // hand the batch to the caller; the session itself is done
         return ok(result);
