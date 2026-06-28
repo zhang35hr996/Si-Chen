@@ -100,6 +100,8 @@ import { availableInvestigationActions, validateCanStartTask } from "../engine/c
 import { settleDueInvestigationTasks, nextTaskId } from "../engine/characters/haremInvestigation/settlement";
 import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS } from "../engine/characters/haremInvestigation/types";
 import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
+import { resolveInvestigationTruth, buildHeirHealthTruthContext, hashStr } from "../engine/characters/haremInvestigation/truth/truthResolver";
+import type { HeirHealthSymptom, HeirHealthAnomalyIncident } from "../engine/characters/haremInvestigation/truth/types";
 
 /** Diagnostics for the debug panel: what the last effect batch did. */
 export interface EffectReport {
@@ -2788,6 +2790,64 @@ export class GameStore {
     this.state = result.value.state;
     this.emit();
     return ok({ caseId: result.value.caseId });
+  }
+
+  createHeirHealthAnomalyIncident(params: {
+    victimHeirId: string;
+    custodianId?: string;
+    accuserIds: string[];
+    initiallyAccusedIds: string[];
+    symptom: HeirHealthSymptom;
+    publicFactCodes: string[];
+    victimHealth: number;
+  }): Result<{ incidentId: string; truthId: string }, GameError[]> {
+    const at = toGameTime(this.state.calendar);
+
+    // Derive sourceKey internally — callers cannot influence it
+    const month = String(this.state.calendar.month).padStart(2, "0");
+    const sourceKey = `heir_health_anomaly:${this.state.calendar.year}:${month}:${params.victimHeirId}`;
+    const incidentId = `heir_health_${params.victimHeirId}_${hashStr(sourceKey)}`;
+    const truthId = `itruth_${incidentId}`;
+
+    // Idempotency: both must exist together
+    const existingIncident = this.state.investigationIncidents.find((i) => i.id === incidentId);
+    const existingTruth = this.state.investigationTruths.find((t) => t.id === truthId);
+    if (existingIncident !== undefined && existingTruth !== undefined) {
+      return ok({ incidentId, truthId });
+    }
+    if (existingIncident !== undefined || existingTruth !== undefined) {
+      return err([
+        stateError(
+          "INCONSISTENT_INVESTIGATION_STATE",
+          `Investigation incident/truth pair is inconsistent: incidentId="${incidentId}"`,
+          { context: { incidentId, truthId } },
+        ),
+      ]);
+    }
+
+    const incident: HeirHealthAnomalyIncident = {
+      id: incidentId,
+      eventFamily: "heir_health_anomaly",
+      occurredAt: at,
+      sourceKey,
+      victimHeirId: params.victimHeirId,
+      custodianId: params.custodianId,
+      accuserIds: params.accuserIds,
+      initiallyAccusedIds: params.initiallyAccusedIds,
+      symptom: params.symptom,
+      publicFactCodes: params.publicFactCodes,
+    };
+
+    const context = buildHeirHealthTruthContext(incident, this.state, params.victimHealth);
+    const truth = resolveInvestigationTruth(context, this.state.rngSeed);
+
+    this.state = {
+      ...this.state,
+      investigationIncidents: [...this.state.investigationIncidents, incident],
+      investigationTruths: [...this.state.investigationTruths, truth],
+    };
+    this.emit();
+    return ok({ incidentId, truthId });
   }
 
   cancelHaremInvestigation(caseId: string): Result<void, GameError[]> {

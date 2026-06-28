@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 36;
+export const SAVE_FORMAT_VERSION = 37;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -700,6 +700,19 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       state["haremInvestigationNextSeq"] = 1;
     }
     return { ...env, formatVersion: 36, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+
+  // v36 → v37: 宫斗事件后台真相层（Phase 5B-2A）。新增 investigationIncidents 和 investigationTruths 字段。
+  36: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    if (!Array.isArray(state["investigationIncidents"])) {
+      state["investigationIncidents"] = [];
+    }
+    if (!Array.isArray(state["investigationTruths"])) {
+      state["investigationTruths"] = [];
+    }
+    return { ...env, formatVersion: 37, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 
