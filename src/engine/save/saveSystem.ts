@@ -635,8 +635,7 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return { ...env, formatVersion: 33, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 
-  // v33 → v34: 动态事件模板持久化（event-template-system）。
-  // 新增 templateEventNextSeq（顺序号）和 templateEventRecords（实例记录）。
+  // v33 → v34: 动态事件模板持久化 + 皇嗣性格/成长环境/立绘（PR 1）。
   33: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as Record<string, unknown>;
@@ -644,6 +643,35 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     if (typeof state["templateEventRecords"] !== "object" || state["templateEventRecords"] === null) {
       state["templateEventRecords"] = {};
     }
+    const resources = (state["resources"] ?? {}) as Record<string, unknown>;
+    const bloodline = (resources["bloodline"] ?? {}) as Record<string, unknown>;
+    const heirs = Array.isArray(bloodline["heirs"])
+      ? (bloodline["heirs"] as Array<Record<string, unknown>>)
+      : [];
+    for (const h of heirs) {
+      if (h["personality"] === undefined) {
+        h["personality"] = {
+          empathy: 50, guile: 50, restraint: 50,
+          sociability: 50, assertiveness: 50, curiosity: 50,
+        };
+      }
+      if (h["interests"] === undefined) h["interests"] = [];
+      if (h["imperialFear"] === undefined) h["imperialFear"] = 20;
+      if (h["neglect"] === undefined) h["neglect"] = 30;
+      if (h["custodianBond"] === undefined) {
+        h["custodianBond"] = h["adoptiveFatherId"] !== undefined ? 50 : 0;
+      }
+      if (h["portraitVariants"] === undefined) {
+        const sexPrefix = h["sex"] === "daughter" ? "girl" : "boy";
+        h["portraitVariants"] = {
+          baby: `${sexPrefix}_baby1`,
+          kid: `${sexPrefix}_kid1`,
+          child: `${sexPrefix}_child1`,
+          teen: `${sexPrefix}_teen1`,
+        };
+      }
+    }
+
     return { ...env, formatVersion: 34, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };

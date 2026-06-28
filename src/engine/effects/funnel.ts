@@ -27,6 +27,7 @@ import {
   canEmpressAdjustRank,
 } from "../characters/haremRankAuthority";
 import { nextHeirId } from "../characters/heirs";
+import { gestationRollRaw } from "../characters/gestation";
 import { getCharacterLocation } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
 import { isAssignableRank, eventEffectSchema, type EventEffect } from "../content/schemas";
@@ -34,7 +35,7 @@ import { stateError, type GameError } from "../infra/errors";
 import { err, ok, type Result } from "../infra/result";
 import { memoryEntryId } from "../state/newGame";
 import type { GameTime } from "../calendar/time";
-import type { ChamberId, ColdPalaceEffect, GameState } from "../state/types";
+import type { ChamberId, ColdPalaceEffect, GameState, HeirInterest } from "../state/types";
 import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
 
 /** Max |cumulative delta| per axis (char×field / pillar×field) per batch. */
@@ -791,26 +792,53 @@ export function applyEffects(
         const bl = next.resources.bloodline;
         const childSurvives = effect.bearerOutcome === "safe" || effect.bearerOutcome === "bearer_dies";
         if (childSurvives) {
-          const makeHeir = (sex: typeof effect.sex, favor: number) => ({
-            id: nextHeirId(bl.heirs.length),
-            sex,
-            fatherId: effect.fatherId,
-            bearer: effect.bearer,
-            birthAt: now,
-            favor,
-            legitimate: effect.legitimate,
-            petName: "",
-            education: { scholarship: 5, martial: 5, virtue: 5 },
-            health: 60,
-            talent: 50,
-            diligence: 50,
-            ambition: 20,
-            closeness: 50,
-            support: 20,
-            faction: "none" as const,
-            lifecycle: "alive" as const,
-            healthStatus: "healthy" as const,
-          });
+          const makeHeir = (sex: typeof effect.sex, favor: number) => {
+            const id = nextHeirId(bl.heirs.length);
+            const seed = next.rngSeed;
+            const roll = (key: string, max: number) => gestationRollRaw(`${seed}:${id}:${key}`) % max;
+            const trait = (key: string) => 20 + roll(key, 61); // 20–80
+            const sexPrefix = sex === "daughter" ? "girl" : "boy";
+            const teenMax = sex === "daughter" ? 4 : 3;
+            const portraitVariants = {
+              baby: `${sexPrefix}_baby1`,
+              kid: `${sexPrefix}_kid${1 + roll("portrait:kid", 4)}`,
+              child: `${sexPrefix}_child${1 + roll("portrait:child", 4)}`,
+              teen: `${sexPrefix}_teen${1 + roll("portrait:teen", teenMax)}`,
+            };
+            return {
+              id,
+              sex,
+              fatherId: effect.fatherId,
+              bearer: effect.bearer,
+              birthAt: now,
+              favor,
+              legitimate: effect.legitimate,
+              petName: "",
+              education: { scholarship: 5, martial: 5, virtue: 5 },
+              health: 60,
+              talent: 50,
+              diligence: 50,
+              personality: {
+                empathy: trait("pers:empathy"),
+                guile: trait("pers:guile"),
+                restraint: trait("pers:restraint"),
+                sociability: trait("pers:sociability"),
+                assertiveness: trait("pers:assertiveness"),
+                curiosity: trait("pers:curiosity"),
+              },
+              interests: [] as HeirInterest[],
+              imperialFear: 20,
+              neglect: 40,
+              custodianBond: 0,
+              portraitVariants,
+              ambition: 20,
+              closeness: 50,
+              support: 20,
+              faction: "none" as const,
+              lifecycle: "alive" as const,
+              healthStatus: "healthy" as const,
+            };
+          };
           bl.heirs.push(makeHeir(effect.sex, effect.favor));
           if (effect.twinSex !== undefined && effect.twinFavor !== undefined) {
             bl.heirs.push(makeHeir(effect.twinSex, effect.twinFavor));

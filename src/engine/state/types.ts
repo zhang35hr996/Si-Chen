@@ -129,6 +129,44 @@ export interface HeirEducation {
   virtue: number;
 }
 
+/** 皇嗣六维性格（隐藏属性，不直接展示，由对话和事件解析）。 */
+export interface HeirPersonality {
+  /** 仁心 0–100：低=凉薄自我，高=善良体恤 */
+  empathy: number;
+  /** 城府 0–100：低=直率藏不住，高=心思深善掩饰 */
+  guile: number;
+  /** 克制 0–100：低=冲动坐不住，高=沉稳自制 */
+  restraint: number;
+  /** 外向 0–100：低=安静独处，高=活泼喜交往 */
+  sociability: number;
+  /** 强势 0–100：低=胆怯退让，高=强势自信 */
+  assertiveness: number;
+  /** 好奇 0–100：低=安于常规，高=喜探索爱提问 */
+  curiosity: number;
+}
+
+/** 皇嗣兴趣（出生后逐渐形成，默认隐藏直至被发现）。 */
+export type HeirInterest =
+  | "books"
+  | "statecraft"
+  | "riding"
+  | "music"
+  | "dance"
+  | "needlework"
+  | "calligraphy"
+  | "animals"
+  | "outdoors"
+  | "games"
+  | "socializing";
+
+/** 各成长阶段的固定立绘集 id（出生时一次性确定，读档不换脸）。 */
+export interface HeirPortraitVariants {
+  baby: string;
+  kid: string;
+  child: string;
+  teen: string;
+}
+
 /** 落地子嗣。 */
 export interface Heir {
   /** "heir_000001" 单调 */
@@ -158,6 +196,21 @@ export interface Heir {
   talent: number;
   /** 努力 0–100（成长速度）。 */
   diligence: number;
+  // ── 性格 ──
+  personality: HeirPersonality;
+  /** 兴趣（出生时空，逐渐被发现）。 */
+  interests: HeirInterest[];
+  // ── 成长环境暗属性 ──
+  /** 对皇帝的畏惧 0–100（独立于亲近）。 */
+  imperialFear: number;
+  /** 受忽视程度 0–100（无养父或长期未召见则上升）。 */
+  neglect: number;
+  /** 与养父的感情深度 0–100（无养父则为 0）。 */
+  custodianBond: number;
+  /** 上次皇帝互动时刻（驱动忽视更新）。 */
+  lastImperialInteractionAt?: GameTime;
+  // ── 固定立绘（出生时确定）──
+  portraitVariants: HeirPortraitVariants;
   // ── 暗属性 ──
   /** 野心 0–100（是否主动争储）。 */
   ambition: number;
