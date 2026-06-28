@@ -2813,7 +2813,7 @@ export class GameStore {
     return ok({ caseId: result.value.caseId });
   }
 
-  createHeirHealthAnomalyIncident(params: {
+  createHeirHealthAnomaly(params: {
     victimHeirId: string;
     custodianId?: string;
     accuserIds: string[];
@@ -2822,7 +2822,7 @@ export class GameStore {
     publicFactCodes: string[];
     victimHealth: number;
   }): Result<{ incidentId: string; truthId: string; reportId: string }, GameError[]> {
-    // 原子生成 incident + 后台真相 + 玩家可见公开报告（5B-2B1）
+    // 原子生成 incident + 后台真相 + 玩家可见公开报告（5B-2B1）；纯函数仍名 *Bundle
     const result = createHeirHealthAnomalyBundle(this.state, params);
     if (!result.ok) return result;
 
