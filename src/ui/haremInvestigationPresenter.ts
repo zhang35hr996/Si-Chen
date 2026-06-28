@@ -16,6 +16,7 @@ import type {
 import type { HaremIntrigueKind } from "../engine/characters/haremIntrigue/types";
 import type { HaremIntrigueReportConfidence } from "../engine/state/types";
 import type { AvailableInvestigationAction } from "../engine/characters/haremInvestigation/actions";
+import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
 
 export interface HaremInvestigationPresentation {
   /** 案件标题（含嫌疑人/目标/手段语境） */
@@ -128,13 +129,23 @@ export interface InvestigationLeadView {
   strengthLabel: string;
 }
 
+export interface AvailableActionView {
+  method: InvestigationMethod;
+  label: string;
+  apCost: number;
+  durationDays: number;
+  subjects?: Array<{ id: string; label: string }>;
+}
+
 export interface InvestigationDetailPresentation extends HaremInvestigationPresentation {
   currentTask?: InvestigationCurrentTaskView;
   leadViews: InvestigationLeadView[];
-  availableActions: AvailableInvestigationAction[];
+  availableActionViews: AvailableActionView[];
   confirmedCulpritLabel?: string;
   /** 当前嫌疑人 {id, label} 列表，供 ready_for_review 裁定选人使用。 */
   suspectViews: Array<{ id: string; label: string }>;
+  /** 是否允许确认主谋：仅当 case.confidence === "confirmed" 时为 true。 */
+  canConfirmCulprit: boolean;
 }
 
 const METHOD_LABELS: Record<string, string> = {
@@ -151,11 +162,25 @@ const LEAD_STRENGTH_LABELS: Record<string, string> = {
 };
 
 const LEAD_SUMMARY_LABELS: Record<string, string> = {
-  inquiry_limited_findings: "查访所得有限，线索仍不充分",
-  inquiry_found_suspicious_pattern: "发现可疑规律，需进一步核实",
+  // question_target
+  target_mentioned_unusual: "受影响之人提及近来有异常情形",
+  target_noted_prior_activity: "受影响之人回忆起事前的可疑举动",
+  // question_suspect — true actor
+  suspect_admitted_under_pressure: "当事人受审时有所失口，嫌疑加重",
+  suspect_contradicted_account: "供词与证据相悖，嫌疑明显加深",
+  suspect_evasive_response: "当事人回避追问，态度可疑",
+  suspect_denied_convincingly: "当事人坦然应对，暂无实证",
+  // question_suspect — non-actor
+  suspect_cleared_alibi: "当事人提供可信不在场证明，基本排除",
+  suspect_irrelevant_account: "当事人所述与案情无关",
   suspect_inconclusive_account: "供述存在漏洞，尚无定论",
-  suspect_contradicted_account: "供词与证据相悖，嫌疑加深",
-  target_account_consistent: "受害者陈述有所补充",
+  // quiet_inquiry
+  inquiry_gathered_servant_rumors: "查访所得有限，仅有零散传闻",
+  inquiry_tracked_actor_movement: "追踪到可疑人员的行踪脉络",
+  inquiry_found_suspicious_pattern: "发现可疑规律，需进一步核实",
+  inquiry_revealed_scheme_method: "查访揭示了作案手段的部分情况",
+  inquiry_limited_findings: "暗中查访所得有限，线索仍不充分",
+  // misc
   orphan_task_skipped: "（调查记录缺失）",
 };
 
@@ -191,7 +216,7 @@ export function presentHaremInvestigationDetail(
     id: l.id,
     discoveredAtLabel: gameTimeLabel(l.discoveredAt),
     methodLabel: METHOD_LABELS[l.method] ?? l.method,
-    summary: LEAD_SUMMARY_LABELS[l.summaryCode] ?? l.summaryCode,
+    summary: LEAD_SUMMARY_LABELS[l.summaryCode] ?? "调查取得了一项新线索，详情尚待核实",
     strengthLabel: LEAD_STRENGTH_LABELS[l.strength] ?? l.strength,
   }));
 
@@ -205,12 +230,24 @@ export function presentHaremInvestigationDetail(
     label: resolveCharacterName(id),
   }));
 
+  const availableActionViews: AvailableActionView[] = availableActions.map((a) => ({
+    method: a.method,
+    label: METHOD_LABELS[a.method] ?? a.method,
+    apCost: a.apCost,
+    durationDays: a.durationDays,
+    subjects: a.subjectCandidateIds?.map((id) => ({ id, label: resolveCharacterName(id) })),
+  }));
+
+  const canConfirmCulprit =
+    investigationCase.status === "ready_for_review" && investigationCase.confidence === "confirmed";
+
   return {
     ...base,
     currentTask,
     leadViews,
-    availableActions,
+    availableActionViews,
     confirmedCulpritLabel,
     suspectViews,
+    canConfirmCulprit,
   };
 }

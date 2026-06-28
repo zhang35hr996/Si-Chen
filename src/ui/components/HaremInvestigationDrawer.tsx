@@ -4,12 +4,16 @@
  * 知识边界：仅读取玩家已知字段，不访问 haremSchemes / haremIncidents / investigationTruths。
  */
 import { useState } from "react";
-import type { InvestigationDetailPresentation } from "../haremInvestigationPresenter";
+import type { InvestigationDetailPresentation, AvailableActionView } from "../haremInvestigationPresenter";
 import { CASE_STATUS_LABELS } from "../haremInvestigationPresenter";
 import type { IntrigueInvestigationStatus, InvestigationMethod } from "../../engine/characters/haremInvestigation/types";
 import { isActiveCase } from "../../engine/characters/haremInvestigation/types";
-import type { AvailableInvestigationAction } from "../../engine/characters/haremInvestigation/actions";
 import type { GameTime } from "../../engine/calendar/time";
+
+export type InvestigationReviewDecision =
+  | { type: "continue" }
+  | { type: "close_unresolved" }
+  | { type: "confirm"; suspectId: string };
 
 export interface HaremInvestigationCaseView {
   id: string;
@@ -21,7 +25,7 @@ export interface HaremInvestigationCaseView {
 export interface HaremInvestigationDrawerCallbacks {
   onStartTask: (caseId: string, method: InvestigationMethod, subjectId?: string) => Promise<string | null>;
   onCancelCase: (caseId: string) => Promise<string | null>;
-  onReviewCase: (caseId: string, decision: "confirm" | "close_unresolved", suspectId?: string) => Promise<string | null>;
+  onReviewCase: (caseId: string, decision: InvestigationReviewDecision) => Promise<string | null>;
 }
 
 const PERIOD_ORDER = { early: 0, mid: 1, late: 2 } as const;
@@ -148,13 +152,13 @@ function CaseDetail({
 }) {
   const { presentation: pres, id: caseId, status } = caseView;
   const [error, setError] = useState<string | null>(null);
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [selectedSubjectByMethod, setSelectedSubjectByMethod] = useState<Record<string, string>>({});
   const [selectedSuspectForReview, setSelectedSuspectForReview] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function handleStartTask(action: AvailableInvestigationAction) {
-    const subjectId = action.subjectCandidateIds ? selectedSubject ?? undefined : undefined;
-    if (action.subjectCandidateIds && !subjectId) {
+  async function handleStartTask(action: AvailableActionView) {
+    const subjectId = action.subjects ? selectedSubjectByMethod[action.method] ?? undefined : undefined;
+    if (action.subjects && !subjectId) {
       setError("请先选择调查对象");
       return;
     }
@@ -167,7 +171,7 @@ function CaseDetail({
     const err = await callbacks.onStartTask(caseId, action.method, subjectId);
     setPending(false);
     if (err) setError(err);
-    else setSelectedSubject(null);
+    else setSelectedSubjectByMethod({});
   }
 
   async function handleCancel() {
@@ -178,24 +182,26 @@ function CaseDetail({
     if (err) setError(err);
   }
 
-  async function handleReview(decision: "confirm" | "close_unresolved") {
-    if (decision === "confirm" && !selectedSuspectForReview) {
+  async function handleReview(intent: "confirm" | "close_unresolved" | "continue") {
+    if (intent === "confirm" && !selectedSuspectForReview) {
       setError("请先选择确认主谋");
       return;
     }
+    const decision: InvestigationReviewDecision =
+      intent === "confirm"
+        ? { type: "confirm", suspectId: selectedSuspectForReview! }
+        : intent === "close_unresolved"
+          ? { type: "close_unresolved" }
+          : { type: "continue" };
     setPending(true);
     setError(null);
-    const err = await callbacks.onReviewCase(
-      caseId,
-      decision,
-      decision === "confirm" ? (selectedSuspectForReview ?? undefined) : undefined,
-    );
+    const err = await callbacks.onReviewCase(caseId, decision);
     setPending(false);
     if (err) setError(err);
     else setSelectedSuspectForReview(null);
   }
 
-  const canConfirmCulprit = pres.confidenceLabel === "已有确证" || pres.confidenceLabel === "线索较明";
+  const canConfirmCulprit = pres.canConfirmCulprit;
 
   return (
     <div className="investigation-drawer__detail">
@@ -249,23 +255,29 @@ function CaseDetail({
       )}
 
       {/* open — 可用行动 */}
-      {status === "open" && pres.availableActions.length > 0 && (
+      {status === "open" && pres.availableActionViews.length > 0 && (
         <section className="investigation-drawer__actions">
           <h4>调查行动</h4>
-          {pres.availableActions.map((action) => {
-            const needsSubject = !!action.subjectCandidateIds;
+          {pres.availableActionViews.map((action) => {
+            const needsSubject = !!action.subjects;
+            const selected = selectedSubjectByMethod[action.method] ?? "";
             return (
               <div key={action.method} className="investigation-action">
                 {needsSubject && (
                   <select
                     className="investigation-action__select"
-                    value={selectedSubject ?? ""}
-                    onChange={(e) => setSelectedSubject(e.target.value || null)}
+                    value={selected}
+                    onChange={(e) =>
+                      setSelectedSubjectByMethod((prev) => ({
+                        ...prev,
+                        [action.method]: e.target.value,
+                      }))
+                    }
                     disabled={pending}
                   >
                     <option value="">— 选择对象 —</option>
-                    {action.subjectCandidateIds!.map((id) => (
-                      <option key={id} value={id}>{id}</option>
+                    {action.subjects!.map(({ id, label }) => (
+                      <option key={id} value={id}>{label}</option>
                     ))}
                   </select>
                 )}
@@ -275,8 +287,7 @@ function CaseDetail({
                   onClick={() => handleStartTask(action)}
                   disabled={pending || playerAp < action.apCost}
                 >
-                  {ACTION_LABEL[action.method] ?? action.method}
-                  　{action.apCost} 行动力 · {action.durationDays} 旬
+                  {action.label}　{action.apCost} 行动力 · {action.durationDays} 旬
                 </button>
               </div>
             );
@@ -347,7 +358,7 @@ function CaseDetail({
           <button
             type="button"
             className="investigation-action__cancel"
-            onClick={handleCancel}
+            onClick={() => handleReview("continue")}
             disabled={pending}
           >
             继续调查
@@ -369,11 +380,6 @@ function CaseDetail({
   );
 }
 
-const ACTION_LABEL: Record<string, string> = {
-  question_target: "询问受影响之人",
-  question_suspect: "传问嫌疑人",
-  quiet_inquiry: "暗中查访",
-};
 
 export function getCaseStatusLabel(status: IntrigueInvestigationStatus): string {
   return CASE_STATUS_LABELS[status];

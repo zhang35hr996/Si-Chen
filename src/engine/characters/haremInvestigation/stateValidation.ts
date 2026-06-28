@@ -238,11 +238,19 @@ export function validateHaremInvestigationLinks(
       errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `haremIntrigueReports[id=${report.id}]: linkedInvestigationId="${report.linkedInvestigationId}" 对应 case 不存在`));
       continue;
     }
-    // 反向：case.source.reportId === report.id
+
+    // 调查进展通报（investigation_update/final）：仅校验 incidentId 匹配，不要求 actioned 状态
+    if (report.reportKind === "investigation_update" || report.reportKind === "investigation_final") {
+      if (report.source.incidentId !== linkedCase.source.incidentId) {
+        errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `haremIntrigueReports[id=${report.id}]: source.incidentId="${report.source.incidentId}" 与 case.source.incidentId="${linkedCase.source.incidentId}" 不一致`));
+      }
+      continue;
+    }
+
+    // 立案来源报告（anomaly/rumor/exposure）：完整双向校验
     if (linkedCase.source.reportId !== report.id) {
       errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `haremIntrigueReports[id=${report.id}]: case.source.reportId="${linkedCase.source.reportId}" 与 report.id 不一致`));
     }
-    // 有 case 的 report 必须是 actioned/investigating/acknowledgedAt
     if (report.status !== "actioned") {
       errors.push(stateError("INTRIGUE_CASE_REPORT_STATUS", `haremIntrigueReports[id=${report.id}]: linkedInvestigationId 存在但 status="${report.status}"，期望 actioned`));
     }

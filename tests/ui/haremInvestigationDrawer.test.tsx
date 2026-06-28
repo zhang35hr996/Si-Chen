@@ -1,16 +1,16 @@
 /**
- * Phase 5B-1B / 5B-3: HaremInvestigationDrawer 排序测试。
- * 重点验证 active 优先 + GameTime 数值排序（跨月、跨年、同月旬次）。
+ * Phase 5B-1B / 5B-3: HaremInvestigationDrawer 排序 + 交互行为测试。
  */
-import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { HaremInvestigationDrawer, type HaremInvestigationCaseView, type HaremInvestigationDrawerCallbacks } from "../../src/ui/components/HaremInvestigationDrawer";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { HaremInvestigationDrawer, type HaremInvestigationCaseView, type HaremInvestigationDrawerCallbacks, type InvestigationReviewDecision } from "../../src/ui/components/HaremInvestigationDrawer";
+import type { InvestigationDetailPresentation } from "../../src/ui/haremInvestigationPresenter";
 import { makeGameTime } from "../../src/engine/calendar/time";
 
 const NO_OP_CALLBACKS: HaremInvestigationDrawerCallbacks = {
   onStartTask: vi.fn().mockResolvedValue(null),
   onCancelCase: vi.fn().mockResolvedValue(null),
-  onReviewCase: vi.fn().mockResolvedValue(null),
+  onReviewCase: vi.fn().mockResolvedValue(null) as HaremInvestigationDrawerCallbacks["onReviewCase"],
 };
 
 function makeView(
@@ -37,7 +37,8 @@ function makeView(
       emptyKindText: "作案手段尚未查明",
       confidenceLabel: "线索模糊",
       leadViews: [],
-      availableActions: [],
+      availableActionViews: [],
+      canConfirmCulprit: false,
       suspectViews: [],
     },
   };
@@ -109,5 +110,182 @@ describe("HaremInvestigationDrawer: 排序", () => {
     expect(titles[1]).toBe("active-old");
     expect(titles[2]).toBe("closed-new");
     expect(titles[3]).toBe("closed-old");
+  });
+});
+
+// ── 交互行为测试 ───────────────────────────────────────────────────────
+
+function makeDetailPresentation(overrides: Partial<InvestigationDetailPresentation> = {}): InvestigationDetailPresentation {
+  return {
+    title: "测试案件",
+    openedAtLabel: "元年3月上旬",
+    statusLabel: "待查",
+    targetLabels: ["受害者甲"],
+    suspectLabels: ["嫌疑人乙"],
+    emptySuspectText: "目前尚无明确嫌疑人",
+    emptyKindText: "作案手段尚未查明",
+    kindLabels: [],
+    confidenceLabel: "线索模糊",
+    leadViews: [],
+    availableActionViews: [],
+    canConfirmCulprit: false,
+    suspectViews: [],
+    ...overrides,
+  };
+}
+
+function makeInteractiveCase(
+  status: HaremInvestigationCaseView["status"],
+  presentation?: Partial<InvestigationDetailPresentation>,
+): HaremInvestigationCaseView {
+  return {
+    id: "icase_test",
+    openedAt: makeGameTime(1, 3, "early"),
+    status,
+    presentation: makeDetailPresentation(presentation),
+  };
+}
+
+describe("HaremInvestigationDrawer: 交互", () => {
+  let callbacks: HaremInvestigationDrawerCallbacks;
+
+  beforeEach(() => {
+    callbacks = {
+      onStartTask: vi.fn().mockResolvedValue(null),
+      onCancelCase: vi.fn().mockResolvedValue(null),
+      onReviewCase: vi.fn().mockResolvedValue(null) as HaremInvestigationDrawerCallbacks["onReviewCase"],
+    };
+  });
+
+  it("点击案件 → 进入详情", () => {
+    const c = makeInteractiveCase("open");
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    expect(screen.getByText("← 返回列表")).toBeDefined();
+  });
+
+  it("继续调查 → onReviewCase({type:'continue'})，不调用 onCancelCase", async () => {
+    const c = makeInteractiveCase("ready_for_review");
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    const continueBtn = screen.getByText("继续调查");
+    fireEvent.click(continueBtn);
+    await vi.waitFor(() => expect(callbacks.onReviewCase).toHaveBeenCalledTimes(1));
+    const call = (callbacks.onReviewCase as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(call[0]).toBe("icase_test");
+    expect((call[1] as InvestigationReviewDecision).type).toBe("continue");
+    expect(callbacks.onCancelCase).not.toHaveBeenCalled();
+  });
+
+  it("strong 置信度 → 确认主谋按钮禁用（canConfirmCulprit=false）", () => {
+    const c = makeInteractiveCase("ready_for_review", { canConfirmCulprit: false });
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    const confirmBtn = screen.getByText("确认主谋");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("confirmed 置信度 + 嫌疑人已选 → 确认主谋按钮可点击", async () => {
+    const c = makeInteractiveCase("ready_for_review", {
+      canConfirmCulprit: true,
+      suspectViews: [{ id: "suspect_x", label: "嫌疑人乙" }],
+    });
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    // 选择嫌疑人
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "suspect_x" } });
+    const confirmBtn = screen.getByText("确认主谋");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(confirmBtn);
+    await vi.waitFor(() => expect(callbacks.onReviewCase).toHaveBeenCalledTimes(1));
+    const call = (callbacks.onReviewCase as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect((call[1] as InvestigationReviewDecision).type).toBe("confirm");
+    expect((call[1] as Extract<InvestigationReviewDecision, {type:"confirm"}>).suspectId).toBe("suspect_x");
+  });
+
+  it("调查候选下拉显示姓名，不显示 raw ID", () => {
+    const c = makeInteractiveCase("open", {
+      availableActionViews: [{
+        method: "question_suspect",
+        label: "传问嫌疑人",
+        apCost: 1,
+        durationDays: 3,
+        subjects: [
+          { id: "lu_huaijin", label: "陆怀瑾" },
+          { id: "xu_qinghuan", label: "徐青环" },
+        ],
+      }],
+    });
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    expect(screen.queryByText("lu_huaijin")).toBeNull();
+    expect(screen.queryByText("xu_qinghuan")).toBeNull();
+    expect(screen.getByText("陆怀瑾")).toBeDefined();
+    expect(screen.getByText("徐青环")).toBeDefined();
+  });
+
+  it("两个行动的 subject 选择互不干扰", async () => {
+    const c = makeInteractiveCase("open", {
+      availableActionViews: [
+        {
+          method: "question_target",
+          label: "询问受害者",
+          apCost: 1,
+          durationDays: 3,
+          subjects: [{ id: "target_a", label: "受害者甲" }],
+        },
+        {
+          method: "question_suspect",
+          label: "传问嫌疑人",
+          apCost: 1,
+          durationDays: 3,
+          subjects: [{ id: "suspect_x", label: "嫌疑人乙" }],
+        },
+      ],
+    });
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    const selects = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    // Select subject for first action only
+    fireEvent.change(selects[0]!, { target: { value: "target_a" } });
+    // Second select should remain empty
+    expect(selects[1]!.value).toBe("");
+  });
+
+  it("AP 不足 → 调查按钮禁用", () => {
+    const c = makeInteractiveCase("open", {
+      availableActionViews: [{
+        method: "quiet_inquiry",
+        label: "暗中查访",
+        apCost: 3,
+        durationDays: 6,
+      }],
+    });
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={2} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    // Use getAllByRole since button text spans multiple text nodes
+    const actionBtns = screen.getAllByRole("button").filter(
+      (b) => b.textContent?.includes("暗中查访"),
+    );
+    expect(actionBtns.length).toBeGreaterThan(0);
+    expect((actionBtns[0] as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("pending 中防双击：按钮不可重复触发", async () => {
+    let resolveCb!: () => void;
+    (callbacks.onReviewCase as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise<string | null>((r) => { resolveCb = () => r(null); }),
+    );
+    const c = makeInteractiveCase("ready_for_review");
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    const continueBtn = screen.getByText("继续调查");
+    fireEvent.click(continueBtn);
+    // Button should be disabled while pending
+    expect((continueBtn as HTMLButtonElement).disabled).toBe(true);
+    resolveCb();
+    await vi.waitFor(() => expect((continueBtn as HTMLButtonElement).disabled).toBe(false));
+    expect(callbacks.onReviewCase).toHaveBeenCalledTimes(1);
   });
 });

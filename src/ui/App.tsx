@@ -2118,7 +2118,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                   onStartTask: async (caseId, method, subjectId) => {
                     const r = store.startHaremInvestigationTask(db, caseId, method, subjectId);
                     if (!r.ok) return r.error.map((e) => e.message).join("; ");
+                    if (r.value.healthOutcome?.sovereignDied) { onSovereignDeath(); return null; }
                     doAutosave();
+                    if (r.value.rolledOver) beginSettlement(stationaryRequest());
                     return null;
                   },
                   onCancelCase: async (caseId) => {
@@ -2127,14 +2129,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                     doAutosave();
                     return null;
                   },
-                  onReviewCase: async (caseId, decision, suspectId) => {
-                    const decisionArg =
-                      decision === "confirm" && suspectId
-                        ? ({ type: "confirm", suspectId } as const)
-                        : decision === "close_unresolved"
-                          ? ({ type: "close_unresolved" } as const)
-                          : ({ type: "continue" } as const);
-                    const r = store.reviewHaremInvestigation(caseId, decisionArg);
+                  onReviewCase: async (caseId, decision) => {
+                    const r = store.reviewHaremInvestigation(caseId, decision);
                     if (!r.ok) return r.error.map((e) => e.message).join("; ");
                     doAutosave();
                     return null;

@@ -300,7 +300,7 @@ export function settleDueInvestigationTasks(
           updatedCase.status === "ready_for_review" ? "investigation_final" : "investigation_update";
         const investigationReport: HaremIntrigueReport = {
           id: reportId,
-          source: updatedCase.source,
+          source: { incidentId: updatedCase.source.incidentId },
           reportKind,
           createdAt: resolvedAt,
           status: "unread",
