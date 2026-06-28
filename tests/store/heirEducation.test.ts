@@ -279,10 +279,10 @@ function makeCompanionAssignment(companionName: string): HeirCompanionAssignment
     assignedAt: makeGameTime(6, 1, "early"),
     status: "active",
     bond: 5,
+    ageAtAssignment: 5,
     profile: {
       name: companionName,
       sex: "female",
-      age: 5,
       legitimate: true,
       personality: { ...defaultPersonality, sociability: 80 }, // high social → bothSocial path
     },

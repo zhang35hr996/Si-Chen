@@ -17,6 +17,7 @@ import { validateJusticeLinks } from "../justice/crossLink";
 import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks, validateColdPalaceMadnessLinks } from "../characters/coldPalaceValidator";
 import { validateHaremDisciplineLinks } from "../characters/haremDisciplineValidator";
 import { validatePeakFavor } from "../characters/peakFavorValidator";
+import { validateCompanionWorld } from "../characters/companionValidator";
 import { validateHaremIntrigueLinks } from "../characters/haremIntrigue/stateValidation";
 import { validateHaremInvestigationLinks } from "../characters/haremInvestigation/stateValidation";
 import { validateInvestigationIncidents, validateInvestigationTruths } from "../characters/haremInvestigation/truth/stateValidation";
@@ -33,6 +34,20 @@ export const gameTimeSchema = z.strictObject({
   period: z.enum(["early", "mid", "late"]),
   dayIndex: z.number().int().min(0),
 });
+
+// 伴读/宗室共用子 schema（HeirPersonality 六维 + 伴读人物引用）。
+const companionPersonalitySchema = z.object({
+  empathy: percent,
+  guile: percent,
+  restraint: percent,
+  sociability: percent,
+  assertiveness: percent,
+  curiosity: percent,
+});
+const companionRefSchema = z.union([
+  z.object({ kind: z.literal("family_member"), personId: z.string().min(1) }),
+  z.object({ kind: z.literal("royal_relative"), personId: z.string().min(1) }),
+]);
 
 const calendarStateSchema = gameTimeSchema
   .extend({
@@ -1239,56 +1254,30 @@ export const gameStateSchema = z.strictObject({
     sex: z.enum(["female", "male"]),
     age: z.number().int().min(0),
     branch: z.enum(["close", "collateral", "distant"]),
-    branchPrestige: z.number().int().min(0).max(100),
+    branchPrestige: percent,
     legitimate: z.boolean(),
-    personality: z.object({
-      empathy: z.number().int().min(0).max(100),
-      guile: z.number().int().min(0).max(100),
-      restraint: z.number().int().min(0).max(100),
-      sociability: z.number().int().min(0).max(100),
-      assertiveness: z.number().int().min(0).max(100),
-      curiosity: z.number().int().min(0).max(100),
-    }),
+    personality: companionPersonalitySchema,
     lifecycle: z.enum(["alive", "deceased"]),
-    deceasedAt: z.object({ year: z.number().int(), month: z.number().int(), period: z.enum(["early", "mid", "late"]), dayIndex: z.number().int() }).optional(),
+    deceasedAt: gameTimeSchema.optional(),
   })).default({}),
   heirCompanions: z.record(z.string(), z.object({
     heirId: nonEmpty,
-    companion: z.union([
-      z.object({ kind: z.literal("family_member"), personId: nonEmpty }),
-      z.object({ kind: z.literal("royal_relative"), personId: nonEmpty }),
-    ]),
-    assignedAt: z.object({ year: z.number().int(), month: z.number().int(), period: z.enum(["early", "mid", "late"]), dayIndex: z.number().int() }),
+    companion: companionRefSchema,
+    assignedAt: gameTimeSchema,
     status: z.enum(["active", "ended"]),
-    endedAt: z.object({ year: z.number().int(), month: z.number().int(), period: z.enum(["early", "mid", "late"]), dayIndex: z.number().int() }).optional(),
+    endedAt: gameTimeSchema.optional(),
     endReason: z.enum(["heir_left_school", "companion_deceased", "dismissed"]).optional(),
-    bond: z.number().int().min(0).max(100),
+    bond: percent,
+    ageAtAssignment: z.number().int().min(0),
     profile: z.object({
       name: nonEmpty,
       sex: z.enum(["female", "male"]),
-      age: z.number().int().min(0),
       legitimate: z.boolean(),
-      personality: z.object({
-        empathy: z.number().int().min(0).max(100),
-        guile: z.number().int().min(0).max(100),
-        restraint: z.number().int().min(0).max(100),
-        sociability: z.number().int().min(0).max(100),
-        assertiveness: z.number().int().min(0).max(100),
-        curiosity: z.number().int().min(0).max(100),
-      }),
+      personality: companionPersonalitySchema,
       familyName: z.string().optional(),
       familyRole: z.string().optional(),
     }),
   })).default({}),
-  pendingCompanionAppointments: z.array(z.object({
-    heirId: nonEmpty,
-    companion: z.union([
-      z.object({ kind: z.literal("family_member"), personId: nonEmpty }),
-      z.object({ kind: z.literal("royal_relative"), personId: nonEmpty }),
-    ]),
-    createdAt: z.object({ year: z.number().int(), month: z.number().int(), period: z.enum(["early", "mid", "late"]), dayIndex: z.number().int() }),
-    acknowledged: z.boolean(),
-  })).default([]),
   templateEventNextSeq: z.number().int().min(0).default(0),
   templateEventRecords: z.record(z.string(), z.object({
     id: z.string(),
@@ -1309,6 +1298,7 @@ export const gameStateSchema = z.strictObject({
     ...validateColdPalaceInterventionLinks(data as Parameters<typeof validateColdPalaceInterventionLinks>[0]),
     ...validateColdPalaceMadnessLinks(data as Parameters<typeof validateColdPalaceMadnessLinks>[0]),
     ...validatePeakFavor(data as Parameters<typeof validatePeakFavor>[0]),
+    ...validateCompanionWorld(data as Parameters<typeof validateCompanionWorld>[0]),
     ...validateHaremIntrigueLinks(data as Parameters<typeof validateHaremIntrigueLinks>[0]),
     ...validateHaremInvestigationLinks({
       haremIntrigueReports: (data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIntrigueReports,

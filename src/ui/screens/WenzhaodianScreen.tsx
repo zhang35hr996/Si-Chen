@@ -7,6 +7,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { courseLabel } from "../../store/heirEducation";
+import { resolveCompanionView } from "../../engine/characters/companionReconciliation";
 import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
@@ -14,8 +15,8 @@ import { breadcrumbFor } from "../components/breadcrumb";
 type Subject = "scholarship" | "martial" | "virtue";
 const SUBJECTS: Subject[] = ["scholarship", "martial", "virtue"];
 
-function companionSourceLabel(kind: "family_member" | "royal_relative"): string {
-  return kind === "royal_relative" ? "宗室" : "官宦";
+function companionSourceLabel(source: "family_member" | "royal_relative"): string {
+  return source === "royal_relative" ? "宗室" : "官宦";
 }
 
 export function WenzhaodianScreen({
@@ -46,6 +47,7 @@ export function WenzhaodianScreen({
   const selected = students.find((r) => r.heir.id === selectedId);
   const companion = selected ? state.heirCompanions[selected.heir.id] : undefined;
   const activeCompanion = companion?.status === "active" ? companion : undefined;
+  const companionView = activeCompanion ? resolveCompanionView(state, activeCompanion) : undefined;
 
   return (
     <GameShell
@@ -103,15 +105,15 @@ export function WenzhaodianScreen({
                     <span key={s}>{courseLabel(selected.heir.sex, s)}：{selected.heir.education[s]}</span>
                   ))}
                 </div>
-                {activeCompanion ? (
+                {companionView ? (
                   <div className="wenzhao-screen__companion" data-testid="companion-card">
                     <h3>伴读</h3>
-                    <span className="companion-name">{activeCompanion.profile.name}</span>
+                    <span className="companion-name">{companionView.name}</span>
                     <span className="companion-meta">
-                      {activeCompanion.profile.age}岁　{companionSourceLabel(activeCompanion.companion.kind)}
+                      {companionView.age}岁　{companionSourceLabel(companionView.source)}
                     </span>
-                    {activeCompanion.bond > 0 && (
-                      <span className="companion-bond">情谊 {activeCompanion.bond}</span>
+                    {companionView.bond > 0 && (
+                      <span className="companion-bond">情谊 {companionView.bond}</span>
                     )}
                   </div>
                 ) : (

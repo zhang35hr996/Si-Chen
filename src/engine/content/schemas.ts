@@ -324,18 +324,6 @@ export const eventEffectSchema = z.union([
   z.strictObject({ type: z.literal("child_favor"), heirId: nonEmpty, delta }),
   z.strictObject({ type: z.literal("heir_died"), heirId: nonEmpty }),
   z.strictObject({
-    type: z.literal("heir_companion_assign"),
-    heirId: nonEmpty,
-    /** companion.kind + companion.personId 唯一标识伴读人物。 */
-    companionKind: z.enum(["family_member", "royal_relative"]),
-    companionPersonId: nonEmpty,
-  }),
-  z.strictObject({
-    type: z.literal("heir_companion_end"),
-    heirId: nonEmpty,
-    endReason: z.enum(["heir_left_school", "companion_deceased", "dismissed"]),
-  }),
-  z.strictObject({
     type: z.literal("relocate"),
     char: idSchema,
     location: idSchema,

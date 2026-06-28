@@ -87,7 +87,6 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     haremDisciplineIncidents: [],
     royalRelatives: {},
     heirCompanions: {},
-    pendingCompanionAppointments: [],
     templateEventNextSeq: 0,
     templateEventRecords: {},
     justice: createEmptyJusticeState(),

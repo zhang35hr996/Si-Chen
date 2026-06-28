@@ -2012,13 +2012,12 @@ export class GameStore {
     candidate = swept.value;
     collector?.capturePhaseScheduled("sweep_expired_confinements", diffGameState(beforeSweep, candidate));
 
-    // 伴读幂等协调（每次时间推进后运行；无 AP、无 EventEffect，直接变换 state）。
+    // 伴读幂等协调（每次时间推进后运行；无 AP、无 EventEffect，纯不可变变换）。
     {
       const beforeCompanion = candidate;
-      const companionPlan = planCompanionReconciliation(candidate, toGameTime(candidate.calendar));
-      const nextCandidate = { ...candidate };
-      applyCompanionReconciliation(nextCandidate, companionPlan, toGameTime(candidate.calendar));
-      candidate = nextCandidate;
+      const now = toGameTime(candidate.calendar);
+      const companionPlan = planCompanionReconciliation(db, candidate, now);
+      candidate = applyCompanionReconciliation(candidate, companionPlan, now);
       collector?.capturePhaseScheduled("companion_reconciliation", diffGameState(beforeCompanion, candidate));
     }
 
