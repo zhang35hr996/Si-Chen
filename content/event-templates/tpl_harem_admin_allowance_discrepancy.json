@@ -1,0 +1,140 @@
+{
+  "id": "tpl_harem_admin_allowance_discrepancy",
+  "title": "六宫月例有异",
+  "category": "harem_admin",
+  "checkpoint": "time_advance",
+  "apCost": 1,
+  "cooldown": { "actionDays": 60 },
+  "triggerCondition": {
+    "all": [
+      { "monthAtLeast": 2 }
+    ]
+  },
+  "participantRoles": [
+    {
+      "roleId": "reporter",
+      "pool": "empress_or_harem_admin",
+      "exclude": [],
+      "weightFactors": []
+    },
+    {
+      "roleId": "subject",
+      "pool": "consort_alive_active",
+      "exclude": ["candidate", "carrying_late"],
+      "weightFactors": [
+        { "type": "attr_high", "attr": "ambition", "threshold": 55, "weight": 3 },
+        { "type": "attr_low", "attr": "favor", "threshold": 30, "weight": 2 }
+      ]
+    }
+  ],
+  "hiddenTruthCandidates": [
+    { "id": "subject_embezzled", "description": "涉事侍君确实私下挪用了月例", "weight": 2 },
+    { "id": "servant_corruption", "description": "宫人借主子名义中饱私囊", "weight": 3 },
+    { "id": "framed", "description": "其他侍君收买宫人，故意把账记在其名下", "weight": 2 },
+    { "id": "accounting_error", "description": "只是尚宫局重复入账", "weight": 2 },
+    { "id": "charity", "description": "涉事侍君暗中接济失宠或生病的低位侍君", "weight": 2 }
+  ],
+  "openingNarration": "{reporter}向陛下禀报：尚宫局核对本月账目时，发现{subject}宫中香料、绸缎领用明显超出定额，手续齐全，却有几处领用日期与宫中记录对不上。",
+  "choices": [
+    { "id": "recheck", "text": "命尚宫局重新查账", "tone": "neutral" },
+    { "id": "summon_subject", "text": "传当事侍君来问", "tone": "neutral" },
+    { "id": "penalize", "text": "按宫规扣减下月月例", "tone": "hostile" },
+    { "id": "dismiss", "text": "压下此事", "tone": "guarded" }
+  ],
+  "outcomes": [
+    {
+      "choiceId": "recheck",
+      "responseLine": {
+        "role": "reporter",
+        "text": "是。臣侍这便命人重新核查，结果呈报陛下。",
+        "expression": "neutral"
+      },
+      "effects": [],
+      "memories": [
+        {
+          "forRole": "subject",
+          "entry": {
+            "kind": "impression",
+            "summary": "陛下对月例异常命重新查账，未立即追责。",
+            "strength": 45,
+            "retention": "slow",
+            "subjectIds": ["player", "subject"],
+            "perspective": "target",
+            "triggerTags": ["allowance", "investigation", "harem_admin"],
+            "unresolved": true,
+            "emotions": { "fear": 25 }
+          }
+        }
+      ]
+    },
+    {
+      "choiceId": "summon_subject",
+      "responseLine": {
+        "role": "subject",
+        "text": "……臣侍不知账目有误。若有差池，必是宫人办事不周，臣侍愿配合查问。",
+        "expression": "worried"
+      },
+      "effects": [
+        { "type": "adjust_consort_attr", "role": "subject", "field": "fear", "delta": 2 }
+      ],
+      "memories": [
+        {
+          "forRole": "subject",
+          "entry": {
+            "kind": "episodic",
+            "summary": "陛下因月例账目异常将我传来问话。",
+            "strength": 65,
+            "retention": "slow",
+            "subjectIds": ["player", "subject"],
+            "perspective": "target",
+            "triggerTags": ["allowance", "questioned", "harem_admin"],
+            "unresolved": true,
+            "emotions": { "fear": 40, "shame": 20 }
+          }
+        }
+      ]
+    },
+    {
+      "choiceId": "penalize",
+      "responseLine": {
+        "role": "reporter",
+        "text": "臣侍遵旨，这便知会尚宫局，下月起按规扣减。",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "adjust_consort_attr", "role": "subject", "field": "affection", "delta": -2 },
+        { "type": "adjust_consort_attr", "role": "subject", "field": "fear", "delta": 3 }
+      ],
+      "memories": [
+        {
+          "forRole": "subject",
+          "entry": {
+            "kind": "episodic",
+            "summary": "陛下未查清缘由便直接扣减我的下月月例。",
+            "strength": 70,
+            "retention": "slow",
+            "subjectIds": ["player", "subject"],
+            "perspective": "target",
+            "triggerTags": ["allowance", "punished", "harem_admin"],
+            "unresolved": true,
+            "emotions": { "anger": 35, "grief": 25, "fear": 20 }
+          }
+        }
+      ]
+    },
+    {
+      "choiceId": "dismiss",
+      "responseLine": {
+        "role": "reporter",
+        "text": "……是，臣侍知道了。",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "resource", "pillar": "nation", "field": "rumor", "delta": 1 }
+      ],
+      "memories": []
+    }
+  ],
+  "basePriority": 45,
+  "narrativeBriefTemplate": "场景类型：六宫账务奏报。{reporter}汇报{subject}宫中月例异常。隐藏真相：{hiddenTruth}。{reporter}不得直接断定{subject}有罪，须留余地。语气视性格决定。"
+}

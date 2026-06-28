@@ -4,7 +4,7 @@
  *
  *   npm run validate-content
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatErrorTag, type GameError } from "../src/engine/infra/errors";
@@ -43,6 +43,9 @@ export function readContentDir(rootDir: string): DiskContent {
       .map((name) => readJson(join(full, name)));
   };
 
+  const eventTemplatesDir = join(rootDir, "event-templates");
+  const eventTemplates = existsSync(eventTemplatesDir) ? readDir("event-templates") : [];
+
   return {
     raw: {
       world: readJson(join(rootDir, "world.json")),
@@ -52,6 +55,7 @@ export function readContentDir(rootDir: string): DiskContent {
       events: readDir("events"),
       scenes: readDir("scenes"),
       items: readJson(join(rootDir, "items.json")),
+      eventTemplates,
     },
     parseErrors,
   };
@@ -83,7 +87,8 @@ function main(): void {
       `${Object.keys(db.locations).length} locations, ` +
       `${Object.keys(db.events).length} events, ` +
       `${Object.keys(db.scenes).length} scenes, ` +
-      `${Object.keys(db.ranks).length} ranks`,
+      `${Object.keys(db.ranks).length} ranks, ` +
+      `${Object.keys(db.templates).length} event templates`,
   );
 }
 

@@ -1,0 +1,123 @@
+{
+  "id": "tpl_garden_avoid_emperor",
+  "title": "御花园·见驾而避",
+  "category": "garden_encounter",
+  "checkpoint": "location_enter",
+  "apCost": 1,
+  "cooldown": { "actionDays": 25 },
+  "triggerCondition": { "atLocation": "yuhuayuan" },
+  "participantRoles": [
+    {
+      "roleId": "consort",
+      "pool": "consort_alive_active",
+      "exclude": ["carrying_late", "candidate", "sick_or_critical"],
+      "weightFactors": [
+        { "type": "attr_low", "attr": "affection", "threshold": 40, "weight": 4 },
+        { "type": "attr_low", "attr": "favor", "threshold": 25, "weight": 3 },
+        { "type": "has_grievance", "weight": 5 },
+        { "type": "attr_high", "attr": "pride", "threshold": 65, "weight": 3 }
+      ]
+    }
+  ],
+  "presentation": {
+    "mode": "exploration",
+    "hostLocationId": "yuhuayuan",
+    "subLocationId": "zhujing",
+    "eventHint": "竹径尽头，有人影见到陛下后悄然转向。"
+  },
+  "hiddenTruthCandidates": [
+    { "id": "ashamed_of_punishment", "description": "因受罚而不愿见驾", "weight": 3 },
+    { "id": "hiding_tears", "description": "怕自己情绪失控", "weight": 3 },
+    { "id": "after_argument", "description": "刚与另一名侍君发生口角", "weight": 2 },
+    { "id": "concealing_item", "description": "身上藏有不愿被发现的物件", "weight": 1 },
+    { "id": "misread_intent", "description": "误以为陛下不愿见自己", "weight": 2 }
+  ],
+  "openingNarration": "陛下远远瞥见竹径间{consort}的背影——对方显然也看见了陛下，却悄然转身，往另一条小径走去。",
+  "choices": [
+    { "id": "call_back", "text": "命他回来", "tone": "neutral" },
+    { "id": "follow_ask", "text": "亲自追上询问", "tone": "friendly" },
+    { "id": "send_eunuch", "text": "让宦官稍后去问", "tone": "neutral" },
+    { "id": "pretend_unseen", "text": "当作没有看见", "tone": "guarded" }
+  ],
+  "outcomes": [
+    {
+      "choiceId": "call_back",
+      "responseLine": {
+        "role": "consort",
+        "text": "……臣侍失仪，请陛下恕罪。",
+        "expression": "worried"
+      },
+      "effects": [
+        { "type": "adjust_consort_attr", "role": "consort", "field": "fear", "delta": 2 }
+      ],
+      "memories": [
+        {
+          "forRole": "consort",
+          "entry": {
+            "kind": "episodic",
+            "summary": "陛下在竹径命我回来，我没有来得及躲开。",
+            "strength": 65,
+            "retention": "slow",
+            "subjectIds": ["player", "consort"],
+            "perspective": "witness",
+            "triggerTags": ["yuhuayuan", "caught", "encounter"],
+            "unresolved": true,
+            "emotions": { "fear": 40, "shame": 25 }
+          }
+        }
+      ]
+    },
+    {
+      "choiceId": "follow_ask",
+      "responseLine": {
+        "role": "consort",
+        "text": "陛下……臣侍只是……臣侍无事。",
+        "expression": "worried"
+      },
+      "effects": [
+        { "type": "adjust_consort_attr", "role": "consort", "field": "affection", "delta": 1 },
+        { "type": "adjust_consort_attr", "role": "consort", "field": "fear", "delta": 1 }
+      ],
+      "memories": [
+        {
+          "forRole": "consort",
+          "entry": {
+            "kind": "episodic",
+            "summary": "陛下特意追来问我为何避开，我未能如实回答。",
+            "strength": 70,
+            "retention": "slow",
+            "subjectIds": ["player", "consort"],
+            "perspective": "witness",
+            "triggerTags": ["yuhuayuan", "concern", "encounter"],
+            "unresolved": true,
+            "emotions": { "grief": 30, "shame": 35 }
+          }
+        }
+      ]
+    },
+    {
+      "choiceId": "send_eunuch",
+      "responseLine": {
+        "role": "consort",
+        "text": "（宦官传话后，回报：臣侍称无事，只是一时不适，不敢惊扰陛下。）",
+        "expression": "neutral"
+      },
+      "effects": [],
+      "memories": []
+    },
+    {
+      "choiceId": "pretend_unseen",
+      "responseLine": {
+        "role": "consort",
+        "text": "（{consort}的背影在竹径深处消失，不知去向。）",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "adjust_consort_attr", "role": "consort", "field": "affection", "delta": -1 }
+      ],
+      "memories": []
+    }
+  ],
+  "basePriority": 35,
+  "narrativeBriefTemplate": "场景类型：御花园·关系异常。{consort}试图回避陛下。隐藏真相：{hiddenTruth}。不要自动升级成宫斗或重大指控。台词应含蓄克制。"
+}

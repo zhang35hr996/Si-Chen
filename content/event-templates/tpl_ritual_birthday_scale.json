@@ -1,0 +1,94 @@
+{
+  "id": "tpl_ritual_birthday_scale",
+  "title": "万寿节规模决策",
+  "category": "ritual",
+  "checkpoint": "time_advance",
+  "apCost": 1,
+  "cooldown": { "actionDays": 360 },
+  "triggerCondition": {
+    "all": [
+      { "monthAtLeast": 1 },
+      { "flagSet": "ritual_birthday_pending" }
+    ]
+  },
+  "participantRoles": [
+    {
+      "roleId": "official",
+      "pool": "court_official_active",
+      "exclude": [],
+      "weightFactors": []
+    }
+  ],
+  "hiddenTruthCandidates": [
+    { "id": "normal_year", "description": "平稳年份，无重大外部压力", "weight": 4 },
+    { "id": "treasury_tight", "description": "国库较为紧张，大办有压力", "weight": 3 },
+    { "id": "disaster_year", "description": "年内有灾情，大办可能引发民怨", "weight": 2 },
+    { "id": "victory_year", "description": "近期有军事胜利，大办可提振民心", "weight": 2 }
+  ],
+  "openingNarration": "司礼官呈上万寿节章程，按当前国情提出三种规格，请陛下圣裁。",
+  "choices": [
+    { "id": "grand", "text": "大办——宫宴百官朝贺、灯会赐宴", "tone": "friendly" },
+    { "id": "standard", "text": "按例举行", "tone": "neutral" },
+    { "id": "simple", "text": "一切从简", "tone": "neutral" },
+    { "id": "cancel", "text": "停办，将费用用于赈济或军饷", "tone": "guarded" }
+  ],
+  "outcomes": [
+    {
+      "choiceId": "grand",
+      "responseLine": {
+        "role": "official",
+        "text": "臣等遵旨，这便着礼部筹办，务必盛典无虞。",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "resource", "pillar": "sovereign", "field": "prestige", "delta": 4 },
+        { "type": "resource", "pillar": "nation", "field": "publicSupport", "delta": -2 },
+        { "type": "flag", "key": "ritual_birthday_pending", "value": false }
+      ],
+      "memories": []
+    },
+    {
+      "choiceId": "standard",
+      "responseLine": {
+        "role": "official",
+        "text": "是，臣等遵旨，一切依成例办理。",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "resource", "pillar": "sovereign", "field": "prestige", "delta": 2 },
+        { "type": "flag", "key": "ritual_birthday_pending", "value": false }
+      ],
+      "memories": []
+    },
+    {
+      "choiceId": "simple",
+      "responseLine": {
+        "role": "official",
+        "text": "……是，臣等谨遵圣命，一切从俭。",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "resource", "pillar": "sovereign", "field": "prestige", "delta": -1 },
+        { "type": "resource", "pillar": "nation", "field": "publicSupport", "delta": 1 },
+        { "type": "flag", "key": "ritual_birthday_pending", "value": false }
+      ],
+      "memories": []
+    },
+    {
+      "choiceId": "cancel",
+      "responseLine": {
+        "role": "official",
+        "text": "……陛下仁德，臣等遵旨，将万寿节用度悉数转作他用，礼部记档备查。",
+        "expression": "neutral"
+      },
+      "effects": [
+        { "type": "resource", "pillar": "sovereign", "field": "prestige", "delta": -3 },
+        { "type": "resource", "pillar": "nation", "field": "publicSupport", "delta": 3 },
+        { "type": "flag", "key": "ritual_birthday_pending", "value": false }
+      ],
+      "memories": []
+    }
+  ],
+  "basePriority": 60,
+  "narrativeBriefTemplate": "场景类型：年度礼仪决策。司礼官提出万寿节方案。当前国情见运行态。台词须引用当前真实国情，不得编造具体灾区或战争。"
+}
