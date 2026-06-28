@@ -2821,7 +2821,7 @@ export class GameStore {
         };
         const caseIdx = s.haremInvestigationCases.findIndex((x) => x.id === caseId);
         const updatedCases = [...s.haremInvestigationCases];
-        updatedCases[caseIdx] = { ...c, status: "in_progress" };
+        updatedCases[caseIdx] = { ...s.haremInvestigationCases[caseIdx]!, status: "in_progress" };
         return {
           ...s,
           haremInvestigationTasks: { ...s.haremInvestigationTasks, [taskId]: newTask },
@@ -2869,7 +2869,7 @@ export class GameStore {
       if (!c.suspectIds.includes(decision.suspectId)) {
         return err([stateError("INTRIGUE_CASE_SUSPECT_NOT_FOUND", `"${decision.suspectId}" 不在当前嫌疑人名单 suspectIds 中`)]);
       }
-      updated = { ...c, status: "closed_confirmed", closedAt: at, closureReason: "culprit_confirmed" };
+      updated = { ...c, status: "closed_confirmed", closedAt: at, closureReason: "culprit_confirmed", confirmedCulpritId: decision.suspectId };
     }
 
     const cases = [...this.state.haremInvestigationCases];

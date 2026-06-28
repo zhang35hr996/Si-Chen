@@ -1010,9 +1010,10 @@ export const gameStateSchema = z.strictObject({
     leadIds: z.array(z.string()),
     closedAt: gameTimeSchema.optional(),
     closureReason: z.enum(["player_cancelled", "insufficient_evidence", "culprit_confirmed"]).optional(),
+    confirmedCulpritId: idSchema.optional(),
   })).default([]),
-  haremInvestigationTasks: z.record(z.string(), z.strictObject({
-    id: z.string().min(1),
+  haremInvestigationTasks: z.record(z.string().regex(/^itask_\d{6}$/), z.strictObject({
+    id: z.string().regex(/^itask_\d{6}$/),
     caseId: z.string().min(1),
     method: z.enum(["question_target", "question_suspect", "quiet_inquiry"]),
     subjectId: idSchema.optional(),
@@ -1022,8 +1023,8 @@ export const gameStateSchema = z.strictObject({
     resolvedAt: gameTimeSchema.optional(),
     leadId: z.string().optional(),
   })).default({}),
-  haremInvestigationLeads: z.record(z.string(), z.strictObject({
-    id: z.string().min(1),
+  haremInvestigationLeads: z.record(z.string().regex(/^ilead_\d{6}$/), z.strictObject({
+    id: z.string().regex(/^ilead_\d{6}$/),
     caseId: z.string().min(1),
     discoveredAt: gameTimeSchema,
     method: z.enum(["question_target", "question_suspect", "quiet_inquiry"]),

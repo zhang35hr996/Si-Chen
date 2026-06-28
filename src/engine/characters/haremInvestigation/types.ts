@@ -62,6 +62,8 @@ export interface IntrigueInvestigationCase {
   /** 玩家终止或结案时间。 */
   closedAt?: GameTime;
   closureReason?: "player_cancelled" | "insufficient_evidence" | "culprit_confirmed";
+  /** 玩家在 closed_confirmed 状态时指认的主谋 ID。 */
+  confirmedCulpritId?: string;
 }
 
 // ── 5B-2：调查任务 ────────────────────────────────────────────────────

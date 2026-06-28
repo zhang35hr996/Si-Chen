@@ -72,7 +72,22 @@ export function resolveInvestigationTask(
     task.subjectId,
   );
 
-  const c = state.haremInvestigationCases.find((x) => x.id === task.caseId)!;
+  const c = state.haremInvestigationCases.find((x) => x.id === task.caseId);
+  if (!c) {
+    // 孤儿任务（integrity 检查应已拦截），跳过而非崩溃
+    const emptyLead: IntrigueInvestigationLead = {
+      id: nextLeadId(state.haremInvestigationNextSeq),
+      caseId: task.caseId,
+      discoveredAt: resolvedAt,
+      method: task.method,
+      summaryCode: "orphan_task_skipped",
+      strength: "tenuous",
+      implicatedIds: [],
+      clearedIds: [],
+      revealedKinds: [],
+    };
+    return { lead: emptyLead, nextSeq: state.haremInvestigationNextSeq + 1 };
+  }
   const incident = state.haremIncidents.find((i) => i.id === c.source.incidentId);
   const trueActorId = incident?.actorId;
   const trueKind: HaremIntrigueKind | undefined = incident?.kind;
@@ -138,11 +153,17 @@ export function resolveInvestigationTask(
           summaryCode = "suspect_irrelevant_account";
         } else {
           // 罕见：此人虽非主谋，但供出了另一个嫌疑人
-          const possibleSuspects = c.knownTargetIds.filter(
-            (id) => !c.suspectIds.includes(id) && id !== subject,
+          // 候选池：在宫有身份（有 standing）、非受害者、非当前嫌疑人、非被问者本人
+          const possibleSuspects = Object.keys(state.standing).filter(
+            (id) =>
+              !c.suspectIds.includes(id) &&
+              !c.knownTargetIds.includes(id) &&
+              id !== subject &&
+              state.standing[id]?.lifecycle !== "deceased",
           );
           if (possibleSuspects.length > 0 && roll2 < 0.30) {
-            const newSuspect = possibleSuspects[Math.floor(roll2 * possibleSuspects.length)];
+            // roll2 已用于概率门；用 roll3 做索引以避免偏向第一项
+            const newSuspect = possibleSuspects[Math.floor(roll3 * possibleSuspects.length)];
             implicatedIds = newSuspect ? [newSuspect] : [];
             strength = "tenuous";
           }
