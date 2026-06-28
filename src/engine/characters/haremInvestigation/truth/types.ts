@@ -13,7 +13,7 @@ export type InvestigationCauseType =
   | "framing"
   | "false_accusation";
 
-export type InvestigationMethod =
+export type IncidentMechanism =
   | "none"
   | "wrong_dosage"
   | "tampered_medicine"
@@ -40,7 +40,7 @@ export type EvidenceType =
   | "timeline"
   | "correspondence";
 
-export type InvestigationActionType =
+export type EvidenceDiscoveryAction =
   | "medical_examination"
   | "question_servants"
   | "reconstruct_timeline"
@@ -52,7 +52,7 @@ export type EvidenceClaim =
   | { kind: "implicates_character"; characterRef: string; strength: "weak" | "moderate" | "strong" }
   | { kind: "exonerates_character"; characterRef: string; strength: "weak" | "moderate" | "strong" }
   | { kind: "supports_cause"; causeType: InvestigationCauseType }
-  | { kind: "reveals_method"; method: InvestigationMethod }
+  | { kind: "reveals_method"; method: IncidentMechanism }
   | { kind: "establishes_fact"; factCode: string };
 
 export interface HiddenEvidenceNode {
@@ -65,7 +65,7 @@ export interface HiddenEvidenceNode {
   difficulty: number;
   /** Evidence decay per investigation period. */
   decayPerPeriod: number;
-  discoverableBy: InvestigationActionType[];
+  discoverableBy: EvidenceDiscoveryAction[];
   prerequisiteEvidenceIds: string[];
   /** If true, this evidence leads investigators astray. */
   misleading: boolean;
@@ -83,7 +83,7 @@ export interface InvestigationTruth {
   accusedIds: string[];
   /** For framing: the intended framing target. */
   framingTargetIds: string[];
-  method: InvestigationMethod;
+  method: IncidentMechanism;
   motive: InvestigationMotive;
   /** Concealment level 0–100: higher = harder to uncover. */
   concealment: number;

@@ -7,16 +7,16 @@
  */
 import type {
   EvidenceType,
-  InvestigationActionType,
+  EvidenceDiscoveryAction,
   InvestigationCauseType,
-  InvestigationMethod,
+  IncidentMechanism,
 } from "./types";
 
 export type BlueprintClaim =
   | { kind: "implicates_character"; characterRef: "culprit" | "framing_target" | "accused"; strength: "weak" | "moderate" | "strong" }
   | { kind: "exonerates_character"; characterRef: "accused" | "framing_target"; strength: "weak" | "moderate" | "strong" }
   | { kind: "supports_cause"; causeType: InvestigationCauseType }
-  | { kind: "reveals_method"; method: InvestigationMethod }
+  | { kind: "reveals_method"; method: IncidentMechanism }
   | { kind: "reveals_method_ref" }  // bound to truth.method at resolve time
   | { kind: "establishes_fact"; factCode: string };
 
@@ -26,7 +26,7 @@ export interface EvidenceBlueprint {
   claims: BlueprintClaim[];
   difficulty: number;
   decayPerPeriod: number;
-  discoverableBy: InvestigationActionType[];
+  discoverableBy: EvidenceDiscoveryAction[];
   prerequisiteEvidenceIds: string[];
   misleading: boolean;
 }

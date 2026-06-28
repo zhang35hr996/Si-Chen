@@ -13,7 +13,7 @@ import type {
   HeirHealthTruthContext,
   HiddenEvidenceNode,
   InvestigationCauseType,
-  InvestigationMethod,
+  IncidentMechanism,
   InvestigationMotive,
   InvestigationTruth,
   TruthCandidateSnapshot,
@@ -71,13 +71,13 @@ function weightedPick<T>(
 
 // ── Method / motive mapping ───────────────────────────────────────────────────
 
-function methodForCause(causeType: InvestigationCauseType, rng: () => number): InvestigationMethod {
+function methodForCause(causeType: InvestigationCauseType, rng: () => number): IncidentMechanism {
   switch (causeType) {
     case "natural_illness":
     case "accident":
       return "none";
     case "negligence": {
-      const methods: InvestigationMethod[] = ["wrong_dosage", "contaminated_medicine", "treatment_delay", "medicine_mixup"];
+      const methods: IncidentMechanism[] = ["wrong_dosage", "contaminated_medicine", "treatment_delay", "medicine_mixup"];
       return methods[Math.floor(rng() * methods.length)]!;
     }
     case "intentional_harm":
@@ -151,7 +151,7 @@ function pickOne(rng: () => number, candidates: TruthCandidateSnapshot[]): Truth
  */
 function bindClaim(
   blueprintClaim: BlueprintClaim,
-  resolvedMethod: InvestigationMethod,
+  resolvedMethod: IncidentMechanism,
   culpritId?: string,
   framingTargetId?: string,
   accusedId?: string,
