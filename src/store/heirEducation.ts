@@ -83,27 +83,34 @@ function peerFragment(
   subject: Subject,
   seed: string,
 ): string {
-  const { sociability, empathy, assertiveness, guile } = heir.personality;
-  const peerName = displayName(state, peer(state, heir, seed));
+  const p = peer(state, heir, seed);
+  const peerName = displayName(state, p);
+  const heirName = displayName(state, heir);
   const subjectCourse = courseLabel(heir.sex, subject);
+  const bothSocial = heir.personality.sociability >= 65 && p.personality.sociability >= 65;
+  const heirEmpathy = heir.personality.empathy >= 65;
+  const peerWeak = p.personality.empathy < 40;
+  const bothAssert = heir.personality.assertiveness >= 65 && p.personality.assertiveness >= 65;
+  const heirGuile = heir.personality.guile >= 65;
+  const peerGuile = p.personality.guile >= 65;
 
   if (subject === "scholarship") {
-    if (sociability >= 65) return `课间${peerName}低声凑过来，两人悄声讨论起一处典故，引得先生侧目。`;
-    if (empathy >= 65) return `${peerName}在旁卡住了半晌，${heir.givenName ?? ""}见状悄悄把答案写在小纸条上递了过去。`;
-    if (assertiveness >= 65) return `${peerName}与其争论一处诠释，各执一词，声音不觉大了些，先生咳了一声才平息。`;
-    if (guile >= 65) return `${peerName}抄了一段，被先生当场看穿，${heir.givenName ?? ""}悄悄撇开视线，不动声色。`;
-    return `课后${peerName}围着追问${subjectCourse}的疑难，你来我往好一番交流。`;
+    if (bothSocial) return `课间${peerName}低声凑来，两人悄声讨论起一处典故，互相补充，引得先生侧目。`;
+    if (heirEmpathy && peerWeak) return `${peerName}在旁卡住了半晌，${heirName}见状悄悄把思路写在小纸条上递了过去。`;
+    if (bothAssert) return `${peerName}与${heirName}争论一处诠释，各执一词，声音不觉大了些，先生咳了一声才平息。`;
+    if (heirGuile && !peerGuile) return `${peerName}抄了一段，被先生当场看穿，${heirName}悄悄撇开视线，不动声色。`;
+    return `课后${peerName}围着追问${subjectCourse}的疑难，${heirName}耐心拆解，来回好一番交流。`;
   }
   if (subject === "martial") {
-    if (sociability >= 65) return `演练间歇${peerName}拉着比试拉弓，两人你追我赶，直到先生叫停才罢休。`;
-    if (assertiveness >= 65) return `${peerName}下手偏重，切磋时险些绊倒，相视苦笑后各自重来。`;
-    if (empathy >= 65) return `${peerName}脚步踉跄，悄悄把自己的位置让出半步，两人配合反倒流畅了许多。`;
-    return `收课后${peerName}低声请教发力技巧，旁边几人凑来，围了一小圈。`;
+    if (bothSocial) return `演练间歇${peerName}拉着${heirName}比试拉弓，两人你追我赶，直到先生叫停才罢休。`;
+    if (bothAssert) return `${peerName}下手偏重，两人切磋时险些绊倒，相视苦笑后各自重来，愈打愈起劲。`;
+    if (heirEmpathy && peerWeak) return `${peerName}脚步踉跄，${heirName}悄悄让出半步位置，两人配合反倒流畅了许多。`;
+    return `收课后${peerName}低声请教发力技巧，${heirName}演示了一遍，旁边几人凑来，围了一小圈。`;
   }
   // virtue
-  if (sociability >= 65) return `礼仪课上${peerName}忍不住偷笑，先生板脸重讲，两人对视一眼，更难绷住。`;
-  if (empathy >= 65) return `${peerName}行礼时一步踩错，悄悄用眼神示意该怎么站位，${peerName}如获救星。`;
-  return `${peerName}行礼时袖子甩偏，两人面面相觑，忍笑复又整衣。`;
+  if (bothSocial) return `礼仪课上${peerName}忍不住偷笑，两人对视一眼，先生板脸重讲，笑声才勉强压住。`;
+  if (heirEmpathy && peerWeak) return `${peerName}行礼时踩错方位，${heirName}悄悄用眼神示意该怎么站，${peerName}如获救星。`;
+  return `${peerName}行礼时袖子甩偏，碰到了${heirName}，两人面面相觑，忍笑复又整衣。`;
 }
 
 function peer(state: GameState, heir: Heir, seed: string): Heir {
