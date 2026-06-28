@@ -1001,7 +1001,7 @@ export const gameStateSchema = z.strictObject({
       incidentId: z.string().min(1),
     }),
     openedAt: gameTimeSchema,
-    openedFromReportKind: z.enum(["anomaly", "rumor", "exposure", "investigation_update", "investigation_final"]),
+    openedFromReportKind: z.enum(["anomaly", "rumor", "exposure"]),
     status: z.enum(["open", "in_progress", "ready_for_review", "closed_unresolved", "closed_confirmed", "cancelled"]),
     knownTargetIds: z.array(idSchema),
     suspectIds: z.array(idSchema),

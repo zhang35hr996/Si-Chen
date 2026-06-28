@@ -7,6 +7,8 @@ import type { HaremIntrigueReport } from "../../state/types";
 import type { IntrigueInvestigationCase } from "./types";
 import { isActiveCase } from "./types";
 
+const NON_INVESTIGATABLE_KINDS = new Set(["investigation_update", "investigation_final"]);
+
 export interface HaremInvestigationValidationInput {
   haremIntrigueReports: HaremIntrigueReport[];
   haremInvestigationCases: IntrigueInvestigationCase[];
@@ -35,6 +37,11 @@ export function validateHaremInvestigationLinks(
       errors.push(stateError("INTRIGUE_CASE_ORPHAN_REPORT", `haremInvestigationCases[id=${c.id}]: source.reportId="${c.source.reportId}" 不存在`));
     }
 
+    // case → report 反向链接：report 必须指回此 case
+    if (report && report.linkedInvestigationId !== c.id) {
+      errors.push(stateError("INTRIGUE_CASE_BROKEN_LINK", `haremInvestigationCases[id=${c.id}]: source report 的 linkedInvestigationId="${report.linkedInvestigationId ?? "(undefined)"}" 未反向链接此案件`));
+    }
+
     // source.incidentId 必须存在
     if (!incidentIds.has(c.source.incidentId)) {
       errors.push(stateError("INTRIGUE_CASE_ORPHAN_INCIDENT", `haremInvestigationCases[id=${c.id}]: source.incidentId="${c.source.incidentId}" 不存在`));
@@ -43,6 +50,16 @@ export function validateHaremInvestigationLinks(
     // source.incidentId 与 report 一致
     if (report && report.source.incidentId !== c.source.incidentId) {
       errors.push(stateError("INTRIGUE_CASE_INCIDENT_MISMATCH", `haremInvestigationCases[id=${c.id}]: source.incidentId 与 report.source.incidentId 不一致`));
+    }
+
+    // openedFromReportKind 不得为不可立案种类
+    if (NON_INVESTIGATABLE_KINDS.has(c.openedFromReportKind)) {
+      errors.push(stateError("INTRIGUE_CASE_INVALID_KIND", `haremInvestigationCases[id=${c.id}]: openedFromReportKind="${c.openedFromReportKind}" 是不可立案报告种类`));
+    }
+
+    // openedFromReportKind 必须与来源 report 一致
+    if (report && report.reportKind !== c.openedFromReportKind) {
+      errors.push(stateError("INTRIGUE_CASE_KIND_MISMATCH", `haremInvestigationCases[id=${c.id}]: openedFromReportKind="${c.openedFromReportKind}" 与 report.reportKind="${report.reportKind}" 不一致`));
     }
 
     // knownTargetIds 不为空

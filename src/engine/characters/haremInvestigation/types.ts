@@ -4,7 +4,10 @@
  */
 import type { GameTime } from "../../calendar/time";
 import type { HaremIntrigueKind } from "../haremIntrigue/types";
-import type { HaremIntrigueReportConfidence, HaremIntrigueReportKind } from "../../state/types";
+import type { HaremIntrigueReportConfidence } from "../../state/types";
+
+/** 可立案的报告种类（排除调查进行中的中间报告）。 */
+export type InvestigatableReportKind = "anomaly" | "rumor" | "exposure";
 
 /**
  * 调查案件生命周期状态机。
@@ -41,8 +44,8 @@ export interface IntrigueInvestigationCase {
   source: IntrigueInvestigationSource;
 
   openedAt: GameTime;
-  /** 立案时的报告种类（exposure / anomaly）。 */
-  openedFromReportKind: HaremIntrigueReportKind;
+  /** 立案时的报告种类（只允许可立案种类）。 */
+  openedFromReportKind: InvestigatableReportKind;
 
   status: IntrigueInvestigationStatus;
 
