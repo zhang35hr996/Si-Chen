@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
+const mkState = () => withConsort(createNewGameState(db), db, "lu_huaijin");
+
 describe("funnel: heir_designate", () => {
   it("tags consorts candidate + records candidateIds", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const r = applyEffects(db, state, [{ type: "heir_designate", charIds: ["lu_huaijin", "shen_zhibai"] }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -25,7 +28,7 @@ describe("funnel: heir_designate", () => {
   });
 
   it("rejects a deceased consort", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     state.standing.lu_huaijin!.lifecycle = "deceased";
     expect(validateEffects(db, state, [{ type: "heir_designate", charIds: ["lu_huaijin"] }])).toHaveLength(1);
   });

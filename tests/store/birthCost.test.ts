@@ -4,6 +4,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { buildBirth } from "../../src/store/gestation";
 import { makeGameTime } from "../../src/engine/calendar/time";
+import { withConsort } from "../helpers/consortFixture";
 
 const _content = loadGameContent();
 if (!_content.ok) throw new Error("content failed to load");
@@ -17,12 +18,10 @@ const BOTH_SEED = 154;        // bearerOutcome === "both"
 
 /** Create a state with a due consort gestation (lu_huaijin, conceivedAt year=1 month=1). */
 function dueBirth(rngSeed: number, health: number) {
-  const s = createNewGameState(db);
+  // Seeds were pre-scanned with carrier=lu_huaijin; inject her to keep outcomes stable.
+  const s = withConsort(createNewGameState(db), db, "lu_huaijin");
   s.rngSeed = rngSeed;
-  // Pick first non-deceased consort with standing (skip officials)
-  const cid = Object.keys(s.standing).find(
-    (id) => s.standing[id]!.lifecycle !== "deceased" && db.characters[id]?.kind === "consort",
-  )!;
+  const cid = "lu_huaijin";
   s.standing[cid]!.health = health;
   s.standing[cid]!.healthStatus = "healthy";
   s.standing[cid]!.lifecycle = "carrying";

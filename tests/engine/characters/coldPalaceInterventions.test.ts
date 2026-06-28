@@ -31,6 +31,7 @@ import {
 import { validateColdPalaceInterventionLinks } from "../../../src/engine/characters/coldPalaceValidator";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+import { withConsort } from "../../helpers/consortFixture";
 
 /** Build a minimal valid personal_visit intervention for use in validator tests. */
 function makeVisitIntervention(state: GameState, charId: string): ColdPalaceIntervention {
@@ -68,7 +69,7 @@ const db = loadRealContent();
 const REAL_TARGET_ID = "lu_huaijin";
 
 function baseState(): GameState {
-  return createNewGameState(db);
+  return withConsort(createNewGameState(db), db, REAL_TARGET_ID);
 }
 
 function stateWithColdPalaceResident(charId = REAL_TARGET_ID, health = 80): GameState {
@@ -215,7 +216,7 @@ describe("canInterveneInColdPalace", () => {
 describe("interveneInColdPalace (store)", () => {
   function setupStore(health = 80) {
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(r.ok).toBe(true);
     if (health !== 80) {

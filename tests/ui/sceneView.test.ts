@@ -9,6 +9,7 @@ import { consortLocationAt } from "../../src/engine/characters/presence";
 import type { GameState } from "../../src/engine/state/types";
 import { displayRole, focusedCharacterView, presentBarItems, reconcileSelection } from "../../src/ui/sceneView";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
@@ -40,7 +41,8 @@ describe("presentBarItems is driven by presentAt (physical), not residence roste
     let state: GameState | null = null;
     outer: for (let dayIndex = 0; dayIndex < 200; dayIndex++) {
       for (let slot = 1; slot <= 3; slot++) {
-        const s: GameState = { ...fresh(), playerLocation: "zichendian", calendar: { ...fresh().calendar, dayIndex, ap: fresh().calendar.apMax - slot } };
+        const base = withConsort(fresh(), db, "lu_huaijin");
+        const s: GameState = { ...base, playerLocation: "zichendian", calendar: { ...base.calendar, dayIndex, ap: base.calendar.apMax - slot } };
         if (consortLocationAt(db, s, "lu_huaijin", shichenSlot(s.calendar)) === "yuhuayuan") { state = s; break outer; }
       }
     }

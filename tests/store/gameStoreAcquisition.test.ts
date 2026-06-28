@@ -32,12 +32,16 @@ describe("GameStore 获取方法", () => {
   });
   it("giftTribute：库存净不变、目标 favor 升", () => {
     const { db, store } = newStore();
-    const consort = Object.values(db.characters).find((c) => c.kind === "consort" && c.initialStanding)!;
-    const favor0 = store.getState().standing[consort.id]!.favor;
+    const state = store.getState();
+    const consortId = Object.keys(state.standing).find((id) => {
+      const c = db.characters[id] ?? state.generatedConsorts[id];
+      return c?.kind === "consort" && state.standing[id]?.rank !== "huanghou";
+    })!;
+    const favor0 = store.getState().standing[consortId]!.favor;
     const before = store.getState().resources.storehouse.items["luozidai"] ?? 0;
-    const ok = store.giftTribute(db, "luozidai", { kind: "consort", id: consort.id });
+    const ok = store.giftTribute(db, "luozidai", { kind: "consort", id: consortId });
     expect(ok).toBe(true);
-    expect(store.getState().standing[consort.id]!.favor).toBeGreaterThan(favor0);
+    expect(store.getState().standing[consortId]!.favor).toBeGreaterThan(favor0);
     // grant +1 then bestow −1 → net zero: end count equals start count
     expect(store.getState().resources.storehouse.items["luozidai"] ?? 0).toBe(before); // grant 后 bestow 扣回，净不变
   });

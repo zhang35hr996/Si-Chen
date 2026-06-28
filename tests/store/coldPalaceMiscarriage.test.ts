@@ -5,6 +5,7 @@ import { buildMonthlyHealthTick } from "../../src/store/healthTick";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { getCharacterLocation } from "../../src/engine/characters/presence";
 import { makeGameTime } from "../../src/engine/calendar/time";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -14,8 +15,11 @@ const conceived = makeGameTime(1, 1, "early");
 
 /** 让某侍君怀胎且健康充裕（不会因承养损耗致死），返回布置好的 state。 */
 function pregnantConsort(rngSeed: number, consortId: string) {
-  const s = createNewGameState(db);
+  let s = createNewGameState(db);
   s.rngSeed = rngSeed;
+  if (!s.standing[consortId]) {
+    s = withConsort(s, db, consortId);
+  }
   s.standing[consortId]!.health = 95;
   s.standing[consortId]!.healthStatus = "healthy";
   s.standing[consortId]!.lifecycle = "carrying";

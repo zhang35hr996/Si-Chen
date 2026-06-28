@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { eligibleAdoptiveFathers, bioFatherAvailable, buildAdoptionReaction } from "../../src/store/adoption";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import type { Heir } from "../../src/engine/state/types";
 
 const content = loadGameContent();
@@ -31,7 +32,7 @@ describe("bioFatherAvailable", () => {
     expect(bioFatherAvailable(db, s, heir({ fatherId: null }))).toBe(false);
   });
   it("false when bio father deceased or in 冷宫", () => {
-    const s = createNewGameState(db);
+    const s = withConsort(createNewGameState(db), db, "lu_huaijin");
     s.standing.lu_huaijin!.lifecycle = "deceased";
     expect(bioFatherAvailable(db, s, heir({ fatherId: "lu_huaijin" }))).toBe(false);
     expect(bioFatherAvailable(db, createNewGameState(db), heir({ fatherId: "wenya" }))).toBe(false);

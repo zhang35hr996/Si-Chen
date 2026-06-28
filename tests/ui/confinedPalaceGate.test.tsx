@@ -12,10 +12,11 @@ import { applyEffects } from "../../src/engine/effects/funnel";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
-const base = createNewGameState(db);
+const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const now = toGameTime(base.calendar);
 
 const CONSORT_ID = "lu_huaijin";

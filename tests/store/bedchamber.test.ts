@@ -3,10 +3,13 @@ import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { buildBedchamber, bedchamberConfig, passionAllowed, canSummon, hasActiveGestation } from "../../src/store/bedchamber";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
+
+const mkState = () => withConsort(createNewGameState(db), db, "lu_huaijin");
 
 describe("bedchamberConfig", () => {
   it("reads world.json values", () => {
@@ -18,12 +21,12 @@ describe("bedchamberConfig", () => {
 
 describe("buildBedchamber", () => {
   it("returns null for an official", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     expect(buildBedchamber(db, state, "wei_sui", "passion")).toBeNull();
   });
 
   it("first night flag is set when no prior encounters", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const plan = buildBedchamber(db, state, "lu_huaijin", "pleasure");
     expect(plan).not.toBeNull();
     expect(plan!.isFirstNight).toBe(true);
@@ -32,7 +35,7 @@ describe("buildBedchamber", () => {
   });
 
   it("not first night after a prior encounter", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const a = applyEffects(db, state, [{ type: "bedchamber", char: "lu_huaijin", mode: "pleasure" }]);
     expect(a.ok).toBe(true);
     if (!a.ok) return;
@@ -41,20 +44,20 @@ describe("buildBedchamber", () => {
   });
 
   it("pleasure never conceives (no pregnancy effect)", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const plan = buildBedchamber(db, state, "lu_huaijin", "pleasure");
     expect(plan!.conceived).toBe(false);
     expect(plan!.effects.some((e) => e.type === "pregnancy")).toBe(false);
   });
 
   it("passion conceives iff conception roll hits, adds pregnancy begin", () => {
-    const state = createNewGameState(db);
+    const state = mkState();
     const plan = buildBedchamber(db, state, "lu_huaijin", "passion");
     expect(plan!.effects.some((e) => e.type === "pregnancy" && (e as any).op === "begin")).toBe(plan!.conceived);
   });
 
   it("does not roll conception while already pregnant", () => {
-    let state = createNewGameState(db);
+    let state = mkState();
     const begun = applyEffects(db, state, [{ type: "pregnancy", op: "begin" }]);
     expect(begun.ok).toBe(true);
     if (!begun.ok) return;
@@ -72,19 +75,19 @@ describe("陪伴 dialogue four-case branching", () => {
     buildBedchamber(db, s, "lu_huaijin", "companionship")!.lines.join("\n");
 
   it("picks distinct lines for neither / sovereign / consort / both pregnant", () => {
-    const neither = createNewGameState(db);
+    const neither = mkState();
 
-    const sovereign = createNewGameState(db);
+    const sovereign = mkState();
     sovereign.resources.bloodline.pregnancy = { status: "carrying", conceivedAt, candidateIds: [] };
     sovereign.resources.bloodline.gestations = [{ carrier: "sovereign", conceivedAt }];
 
-    const consort = createNewGameState(db);
+    const consort = mkState();
     consort.resources.bloodline.gestations = [
       { carrier: "lu_huaijin", conceivedAt, fatherId: "lu_huaijin", transferredAtMonth: 3 },
     ];
     consort.standing.lu_huaijin!.lifecycle = "carrying";
 
-    const both = createNewGameState(db);
+    const both = mkState();
     both.resources.bloodline.pregnancy = { status: "carrying", conceivedAt, candidateIds: [] };
     both.resources.bloodline.gestations = [
       { carrier: "sovereign", conceivedAt },
@@ -102,7 +105,7 @@ describe("陪伴 dialogue four-case branching", () => {
 
 describe("bedchamber conception gate (multi-line gestation)", () => {
   it("passion does not conceive when the sovereign's own pregnancy is active", () => {
-    const s = createNewGameState(db);
+    const s = mkState();
     s.resources.bloodline.pregnancy = { status: "carrying", candidateIds: [] };
     s.resources.bloodline.gestations = [
       { carrier: "sovereign", conceivedAt: { year: 1, month: 1, period: "early", dayIndex: 0 } },
@@ -113,8 +116,8 @@ describe("bedchamber conception gate (multi-line gestation)", () => {
   });
 
   it("a consort carrying a transferred heir does NOT block the sovereign from conceiving", () => {
-    const baseline = buildBedchamber(db, createNewGameState(db), "lu_huaijin", "passion")!;
-    const s = createNewGameState(db);
+    const baseline = buildBedchamber(db, mkState(), "lu_huaijin", "passion")!;
+    const s = mkState();
     s.resources.bloodline.gestations = [
       {
         carrier: "wenya",
@@ -131,38 +134,38 @@ describe("bedchamber conception gate (multi-line gestation)", () => {
 
 describe("passionAllowed / canSummon / hasActiveGestation", () => {
   it("carrying consort cannot use passion but can be summoned", () => {
-    const s = createNewGameState(db);
+    const s = mkState();
     s.standing.lu_huaijin!.lifecycle = "carrying";
     expect(passionAllowed(s, "lu_huaijin")).toBe(false);
     expect(canSummon(s, "lu_huaijin")).toBe(true);
   });
 
   it("recovering consort (recoverUntilMonth in future) cannot use passion", () => {
-    const s = createNewGameState(db);
+    const s = mkState();
     s.standing.lu_huaijin!.recoverUntilMonth = 999;
     expect(passionAllowed(s, "lu_huaijin")).toBe(false);
   });
 
   it("recovery expired (recoverUntilMonth <= now) allows passion again", () => {
-    const s = createNewGameState(db);
+    const s = mkState();
     s.standing.lu_huaijin!.recoverUntilMonth = 1; // now is monthOrdinal of 元年一月 = 1, not < 1
     expect(passionAllowed(s, "lu_huaijin")).toBe(true);
   });
 
   it("deceased consort cannot be summoned", () => {
-    const s = createNewGameState(db);
+    const s = mkState();
     s.standing.lu_huaijin!.lifecycle = "deceased";
     expect(canSummon(s, "lu_huaijin")).toBe(false);
   });
 
   it("normal consort allows passion and summon", () => {
-    const s = createNewGameState(db);
+    const s = mkState();
     expect(passionAllowed(s, "lu_huaijin")).toBe(true);
     expect(canSummon(s, "lu_huaijin")).toBe(true);
   });
 
   it("hasActiveGestation reflects pregnancy status or gestation presence", () => {
-    const s = createNewGameState(db);
+    const s = mkState();
     expect(hasActiveGestation(s)).toBe(false);
     s.resources.bloodline.pregnancy = { status: "pending", candidateIds: [] };
     expect(hasActiveGestation(s)).toBe(true);

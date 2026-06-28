@@ -25,6 +25,7 @@ import { AssetRegistry } from "../../src/engine/assets/registry";
 import { GameStore } from "../../src/store/gameStore";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { toGameTime } from "../../src/engine/calendar/time";
 import type { GameState } from "../../src/engine/state/types";
@@ -32,7 +33,7 @@ import type { ImperialCommand } from "../../src/store/imperialCommands";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
-const base = createNewGameState(db);
+const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const now = toGameTime(base.calendar);
 
 const CONSORT_ID = "lu_huaijin";

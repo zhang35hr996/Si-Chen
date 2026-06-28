@@ -5,6 +5,7 @@ import { applyEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { EventEffect } from "../../src/engine/content/schemas";
 import type { GameState } from "../../src/engine/state/types";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -12,7 +13,7 @@ const db = content.value;
 
 describe("heir lifecycle save round-trip", () => {
   it("persists gestation, heirs, candidateIds, lifecycle, recoverUntilMonth", () => {
-    let s: GameState = createNewGameState(db);
+    let s: GameState = withConsort(createNewGameState(db), db, "lu_huaijin");
     const steps: EventEffect[][] = [
       [{ type: "pregnancy", op: "begin" }],
       [{ type: "pregnancy", op: "carry" }],

@@ -27,6 +27,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 import { createGameStore } from "../../src/store/gameStore";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const REAL_TARGET_ID = "lu_huaijin";
@@ -142,7 +143,7 @@ describe("save migration chain v17 → ... → v22", () => {
 describe("round-trip: ColdPalaceIntervention in real GameState", () => {
   it("personal_visit intervention survives save/load round-trip", () => {
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(r.ok).toBe(true);
     const s = store.getState();
@@ -181,7 +182,7 @@ describe("round-trip: ColdPalaceIntervention in real GameState", () => {
 
   it("physician intervention survives save/load round-trip", () => {
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(r.ok).toBe(true);
     const s = store.getState();

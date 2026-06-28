@@ -1,6 +1,7 @@
 {
   "id": "xu_qinghuan",
   "kind": "consort",
+  "spawnMode": "event_only",
   "attributes": {
     "appearance": 86,
     "health": 85,

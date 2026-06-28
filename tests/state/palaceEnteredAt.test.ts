@@ -4,6 +4,7 @@ import { consortStandingExtras } from "../../src/engine/state/newGame";
 import { gameStateSchema } from "../../src/engine/save/stateSchema";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import { loadRealContent } from "../helpers/contentFixture";
+import { firstNonEmpressConsortId } from "../helpers/consortFixture";
 
 describe("palaceEnteredAt 播种", () => {
   const startTime = makeGameTime(1, 1, "early");
@@ -33,8 +34,8 @@ describe("palaceEnteredAt 播种", () => {
   it("真实内容：侍君 palaceEnteredAt = 开局时刻，通过 schema", () => {
     const db = loadRealContent();
     const s = createNewGameState(db);
-    const consort = Object.values(db.characters).find((c) => c.kind === "consort" && c.initialStanding)!;
-    expect(s.standing[consort.id]!.palaceEnteredAt!.dayIndex).toBe(s.calendar.dayIndex);
+    const consortId = firstNonEmpressConsortId(db, s);
+    expect(s.standing[consortId]!.palaceEnteredAt!.dayIndex).toBe(s.calendar.dayIndex);
     expect(gameStateSchema.safeParse(s).success).toBe(true);
   });
 });

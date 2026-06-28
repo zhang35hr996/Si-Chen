@@ -3,11 +3,12 @@ import { describe, it, expect } from "vitest";
 import { buildAudienceContext } from "../../src/engine/dialogue/audience";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
-const state = createNewGameState(db);
+const state = withConsort(createNewGameState(db), db, "lu_huaijin");
 
 describe("buildAudienceContext", () => {
   it("targets the player as sovereign, semi_private by default", () => {

@@ -4,11 +4,12 @@ import { evaluateCondition, isFlagSet } from "../../src/engine/events/conditions
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 const base = (): GameState => {
-  const s = createNewGameState(db); // at yushufang, 元年一月上旬
+  const s = withConsort(createNewGameState(db), db, "lu_huaijin"); // inject lu_huaijin for rankAtLeast checks
   return {
     ...s,
     flags: { rite_scheduled: true, count: 3, label: "x", off: false },

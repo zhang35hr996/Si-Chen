@@ -1,6 +1,7 @@
 {
   "id": "lu_huaijin",
   "kind": "consort",
+  "spawnMode": "event_only",
   "attributes": {
     "appearance": 75,
     "health": 64,

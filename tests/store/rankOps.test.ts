@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { buildRankOp } from "../../src/store/rankOps";
 import { loadRealContent } from "../helpers/contentFixture";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 const sovereign = { kind: "sovereign" as const, actorId: "player" as const };
 
 describe("buildRankOp", () => {
-  const state = createNewGameState(db); // lu_huaijin starts at 承徽
+  const state = withConsort(createNewGameState(db), db, "lu_huaijin"); // lu_huaijin starts at 承徽
   it("promote to 驸 emits set_rank + memory and 谢恩 lines", () => {
     const op = buildRankOp(db, state, "lu_huaijin", { kind: "set_rank", rank: "fu" }, sovereign);
     expect(op).not.toBeNull();

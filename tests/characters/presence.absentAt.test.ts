@@ -3,9 +3,10 @@ import { absentAt } from "../../src/engine/characters/presence";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
 import type { GameState } from "../../src/engine/state/types";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const base = createNewGameState(db);
+const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const atSlot = (s: GameState, slot: number): GameState => ({ ...s, calendar: { ...s.calendar, ap: s.calendar.apMax - slot } });
 
 describe("absentAt", () => {

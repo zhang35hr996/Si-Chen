@@ -21,12 +21,18 @@ import type { CharacterStatusEffect, ConfinementEffect } from "../../../src/engi
 import { allocateJusticeIds } from "../../../src/engine/justice/ids";
 import { applyJusticePlan } from "../../../src/engine/justice/mutations";
 import { toGameTime } from "../../../src/engine/calendar/time";
+import { withConsort } from "../../helpers/consortFixture";
 
 const db = loadRealContent();
 
 function makeStore() {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(
+    withConsort(
+      withConsort(createNewGameState(db), db, "lu_huaijin"),
+      db, "wenya",
+    ),
+  );
   return store;
 }
 

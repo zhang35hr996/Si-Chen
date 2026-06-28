@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { firstNonEmpressConsortId } from "../helpers/consortFixture";
 
 describe("新游戏 storehouse + affection 播种", () => {
   it("播种少量种子物品（id 均在目录内）", () => {
@@ -13,8 +14,9 @@ describe("新游戏 storehouse + affection 播种", () => {
 
   it("侍君 affection 播种为其 hidden.affection", () => {
     const db = loadRealContent();
-    const st = createNewGameState(db).standing;
-    const consort = Object.values(db.characters).find((c) => c.kind === "consort" && c.initialStanding)!;
-    expect(st[consort.id]!.affection).toBe(consort.hidden!.affection);
+    const state = createNewGameState(db);
+    const consortId = firstNonEmpressConsortId(db, state);
+    const char = db.characters[consortId] ?? state.generatedConsorts[consortId];
+    expect(state.standing[consortId]!.affection).toBe(char?.hidden!.affection);
   });
 });

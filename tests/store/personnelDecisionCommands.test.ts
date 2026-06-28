@@ -10,6 +10,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { toGameTime } from "../../src/engine/calendar/time";
 import type { GameState, Official } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const LU_CONSORT = "lu_huaijin";
@@ -22,7 +23,7 @@ const tune = (s: GameState, id: string, p: Partial<Official["reviewState"]>): Ga
 describe("store resolvePersonnelDecision", () => {
   it("approving a petition emits once, promotes administratively, returns no punishmentId", () => {
     const store = new GameStore();
-    const base = createNewGameState(db, 1);
+    const base = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     const g = generateConsortPetition(base, db, LU_CONSORT, toGameTime(base.calendar))!;
     store.loadState(g.state);
     let emits = 0;
@@ -51,7 +52,7 @@ describe("store resolvePersonnelDecision", () => {
 
   it("a failing resolution does not emit and leaves state byte-identical", () => {
     const store = new GameStore();
-    const base = createNewGameState(db, 1);
+    const base = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     const g = generateConsortPetition(base, db, LU_CONSORT, toGameTime(base.calendar))!;
     store.loadState(g.state);
     let emits = 0;
@@ -65,7 +66,7 @@ describe("store resolvePersonnelDecision", () => {
 
   it("resolved decisions survive a save/load round-trip", () => {
     const store = new GameStore();
-    const base = createNewGameState(db, 1);
+    const base = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     const g = generateConsortPetition(base, db, LU_CONSORT, toGameTime(base.calendar))!;
     store.loadState(g.state);
     store.resolvePersonnelDecision(db, g.decision.id, "approve");

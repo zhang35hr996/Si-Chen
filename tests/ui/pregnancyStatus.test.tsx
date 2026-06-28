@@ -21,6 +21,7 @@ import { HaremGrid } from "../../src/ui/screens/HaremGrid";
 import { MapScreen } from "../../src/ui/screens/MapScreen";
 import { YuqingGongScreen } from "../../src/ui/screens/YuqingGongScreen";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
@@ -31,7 +32,7 @@ const gest = (carrier: string, cy: number, cm: number): GestationState => ({ car
 
 /** state at year2 month5 with the given gestations (consort conceived y2m2 → 孕4月 unless overridden). */
 function stateWith(gestations: GestationState[]): GameState {
-  const base = createNewGameState(db);
+  const base = withConsort(createNewGameState(db), db, consortId);
   return {
     ...base,
     calendar: { ...base.calendar, year: 2, month: 5 },

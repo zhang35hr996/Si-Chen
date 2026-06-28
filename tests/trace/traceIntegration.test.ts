@@ -395,9 +395,10 @@ describe("GameStore trace integration", () => {
   it("strict mode: applyImperialCommand with chronicle produces untrackedCount === 0", () => {
     const store = makeStarted("strict");
     // confine an eligible non-empress consort so the command produces chronicle entries.
-    const consortId = Object.keys(store.getState().standing).find(
-      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou",
-    );
+    const consortId = Object.keys(store.getState().standing).find((id) => {
+      const c = db.characters[id] ?? store.getState().generatedConsorts[id];
+      return c?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou";
+    });
     expect(consortId, "fixture must have a non-empress consort").toBeDefined();
     if (!consortId) throw new Error("no eligible consort in fixture");
 
@@ -460,11 +461,12 @@ describe("GameStore trace integration", () => {
     const fuRankOrder = db.ranks["fu"]?.order ?? 140;
     const consort = chars.find((id) => {
       const st = store.getState().standing[id];
-      if (!st || db.characters[id]?.kind !== "consort") return false;
+      const char = db.characters[id] ?? store.getState().generatedConsorts[id];
+      if (!st || char?.kind !== "consort") return false;
       if (st.lifecycle === "deceased" || st.rank === "huanghou") return false;
       const rankMeta = db.ranks[st.rank];
       if (!rankMeta || rankMeta.order < fuRankOrder) return false;
-      const home = st.residence ?? db.characters[id]?.defaultLocation;
+      const home = st.residence ?? char?.defaultLocation;
       return home !== "changmengong";
     });
     expect(consort, "fixture must have an eligible non-empress consort").toBeDefined();
@@ -541,9 +543,10 @@ describe("GameStore trace integration", () => {
   it("strict mode: applyImperialPunishmentWithConsequences produces untrackedCount === 0", () => {
     const store = createGameStore({ traceMode: "strict" });
     store.newGame(db);
-    const consortId = Object.keys(store.getState().standing).find(
-      (id) => db.characters[id]?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou",
-    );
+    const consortId = Object.keys(store.getState().standing).find((id) => {
+      const c = db.characters[id] ?? store.getState().generatedConsorts[id];
+      return c?.kind === "consort" && store.getState().standing[id]?.rank !== "huanghou";
+    });
     expect(consortId, "fixture must have a non-empress consort").toBeDefined();
     if (!consortId) throw new Error("no eligible consort in fixture");
 

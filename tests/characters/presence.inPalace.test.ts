@@ -27,8 +27,9 @@ describe("inPalaceConsorts", () => {
   });
 
   it("sorts by effective precedence, highest first", () => {
-    const list = inPalaceConsorts(db, createNewGameState(db));
     const s = createNewGameState(db);
+    // Only test consorts that have a standing entry; event_only consorts may not be in standing
+    const list = inPalaceConsorts(db, s).filter((c) => s.standing[c.id] !== undefined);
     const orders = list.map((c) => {
       const st = s.standing[c.id]!;
       return db.ranks[st.rank]!.order + (st.title !== undefined ? 1 : 0);

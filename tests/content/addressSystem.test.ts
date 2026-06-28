@@ -14,6 +14,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import { buildTextGateContext, scanDialogueText } from "../../src/engine/dialogue/gates";
 import { checksumOf } from "../../src/engine/save/canonical";
 import {
@@ -135,7 +136,13 @@ describe("gates WRONG_PLAYER_HONORIFICS", () => {
 
 describe("save migration v26→v27 rank remapping", () => {
   function makeV26Save(rankOverrides: Record<string, string>): string {
-    const s = createNewGameState(db);
+    let s = createNewGameState(db);
+    // Inject any story consorts referenced in rankOverrides so they appear in standing.
+    for (const charId of Object.keys(rankOverrides)) {
+      if (!s.standing[charId] && db.characters[charId]) {
+        s = withConsort(s, db, charId);
+      }
+    }
     const stateV26 = structuredClone(s) as GameState;
     for (const [charId, rankId] of Object.entries(rankOverrides)) {
       if (stateV26.standing[charId]) {

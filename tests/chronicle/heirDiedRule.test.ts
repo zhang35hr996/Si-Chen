@@ -4,6 +4,7 @@ import { applyEffects } from "../../src/engine/effects/funnel";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { firstNonEmpressConsortId } from "../helpers/consortFixture";
 import type { EventEffect } from "../../src/engine/content/schemas";
 
 function stateWithHeirAndFosterFather(db = loadRealContent()) {
@@ -75,11 +76,11 @@ describe("heir_died 规则", () => {
   it("executeCourtEvent 传 record_after 草稿（rank_changed）→ 返回 ok===false（mode 不匹配）", () => {
     const db = loadRealContent();
     const state = createNewGameState(db);
-    const c = Object.values(db.characters).find((x) => x.kind === "consort" && x.initialStanding)!;
+    const cId = firstNonEmpressConsortId(db, state);
     const r = executeCourtEvent(db, state, {
       type: "rank_changed", occurredAt: toGameTime(state.calendar),
-      participants: [{ charId: c.id, role: "subject" }],
-      payload: { from: state.standing[c.id]!.rank, to: "meiren", direction: "demote" },
+      participants: [{ charId: cId, role: "subject" }],
+      payload: { from: state.standing[cId]!.rank, to: "meiren", direction: "demote" },
       publicity: { scope: "palace", persistence: "contemporaneous" },
       publicSalience: 60, retention: "slow", tags: ["demotion"],
     });

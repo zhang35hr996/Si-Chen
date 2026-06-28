@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import { isAssignableRank } from "../../src/engine/content/schemas";
 import { buildRankOp } from "../../src/store/rankOps";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import { createGameStore } from "../../src/store/gameStore";
 import { createLogger } from "../../src/engine/infra/logger";
 import type { GameState } from "../../src/engine/state/types";
@@ -53,9 +54,9 @@ describe("buildRankOp rejects deprecated rank targets", () => {
   function makeState(rank: string): GameState {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
-    const state = store.getState();
-    const lu = state.standing["lu_huaijin"];
-    if (!lu) throw new Error("lu_huaijin not found");
+    const base = store.getState();
+    const state = withConsort(base, db, "lu_huaijin");
+    const lu = state.standing["lu_huaijin"]!;
     return {
       ...state,
       standing: {

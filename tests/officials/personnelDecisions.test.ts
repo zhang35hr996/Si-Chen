@@ -15,6 +15,7 @@ import type { GameState, Official } from "../../src/engine/state/types";
 import type { PunishmentRecord } from "../../src/engine/justice/types";
 import type { PunishmentSeverity } from "../../src/engine/punishments/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const at = (y: number) => ({ year: y, month: 5, period: "early" as const, dayIndex: y * 100 });
@@ -74,7 +75,7 @@ describe("selection helpers — deterministic & bounded", () => {
 
 describe("generateConsortPetition", () => {
   it("creates a pending administrative-promotion decision targeting a kin official", () => {
-    const s = createNewGameState(db, 1);
+    const s = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     const r = generateConsortPetition(s, db, LU_CONSORT, at(3))!;
     expect(r).not.toBeNull();
     const d = r.decision;
@@ -107,7 +108,7 @@ describe("generateConsortPetition", () => {
   });
 
   it("dedups by source (same consort+official+year) and by pending petition per consort", () => {
-    const s = createNewGameState(db, 1);
+    const s = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     const first = generateConsortPetition(s, db, LU_CONSORT, at(3))!;
     expect(generateConsortPetition(first.state, db, LU_CONSORT, at(3))).toBeNull(); // pending exists
     // 即使换年，pending 未决 → 仍不重复。
@@ -117,7 +118,7 @@ describe("generateConsortPetition", () => {
 
 describe("generateFamilyImplication", () => {
   it("requires a severe consort punishment as source and targets the highest-grade kin official", () => {
-    const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "severe");
+    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "severe");
     const r = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     expect(r).not.toBeNull();
     const d = r.decision;
@@ -140,7 +141,7 @@ describe("generateFamilyImplication", () => {
   });
 
   it("dedups by sourcePunishmentId", () => {
-    const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "terminal");
+    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "terminal");
     const first = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     expect(generateFamilyImplication(first.state, db, "pun_000001", at(4))).toBeNull();
   });
@@ -213,7 +214,7 @@ describe("generateMemorial", () => {
   });
 
   it("getPendingPersonnelDecisions returns pending sorted by id", () => {
-    let s = createNewGameState(db, 1);
+    let s: GameState = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
     s = generateConsortPetition(s, db, LU_CONSORT, at(3))!.state;
     s = tune(s, WEN_OFFICIAL, { merit: 20 });
     s = generateMemorial(s, db, WEN_OFFICIAL, "memorial_demotion", at(3))!.state;

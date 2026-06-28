@@ -18,6 +18,7 @@ import {
 import { activeColdPalaceEffectFor } from "../../src/engine/characters/coldPalace";
 import { exportSaveText, importSaveText } from "../../src/engine/save/saveSystem";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import type { ColdPalaceIncident } from "../../src/engine/state/types";
 
 const db = loadRealContent();
@@ -40,7 +41,7 @@ function advanceUntilIncident(
 
 function setupColdPalaceStore() {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(withConsort(createNewGameState(db), db, TARGET_ID));
   const result = store.sendConsortToColdPalace(db, TARGET_ID, {});
   expect(result.ok).toBe(true);
   return store;

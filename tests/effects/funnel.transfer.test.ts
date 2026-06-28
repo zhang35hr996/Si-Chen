@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -9,7 +10,7 @@ const db = content.value;
 
 /** helper: bring the sovereign to status carrying (self-pregnancy). */
 function carrying() {
-  const s0 = createNewGameState(db);
+  const s0 = withConsort(withConsort(createNewGameState(db), db, "lu_huaijin"), db, "xu_qinghuan");
   const a = applyEffects(db, s0, [{ type: "pregnancy", op: "begin" }]);
   if (!a.ok) throw new Error("begin failed");
   const b = applyEffects(db, a.value, [{ type: "pregnancy", op: "carry" }]);
@@ -36,7 +37,7 @@ describe("funnel: pregnancy_transfer", () => {
   });
 
   it("rejects when sovereign is not carrying", () => {
-    const state = createNewGameState(db); // status none, no gestation
+    const state = withConsort(createNewGameState(db), db, "lu_huaijin"); // status none, no gestation
     expect(validateEffects(db, state, [{ type: "pregnancy_transfer", carrierId: "lu_huaijin", atMonth: 3 }])).toHaveLength(1);
   });
 

@@ -16,6 +16,7 @@ import { ColdPalaceRestoreModal } from "../../src/ui/components/ColdPalaceModal"
 import type { ColdPalaceCriticalIllnessIncident, GameState } from "../../src/engine/state/types";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import { createGameStore } from "../../src/store/gameStore";
 
 const db = loadRealContent();
@@ -24,7 +25,7 @@ const BASE_TIME = { year: 1, month: 1, period: "early" as const, dayIndex: 0 };
 
 function setupColdPalaceState(): { state: GameState; incident: ColdPalaceCriticalIllnessIncident } {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
   const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
   expect(r.ok).toBe(true);
   const s = store.getState();
@@ -249,7 +250,7 @@ describe("store: restoreFromColdPalace auto-resolves pending critical_illness", 
 describe("death path: critical illness ignore at lethal health", () => {
   it("health=1 + ignore: resident is deceased and incident is resolved in same commit", () => {
     const store = createGameStore();
-    store.loadState(createNewGameState(db));
+    store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
     const sr = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
     expect(sr.ok).toBe(true);
     const s = store.getState();

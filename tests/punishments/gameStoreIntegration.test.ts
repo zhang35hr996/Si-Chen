@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { GameStore } from "../../src/store/gameStore";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { addGeneratedConsort } from "../../src/store/grandSelection";
+import { withConsort } from "../helpers/consortFixture";
 import { planPunishmentConsequences } from "../../src/engine/punishments/consequencePlanner";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { WORLD_RULES_TEXT } from "../../src/engine/dialogue/providers/anthropicProvider";
@@ -24,8 +25,8 @@ function makeStore() {
 function firstAliveConsortId(store: GameStore): string {
   const state = store.getState();
   const id = Object.keys(state.standing).find((id) => {
-    const c = db.characters[id];
-    return c?.kind === "consort" && state.standing[id]?.lifecycle !== "deceased";
+    const c = db.characters[id] ?? state.generatedConsorts[id];
+    return c?.kind === "consort" && state.standing[id]?.rank !== "huanghou" && state.standing[id]?.lifecycle !== "deceased";
   });
   if (!id) throw new Error("no alive consort in fixture");
   return id;
@@ -132,22 +133,19 @@ describe("applyImperialPunishmentWithConsequences – impose_confinement", () =>
 
 describe("applyPunitiveRankChangeWithConsequences – demotion", () => {
   it("demote succeeds and returns baseLine + reactionBeats", () => {
-    const store = makeStore();
-    // Find a consort NOT at the floor rank
-    const state = store.getState();
-    const targetId = Object.keys(state.standing).find((id) => {
-      const c = db.characters[id];
-      if (c?.kind !== "consort") return false;
-      const st = state.standing[id];
-      if (!st || st.lifecycle === "deceased") return false;
-      const rank = db.ranks[st.rank];
-      return rank && rank.domain === "harem" && rank.order > 40;
-    });
-    if (!targetId) return; // not enough fixture consorts to test
+    // Inject lu_huaijin (rank "chenghui") so we have a known demotable consort.
+    const baseState = withConsort(createNewGameState(db), db, "lu_huaijin");
+    const store = new GameStore();
+    store.loadState(baseState);
+    // Verify she is in standing with a rank above "cairen" before attempting demotion.
+    const st = store.getState().standing["lu_huaijin"];
+    const cairenOrder = db.ranks["cairen"]?.order ?? 92;
+    const luOrder = db.ranks[st?.rank ?? ""]?.order ?? 0;
+    if (!st || luOrder <= cairenOrder) return; // guard: skip if rank is already at floor
 
     const result = store.applyPunitiveRankChangeWithConsequences(
       db,
-      targetId,
+      "lu_huaijin",
       { kind: "set_rank", rank: "cairen" }, // demote to cairen
       {},
     );
@@ -161,7 +159,7 @@ describe("applyPunitiveRankChangeWithConsequences – demotion", () => {
     // Find a consort below the ceiling
     const state = store.getState();
     const targetId = Object.keys(state.standing).find((id) => {
-      const c = db.characters[id];
+      const c = db.characters[id] ?? state.generatedConsorts[id];
       if (c?.kind !== "consort") return false;
       const st = state.standing[id];
       if (!st || st.lifecycle === "deceased") return false;
@@ -191,7 +189,7 @@ describe("applyPunitiveRankChangeWithConsequences – demotion", () => {
     const store = makeStore();
     const state = store.getState();
     const targetId = Object.keys(state.standing).find((id) => {
-      const c = db.characters[id];
+      const c = db.characters[id] ?? state.generatedConsorts[id];
       if (c?.kind !== "consort") return false;
       const st = state.standing[id];
       if (!st || st.lifecycle === "deceased") return false;
@@ -389,7 +387,10 @@ describe("punishmentId returned by store, not caller", () => {
 describe("secret publicity — target association preserved in bystander memory", () => {
   it("bystander memory subjectIds always includes targetId even when secret", () => {
     const state = createNewGameState(db);
-    const targetId = Object.keys(state.standing).find((id) => db.characters[id]?.kind === "consort")!;
+    const targetId = Object.keys(state.standing).find((id) => {
+      const c = db.characters[id] ?? state.generatedConsorts[id];
+      return c?.kind === "consort" && state.standing[id]?.rank !== "huanghou";
+    })!;
     const plan = planPunishmentConsequences(db, state, {
       punishmentId: "secret_test",
       targetId,

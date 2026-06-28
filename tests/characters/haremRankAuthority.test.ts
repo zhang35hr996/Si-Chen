@@ -26,13 +26,15 @@ import { loadRealContent } from "../helpers/contentFixture";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { GameStore } from "../../src/store/gameStore";
 import type { GameState } from "../../src/engine/state/types";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
 // ─── 共用工具 ────────────────────────────────────────────────────────────────
 
 function baseState(): GameState {
-  return createNewGameState(db);
+  const s = createNewGameState(db);
+  return withConsort(withConsort(s, db, "xu_qinghuan"), db, "wenya");
 }
 
 /** 皇后禁足状态效果 */

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildShizhiEncounter, buildTaihouRebuke } from "../../src/store/taihou";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
+import { withConsort } from "../helpers/consortFixture";
 
 describe("buildShizhiEncounter", () => {
   const loaded = loadGameContent();
@@ -81,13 +82,15 @@ describe("buildTaihouRebuke", () => {
   });
 
   it("weighting reaches every consort when total favor exceeds 99 (raw roll, no 0–99 clamp)", () => {
-    const s = createNewGameState(db2);
+    let s = createNewGameState(db2);
     // Push favors so total > 99 and the last cumulative slice starts above 99.
     const pool = Object.values(db2.characters).filter(
       (c) => c.kind === "consort" && c.id !== "shen_zhibai" && c.defaultLocation !== "changmengong",
     );
     expect(pool.length).toBeGreaterThanOrEqual(2);
-    for (const c of pool) s.standing[c.id]!.favor = 60; // e.g. 3×60 = 180 total
+    // Story consorts are event_only and not in state.standing; inject them first.
+    for (const c of pool) s = withConsort(s, db2, c.id);
+    for (const c of pool) s.standing[c.id]!.favor = 60; // e.g. 2×60 = 120 total
     const picked = new Set<string>();
     let hits = 0;
     for (let i = 0; i < 4000 && hits < 400; i++) {

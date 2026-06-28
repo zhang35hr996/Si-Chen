@@ -1,6 +1,7 @@
 {
   "id": "wenya",
   "kind": "consort",
+  "spawnMode": "event_only",
   "attributes": {
     "appearance": 60,
     "health": 42,

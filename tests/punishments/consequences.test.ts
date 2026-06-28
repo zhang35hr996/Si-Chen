@@ -219,9 +219,13 @@ describe("save migration / resolver", () => {
 
   it("new game: all consorts have fear / ambition / loyalty in standing", () => {
     const state = createNewGameState(db);
-    const consortIds = Object.values(db.characters)
-      .filter((c) => c.kind === "consort" && c.initialStanding)
-      .map((c) => c.id);
+    // Only check consorts that are actually present in standing (story consorts with
+    // spawnMode:"event_only" are excluded from the initial standing).
+    const consortIds = Object.keys(state.standing).filter((id) => {
+      const c = db.characters[id] ?? state.generatedConsorts[id];
+      return c?.kind === "consort";
+    });
+    expect(consortIds.length).toBeGreaterThan(0);
     for (const id of consortIds) {
       const st = state.standing[id];
       expect(st?.fear).not.toBeUndefined();

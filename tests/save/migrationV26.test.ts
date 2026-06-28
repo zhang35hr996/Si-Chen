@@ -29,6 +29,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { PERSONALITY_DEFAULTS, HOUSEHOLD_DEFAULTS } from "../../src/engine/characters/consortAttrs";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
@@ -44,7 +45,7 @@ describe("save format v26", () => {
 
 describe("save migration v25 → v26 (personality + household)", () => {
   function makeV25Save(): string {
-    const s = createNewGameState(db);
+    const s = withConsort(createNewGameState(db), db, "lu_huaijin");
     const stateV25 = structuredClone(s) as unknown as Record<string, unknown>;
     // Strip personality + household from all standing entries to simulate a v25 save.
     const standing = stateV25.standing as Record<string, Record<string, unknown>>;
@@ -125,7 +126,7 @@ describe("save migration v25 → v26 (personality + household)", () => {
     // Edge case: a consort authored without `hidden` (or whose hidden was absent) would have no
     // affection/fear/ambition in standing after the old consortStandingExtras. Migration must still
     // backfill personality + household because the id appears in `bedchamber`.
-    const s = createNewGameState(db);
+    const s = withConsort(createNewGameState(db), db, "lu_huaijin");
     const stateV25 = structuredClone(s) as unknown as Record<string, unknown>;
 
     // Strip personality + household (simulate v25 save), then additionally remove
@@ -169,7 +170,7 @@ describe("save migration v25 → v26 (personality + household)", () => {
 // ── 7–8. New game at v26 ─────────────────────────────────────────────────────
 
 describe("new game at v26 — personality + household in consort standing", () => {
-  const state = createNewGameState(db);
+  const state = withConsort(createNewGameState(db), db, "lu_huaijin");
 
   it("authored consort standing has personality materialised at new-game", () => {
     const standing = state.standing["lu_huaijin"];

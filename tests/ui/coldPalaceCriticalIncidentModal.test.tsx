@@ -16,6 +16,7 @@ import { ColdPalaceCriticalIncidentModal } from "../../src/ui/components/ColdPal
 import type { ColdPalaceCriticalIllnessIncident, GameState } from "../../src/engine/state/types";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import { createGameStore } from "../../src/store/gameStore";
 
 const db = loadRealContent();
@@ -24,7 +25,7 @@ const BASE_TIME = { year: 1, month: 1, period: "early" as const, dayIndex: 0 };
 
 function stateWithColdPalaceResident(): GameState {
   const store = createGameStore();
-  store.loadState(createNewGameState(db));
+  store.loadState(withConsort(createNewGameState(db), db, REAL_TARGET_ID));
   const r = store.sendConsortToColdPalace(db, REAL_TARGET_ID, {});
   expect(r.ok).toBe(true);
   return store.getState();

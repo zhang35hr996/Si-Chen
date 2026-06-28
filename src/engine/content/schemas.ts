@@ -486,6 +486,12 @@ export const characterSchema = z
   .strictObject({
     id: idSchema,
     kind: z.enum(["consort", "official", "elder"]),
+    /**
+     * 新游戏开局行为控制：
+     * - "fixed"      / undefined：拥有 initialStanding 时写入开局 standing（默认）。
+     * - "event_only"：剧情专属角色；即使有 initialStanding 也不自动加入开局后宫。
+     */
+    spawnMode: z.enum(["fixed", "event_only"]).optional(),
     /** 侍君明面属性. Optional: officials carry no养成 stat block. */
     attributes: consortAttributesSchema.optional(),
     /** 侍君暗属性. Optional: officials carry none. */
