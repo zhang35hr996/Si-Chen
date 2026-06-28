@@ -141,6 +141,9 @@ import { oldestPendingHaremAdminReport, buildHaremAdminReviewLine } from "../sto
 import { oldestUnreadIntrigueReport } from "./settlement";
 import { HaremIntrigueReportModal } from "./components/HaremIntrigueReportModal";
 import { intrigueReportSummaryLine } from "./haremIntrigueReportPresenter";
+import { presentHaremInvestigationCase } from "./haremInvestigationPresenter";
+import type { HaremInvestigationCaseView } from "./components/HaremInvestigationDrawer";
+import { resolveDisplayName } from "../engine/characters/standing";
 import type { ColdPalaceInterventionKind } from "../engine/state/types";
 import type { ImperialCommand } from "../store/imperialCommands";
 import { RelocateModal } from "./components/RelocateModal";
@@ -256,6 +259,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [consortListReturnId, setConsortListReturnId] = useState<string | null>(null);
   // 传乘风「交付六宫主理权」：true 时 ConsortListModal 显示「委以六宫」选项。
   const [haremTransferPending, setHaremTransferPending] = useState(false);
+  const [intrigueInvestigateError, setIntrigueInvestigateError] = useState<string | null>(null);
   // Non-persistent debug-only snapshot of the most recent dialogue knowledge retrieval.
   // Never saved to GameState or localStorage.
   const [recentKnowledge, setRecentKnowledge] = useState<DialogueKnowledgeDiagnostic | undefined>(undefined);
@@ -1976,6 +1980,20 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                   }),
                   status: r.status,
                 }))}
+              investigationCases={(() => {
+                const resolveName = (id: string): string => {
+                  const ch = db.characters[id] ?? liveState.generatedConsorts[id];
+                  if (!ch) return "身份不明之人";
+                  const standing = liveState.standing[id];
+                  const rank = standing ? db.ranks[standing.rank] : undefined;
+                  return resolveDisplayName(ch, standing, rank);
+                };
+                return liveState.haremInvestigationCases.map((c): HaremInvestigationCaseView => ({
+                  id: c.id,
+                  status: c.status,
+                  presentation: presentHaremInvestigationCase(c, resolveName),
+                }));
+              })()}
             />
           </GameShell>
         );
@@ -2823,9 +2841,20 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
             state={liveState}
             report={report}
             onAcknowledge={() => {
+              setIntrigueInvestigateError(null);
               const r = store.acknowledgeHaremIntrigueReport(report.id);
               if (r.ok) doAutosave();
             }}
+            onInvestigate={() => {
+              setIntrigueInvestigateError(null);
+              const r = store.openHaremInvestigation(report.id);
+              if (r.ok) {
+                doAutosave();
+              } else {
+                setIntrigueInvestigateError(r.error.map((e) => e.message).join("；"));
+              }
+            }}
+            errorMessage={intrigueInvestigateError ?? undefined}
           />
         );
       })()}
