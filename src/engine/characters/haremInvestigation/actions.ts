@@ -36,20 +36,25 @@ export function availableInvestigationActions(
   const c = state.haremInvestigationCases.find((x) => x.id === caseId);
   if (!c) return [];
 
-  // 5B-2B1 临时封锁：证据驱动事件族（investigation_incident）的调查行动尚未接入
-  // （留待 5B-2B2）。在此之前，禁止此类案件启动旧结算器任务，避免读取不到旧
-  // haremIncidents 真相而生成错误线索（误排除嫌疑人 / 凭空抬高置信度）。
-  if (c.source.kind === "investigation_incident") return [];
-
   // 已关闭/取消/待裁定（裁定后才关闭）→ 不允许新任务
   if (!isActiveCase(c.status) || c.status === "ready_for_review") return [];
 
   // 已有 pending 任务 → 等待结算
   if (hasPendingTask(state, caseId)) return [];
 
+  if (c.source.kind === "investigation_incident") {
+    return availableEvidenceActions(state, c);
+  }
+  return availableLegacyActions(state, c);
+}
+
+function availableLegacyActions(
+  state: GameState,
+  c: IntrigueInvestigationCase,
+): AvailableInvestigationAction[] {
   const actions: AvailableInvestigationAction[] = [];
 
-  // 询问受害者：须有已知目标且目标仍存活（H3：返回候选列表）
+  // 询问受害者：须有已知目标且目标仍存活
   const aliveTargets = c.knownTargetIds.filter((id) => isAlive(state, id));
   if (aliveTargets.length > 0) {
     actions.push({
@@ -81,6 +86,78 @@ export function availableInvestigationActions(
   return actions;
 }
 
+function availableEvidenceActions(
+  state: GameState,
+  c: IntrigueInvestigationCase,
+): AvailableInvestigationAction[] {
+  const actions: AvailableInvestigationAction[] = [];
+
+  // 查验脉案与药物：受害皇嗣仍存活时可用
+  const aliveTargets = c.knownTargetIds.filter((id) => isAlive(state, id));
+  if (aliveTargets.length > 0) {
+    actions.push({
+      method: "medical_examination",
+      apCost: INVESTIGATION_METHOD_AP.medical_examination,
+      durationDays: INVESTIGATION_METHOD_DAYS.medical_examination,
+    });
+  }
+
+  // 询问宫人：始终可用
+  actions.push({
+    method: "question_servants",
+    apCost: INVESTIGATION_METHOD_AP.question_servants,
+    durationDays: INVESTIGATION_METHOD_DAYS.question_servants,
+  });
+
+  // 重建事发时序：始终可用
+  actions.push({
+    method: "reconstruct_timeline",
+    apCost: INVESTIGATION_METHOD_AP.reconstruct_timeline,
+    durationDays: INVESTIGATION_METHOD_DAYS.reconstruct_timeline,
+  });
+
+  // 追查钱物流向：始终可用
+  actions.push({
+    method: "trace_money",
+    apCost: INVESTIGATION_METHOD_AP.trace_money,
+    durationDays: INVESTIGATION_METHOD_DAYS.trace_money,
+  });
+
+  // 搜查住处：需选存活嫌疑人
+  const aliveSuspects = c.suspectIds.filter((id) => isAlive(state, id));
+  if (aliveSuspects.length > 0) {
+    actions.push({
+      method: "search_quarters",
+      subjectCandidateIds: aliveSuspects,
+      apCost: INVESTIGATION_METHOD_AP.search_quarters,
+      durationDays: INVESTIGATION_METHOD_DAYS.search_quarters,
+    });
+  }
+
+  // 获取关键证词：候选来自公开报告中已知人物（指控者 + 被指控者）
+  const publicReport = state.investigationPublicReports.find(
+    (r) => r.source.incidentId === c.source.incidentId && r.reportKind === "anomaly",
+  );
+  const testimonyCandidates: string[] = [];
+  if (publicReport && publicReport.reportKind === "anomaly") {
+    for (const id of [...publicReport.accuserIds, ...publicReport.suspectedActorIds]) {
+      if (!testimonyCandidates.includes(id) && isAlive(state, id)) {
+        testimonyCandidates.push(id);
+      }
+    }
+  }
+  if (testimonyCandidates.length > 0) {
+    actions.push({
+      method: "obtain_testimony",
+      subjectCandidateIds: testimonyCandidates,
+      apCost: INVESTIGATION_METHOD_AP.obtain_testimony,
+      durationDays: INVESTIGATION_METHOD_DAYS.obtain_testimony,
+    });
+  }
+
+  return actions;
+}
+
 /** 验证指定案件是否可以接受新调查任务（单独暴露给 store 使用）。 */
 export function validateCanStartTask(
   state: GameState,
@@ -88,10 +165,6 @@ export function validateCanStartTask(
   method: InvestigationMethod,
   subjectId?: string,
 ): string | null {
-  // 5B-2B1 临时封锁：证据驱动事件族的证据调查尚未接入（留待 5B-2B2）
-  if (c.source.kind === "investigation_incident") {
-    return `案件 "${c.id}" 的证据调查尚未接入，暂不能下令`;
-  }
   if (!isActiveCase(c.status)) {
     return `案件 "${c.id}" 状态 "${c.status}" 不允许新增调查任务`;
   }
@@ -101,6 +174,19 @@ export function validateCanStartTask(
   if (hasPendingTask(state, c.id)) {
     return `案件 "${c.id}" 已有待结算调查任务，请等待结算后再下令`;
   }
+
+  const isLegacy = c.source.kind === "legacy_intrigue";
+  const legacyMethods = new Set(["question_target", "question_suspect", "quiet_inquiry"]);
+  const evidenceMethods = new Set(["medical_examination", "question_servants", "reconstruct_timeline", "trace_money", "search_quarters", "obtain_testimony"]);
+
+  if (isLegacy && !legacyMethods.has(method)) {
+    return `案件 "${c.id}" 为宫斗案件，不支持证据调查方法 "${method}"`;
+  }
+  if (!isLegacy && !evidenceMethods.has(method)) {
+    return `案件 "${c.id}" 为证据驱动案件，不支持旧调查方法 "${method}"`;
+  }
+
+  // legacy 方法校验
   if (method === "question_suspect") {
     if (!subjectId) return "传问嫌疑人须指定调查对象";
     if (!c.suspectIds.includes(subjectId)) return `"${subjectId}" 不在当前嫌疑人名单中`;
@@ -112,6 +198,19 @@ export function validateCanStartTask(
     if (!c.knownTargetIds.includes(subjectId)) return `"${subjectId}" 不在受害者名单 knownTargetIds 中`;
     const st = state.standing[subjectId];
     if (!st || st.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法询问`;
+  }
+
+  // evidence 方法校验
+  if (method === "search_quarters") {
+    if (!subjectId) return "搜查住处须指定搜查对象";
+    if (!c.suspectIds.includes(subjectId)) return `"${subjectId}" 不在当前嫌疑人名单中`;
+    const alive = state.standing[subjectId];
+    if (!alive || alive.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法搜查`;
+  }
+  if (method === "obtain_testimony") {
+    if (!subjectId) return "获取证词须指定证人";
+    const st = state.standing[subjectId];
+    if (!st || st.lifecycle === "deceased") return `"${subjectId}" 已不在人世，无法获取证词`;
   }
   return null; // OK
 }

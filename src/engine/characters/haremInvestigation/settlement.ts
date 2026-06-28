@@ -18,10 +18,13 @@ import type { GameTime } from "../../calendar/time";
 import { fromTurnIndex } from "../../calendar/time";
 import { fnv1a64Hex } from "../../save/canonical";
 import type { HaremIntrigueKind } from "../haremIntrigue/types";
+import type { InvestigationTruth, HiddenEvidenceNode } from "./truth/types";
 import type {
   IntrigueInvestigationTask,
   IntrigueInvestigationLead,
   InvestigationLeadStrength,
+  InvestigationLeadClaim,
+  InvestigationProgressPublicReport,
 } from "./types";
 import { isActiveCase } from "./types";
 import { applyInvestigationLead } from "./leads";
@@ -65,17 +68,8 @@ export function resolveInvestigationTask(
   task: IntrigueInvestigationTask,
   resolvedAt: GameTime,
 ): InvestigationResolution {
-  const rng = makeInvestigationRng(
-    String(state.rngSeed),
-    task.caseId,
-    task.id,
-    task.method,
-    task.subjectId,
-  );
-
   const c = state.haremInvestigationCases.find((x) => x.id === task.caseId);
   if (!c) {
-    // 孤儿任务（integrity 检查应已拦截），跳过而非崩溃
     const emptyLead: IntrigueInvestigationLead = {
       id: nextLeadId(state.haremInvestigationNextSeq),
       caseId: task.caseId,
@@ -89,7 +83,30 @@ export function resolveInvestigationTask(
     };
     return { lead: emptyLead, nextSeq: state.haremInvestigationNextSeq + 1 };
   }
-  const incident = state.haremIncidents.find((i) => i.id === c.source.incidentId);
+
+  if (c.source.kind === "investigation_incident") {
+    return resolveEvidenceDrivenTask(state, task, c.source.incidentId, resolvedAt);
+  }
+  return resolveLegacyIntrigueTask(state, task, c.source.incidentId, resolvedAt);
+}
+
+// ── 旧宫斗案件结算器 ──────────────────────────────────────────────────
+
+function resolveLegacyIntrigueTask(
+  state: GameState,
+  task: IntrigueInvestigationTask,
+  incidentId: string,
+  resolvedAt: GameTime,
+): InvestigationResolution {
+  const rng = makeInvestigationRng(
+    String(state.rngSeed),
+    task.caseId,
+    task.id,
+    task.method,
+    task.subjectId,
+  );
+
+  const incident = state.haremIncidents.find((i) => i.id === incidentId);
   const trueActorId = incident?.actorId;
   const trueKind: HaremIntrigueKind | undefined = incident?.kind;
 
@@ -105,84 +122,38 @@ export function resolveInvestigationTask(
 
   switch (task.method) {
     case "question_target": {
-      // 询问受害者：容易查明手段，不轻易确认主谋
       summaryCode = roll1 < 0.6 ? "target_mentioned_unusual" : "target_noted_prior_activity";
       strength = roll2 < 0.5 ? "tenuous" : "plausible";
-
-      // 30% 概率揭示真实手段
-      if (trueKind && roll3 < 0.30) {
-        revealedKinds = [trueKind];
-      }
+      if (trueKind && roll3 < 0.30) revealedKinds = [trueKind];
       break;
     }
-
     case "question_suspect": {
       const subject = task.subjectId;
       const isTrueActor = !!subject && subject === trueActorId;
-
       if (isTrueActor) {
-        // 询问真实主谋：有较大概率获得强力线索
-        if (roll1 < 0.25) {
-          strength = "confirmed";
-          implicatedIds = [subject];
-          summaryCode = "suspect_admitted_under_pressure";
-        } else if (roll1 < 0.60) {
-          strength = "strong";
-          implicatedIds = [subject];
-          summaryCode = "suspect_contradicted_account";
-        } else if (roll1 < 0.85) {
-          strength = "plausible";
-          implicatedIds = [subject];
-          summaryCode = "suspect_evasive_response";
-        } else {
-          // 狡猾的主谋伪装成功
-          strength = "tenuous";
-          summaryCode = "suspect_denied_convincingly";
-        }
-        // 顺带揭示手段
-        if (trueKind && roll2 < 0.50) {
-          revealedKinds = [trueKind];
-        }
+        if (roll1 < 0.25) { strength = "confirmed"; implicatedIds = [subject]; summaryCode = "suspect_admitted_under_pressure"; }
+        else if (roll1 < 0.60) { strength = "strong"; implicatedIds = [subject]; summaryCode = "suspect_contradicted_account"; }
+        else if (roll1 < 0.85) { strength = "plausible"; implicatedIds = [subject]; summaryCode = "suspect_evasive_response"; }
+        else { strength = "tenuous"; summaryCode = "suspect_denied_convincingly"; }
+        if (trueKind && roll2 < 0.50) revealedKinds = [trueKind];
       } else {
-        // 询问非主谋：大概率得到排除，小概率误导性线索
-        if (roll1 < 0.60) {
-          strength = "tenuous";
-          clearedIds = subject ? [subject] : [];
-          summaryCode = "suspect_cleared_alibi";
-        } else if (roll1 < 0.85) {
-          strength = "tenuous";
-          summaryCode = "suspect_irrelevant_account";
-        } else {
-          // 非主谋无不在场证明 → 供述无用，案件无变化
-          strength = "tenuous";
-          summaryCode = "suspect_inconclusive_account";
-        }
+        if (roll1 < 0.60) { strength = "tenuous"; clearedIds = subject ? [subject] : []; summaryCode = "suspect_cleared_alibi"; }
+        else if (roll1 < 0.85) { strength = "tenuous"; summaryCode = "suspect_irrelevant_account"; }
+        else { strength = "tenuous"; summaryCode = "suspect_inconclusive_account"; }
       }
       break;
     }
-
     case "quiet_inquiry": {
-      // 暗中查访：耗时较长，有机会找到真实嫌疑人
       summaryCode = "inquiry_gathered_servant_rumors";
-
       if (trueActorId && roll1 < 0.40) {
-        // 40% 概率查到真实主谋的蛛丝马迹
         implicatedIds = [trueActorId];
         strength = roll2 < 0.35 ? "strong" : "plausible";
-        if (strength === "strong") {
-          summaryCode = "inquiry_tracked_actor_movement";
-        } else {
-          summaryCode = "inquiry_found_suspicious_pattern";
-        }
+        summaryCode = strength === "strong" ? "inquiry_tracked_actor_movement" : "inquiry_found_suspicious_pattern";
       } else if (roll1 < 0.70) {
-        // 仅揭示手段
         strength = "plausible";
-        if (trueKind && roll2 < 0.60) {
-          revealedKinds = [trueKind];
-        }
+        if (trueKind && roll2 < 0.60) revealedKinds = [trueKind];
         summaryCode = "inquiry_revealed_scheme_method";
       } else {
-        // 线索较少
         strength = "tenuous";
         summaryCode = "inquiry_limited_findings";
       }
@@ -190,9 +161,8 @@ export function resolveInvestigationTask(
     }
   }
 
-  const leadId = nextLeadId(state.haremInvestigationNextSeq);
   const lead: IntrigueInvestigationLead = {
-    id: leadId,
+    id: nextLeadId(state.haremInvestigationNextSeq),
     caseId: task.caseId,
     discoveredAt: resolvedAt,
     method: task.method,
@@ -202,7 +172,150 @@ export function resolveInvestigationTask(
     clearedIds,
     revealedKinds,
   };
+  return { lead, nextSeq: state.haremInvestigationNextSeq + 1 };
+}
 
+// ── 证据驱动案件结算器 ────────────────────────────────────────────────
+
+/** 难度公式（确定性，不含随机；success = roll0to99 < effectiveDifficulty 为失败）。 */
+function computeEffectiveDifficulty(
+  node: HiddenEvidenceNode,
+  truth: InvestigationTruth,
+  elapsedPeriods: number,
+): number {
+  const raw = node.difficulty + elapsedPeriods * node.decayPerPeriod + Math.floor(truth.concealment / 5);
+  return Math.max(5, Math.min(95, raw));
+}
+
+/** 将后台 EvidenceClaim 转成玩家知识层 InvestigationLeadClaim（脱敏）。 */
+function sanitizeClaims(node: HiddenEvidenceNode): InvestigationLeadClaim[] {
+  return node.claims.map((ec): InvestigationLeadClaim => {
+    switch (ec.kind) {
+      case "implicates_character":
+        return { kind: "implicates_character", characterId: ec.characterRef, strength: ec.strength };
+      case "exonerates_character":
+        return { kind: "exonerates_character", characterId: ec.characterRef, strength: ec.strength };
+      case "supports_cause":
+        return { kind: "supports_cause", causeType: ec.causeType };
+      case "reveals_method":
+        return { kind: "reveals_mechanism", mechanism: ec.method };
+      case "establishes_fact":
+        return { kind: "establishes_fact", factCode: ec.factCode };
+    }
+  });
+}
+
+function resolveEvidenceDrivenTask(
+  state: GameState,
+  task: IntrigueInvestigationTask,
+  incidentId: string,
+  resolvedAt: GameTime,
+): InvestigationResolution {
+  const truth: InvestigationTruth | undefined = state.investigationTruths.find(
+    (t) => t.incidentId === incidentId,
+  );
+
+  if (!truth) {
+    // truth 缺失（应由 integrity 检查拦截）
+    const lead: IntrigueInvestigationLead = {
+      id: nextLeadId(state.haremInvestigationNextSeq),
+      caseId: task.caseId,
+      discoveredAt: resolvedAt,
+      method: task.method,
+      summaryCode: "evidence_truth_missing",
+      strength: "tenuous",
+      implicatedIds: [],
+      clearedIds: [],
+      revealedKinds: [],
+    };
+    return { lead, nextSeq: state.haremInvestigationNextSeq + 1 };
+  }
+
+  // 已发现节点 ID 集合（从已有 lead 推导，不需要新 GameState collection）
+  const c = state.haremInvestigationCases.find((x) => x.id === task.caseId)!;
+  const discoveredNodeIds = new Set(
+    c.leadIds
+      .map((lid) => state.haremInvestigationLeads[lid]?.sourceEvidenceNodeId)
+      .filter(Boolean) as string[],
+  );
+
+  // 筛选候选节点：method 匹配 + 未发现 + prereq 满足
+  const candidates = truth.evidenceNodes.filter(
+    (n) =>
+      n.discoverableBy.includes(task.method as import("./truth/types").EvidenceDiscoveryAction) &&
+      !discoveredNodeIds.has(n.id) &&
+      n.prerequisiteEvidenceIds.every((pid) => discoveredNodeIds.has(pid)),
+  );
+
+  // 确定性 RNG（同 state + task → 同结果）
+  const rng = makeInvestigationRng(
+    String(state.rngSeed),
+    task.caseId,
+    task.id,
+    task.method,
+    task.subjectId,
+  );
+
+  const incident = state.investigationIncidents.find((i) => i.id === incidentId);
+  const elapsedPeriods = incident
+    ? Math.max(0, resolvedAt.dayIndex - incident.occurredAt.dayIndex)
+    : 0;
+
+  // 尝试发现第一个通过难度检定的候选节点（至多一个）
+  let discoveredNode: HiddenEvidenceNode | null = null;
+  for (const node of candidates) {
+    const effectiveDifficulty = computeEffectiveDifficulty(node, truth, elapsedPeriods);
+    const roll = Math.floor(rng() * 100); // 0–99
+    if (roll >= effectiveDifficulty) {
+      discoveredNode = node;
+      break;
+    }
+  }
+
+  if (discoveredNode) {
+    const claims = sanitizeClaims(discoveredNode);
+    // implicatedIds: 来自 implicates_character strong/moderate claim（不暴露后台 culpritIds）
+    const implicatedIds = claims
+      .filter((cl): cl is Extract<InvestigationLeadClaim, { kind: "implicates_character" }> =>
+        cl.kind === "implicates_character" && cl.strength !== "weak",
+      )
+      .map((cl) => cl.characterId);
+    const clearedIds = claims
+      .filter((cl): cl is Extract<InvestigationLeadClaim, { kind: "exonerates_character" }> =>
+        cl.kind === "exonerates_character" && cl.strength === "strong",
+      )
+      .map((cl) => cl.characterId);
+
+    const lead: IntrigueInvestigationLead = {
+      id: nextLeadId(state.haremInvestigationNextSeq),
+      caseId: task.caseId,
+      discoveredAt: resolvedAt,
+      method: task.method,
+      summaryCode: `evidence_${discoveredNode.type}`,
+      strength: claims.some((cl) => cl.kind === "implicates_character" && cl.strength === "strong") ? "strong"
+        : claims.some((cl) => cl.kind === "implicates_character" && cl.strength === "moderate") ? "plausible"
+        : "tenuous",
+      implicatedIds,
+      clearedIds,
+      revealedKinds: [],
+      sourceEvidenceNodeId: discoveredNode.id,
+      claims,
+    };
+    return { lead, nextSeq: state.haremInvestigationNextSeq + 1 };
+  }
+
+  // 未发现任何节点
+  const lead: IntrigueInvestigationLead = {
+    id: nextLeadId(state.haremInvestigationNextSeq),
+    caseId: task.caseId,
+    discoveredAt: resolvedAt,
+    method: task.method,
+    summaryCode: "evidence_no_new_findings",
+    strength: "tenuous",
+    implicatedIds: [],
+    clearedIds: [],
+    revealedKinds: [],
+  };
   return { lead, nextSeq: state.haremInvestigationNextSeq + 1 };
 }
 
@@ -291,28 +404,48 @@ export function settleDueInvestigationTasks(
 
     // 5) 生成调查进展通报（幂等：按 task.id 去重）
     const reportId = `ireport_investigation_${task.id}`;
-    const alreadyHasReport = state.haremIntrigueReports.some((r) => r.id === reportId);
-    if (!alreadyHasReport) {
-      // 读取结算后最新案件状态
-      const updatedCase = state.haremInvestigationCases.find((x) => x.id === task.caseId);
-      if (updatedCase) {
-        const reportKind: HaremIntrigueReport["reportKind"] =
-          updatedCase.status === "ready_for_review" ? "investigation_final" : "investigation_update";
-        const investigationReport: HaremIntrigueReport = {
-          id: reportId,
-          source: { incidentId: updatedCase.source.incidentId },
-          reportKind,
-          createdAt: resolvedAt,
-          status: "unread",
-          knownTargetIds: [...updatedCase.knownTargetIds],
-          suspectedActorIds: [...updatedCase.suspectIds],
-          suspectedKinds: [...updatedCase.suspectedKinds],
-          knownOutcome: "unknown",
-          confidence: updatedCase.confidence,
-          summaryCode: lead.summaryCode,
-          linkedInvestigationId: updatedCase.id,
-        };
-        state = { ...state, haremIntrigueReports: [...state.haremIntrigueReports, investigationReport] };
+    const updatedCase = state.haremInvestigationCases.find((x) => x.id === task.caseId);
+    if (updatedCase) {
+      const reportKind = updatedCase.status === "ready_for_review" ? "investigation_final" as const : "investigation_update" as const;
+
+      if (updatedCase.source.kind === "legacy_intrigue") {
+        // 旧宫斗案件：进展通报写入 haremIntrigueReports
+        const alreadyHasReport = state.haremIntrigueReports.some((r) => r.id === reportId);
+        if (!alreadyHasReport) {
+          const investigationReport: HaremIntrigueReport = {
+            id: reportId,
+            source: { incidentId: updatedCase.source.incidentId },
+            reportKind,
+            createdAt: resolvedAt,
+            status: "unread",
+            knownTargetIds: [...updatedCase.knownTargetIds],
+            suspectedActorIds: [...updatedCase.suspectIds],
+            suspectedKinds: [...updatedCase.suspectedKinds],
+            knownOutcome: "unknown",
+            confidence: updatedCase.confidence,
+            summaryCode: lead.summaryCode,
+            linkedInvestigationId: updatedCase.id,
+          };
+          state = { ...state, haremIntrigueReports: [...state.haremIntrigueReports, investigationReport] };
+        }
+      } else {
+        // 证据驱动案件（investigation_incident）：进展通报写入 investigationPublicReports
+        const alreadyHasReport = state.investigationPublicReports.some((r) => r.id === reportId);
+        if (!alreadyHasReport) {
+          const progressReport: InvestigationProgressPublicReport = {
+            id: reportId,
+            source: { kind: "investigation_incident", incidentId: updatedCase.source.incidentId },
+            reportKind,
+            createdAt: resolvedAt,
+            status: "unread",
+            linkedInvestigationId: updatedCase.id,
+            knownTargetIds: [...updatedCase.knownTargetIds],
+            suspectedActorIds: [...updatedCase.suspectIds],
+            confidence: updatedCase.confidence,
+            summaryCode: lead.summaryCode,
+          };
+          state = { ...state, investigationPublicReports: [...state.investigationPublicReports, progressReport] };
+        }
       }
     }
 
