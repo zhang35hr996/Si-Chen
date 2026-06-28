@@ -153,6 +153,21 @@ describe("isWenzhaoStudent", () => {
     const h = schoolingHeir({ lifecycle: "alive", sex: "son" });
     expect(isWenzhaoStudent(h, makeGameTime(8, 1, "early"))).toBe(true);
   });
+
+  it("returns true for alive son at age 17", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "son" });
+    expect(isWenzhaoStudent(h, makeGameTime(18, 1, "early"))).toBe(true);
+  });
+
+  it("returns false for alive son at age 18 (离校)", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "son" });
+    expect(isWenzhaoStudent(h, makeGameTime(19, 1, "early"))).toBe(false);
+  });
+
+  it("returns true for alive daughter at age 18 (无上限)", () => {
+    const h = schoolingHeir({ lifecycle: "alive", sex: "daughter" });
+    expect(isWenzhaoStudent(h, makeGameTime(19, 1, "early"))).toBe(true);
+  });
 });
 
 describe("isWenzhaodianOpen", () => {

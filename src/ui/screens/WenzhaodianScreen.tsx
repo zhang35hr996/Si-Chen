@@ -2,19 +2,16 @@
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
-import { isWenzhaoStudent, isWenzhaodianOpen, listHeirsBySex } from "../../engine/characters/heirs";
+import { heirAge, heirPortraitSet, isWenzhaoStudent, isWenzhaodianOpen, listHeirsBySex } from "../../engine/characters/heirs";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
+import { courseLabel } from "../../store/heirEducation";
 import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 type Subject = "scholarship" | "martial" | "virtue";
-
-const SUBJECT_LABEL: Record<Subject, string> = {
-  scholarship: "学问", martial: "骑射", virtue: "品行",
-};
 const SUBJECTS: Subject[] = ["scholarship", "martial", "virtue"];
 
 export function WenzhaodianScreen({
@@ -83,18 +80,22 @@ export function WenzhaodianScreen({
                     onClick={() => setSelectedId(heir.id)}
                     onKeyDown={(e) => e.key === "Enter" && setSelectedId(heir.id)}
                   >
-                    <span>{name}{heir.givenName ? `·${heir.givenName}` : ""}</span>
+                    <span>{name}{heir.givenName ? `·${heir.givenName}` : ""}　{heirAge(heir, state.calendar)}岁</span>
                   </div>
                 ))
               )}
             </section>
             {selected ? (
               <section className="wenzhao-screen__detail">
-                <h2>{selected.name}{selected.heir.givenName ? `·${selected.heir.givenName}` : ""}</h2>
+                <div
+                  className="wenzhao-screen__portrait"
+                  style={{ backgroundImage: `url("${registry.portrait(heirPortraitSet(selected.heir, state.calendar), "neutral").url}")` }}
+                />
+                <h2>{selected.name}{selected.heir.givenName ? `·${selected.heir.givenName}` : ""}　{heirAge(selected.heir, state.calendar)}岁</h2>
                 <div className="wenzhao-screen__education">
-                  <span>学问：{selected.heir.education.scholarship}</span>
-                  <span>骑射：{selected.heir.education.martial}</span>
-                  <span>品行：{selected.heir.education.virtue}</span>
+                  {SUBJECTS.map((s) => (
+                    <span key={s}>{courseLabel(selected.heir.sex, s)}：{selected.heir.education[s]}</span>
+                  ))}
                 </div>
                 <div className="wenzhao-screen__subject-picker">
                   {SUBJECTS.map((s) => (
@@ -104,7 +105,7 @@ export function WenzhaodianScreen({
                       className={selectedSubject === s ? "btn-selected" : undefined}
                       onClick={() => setSelectedSubject(s)}
                     >
-                      {SUBJECT_LABEL[s]}
+                      {courseLabel(selected.heir.sex, s)}
                     </button>
                   ))}
                 </div>
@@ -114,7 +115,7 @@ export function WenzhaodianScreen({
                     disabled={!canAct}
                     onClick={() => { onLesson(selected.heir.id, selectedSubject); setSelectedId(null); }}
                   >
-                    旁听{SUBJECT_LABEL[selectedSubject]}课
+                    旁听{courseLabel(selected.heir.sex, selectedSubject)}课
                   </button>
                   <button
                     type="button"

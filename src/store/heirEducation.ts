@@ -2,14 +2,13 @@
 import { gestationRollRaw } from "../engine/characters/gestation";
 import { heirPortraitSet, isWenzhaoStudent, listHeirsBySex } from "../engine/characters/heirs";
 import type { EventEffect } from "../engine/content/schemas";
-import type { GameState, Heir } from "../engine/state/types";
+import type { GameState, Heir, HeirSex } from "../engine/state/types";
 
 export interface WenzhaoLessonPlan {
   effects: EventEffect[];
   lines: string[];
   portraitSet: string;
   speakerName: string;
-  peerFragments: string[];
 }
 
 export interface WenzhaoTutorReport {
@@ -20,9 +19,17 @@ export interface WenzhaoTutorReport {
 const SUBJECTS = ["scholarship", "martial", "virtue"] as const;
 type Subject = (typeof SUBJECTS)[number];
 
-const SUBJECT_LABEL: Record<Subject, string> = {
-  scholarship: "学问", martial: "骑射", virtue: "品行",
-};
+/** 性别化课程名。底层 subject 不变，仅用于展示层与台词。 */
+export function courseLabel(sex: HeirSex, subject: Subject): string {
+  if (sex === "daughter") {
+    if (subject === "scholarship") return "经史治术";
+    if (subject === "martial") return "骑射兵略";
+    return "礼法德行";
+  }
+  if (subject === "scholarship") return "经史诗书";
+  if (subject === "martial") return "骑射强身";
+  return "礼仪德行";
+}
 
 function displayName(state: GameState, heir: Heir): string {
   const rows = listHeirsBySex(state.resources.bloodline.heirs, heir.sex);
@@ -68,38 +75,64 @@ const PERF_LABEL: Record<Performance, string> = {
   excellent: "出色", good: "稳健", mixed: "尚可", poor: "欠佳",
 };
 
-// ── 同窗片段（30% 概率，确定性）────────────────────────────────────────────────
+// ── 同窗片段（30% 概率，须有真实第二名在读皇嗣）────────────────────────────────
 
-const PEER_FRAGMENTS: Record<Subject, string[]> = {
-  scholarship: [
-    "课间有同窗低声请教，两人凑在一起反复推敲，引得先生侧目。",
-    "诵读时，隔壁座位的同窗跟不上进度，悄悄抄了一段——被先生当场看穿。",
-    "课后同窗们争论一处典故，各执一词，吵得面红耳赤，无人让步。",
-  ],
-  martial: [
-    "演练时有同窗脚步踉跄，险些撞上，两人相视苦笑，各自重头练起。",
-    "课后同窗拉着一起比试拉弓，你追我赶，直到天色将暗才肯罢休。",
-    "一位同窗偷偷向先生请教发力技巧，被旁边人听见，一下子围了一圈。",
-  ],
-  virtue: [
-    "礼仪课上同窗忍不住偷笑，先生板着脸重讲了一遍，笑声才压下去。",
-    "课后同窗们围在一起，把讲过的典故扒拉出来说故事，越说越离谱。",
-    "一位同窗行礼时袖子甩到了邻座，两人面面相觑，忍笑复又整衣。",
-  ],
-};
+function peerFragment(
+  state: GameState,
+  heir: Heir,
+  subject: Subject,
+  seed: string,
+): string {
+  const { sociability, empathy, assertiveness, guile } = heir.personality;
+  const peerName = displayName(state, peer(state, heir, seed));
+  const subjectCourse = courseLabel(heir.sex, subject);
 
-function maybePeerFragment(_heir: Heir, subject: Subject, seed: string, dayIndex: number): string[] {
-  const roll = gestationRollRaw(seed + ":peer:" + dayIndex) % 10;
+  if (subject === "scholarship") {
+    if (sociability >= 65) return `课间${peerName}低声凑过来，两人悄声讨论起一处典故，引得先生侧目。`;
+    if (empathy >= 65) return `${peerName}在旁卡住了半晌，${heir.givenName ?? ""}见状悄悄把答案写在小纸条上递了过去。`;
+    if (assertiveness >= 65) return `${peerName}与其争论一处诠释，各执一词，声音不觉大了些，先生咳了一声才平息。`;
+    if (guile >= 65) return `${peerName}抄了一段，被先生当场看穿，${heir.givenName ?? ""}悄悄撇开视线，不动声色。`;
+    return `课后${peerName}围着追问${subjectCourse}的疑难，你来我往好一番交流。`;
+  }
+  if (subject === "martial") {
+    if (sociability >= 65) return `演练间歇${peerName}拉着比试拉弓，两人你追我赶，直到先生叫停才罢休。`;
+    if (assertiveness >= 65) return `${peerName}下手偏重，切磋时险些绊倒，相视苦笑后各自重来。`;
+    if (empathy >= 65) return `${peerName}脚步踉跄，悄悄把自己的位置让出半步，两人配合反倒流畅了许多。`;
+    return `收课后${peerName}低声请教发力技巧，旁边几人凑来，围了一小圈。`;
+  }
+  // virtue
+  if (sociability >= 65) return `礼仪课上${peerName}忍不住偷笑，先生板脸重讲，两人对视一眼，更难绷住。`;
+  if (empathy >= 65) return `${peerName}行礼时一步踩错，悄悄用眼神示意该怎么站位，${peerName}如获救星。`;
+  return `${peerName}行礼时袖子甩偏，两人面面相觑，忍笑复又整衣。`;
+}
+
+function peer(state: GameState, heir: Heir, seed: string): Heir {
+  const peers = state.resources.bloodline.heirs.filter(
+    (c) => c.id !== heir.id && isWenzhaoStudent(c, state.calendar),
+  );
+  const idx = gestationRollRaw(seed + ":peeridx") % peers.length;
+  return peers[idx]!;
+}
+
+function maybePeerFragment(
+  state: GameState,
+  heir: Heir,
+  subject: Subject,
+  seed: string,
+): string[] {
+  const peers = state.resources.bloodline.heirs.filter(
+    (c) => c.id !== heir.id && isWenzhaoStudent(c, state.calendar),
+  );
+  if (peers.length === 0) return [];
+  const roll = gestationRollRaw(seed + ":peer") % 10;
   if (roll >= 3) return []; // 70% 无同窗片段
-  const pool = PEER_FRAGMENTS[subject];
-  const idx = gestationRollRaw(seed + ":peeridx") % pool.length;
-  return [pool[idx]!];
+  return [peerFragment(state, heir, subject, seed)];
 }
 
 // ── 旁听授课台词 ──────────────────────────────────────────────────────────────
 
 function buildLessonLines(name: string, subject: Subject, performance: Performance, heir: Heir): string[] {
-  const subjectStr = SUBJECT_LABEL[subject];
+  const subjectStr = courseLabel(heir.sex, subject);
   const perf = PERF_LABEL[performance];
   const { curiosity, restraint } = heir.personality;
   const guile = heir.personality.guile;
@@ -158,14 +191,13 @@ export function buildWenzhaoLesson(
   const performance = scoreToPerformance(score);
   const attrDelta = ATTR_DELTA[performance];
   const name = displayName(state, heir);
-  const peerFragments = maybePeerFragment(heir, subject, seed, state.calendar.dayIndex);
+  const peerLines = maybePeerFragment(state, heir, subject, seed);
 
   return {
     effects: [{ type: "heir_educate", heirId, subject, attrDelta, favorDelta: 0 }],
-    lines: buildLessonLines(name, subject, performance, heir),
+    lines: [...buildLessonLines(name, subject, performance, heir), ...peerLines],
     portraitSet: heirPortraitSet(heir, state.calendar),
     speakerName: name,
-    peerFragments,
   };
 }
 
@@ -187,8 +219,8 @@ export function buildWenzhaoTutorReport(
 
   const summary: string[] = [
     `先生向陛下禀报${name}近来的功课，总评：${overallLabel}。`,
-    `三科详情：学问 ${e.scholarship}·骑射 ${e.martial}·品行 ${e.virtue}，` +
-      `${SUBJECT_LABEL[best]}最为见长，${SUBJECT_LABEL[worst]}尚需加强。`,
+    `三科详情：${courseLabel(heir.sex, "scholarship")} ${e.scholarship}·${courseLabel(heir.sex, "martial")} ${e.martial}·${courseLabel(heir.sex, "virtue")} ${e.virtue}，` +
+      `${courseLabel(heir.sex, best)}最为见长，${courseLabel(heir.sex, worst)}尚需加强。`,
   ];
 
   const warnings: string[] = [];

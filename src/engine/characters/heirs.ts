@@ -88,9 +88,12 @@ export function residesInYuqing(heir: Heir, now: Pick<GameTime, "year">): boolea
   return heirAge(heir, now) >= YUQING_MOVE_AGE[heir.sex];
 }
 
-/** 是否是文昭殿在读皇嗣（已开蒙且存活）。 */
+/** 是否是文昭殿在读皇嗣（已开蒙且存活）。皇郎 18 岁起离校，皇子无上限。 */
 export function isWenzhaoStudent(heir: Heir, now: Pick<GameTime, "year">): boolean {
-  return heir.lifecycle === "alive" && isEnrolled(heir, now);
+  if (heir.lifecycle !== "alive") return false;
+  const age = heirAge(heir, now);
+  if (heir.sex === "daughter") return age >= enlightenmentAge("daughter");
+  return age >= enlightenmentAge("son") && age < 18;
 }
 
 /** 文昭殿是否开馆（日间时段方可旁听）。 */
