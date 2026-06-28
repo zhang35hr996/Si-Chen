@@ -19,5 +19,10 @@ export function ageOfficialsOneYear(state: GameState): GameState {
   for (const [id, m] of Object.entries(state.familyMembers)) {
     familyMembers[id] = m.deceasedAt ? m : { ...m, age: nextAge(m.age) };
   }
-  return { ...state, officials, familyMembers };
+  // 宗室青年（伴读来源）同步年度增龄；deceased 不再增长。
+  const royalRelatives: GameState["royalRelatives"] = {};
+  for (const [id, r] of Object.entries(state.royalRelatives)) {
+    royalRelatives[id] = r.lifecycle === "deceased" ? r : { ...r, age: nextAge(r.age) };
+  }
+  return { ...state, officials, familyMembers, royalRelatives };
 }

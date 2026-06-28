@@ -232,6 +232,72 @@ export interface Heir {
   lastPhysicianVisitMonthKey?: string;
 }
 
+// ── 宗室青年 ─────────────────────────────────────────────────────────────────
+
+/** 宗室旁支青年人物（持久存档；仅按需生成，不预生成全宗室树）。 */
+export interface RoyalRelative {
+  id: string;
+  name: string;
+  sex: PersonSex;
+  age: number;
+  /** 宗室支系亲疏。 */
+  branch: "close" | "collateral" | "distant";
+  /** 支系地位 0–100（服务伴读择定与台词）。 */
+  branchPrestige: number;
+  legitimate: boolean;
+  personality: HeirPersonality;
+  lifecycle: "alive" | "deceased";
+  deceasedAt?: GameTime;
+}
+
+// ── 伴读 ─────────────────────────────────────────────────────────────────────
+
+/** 伴读的人物引用（官员家族子弟 or 宗室青年）。 */
+export type CompanionPersonRef =
+  | { kind: "family_member"; personId: string }
+  | { kind: "royal_relative"; personId: string };
+
+export type CompanionEndReason = "heir_left_school" | "companion_deceased" | "dismissed";
+
+/**
+ * 伴读关系（key = heirId）。
+ *
+ * profile 仅快照**稳定身份**（姓名/性别/嫡庶/性格/家族），不含年龄——年龄须经
+ * resolveCompanionView 从 live 来源（familyMembers / royalRelatives）解析，
+ * 否则入学时的年龄会永久停留。ageAtAssignment 仅作择定时记录。
+ */
+export interface HeirCompanionAssignment {
+  heirId: string;
+  companion: CompanionPersonRef;
+  assignedAt: GameTime;
+  status: "active" | "ended";
+  endedAt?: GameTime;
+  endReason?: CompanionEndReason;
+  /** 伴读与该皇嗣的感情基础 0–100。 */
+  bond: number;
+  /** 择定时年龄快照（仅记录；当前年龄经 resolveCompanionView 取 live 值）。 */
+  ageAtAssignment: number;
+  /** 择定时稳定身份快照，不随后续家族变化漂移（年龄除外）。 */
+  profile: {
+    name: string;
+    sex: PersonSex;
+    legitimate: boolean;
+    personality: HeirPersonality;
+    familyName?: string;
+    familyRole?: string;
+  };
+}
+
+// ── 官员家族青年派生资料 ──────────────────────────────────────────────────────
+
+/** 官员家族子弟的嫡庶/排行/性格派生结果（稳定种子派生，快照进 assignment 避免漂移）。 */
+export interface FamilyYouthProfile {
+  legitimate: boolean;
+  /** 同家族同性别子女中的排行（0 起，按年龄降序 + 稳定 id）。 */
+  birthOrder: number;
+  personality: HeirPersonality;
+}
+
 export interface BloodlineState {
   /** 经血状态 */
   menstrualStatus: MenstrualStatus;
@@ -1482,6 +1548,10 @@ export interface GameState {
   settledHaremIntriguePeriods: string[];
   /** 后宫内部惩戒事件（PUNISH-4G-B）：append-only；pending_response 构成全局中断。 */
   haremDisciplineIncidents: HaremDisciplineIncident[];
+  /** 宗室青年人物（按需生成；id="royal_youth_*"）。 */
+  royalRelatives: Record<string, RoyalRelative>;
+  /** 皇嗣伴读关系（key = heirId；每名皇嗣至多一条 active）。 */
+  heirCompanions: Record<string, HeirCompanionAssignment>;
   /** 动态模板事件实例序列号（每次实例化递增，用于确定性 ID 生成）。 */
   templateEventNextSeq: number;
   /** 已生成/已解决的模板事件实例（按 instanceId 索引）；存档校验据此跳过 MISSING_REF 检查。 */

@@ -2,7 +2,7 @@
 import { gestationRollRaw } from "../engine/characters/gestation";
 import { heirPortraitSet, isWenzhaoStudent, listHeirsBySex } from "../engine/characters/heirs";
 import type { EventEffect } from "../engine/content/schemas";
-import type { GameState, Heir, HeirSex } from "../engine/state/types";
+import type { GameState, Heir, HeirPersonality, HeirSex } from "../engine/state/types";
 
 export interface WenzhaoLessonPlan {
   effects: EventEffect[];
@@ -75,24 +75,27 @@ const PERF_LABEL: Record<Performance, string> = {
   excellent: "出色", good: "稳健", mixed: "尚可", poor: "欠佳",
 };
 
-// ── 同窗片段（30% 概率，须有真实第二名在读皇嗣）────────────────────────────────
+// ── 同窗片段（30% 概率；有伴读时优先以伴读为同窗对象）────────────────────────
+
+interface PeerInfo {
+  name: string;
+  personality: HeirPersonality;
+}
 
 function peerFragment(
-  state: GameState,
   heir: Heir,
+  heirName: string,
+  peer: PeerInfo,
   subject: Subject,
-  seed: string,
 ): string {
-  const p = peer(state, heir, seed);
-  const peerName = displayName(state, p);
-  const heirName = displayName(state, heir);
+  const peerName = peer.name;
   const subjectCourse = courseLabel(heir.sex, subject);
-  const bothSocial = heir.personality.sociability >= 65 && p.personality.sociability >= 65;
+  const bothSocial = heir.personality.sociability >= 65 && peer.personality.sociability >= 65;
   const heirEmpathy = heir.personality.empathy >= 65;
-  const peerWeak = p.personality.empathy < 40;
-  const bothAssert = heir.personality.assertiveness >= 65 && p.personality.assertiveness >= 65;
+  const peerWeak = peer.personality.empathy < 40;
+  const bothAssert = heir.personality.assertiveness >= 65 && peer.personality.assertiveness >= 65;
   const heirGuile = heir.personality.guile >= 65;
-  const peerGuile = p.personality.guile >= 65;
+  const peerGuile = peer.personality.guile >= 65;
 
   if (subject === "scholarship") {
     if (bothSocial) return `课间${peerName}低声凑来，两人悄声讨论起一处典故，互相补充，引得先生侧目。`;
@@ -113,12 +116,23 @@ function peerFragment(
   return `${peerName}行礼时袖子甩偏，碰到了${heirName}，两人面面相觑，忍笑复又整衣。`;
 }
 
-function peer(state: GameState, heir: Heir, seed: string): Heir {
+function resolvePeerInfo(state: GameState, heir: Heir, seed: string): PeerInfo | null {
+  // 优先：若有 active 伴读，以伴读为同窗对象（profile 已快照，稳定）
+  const companionAssignment = state.heirCompanions[heir.id];
+  if (companionAssignment?.status === "active") {
+    return {
+      name: companionAssignment.profile.name,
+      personality: companionAssignment.profile.personality,
+    };
+  }
+  // 回退：随机选另一名在读皇嗣
   const peers = state.resources.bloodline.heirs.filter(
     (c) => c.id !== heir.id && isWenzhaoStudent(c, state.calendar),
   );
+  if (peers.length === 0) return null;
   const idx = gestationRollRaw(seed + ":peeridx") % peers.length;
-  return peers[idx]!;
+  const p = peers[idx]!;
+  return { name: displayName(state, p), personality: p.personality };
 }
 
 function maybePeerFragment(
@@ -127,13 +141,19 @@ function maybePeerFragment(
   subject: Subject,
   seed: string,
 ): string[] {
-  const peers = state.resources.bloodline.heirs.filter(
+  // 无伴读时须有真实第二名在读皇嗣
+  const hasCompanion = state.heirCompanions[heir.id]?.status === "active";
+  const hasPeerHeir = state.resources.bloodline.heirs.some(
     (c) => c.id !== heir.id && isWenzhaoStudent(c, state.calendar),
   );
-  if (peers.length === 0) return [];
+  if (!hasCompanion && !hasPeerHeir) return [];
+
   const roll = gestationRollRaw(seed + ":peer") % 10;
   if (roll >= 3) return []; // 70% 无同窗片段
-  return [peerFragment(state, heir, subject, seed)];
+
+  const peerInfo = resolvePeerInfo(state, heir, seed);
+  if (!peerInfo) return [];
+  return [peerFragment(heir, displayName(state, heir), peerInfo, subject)];
 }
 
 // ── 旁听授课台词 ──────────────────────────────────────────────────────────────

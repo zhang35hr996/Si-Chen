@@ -1,4 +1,4 @@
-/** 文昭殿：在读皇嗣名册（左）+ 科目选择·旁听·询问先生（右）。日间开馆，否则显示散学提示。 */
+/** 文昭殿：在读皇嗣名册（左）+ 科目选择·旁听·询问先生（右）+ 伴读卡片。日间开馆，否则显示散学提示。 */
 import { useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
 import { timeOfDay } from "../../engine/calendar/time";
@@ -7,12 +7,17 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { courseLabel } from "../../store/heirEducation";
+import { resolveCompanionView } from "../../engine/characters/companionReconciliation";
 import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
 
 type Subject = "scholarship" | "martial" | "virtue";
 const SUBJECTS: Subject[] = ["scholarship", "martial", "virtue"];
+
+function companionSourceLabel(source: "family_member" | "royal_relative"): string {
+  return source === "royal_relative" ? "宗室" : "官宦";
+}
 
 export function WenzhaodianScreen({
   db, store, registry, onOpenMap, onOpenSettings, onLesson, onTutorReport, onOpenResources, onOpenStorehouse,
@@ -40,6 +45,9 @@ export function WenzhaodianScreen({
   const [selectedSubject, setSelectedSubject] = useState<Subject>("scholarship");
 
   const selected = students.find((r) => r.heir.id === selectedId);
+  const companion = selected ? state.heirCompanions[selected.heir.id] : undefined;
+  const activeCompanion = companion?.status === "active" ? companion : undefined;
+  const companionView = activeCompanion ? resolveCompanionView(state, activeCompanion) : undefined;
 
   return (
     <GameShell
@@ -97,6 +105,22 @@ export function WenzhaodianScreen({
                     <span key={s}>{courseLabel(selected.heir.sex, s)}：{selected.heir.education[s]}</span>
                   ))}
                 </div>
+                {companionView ? (
+                  <div className="wenzhao-screen__companion" data-testid="companion-card">
+                    <h3>伴读</h3>
+                    <span className="companion-name">{companionView.name}</span>
+                    <span className="companion-meta">
+                      {companionView.age}岁　{companionSourceLabel(companionView.source)}
+                    </span>
+                    {companionView.bond > 0 && (
+                      <span className="companion-bond">情谊 {companionView.bond}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="wenzhao-screen__companion wenzhao-screen__companion--empty" data-testid="companion-empty">
+                    <span>尚无伴读</span>
+                  </div>
+                )}
                 <div className="wenzhao-screen__subject-picker">
                   {SUBJECTS.map((s) => (
                     <button

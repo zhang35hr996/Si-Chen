@@ -17,6 +17,7 @@ import { validateJusticeLinks } from "../justice/crossLink";
 import { validateColdPalaceIncidentLinks, validateColdPalaceInterventionLinks, validateColdPalaceMadnessLinks } from "../characters/coldPalaceValidator";
 import { validateHaremDisciplineLinks } from "../characters/haremDisciplineValidator";
 import { validatePeakFavor } from "../characters/peakFavorValidator";
+import { validateCompanionWorld } from "../characters/companionValidator";
 import { validateHaremIntrigueLinks } from "../characters/haremIntrigue/stateValidation";
 import { validateHaremInvestigationLinks } from "../characters/haremInvestigation/stateValidation";
 import { validateInvestigationIncidents, validateInvestigationTruths } from "../characters/haremInvestigation/truth/stateValidation";
@@ -33,6 +34,20 @@ export const gameTimeSchema = z.strictObject({
   period: z.enum(["early", "mid", "late"]),
   dayIndex: z.number().int().min(0),
 });
+
+// 伴读/宗室共用子 schema（HeirPersonality 六维 + 伴读人物引用）。
+const companionPersonalitySchema = z.object({
+  empathy: percent,
+  guile: percent,
+  restraint: percent,
+  sociability: percent,
+  assertiveness: percent,
+  curiosity: percent,
+});
+const companionRefSchema = z.union([
+  z.object({ kind: z.literal("family_member"), personId: z.string().min(1) }),
+  z.object({ kind: z.literal("royal_relative"), personId: z.string().min(1) }),
+]);
 
 const calendarStateSchema = gameTimeSchema
   .extend({
@@ -1233,6 +1248,36 @@ export const gameStateSchema = z.strictObject({
     speakerId: z.string(),
     lines: z.array(z.string()),
   })).optional(),
+  royalRelatives: z.record(z.string(), z.object({
+    id: nonEmpty,
+    name: nonEmpty,
+    sex: z.enum(["female", "male"]),
+    age: z.number().int().min(0),
+    branch: z.enum(["close", "collateral", "distant"]),
+    branchPrestige: percent,
+    legitimate: z.boolean(),
+    personality: companionPersonalitySchema,
+    lifecycle: z.enum(["alive", "deceased"]),
+    deceasedAt: gameTimeSchema.optional(),
+  })).default({}),
+  heirCompanions: z.record(z.string(), z.object({
+    heirId: nonEmpty,
+    companion: companionRefSchema,
+    assignedAt: gameTimeSchema,
+    status: z.enum(["active", "ended"]),
+    endedAt: gameTimeSchema.optional(),
+    endReason: z.enum(["heir_left_school", "companion_deceased", "dismissed"]).optional(),
+    bond: percent,
+    ageAtAssignment: z.number().int().min(0),
+    profile: z.object({
+      name: nonEmpty,
+      sex: z.enum(["female", "male"]),
+      legitimate: z.boolean(),
+      personality: companionPersonalitySchema,
+      familyName: z.string().optional(),
+      familyRole: z.string().optional(),
+    }),
+  })).default({}),
   templateEventNextSeq: z.number().int().min(0).default(0),
   templateEventRecords: z.record(z.string(), z.object({
     id: z.string(),
@@ -1253,6 +1298,7 @@ export const gameStateSchema = z.strictObject({
     ...validateColdPalaceInterventionLinks(data as Parameters<typeof validateColdPalaceInterventionLinks>[0]),
     ...validateColdPalaceMadnessLinks(data as Parameters<typeof validateColdPalaceMadnessLinks>[0]),
     ...validatePeakFavor(data as Parameters<typeof validatePeakFavor>[0]),
+    ...validateCompanionWorld(data as Parameters<typeof validateCompanionWorld>[0]),
     ...validateHaremIntrigueLinks(data as Parameters<typeof validateHaremIntrigueLinks>[0]),
     ...validateHaremInvestigationLinks({
       haremIntrigueReports: (data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIntrigueReports,
