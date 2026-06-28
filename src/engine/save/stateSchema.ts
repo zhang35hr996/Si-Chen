@@ -19,6 +19,7 @@ import { validateHaremDisciplineLinks } from "../characters/haremDisciplineValid
 import { validatePeakFavor } from "../characters/peakFavorValidator";
 import { validateHaremIntrigueLinks } from "../characters/haremIntrigue/stateValidation";
 import { validateHaremInvestigationLinks } from "../characters/haremInvestigation/stateValidation";
+import { validateInvestigationIncidents, validateInvestigationTruths } from "../characters/haremInvestigation/truth/stateValidation";
 
 const nonEmpty = z.string().min(1);
 
@@ -525,6 +526,122 @@ const justiceStateSchema = z.strictObject({
   for (const e of errs) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: e.message });
   }
+});
+
+// ── Investigation truth layer (Phase 5B-2A) ───────────────────────────────────
+
+const investigationCauseTypeSchema = z.enum([
+  "natural_illness",
+  "accident",
+  "negligence",
+  "intentional_harm",
+  "framing",
+  "false_accusation",
+]);
+
+const investigationMethodSchema = z.enum([
+  "none",
+  "wrong_dosage",
+  "tampered_medicine",
+  "hallucinogenic_herb",
+  "fabricated_testimony",
+  "induced_symptoms",        // kept for backwards compat; no longer generated
+  "contaminated_medicine",
+  "treatment_delay",
+  "medicine_mixup",
+]);
+
+const investigationMotiveSchema = z.enum([
+  "none",
+  "succession_rivalry",
+  "jealousy",
+  "personal_grievance",
+  "frame_rival",
+  "conceal_negligence",
+]);
+
+const evidenceTypeSchema = z.enum([
+  "medical",
+  "physical",
+  "testimony",
+  "financial",
+  "timeline",
+  "correspondence",
+]);
+
+const investigationActionTypeSchema = z.enum([
+  "medical_examination",
+  "question_servants",
+  "reconstruct_timeline",
+  "trace_money",
+  "search_quarters",
+  "obtain_testimony",
+]);
+
+const evidenceClaimSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("implicates_character"),
+    characterRef: z.string(),
+    strength: z.enum(["weak", "moderate", "strong"]),
+  }),
+  z.object({
+    kind: z.literal("exonerates_character"),
+    characterRef: z.string(),
+    strength: z.enum(["weak", "moderate", "strong"]),
+  }),
+  z.object({
+    kind: z.literal("supports_cause"),
+    causeType: investigationCauseTypeSchema,
+  }),
+  z.object({
+    kind: z.literal("reveals_method"),
+    method: investigationMethodSchema,
+  }),
+  z.object({
+    kind: z.literal("establishes_fact"),
+    factCode: z.string(),
+  }),
+]);
+
+const hiddenEvidenceNodeSchema = z.strictObject({
+  id: z.string().min(1),
+  type: evidenceTypeSchema,
+  factCode: z.string().min(1),
+  claims: z.array(evidenceClaimSchema),
+  difficulty: z.number().int().min(0).max(100),
+  decayPerPeriod: z.number().int().min(0),
+  discoverableBy: z.array(investigationActionTypeSchema),
+  prerequisiteEvidenceIds: z.array(z.string().min(1)),
+  misleading: z.boolean(),
+});
+
+const investigationTruthSchema = z.strictObject({
+  id: z.string().min(1),
+  incidentId: z.string().min(1),
+  eventFamily: z.literal("heir_health_anomaly"),
+  causeType: investigationCauseTypeSchema,
+  culpritIds: z.array(z.string().min(1)),
+  accusedIds: z.array(z.string().min(1)),
+  framingTargetIds: z.array(z.string().min(1)),
+  method: investigationMethodSchema,
+  motive: investigationMotiveSchema,
+  concealment: z.number().int().min(0).max(100),
+  evidenceNodes: z.array(hiddenEvidenceNodeSchema),
+  generatedAt: gameTimeSchema,
+  sourceKey: z.string().min(1),
+});
+
+const heirHealthAnomalyIncidentSchema = z.strictObject({
+  id: z.string().min(1),
+  eventFamily: z.literal("heir_health_anomaly"),
+  occurredAt: gameTimeSchema,
+  sourceKey: z.string().min(1),
+  victimHeirId: z.string().min(1),
+  custodianId: z.string().optional(),
+  accuserIds: z.array(idSchema),
+  initiallyAccusedIds: z.array(idSchema),
+  symptom: z.enum(["hysteria", "acute_pain", "high_fever", "convulsions", "excessive_drowsiness"]),
+  publicFactCodes: z.array(z.string()),
 });
 
 export const gameStateSchema = z.strictObject({
@@ -1035,6 +1152,8 @@ export const gameStateSchema = z.strictObject({
     revealedKinds: z.array(z.enum(["slander", "false_accusation", "steal_credit", "faction_pressure", "servant_subversion"])),
   })).default({}),
   haremInvestigationNextSeq: z.number().int().min(1).default(1),
+  investigationIncidents: z.array(heirHealthAnomalyIncidentSchema).default([]),
+  investigationTruths: z.array(investigationTruthSchema).default([]),
   settledHaremIntriguePeriods: z.array(z.string().regex(/^harem_intrigue_settlement:\d+:\d{2}$/)).default([]),
   haremDisciplineIncidents: z.array(z.strictObject({
     id: idSchema,
@@ -1142,6 +1261,17 @@ export const gameStateSchema = z.strictObject({
       haremInvestigationLeads: (data as { haremInvestigationLeads: Parameters<typeof validateHaremInvestigationLinks>[0]["haremInvestigationLeads"] }).haremInvestigationLeads,
       haremInvestigationNextSeq: (data as { haremInvestigationNextSeq: number }).haremInvestigationNextSeq,
       incidentIds: new Set((data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIncidents.map((i) => i.id)),
+    }),
+    ...validateInvestigationIncidents({
+      investigationIncidents: (data as { investigationIncidents: Parameters<typeof validateInvestigationIncidents>[0]["investigationIncidents"] }).investigationIncidents,
+    }),
+    ...validateInvestigationTruths({
+      investigationTruths: (data as { investigationTruths: Parameters<typeof validateInvestigationTruths>[0]["investigationTruths"] }).investigationTruths,
+      investigationIncidents: (data as { investigationIncidents: Parameters<typeof validateInvestigationTruths>[0]["investigationIncidents"] }).investigationIncidents,
+      allCharacterIds: new Set([
+        ...Object.keys((data as { standing: Record<string, unknown> }).standing),
+        ...Object.keys((data as { generatedConsorts: Record<string, unknown> }).generatedConsorts),
+      ]),
     }),
   ];
   for (const e of errs) {
