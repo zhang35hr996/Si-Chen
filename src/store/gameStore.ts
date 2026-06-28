@@ -28,7 +28,7 @@ import type { GameCommand } from "../engine/state/commands";
 import { createInitialState, type InitialStateOverrides } from "../engine/state/initialState";
 import { createNewGameState } from "../engine/state/newGame";
 import { applyBatch, applyCommand, type CommandResult } from "../engine/state/reducer";
-import type { GameState, NarrativeEntry, PendingDaxuan } from "../engine/state/types";
+import type { GameState, NarrativeEntry, PendingDaxuan, TemplateEventRecord } from "../engine/state/types";
 import { NARRATIVE_LOG_MAX } from "../engine/state/types";
 import { buildMonthlyHealthTick, type MonthlyTickResult } from "./healthTick";
 import { planHealthChange } from "./health";
@@ -1437,6 +1437,134 @@ export class GameStore {
     this.lastEffectReport = { effects, outcome: "applied", errors: [] };
     this.emit();
     return ok({ state: finalState, rolledOver: result.value.rolledOver });
+  }
+
+  /**
+   * 模板事件启动前原子写入 seq 递增 + generated record。
+   * 调用方随即进入 SceneRunner；quit 时须调用 abandonTemplateEvent 清除 generated record。
+   */
+  beginTemplateEvent(statePatch: { templateEventNextSeq: number; newRecord: TemplateEventRecord }): void {
+    const beforeState = this.state;
+    const finalState: GameState = {
+      ...this.state,
+      templateEventNextSeq: statePatch.templateEventNextSeq,
+      templateEventRecords: {
+        ...this.state.templateEventRecords,
+        [statePatch.newRecord.id]: statePatch.newRecord,
+      },
+    };
+    const collector = this.makeCollector();
+    if (collector) {
+      const source: TraceSource = { kind: "event", sourceId: statePatch.newRecord.id, label: `template:begin ${statePatch.newRecord.id}` };
+      collector.capturePhaseScheduled("direct_mutation", diffGameState(beforeState, finalState));
+      const tx = this.buildTrace(beforeState, finalState, source, collector, "committed");
+      this.state = finalState;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = finalState;
+    }
+    this.emit();
+  }
+
+  /**
+   * 模板事件一次性提交：effects + apCost + eventLog + sceneHistory + record resolved 全部单次 commit。
+   * 不先调用 resolveEvent 再修改 record；改为直接复用 resolveEvent 纯函数 + settlePostAdvance，
+   * 在 settled 状态上追加 record 更新后一次性提交。
+   */
+  resolveTemplateEvent(
+    runtimeDb: ContentDB,
+    instanceId: string,
+    selectedChoiceId: string,
+    effects: readonly EventEffect[],
+  ): Result<EventResolution, GameError[]> {
+    const record = this.state.templateEventRecords[instanceId];
+    if (!record) {
+      return err([stateError("BAD_EVENT_REF", `template event record "${instanceId}" not found`)]);
+    }
+    if (record.status !== "generated") {
+      return err([stateError("EVENT_ALREADY_FIRED", `template event "${instanceId}" already ${record.status}`)]);
+    }
+    const template = runtimeDb.templates[record.templateId];
+    if (!selectedChoiceId || !template?.choices.some((c) => c.id === selectedChoiceId)) {
+      return err([stateError("BAD_CHOICE", `"${selectedChoiceId}" is not a valid choice for template "${record.templateId}"`)]);
+    }
+
+    const collector = this.makeCollector();
+    const beforeState = this.state;
+    const source: TraceSource = { kind: "event", sourceId: instanceId, label: `template: ${instanceId}` };
+
+    const result = resolveEvent(runtimeDb, this.state, instanceId, effects, collector ? { collector } : undefined);
+    if (!result.ok) {
+      for (const error of result.error) this.logger?.logGameError(error);
+      this.lastEffectReport = { effects, outcome: "rejected", errors: result.error };
+      if (collector) {
+        collector.fail("event_resolution", result.error);
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          result.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
+      return result;
+    }
+    const engineState = result.value.state;
+    collector?.capturePhaseScheduled("event_resolution", diffGameState(beforeState, engineState));
+
+    const settled = this.settlePostAdvance(runtimeDb, this.state, engineState, collector ?? undefined);
+    if (!settled.ok) {
+      for (const error of settled.error) this.logger?.logGameError(error);
+      this.lastEffectReport = { effects, outcome: "rejected", errors: settled.error };
+      if (collector) {
+        collector.fail("settle_post_advance", settled.error);
+        const tx = this.buildTrace(beforeState, beforeState, source, collector, "rolled_back",
+          settled.error.map((e) => e.message).join("; "));
+        this.traceHistory.push(tx);
+      }
+      return err(settled.error);
+    }
+
+    // record 与其他变更同批次写入 — 不二次 emit
+    const resolvedRecord: TemplateEventRecord = {
+      ...record,
+      status: "resolved",
+      selectedChoiceId,
+      resolvedAt: toGameTime(settled.value.state.calendar),
+    };
+    const finalState: GameState = {
+      ...settled.value.state,
+      templateEventRecords: {
+        ...settled.value.state.templateEventRecords,
+        [instanceId]: resolvedRecord,
+      },
+    };
+
+    if (collector) {
+      // record 从 generated → resolved 的 diff 需单独登记，否则 strict 模式会抛 untracked
+      collector.capturePhaseScheduled(
+        "template_record_resolution",
+        diffGameState(settled.value.state, finalState),
+      );
+      captureEligibilityTransitions(runtimeDb, beforeState, finalState, collector);
+      const tx = this.buildTrace(beforeState, finalState, source, collector, "committed");
+      this.state = finalState;
+      this.traceHistory.push(tx);
+    } else {
+      this.state = finalState;
+    }
+    this.lastEffectReport = { effects, outcome: "applied", errors: [] };
+    this.emit();
+    return ok({ state: finalState, rolledOver: result.value.rolledOver });
+  }
+
+  /**
+   * 中途离开模板事件：删除 generated record，不回退 seq，不触发 cooldown，不写 eventLog。
+   * resolved record 不受影响。
+   */
+  abandonTemplateEvent(instanceId: string): void {
+    const record = this.state.templateEventRecords[instanceId];
+    if (!record || record.status !== "generated") return;
+    const templateEventRecords = { ...this.state.templateEventRecords };
+    delete templateEventRecords[instanceId];
+    this.state = { ...this.state, templateEventRecords };
+    this.emit();
   }
 
   /**

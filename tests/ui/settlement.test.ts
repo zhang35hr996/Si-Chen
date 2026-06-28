@@ -168,8 +168,8 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     // pendingDaxuan must be able to drain after an event clears activeEventId even while view still reads
     // "event"; the atomic gate keys on activeEventId (state), never on a "view === \"event\"" string.
     const expr = appSrc.match(/const atomicFlowInProgress =([\s\S]*?);/)?.[1] ?? "";
-    expect(expr).toContain("activeEventId !== null"); // events gate by state, not view
-    expect(expr).not.toContain('view === "event"'); // never view-gated on event → no deadlock when activeEventId clears
+    expect(expr).toContain("activeSession !== null"); // events gate by state, not view
+    expect(expr).not.toContain('view === "event"'); // never view-gated on event → no deadlock when activeSession clears
   });
 
   it("rollover completers route through the settlement seam, and completion uses completeAutoCheckpoint", () => {
@@ -211,13 +211,13 @@ describe("App settlement wiring source contract (no jsdom)", () => {
   // ── Blocker 3: atomic-flow gating (state-based, not stale view strings) ──
   it("atomicFlowInProgress gates on event/court/dianxuan/shop/gift/dialogue state, not a stale view string", () => {
     const block = appSrc.slice(appSrc.indexOf("const atomicFlowInProgress"), appSrc.indexOf("const atomicFlowInProgress") + 700);
-    expect(block).toContain("activeEventId !== null");
+    expect(block).toContain("activeSession !== null");
     expect(block).toContain("court !== null");
     expect(block).toContain("dianxuan !== null");
     expect(block).toContain("shopId !== null");
     expect(block).toContain("giftItemId !== null");
     expect(block).toContain("dialogueInFlight");
-    expect(block).not.toMatch(/view === "event"/); // replaced by activeEventId !== null (avoids deadlock)
+    expect(block).not.toMatch(/view === "event"/); // replaced by activeSession !== null (avoids deadlock)
   });
 
   it("generative dialogue is in-flight-guarded with a unique op token cleared only by its owner", () => {
@@ -243,6 +243,22 @@ describe("App settlement wiring source contract (no jsdom)", () => {
     expect(appSrc).not.toContain("choiceInFlightRef"); // the un-owned boolean gate is gone
     // owner-scoped finally: only the holder of opToken clears the UI pending
     expect(appSrc).toMatch(/if \(choiceOpTokenRef\.current === opToken\) \{[\s\S]*setChoicePendingToken\(null\)/);
+  });
+});
+
+describe("garden sub-location template priority", () => {
+  const appSrc = readFileSync(new URL("../../src/ui/App.tsx", import.meta.url), "utf8");
+
+  it("static exploration event blocks template even when AP is insufficient (ev exists → early return, template never tried)", () => {
+    // 模板只在 ev === null 时才尝试，保证静态 AP 不足时显示真实原因而非启动模板。
+    const block = appSrc.match(/const enterGardenSubArea[\s\S]*?^        \};/m)?.[0] ?? "";
+    // ev 存在时走 if (ev) { ... return; } 分支，return 之后才到 planSubLocationTemplateStart
+    expect(block).toMatch(/if \(ev\) \{/);
+    expect(block).toMatch(/return;\s*\}\s*\/\/ 无静态事件时/);
+    // planSubLocationTemplateStart 在 if (ev) 块之外
+    const evBlockEnd = block.indexOf("// 无静态事件时");
+    const templateTryIdx = block.indexOf("planSubLocationTemplateStart");
+    expect(templateTryIdx).toBeGreaterThan(evBlockEnd);
   });
 });
 
