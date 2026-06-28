@@ -9,7 +9,8 @@ import { withConsort } from "../helpers/consortFixture";
 const db = loadRealContent();
 
 const base = (): GameState => {
-  const s = withConsort(createNewGameState(db), db, "lu_huaijin"); // inject lu_huaijin for rankAtLeast checks
+  // shen_zhibai is now event_only; inject both her and lu_huaijin for rankAtLeast checks
+  const s = withConsort(withConsort(createNewGameState(db), db, "shen_zhibai"), db, "lu_huaijin");
   return {
     ...s,
     flags: { rite_scheduled: true, count: 3, label: "x", off: false },
@@ -42,7 +43,7 @@ describe("predicate truth table", () => {
     ["hasMemoryTag wrong tag", { hasMemoryTag: { char: "lu_huaijin", tag: "favor" } }, false],
     ["hasMemoryTag unknown char → false", { hasMemoryTag: { char: "char_ghost", tag: "neglect" } }, false],
     ["eventFired met", { eventFired: "ev_menses_rite" }, true],
-    ["eventFired unmet", { eventFired: "ev_shen_neglect" }, false],
+    ["eventFired unmet", { eventFired: "ev_fixture_scene_runner" }, false],
   ])("%s", (_name, condition, expected) => {
     expect(ev(condition)).toBe(expected);
   });
@@ -51,7 +52,7 @@ describe("predicate truth table", () => {
     expect(ev({ all: [{ flagSet: "rite_scheduled" }, { atLocation: "zichendian" }] })).toBe(true);
     expect(ev({ all: [{ flagSet: "rite_scheduled" }, { atLocation: "yuhuayuan" }] })).toBe(false);
     expect(ev({ any: [{ atLocation: "yuhuayuan" }, { periodIs: "early" }] })).toBe(true);
-    expect(ev({ not: { eventFired: "ev_shen_neglect" } })).toBe(true);
+    expect(ev({ not: { eventFired: "ev_fixture_scene_runner" } })).toBe(true);
     expect(
       ev({ all: [{ any: [{ flagSet: "off" }, { monthAtLeast: 1 }] }, { not: { flagSet: "ghost" } }] }),
     ).toBe(true);

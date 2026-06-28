@@ -253,7 +253,7 @@ export function validateEffects(
         break;
       }
       case "pregnancy_transfer": {
-        const ch = db.characters[e.carrierId];
+        const ch = db.characters[e.carrierId] ?? state.generatedConsorts[e.carrierId];
         const st = state.standing[e.carrierId];
         const preg = state.resources.bloodline.pregnancy;
         const sov = state.resources.bloodline.gestations.find((g) => g.carrier === "sovereign");

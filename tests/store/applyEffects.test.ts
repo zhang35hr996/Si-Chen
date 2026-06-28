@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createLogger } from "../../src/engine/infra/logger";
 import { createGameStore } from "../../src/store/gameStore";
 import { loadRealContent } from "../helpers/contentFixture";
+import { activeEmpressId } from "../../src/engine/characters/empress";
 
 const db = loadRealContent();
 
@@ -16,16 +17,18 @@ describe("GameStore.applyEffects — the single gameplay-state entry point", () 
   it("applied batch: new state reference, one notification, applied report", () => {
     const { store } = makeStarted();
     const before = store.getState();
+    const empressId = activeEmpressId(store.getState())!;
+    const empressFavorBefore = store.getState().standing[empressId]!.favor;
     let notifications = 0;
     store.subscribe(() => notifications++);
 
     const result = store.applyEffects(db, [
-      { type: "favor", char: "shen_zhibai", delta: 2 },
+      { type: "favor", char: empressId, delta: 2 },
     ]);
 
     expect(result.ok).toBe(true);
     expect(store.getState()).not.toBe(before);
-    expect(store.getState().standing["shen_zhibai"]?.favor).toBe(27);
+    expect(store.getState().standing[empressId]?.favor).toBe(empressFavorBefore + 2);
     expect(notifications).toBe(1);
     expect(store.getLastEffectReport()).toMatchObject({ outcome: "applied", errors: [] });
   });
@@ -33,11 +36,12 @@ describe("GameStore.applyEffects — the single gameplay-state entry point", () 
   it("rejected batch: same state reference, zero notifications, every error logged once, rejected report", () => {
     const { store, logger } = makeStarted();
     const before = store.getState();
+    const empressId = activeEmpressId(store.getState())!;
     let notifications = 0;
     store.subscribe(() => notifications++);
 
     const result = store.applyEffects(db, [
-      { type: "favor", char: "shen_zhibai", delta: 2 },
+      { type: "favor", char: empressId, delta: 2 },
       { type: "favor", char: "char_ghost", delta: 2 },
     ]);
 

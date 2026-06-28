@@ -23,11 +23,13 @@ import { contextRefKey } from "../../src/engine/dialogue/types";
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { loadRealContent } from "../helpers/contentFixture";
 import type { DialogueClaim, ProposedClaim } from "../../src/engine/dialogue/claims";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+// shen_zhibai is now event_only; inject her so belief projection can read her rank
+const state = withConsort(createNewGameState(db), db, "shen_zhibai");
 const SPEAKER = "shen_zhibai";
 const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 

@@ -14,8 +14,10 @@ const makeStarted = (traceMode: "record" | "off" | "strict" = "record") => {
 
 /** favor requires a consort-kind character; pick the first one from standing. */
 const firstConsortId = (store: ReturnType<typeof makeStarted>): string => {
-  return Object.keys(store.getState().standing).find((id) => db.characters[id]?.kind === "consort") ??
-    Object.keys(store.getState().standing)[0]!;
+  const s = store.getState();
+  return Object.keys(s.standing).find(
+    (id) => (db.characters[id] ?? s.generatedConsorts[id])?.kind === "consort",
+  )!;
 };
 
 describe("GameStore trace integration", () => {

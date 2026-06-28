@@ -5,9 +5,11 @@ import { OfficialRoster } from "../../src/ui/officials/OfficialRoster";
 import { OfficialDetail } from "../../src/ui/officials/OfficialDetail";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const state = createNewGameState(db, 1);
+// shen_zhibai is now event_only; inject her so OfficialDetail shows her as Shen family palace kin
+const state = withConsort(createNewGameState(db, 1), db, "shen_zhibai");
 
 const SHEN_HEAD = "official_fam_shen_main";
 const headName = (id: string) => `${state.officials[id]!.surname}${state.officials[id]!.givenName}`;

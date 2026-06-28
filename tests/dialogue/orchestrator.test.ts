@@ -34,6 +34,7 @@ import type { DialogueProviderResult } from "../../src/engine/dialogue/providerC
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import type { ProposedClaim } from "../../src/engine/dialogue/claims";
 import { toGameTime } from "../../src/engine/calendar/time";
 import type { CourtEvent, GameState, MemoryEntry } from "../../src/engine/state/types";
@@ -41,7 +42,8 @@ import type { KnowledgeRetriever } from "../../src/engine/dialogue/knowledge/typ
 import type { KnowledgeHybridResult } from "../../src/engine/knowledge/retrieval/types";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+// shen_zhibai is now event_only; inject her so dialogue tests work
+const state = withConsort(createNewGameState(db), db, "shen_zhibai");
 const SPEAKER = "shen_zhibai";
 const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
@@ -267,7 +269,8 @@ function makeEligibleEvent(
 
 /** Inject events into a fresh GameState's chronicle. */
 function stateWithEvents(events: CourtEvent[]): GameState {
-  const base = createNewGameState(db);
+  // shen_zhibai is now event_only; inject her so she can know chronicle events
+  const base = withConsort(createNewGameState(db), db, "shen_zhibai");
   return { ...base, chronicle: events };
 }
 

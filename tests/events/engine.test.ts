@@ -17,11 +17,9 @@ describe("eligibility", () => {
       "ev_menses_rite",
     ]);
     expect(getEligibleEvents(db, at("yuhuayuan"), "location_enter").map((e) => e.event.id)).toEqual([
-      "ev_shen_neglect",
+      "ev_fixture_scene_runner",
     ]);
-    expect(getEligibleEvents(db, at("kunninggong"), "location_enter").map((e) => e.event.id)).toEqual([
-      "ev_fenghou_rules",
-    ]);
+    expect(getEligibleEvents(db, at("kunninggong"), "location_enter").map((e) => e.event.id)).toEqual([]);
   });
 
   it("fired once-events drop out", () => {

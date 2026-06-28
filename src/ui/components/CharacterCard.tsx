@@ -51,8 +51,8 @@ export function CharacterCard({
   const pregnancy = isConsort ? consortGestationDisplay(state, character.id) : null;
   const displayName = character.profile.name; // 界面标识用本名；位分由下方 char-card__rank 并列展示
   const alive = standing?.lifecycle !== "deceased";
-  const canManage = isConsort && character.id !== "shen_zhibai" && onManage;
-  const canPunish = isConsort && character.id !== "shen_zhibai" && alive && onPunish;
+  const canManage = isConsort && standing?.rank !== "huanghou" && onManage;
+  const canPunish = isConsort && standing?.rank !== "huanghou" && alive && onPunish;
   const confinement = isConsort ? activeConfinement(state, character.id) : undefined;
   const portrait = registry.portrait(character.portraitSet, "neutral");
   const favor =

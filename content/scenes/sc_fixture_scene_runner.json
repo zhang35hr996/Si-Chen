@@ -1,16 +1,16 @@
 {
-  "id": "sc_shen_neglect",
+  "id": "sc_fixture_scene_runner",
   "locationId": "yuhuayuan",
   "participants": [
-    "lu_huaijin"
+    "wenya"
   ],
   "startNodeId": "n_open",
   "nodes": [
     {
       "type": "line",
       "id": "n_open",
-      "speaker": "lu_huaijin",
-      "text": "陛下万福金安。臣侍在御花园赏花，竟有幸见驾临，臣侍喜不自胜。",
+      "speaker": "wenya",
+      "text": "陛下驾临，温雅未能远迎，还请陛下恕罪。",
       "expression": "frown",
       "next": "n_choice"
     },
@@ -44,15 +44,15 @@
       "effects": [
         {
           "type": "memory",
-          "char": "lu_huaijin",
+          "char": "wenya",
           "entry": {
             "kind": "episodic",
-            "summary": "陛下在御花园亲口说，是政务缠身疏忽了我。这句话，我等了三旬。",
+            "summary": "陛下在御花园亲口说，是政务缠身疏忽了我。这句话，我等了许久。",
             "strength": 70,
             "retention": "permanent",
             "subjectIds": [
               "player",
-              "lu_huaijin"
+              "wenya"
             ],
             "perspective": "witness",
             "triggerTags": [
@@ -72,8 +72,8 @@
     {
       "type": "line",
       "id": "n_end_comfort",
-      "speaker": "lu_huaijin",
-      "text": "……臣侍失仪了。陛下既肯来，这园子的花，便不算白开。",
+      "speaker": "wenya",
+      "text": "……臣侍谢陛下。这园中的花，今日开得真好。",
       "expression": "smile"
     },
     {
@@ -82,15 +82,15 @@
       "effects": [
         {
           "type": "memory",
-          "char": "lu_huaijin",
+          "char": "wenya",
           "entry": {
             "kind": "episodic",
-            "summary": "陛下说只是路过。三旬不见，等来一句『你自便』。",
-            "strength": 65,
+            "summary": "陛下说只是路过，臣侍不敢多言。",
+            "strength": 55,
             "retention": "slow",
             "subjectIds": [
               "player",
-              "lu_huaijin"
+              "wenya"
             ],
             "perspective": "witness",
             "triggerTags": [
@@ -99,7 +99,7 @@
             ],
             "unresolved": true,
             "emotions": {
-              "grief": 40
+              "grief": 30
             }
           }
         }
@@ -109,7 +109,7 @@
     {
       "type": "line",
       "id": "n_end_brush",
-      "speaker": "lu_huaijin",
+      "speaker": "wenya",
       "text": "是，陛下慢走。臣侍恭送陛下。",
       "expression": "frown"
     },
@@ -119,15 +119,15 @@
       "effects": [
         {
           "type": "memory",
-          "char": "lu_huaijin",
+          "char": "wenya",
           "entry": {
             "kind": "episodic",
-            "summary": "陛下说我话不老实，不可窥伺帝踪。希望陛下不会降罪。",
+            "summary": "陛下说臣侍话不老实，不可窥伺帝踪，臣侍知罪。",
             "strength": 75,
             "retention": "permanent",
             "subjectIds": [
               "player",
-              "lu_huaijin"
+              "wenya"
             ],
             "perspective": "witness",
             "triggerTags": [
@@ -147,7 +147,7 @@
     {
       "type": "line",
       "id": "n_end_cold",
-      "speaker": "lu_huaijin",
+      "speaker": "wenya",
       "text": "……臣侍知罪。恭送陛下。",
       "expression": "worried"
     }

@@ -188,11 +188,11 @@ describe("template event pipeline — dynamic consort (殿选侍君)", () => {
   it("所有静态侍君 deceased 时选人落到 generatedConsorts，SceneRunner 回应台词不崩溃", async () => {
     const baseState = createNewGameState(db);
 
-    // 取第一个静态侍君的内容作为殿选侍君的内容底板（必须找 consort 类型角色）
+    // 取第一个侍君的内容作为殿选侍君的内容底板（静态或 generated 均可）
     const staticId = Object.keys(baseState.standing).find(
-      (id) => db.characters[id]?.kind === "consort",
+      (id) => (db.characters[id] ?? baseState.generatedConsorts[id])?.kind === "consort",
     )!;
-    const staticContent = db.characters[staticId]!;
+    const staticContent = (db.characters[staticId] ?? baseState.generatedConsorts[staticId])!;
     const staticStanding = baseState.standing[staticId]!;
 
     const dynId = "dyn_test_consort_01";

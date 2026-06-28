@@ -13,7 +13,7 @@ const mkEvent = (patch: Partial<GameEventContent>): GameEventContent =>
   ({
     id: "ev_x",
     title: "测试",
-    sceneId: "sc_shen_neglect",
+    sceneId: "sc_fixture_scene_runner",
     checkpoint: "location_enter",
     condition: { atLocation: "yuhuayuan" },
     priority: 50,
@@ -118,20 +118,20 @@ describe("eventPinnedSubLocations", () => {
   const SUB_IDS = ["taiyechi", "tuixiushan", "jiangxuexuan"] as const;
 
   it("eligible event 的 scene participants 固定到其子地点", () => {
-    // ev_shen_neglect 绑定 taiyechi，scene sc_shen_neglect participants=[lu_huaijin]
+    // ev_fixture_scene_runner 绑定 taiyechi，scene sc_fixture_scene_runner participants=[wenya]
     const pinned = eventPinnedSubLocations(db, at("yuhuayuan"), "yuhuayuan", SUB_IDS);
-    expect(pinned.get("lu_huaijin")).toBe("taiyechi");
+    expect(pinned.get("wenya")).toBe("taiyechi");
   });
 
   it("已触发（一次性）事件不再产生固定映射", () => {
-    // ev_shen_neglect 是 once=true；写入 eventLog 后 getEligibleEvents 会排除它
+    // ev_fixture_scene_runner 是 once=true；写入 eventLog 后 getEligibleEvents 会排除它
     const base = at("yuhuayuan");
     const fired: GameState = {
       ...base,
-      eventLog: [{ eventId: "ev_shen_neglect", firedAt: base.calendar }],
+      eventLog: [{ eventId: "ev_fixture_scene_runner", firedAt: base.calendar }],
     };
     const pinned = eventPinnedSubLocations(db, fired, "yuhuayuan", SUB_IDS);
-    expect(pinned.has("lu_huaijin")).toBe(false);
+    expect(pinned.has("wenya")).toBe(false);
   });
 
   it("无 exploration 事件的子地点不产生固定映射", () => {

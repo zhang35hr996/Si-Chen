@@ -33,10 +33,21 @@ const db = loadRealContent();
 
 function makeStore() {
   const store = createGameStore();
+  let base = createNewGameState(db);
+  // shen_zhibai is now event_only; remove generated empress and inject her as empress
+  const genEmpressId = Object.keys(base.standing).find((id) => base.standing[id]!.rank === "huanghou");
+  if (genEmpressId) {
+    const { [genEmpressId]: _st, ...restSt } = base.standing;
+    const { [genEmpressId]: _gc, ...restGc } = base.generatedConsorts;
+    base = { ...base, standing: restSt, generatedConsorts: restGc };
+  }
   store.loadState(
     withConsort(
       withConsort(
-        withConsort(createNewGameState(db), db, "lu_huaijin"),
+        withConsort(
+          withConsort(base, db, "shen_zhibai"),
+          db, "lu_huaijin",
+        ),
         db, "wenya",
       ),
       db, "xu_qinghuan",

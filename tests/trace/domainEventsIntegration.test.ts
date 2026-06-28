@@ -16,9 +16,12 @@ const makeStarted = (traceMode: "record" | "off" | "strict" = "record") => {
   return store;
 };
 
-const firstConsortId = (store: ReturnType<typeof makeStarted>): string =>
-  Object.keys(store.getState().standing).find((id) => db.characters[id]?.kind === "consort") ??
-  Object.keys(store.getState().standing)[0]!;
+const firstConsortId = (store: ReturnType<typeof makeStarted>): string => {
+  const s = store.getState();
+  return Object.keys(s.standing).find(
+    (id) => (db.characters[id] ?? s.generatedConsorts[id])?.kind === "consort",
+  )!;
+};
 
 // ── off-mode parity ──────────────────────────────────────────────────────────
 

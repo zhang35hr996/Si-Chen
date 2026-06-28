@@ -24,10 +24,10 @@ const startedStore = (): GameStore => {
   return store;
 };
 
-/** Play ev_shen_neglect to completion through the real runner + commit. */
+/** Play ev_fixture_scene_runner to completion through the real runner + commit. */
 async function playNeglect(store: GameStore, choiceId: string): Promise<void> {
   const runner = new SceneRunner(db, { provider: mockProvider });
-  const first = await runner.start(store.getState(), "ev_shen_neglect");
+  const first = await runner.start(store.getState(), "ev_fixture_scene_runner");
   if (!first.ok) throw new Error(first.error.message);
   const second = await runner.advance(choiceId);
   if (!second.ok) throw new Error(second.error.message);
@@ -44,8 +44,8 @@ describe("subjectivity (acceptance §13 #8)", () => {
     await playNeglect(store, "c_cold");
     const state = store.getState();
 
-    // 沈承徽 (present, rebuked) remembers it — her own POV wording
-    const shen = listMemories(state, "lu_huaijin");
+    // 温承徽 (present, rebuked) remembers it — her own POV wording
+    const shen = listMemories(state, "wenya");
     expect(shen).toHaveLength(2);
     expect(shen[1]?.summary).toContain("不可窥伺帝踪");
 
@@ -61,8 +61,8 @@ describe("subjectivity (acceptance §13 #8)", () => {
     const cold = startedStore();
     await playNeglect(cold, "c_cold");
 
-    const a = listMemories(comforted.getState(), "lu_huaijin")[1]!;
-    const b = listMemories(cold.getState(), "lu_huaijin")[1]!;
+    const a = listMemories(comforted.getState(), "wenya")[1]!;
+    const b = listMemories(cold.getState(), "wenya")[1]!;
     expect(a.summary).not.toBe(b.summary);
     expect(a.summary).toContain("疏忽了我");
   });
@@ -73,12 +73,12 @@ describe("origin trace (acceptance: source + writing scene)", () => {
     const store = startedStore();
     await playNeglect(store, "c_brush");
 
-    const [seed, written] = listMemories(store.getState(), "lu_huaijin");
-    expect(seed?.ownerId).toBe("lu_huaijin");
+    const [seed, written] = listMemories(store.getState(), "wenya");
+    expect(seed?.ownerId).toBe("wenya");
     expect(seed?.sourceEventId).toBeUndefined();
     expect(memoryOriginLabel(seed!)).toBe("授定/直写");
 
-    expect(written?.ownerId).toBe("lu_huaijin");
+    expect(written?.ownerId).toBe("wenya");
     expect(written?.sourceEventId).toBeUndefined(); // scene runner doesn't set sourceEventId by default
     expect(memoryOriginLabel(written!)).toBe("授定/直写");
 
@@ -101,7 +101,7 @@ describe("inspection helpers", () => {
     const state = createNewGameState(db);
     expect(listMemories(state, "char_ghost")).toEqual([]);
     const overview = memoryOverview(state)
-      .filter((o) => !o.charId.startsWith("generated_consort"))
+      .filter((o) => !o.charId.startsWith("generated_"))
       .sort((a, b) => a.charId.localeCompare(b.charId));
     expect(overview).toEqual([
       { charId: "cheng_feng", count: 0, permanentCount: 0 },

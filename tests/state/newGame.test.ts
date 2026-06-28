@@ -26,9 +26,14 @@ describe("createNewGameState", () => {
   });
 
   it("seeds standing for characters with an initial standing", () => {
-    expect(state.standing["shen_zhibai"]).toMatchObject({ rank: "huanghou", favor: 25, affection: 50, palaceEnteredAt: { year: 1, month: 1, period: "early", dayIndex: 0 }, health: 78, healthStatus: "healthy", birthFamilyId: "fam_shen_main" });
+    // shen_zhibai is now event_only; empress is randomly generated
+    expect(state.standing["shen_zhibai"]).toBeUndefined();
     expect(state.standing["wei_sui"]).toEqual({ rank: "sili_zhang", favor: 40, peakFavor: 40 });
     expect(state.standing["taihou"]).toBeUndefined();
+    // A generated empress should be present
+    const empressEntries = Object.entries(state.standing).filter(([, st]) => st.rank === "huanghou");
+    expect(empressEntries).toHaveLength(1);
+    expect(empressEntries[0]![0]).toMatch(/^generated_empress_/);
   });
 
   it("seeds authored initial memories: monotonic ids, ownerId, new fields", () => {

@@ -10,9 +10,11 @@ import {
   resolvePerson,
 } from "../../src/engine/officials/selectors";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const state = createNewGameState(db, 1);
+// shen_zhibai is now event_only; inject her so kinship tests referencing her birthFamilyId work
+const state = withConsort(createNewGameState(db, 1), db, "shen_zhibai");
 
 // 沈氏母族：显式 familyId（content 声明 fam_shen_main）。
 const SHEN_FAMILY = "fam_shen_main";

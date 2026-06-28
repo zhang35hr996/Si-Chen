@@ -4,6 +4,7 @@
  */
 import { monthOrdinal, toGameTime } from "../engine/calendar/time";
 import { resolveBirth, type BirthVerdict } from "../engine/characters/birth";
+import { isEmpress } from "../engine/characters/empress";
 import {
   DEFAULT_GESTATION,
   birthSlot,
@@ -87,7 +88,7 @@ export function buildBirth(db: ContentDB, state: GameState, gestation?: Gestatio
   if (!gest) return null;
   const cfg = gestationConfig(db);
   const now = toGameTime(state.calendar);
-  const bearerIsEmpress = gest.carrier === "shen_zhibai";
+  const bearerIsEmpress = isEmpress(state, gest.carrier);
 
   const verdict = resolveBirth({
     rngSeed: state.rngSeed,

@@ -46,7 +46,8 @@ function sexOf(state: GameState, db: ContentDB, personId: string): PersonSex | u
 function canonicalFamilyOf(state: GameState, db: ContentDB, personId: string): string | undefined {
   if (state.officials[personId]) return state.officials[personId]!.familyId;
   if (state.familyMembers[personId]) return state.familyMembers[personId]!.familyId;
-  if (consortContent(state, db, personId)) return state.standing[personId]?.birthFamilyId;
+  if (consortContent(state, db, personId))
+    return state.standing[personId]?.birthFamilyId ?? db.characters[personId]?.maternalClan?.familyId;
   return undefined;
 }
 

@@ -47,6 +47,7 @@ import { assetError, stateError } from "../engine/infra/errors";
 import { autosave, listSaves, loadWithRecovery } from "../engine/save/saveSystem";
 import { createLocalStorageAdapter } from "../engine/save/storage";
 import { greetingAttendees, gardenSubLocationFor } from "../engine/characters/greeting";
+import { activeEmpressId, isEmpress } from "../engine/characters/empress";
 import { getGreetingHostView } from "../engine/characters/haremAdministration";
 import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
@@ -979,7 +980,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     store.recordOvernight(db, plan.charId, spend.value.rolledOver);
     setSummonedConsortId(null);
     doAutosave();
-    const firstNight = plan.isFirstNight && plan.charId !== "shen_zhibai";
+    const firstNight = plan.isFirstNight && !isEmpress(store.getState(), plan.charId);
     if (firstNight) {
       setFirstNightPromptId(plan.charId);
       pendingReactionDispatch({ type: "begin", request: spend.value.rolledOver ? stationaryRequest() : null }); // 非转旬亦覆盖清空旧 pending（初夜提示关闭后据此补跑）
@@ -1079,14 +1080,14 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       const heirsNow = store.getState().resources.bloodline.heirs;
       setNamePetHeirIds(collectNewbornIds(beforeCount, heirsNow));
     }
-    if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && plan.bearer !== "shen_zhibai") {
+    if (plan.bearerOutcome === "safe" && plan.bearer !== "sovereign" && !isEmpress(store.getState(), plan.bearer)) {
       setReaction({
-        speakerId: "shen_zhibai",
+        speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai",
         lines: ["恭喜陛下喜得麟儿。立功侍君劳苦功高，可愿晋升以彰圣眷？"],
       });
       setPostBirthPromoteId(plan.bearer);
     } else if (plan.bearerOutcome === "safe") {
-      setReaction({ speakerId: "shen_zhibai", lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
+      setReaction({ speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai", lines: ["恭喜陛下喜得麟儿，宗祧有继，举国同庆。"] });
     }
   };
 
@@ -2588,9 +2589,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
               east_annex: "东偏殿", west_annex: "西偏殿",
             };
             const chamberName = CHAMBER_LABELS[assignment.chamberId] ?? assignment.chamberId;
-            setReaction({ speakerId: "shen_zhibai", lines: [`那么${cur.name}就先住${palaceName}的${chamberName}吧。`] });
+            setReaction({ speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai", lines: [`那么${cur.name}就先住${palaceName}的${chamberName}吧。`] });
           } else {
-            setReaction({ speakerId: "shen_zhibai", lines: [`宫中的宫室还需要洒扫，${cur.name}先暂住储秀宫吧。`] });
+            setReaction({ speakerId: activeEmpressId(store.getState()) ?? "shen_zhibai", lines: [`宫中的宫室还需要洒扫，${cur.name}先暂住储秀宫吧。`] });
           }
           advance();
         };

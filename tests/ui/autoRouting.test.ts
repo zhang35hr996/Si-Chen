@@ -36,7 +36,7 @@ const withEvents = (...events: GameEventContent[]): ContentDB =>
 
 describe("App automatic checkpoint routing", () => {
   // ── real-content guarantees ──
-  it("real exploration event (ev_shen_neglect @ 御花园) is NOT auto-started on location_enter (PR3: 探索由进入子地点触发)", () => {
+  it("real exploration event (ev_fixture_scene_runner @ 御花园) is NOT auto-started on location_enter (PR3: 探索由进入子地点触发)", () => {
     const s = at("yuhuayuan");
     expect(pickAutoStartEvent(db, s, "location_enter", locOf(s))).toBeNull();
   });

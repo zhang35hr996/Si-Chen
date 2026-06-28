@@ -1,0 +1,18 @@
+{
+  "id": "ev_fixture_scene_runner",
+  "title": "御花园偶遇",
+  "sceneId": "sc_fixture_scene_runner",
+  "checkpoint": "location_enter",
+  "condition": {
+    "all": [{ "atLocation": "yuhuayuan" }, { "not": { "eventFired": "ev_fixture_scene_runner" } }]
+  },
+  "priority": 50,
+  "once": true,
+  "apCost": 1,
+  "presentation": {
+    "mode": "exploration",
+    "hostLocationId": "yuhuayuan",
+    "subLocationId": "taiyechi",
+    "eventHint": "太液池畔，似有一道身影静立。"
+  }
+}

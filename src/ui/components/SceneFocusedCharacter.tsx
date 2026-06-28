@@ -28,7 +28,7 @@ export function SceneFocusedCharacter({
   onRelocate,
 }: SceneFocusedCharacterProps) {
   const [moreOpen, setMoreOpen] = useState(false);
-  const showMore = (onManage || onRelocate) && view.id !== "shen_zhibai";
+  const showMore = (onManage || onRelocate) && !view.isEmpress;
 
   return (
     <section className="scene-focus" aria-label={`${view.name} · ${view.role}`}>

@@ -13,6 +13,7 @@ import {
 import { validateOfficialWorld } from "../../src/engine/officials/validation";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed");
@@ -89,7 +90,8 @@ describe("completion flow: retire → vacancy → appoint another active officia
 
 describe("completion flow: death keeps the person, releases the post", () => {
   it("dead mother still resolvable by her palace consort; excluded from active source", () => {
-    const s = createNewGameState(db, 1);
+    // shen_zhibai is now event_only; inject her so getOfficialRelativesOfConsort can find her family
+    const s = withConsort(createNewGameState(db, 1), db, "shen_zhibai");
     const motherId = "official_fam_shen_main";
     const post = s.officials[motherId]!.postId;
     const r = markOfficialDead(s, motherId, "natural_death", T);

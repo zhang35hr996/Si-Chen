@@ -7,7 +7,11 @@ import { loadRealContent } from "../helpers/contentFixture";
 import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const fresh = (): GameState => withConsort(createNewGameState(db), db, "lu_huaijin");
+const fresh = (): GameState => {
+  // shen_zhibai is now event_only; inject manually for these funnel tests
+  const base = withConsort(createNewGameState(db), db, "shen_zhibai");
+  return withConsort(base, db, "lu_huaijin");
+};
 // slice starting values: shen_zhibai favor 25; lu_huaijin favor 30; sovereign prestige 50.
 
 const expectApplied = (state: GameState, effects: EventEffect[]): GameState => {

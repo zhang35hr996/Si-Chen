@@ -226,7 +226,8 @@ describe("save migration v26→v27 rank remapping", () => {
   });
 
   it("deathRecord.originalRankId is remapped (fenghou → huanghou)", () => {
-    const s = createNewGameState(db);
+    // shen_zhibai is now event_only; inject her so we can set a deathRecord
+    const s = withConsort(createNewGameState(db), db, "shen_zhibai");
     const stateV26 = structuredClone(s) as GameState;
     if (stateV26.standing["shen_zhibai"]) {
       (stateV26.standing["shen_zhibai"] as unknown as { deathRecord: unknown }).deathRecord = {
@@ -252,7 +253,8 @@ describe("save migration v26→v27 rank remapping", () => {
   });
 
   it("deathRecord.posthumousRankId is remapped (guijun → guifu)", () => {
-    const s = createNewGameState(db);
+    // shen_zhibai is now event_only; inject her so we can set a deathRecord
+    const s = withConsort(createNewGameState(db), db, "shen_zhibai");
     const stateV26 = structuredClone(s) as GameState;
     if (stateV26.standing["shen_zhibai"]) {
       (stateV26.standing["shen_zhibai"] as unknown as { deathRecord: unknown }).deathRecord = {

@@ -23,7 +23,8 @@ describe("buildShizhiEncounter", () => {
     }
     expect(seed).not.toBe("");
     const plan = buildShizhiEncounter(db, s, seed)!;
-    expect(db.characters[plan.attendantId]).toBeDefined();
+    // attendant may be a generated consort (not in db.characters)
+    expect(db.characters[plan.attendantId] ?? s.generatedConsorts[plan.attendantId]).toBeDefined();
     // 侍疾不再免费治愈太后。
     expect(plan.effects.some((e) => e.type === "set_taihou_health")).toBe(false);
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.attendantId && e.delta === 5)).toBe(true);
@@ -59,7 +60,8 @@ describe("buildTaihouRebuke", () => {
     expect(seed).not.toBe("");
     const plan = buildTaihouRebuke(db2, s, seed)!;
     expect(plan.targetId).not.toBe("shen_zhibai");
-    expect(db2.characters[plan.targetId]!.kind).toBe("consort");
+    // target may be a generated consort (not in db.characters)
+    expect((db2.characters[plan.targetId] ?? s.generatedConsorts[plan.targetId])?.kind).toBe("consort");
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.targetId && e.delta === -5)).toBe(true);
     expect(plan.beats.length).toBe(2);
   });

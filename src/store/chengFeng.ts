@@ -3,6 +3,7 @@
  * 汇报内容写入相关侍君的记忆，供日后对话引用。
  */
 import { gestationRoll } from "../engine/characters/gestation";
+import { activeEmpressId, isEmpress } from "../engine/characters/empress";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import type { EventEffect } from "../engine/content/schemas";
@@ -19,7 +20,7 @@ export interface GossipPlan {
 /** 取活跃侍君（不在冷宫、不在长门宫、未亡故）。 */
 function activeConsorts(db: ContentDB, state: GameState) {
   return Object.values(db.characters).filter((c) => {
-    if (c.kind !== "consort" || c.id === "shen_zhibai") return false;
+    if (c.kind !== "consort" || isEmpress(state, c.id)) return false;
     if (c.defaultLocation === "changmengong") return false;
     const st = state.standing[c.id];
     return !st || st.lifecycle !== "deceased";
@@ -132,6 +133,7 @@ function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): Goss
 
   const nameB = displayName(db, state, charB.id);
   const rankB = rankName(db, state, charB.id);
+  const empressId = activeEmpressId(state) ?? "shen_zhibai";
 
   const line = `陛下，听闻皇后殿下斥责${nameB}在宫中言行失仪，冒犯尊上，训诫了一番。${nameB}领训之后回宫，臣瞧着神色有些难看。`;
 
@@ -145,7 +147,7 @@ function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): Goss
           summary: `皇后因言行失仪之由斥责${rankB}，当众受训，颜面有损。`,
           strength: 60,
           retention: "slow",
-          subjectIds: ["shen_zhibai", charB.id],
+          subjectIds: [empressId, charB.id],
           perspective: "target",
           triggerTags: ["empress", "scolded"],
           unresolved: true,
@@ -154,13 +156,13 @@ function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): Goss
       },
       {
         type: "memory",
-        char: "shen_zhibai",
+        char: empressId,
         entry: {
           kind: "episodic",
           summary: `以失仪为由申斥${nameB}，整肃后宫风气。`,
           strength: 45,
           retention: "fast",
-          subjectIds: ["shen_zhibai", charB.id],
+          subjectIds: [empressId, charB.id],
           perspective: "actor",
           triggerTags: ["empress", "discipline"],
           unresolved: false,

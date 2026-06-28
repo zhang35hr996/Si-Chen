@@ -1,5 +1,6 @@
 /** 皇后自行下旨升降「贵人及以下」侍君（纯逻辑，种子化确定性）。 */
 import { gestationRoll } from "../engine/characters/gestation";
+import { activeEmpressId, isEmpress } from "../engine/characters/empress";
 import { resolveDisplayName } from "../engine/characters/standing";
 import type { ContentDB } from "../engine/content/loader";
 import { isAssignableRank, type EventEffect } from "../engine/content/schemas";
@@ -44,7 +45,7 @@ export function adjacentHaremRank(db: ContentDB, currentRankId: string, dir: Dir
 /** 选人 + 方向 + 相邻位分（不含概率门）。无合法懿旨返回 null。 */
 export function decideDecree(db: ContentDB, state: GameState, seedKey: string): DecreePlan | null {
   const candidates = Object.values(db.characters).filter((c) => {
-    if (c.kind !== "consort" || c.id === "shen_zhibai") return false;
+    if (c.kind !== "consort" || isEmpress(state, c.id)) return false;
     if (c.defaultLocation === "changmengong") return false;
     const st = state.standing[c.id];
     if (!st || st.lifecycle === "deceased") return false;
@@ -66,7 +67,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
   const summary = dir === "promote" ? `皇后下旨晋我为${targetName}` : `皇后下旨贬我为${targetName}`;
 
   const effects: EventEffect[] = [
-    { type: "set_rank", char: pick.id, rank: targetId, authority: { kind: "harem_administrator", actorId: "shen_zhibai", office: "empress" as const } },
+    { type: "set_rank", char: pick.id, rank: targetId, authority: { kind: "harem_administrator", actorId: activeEmpressId(state) ?? "shen_zhibai", office: "empress" as const } },
     {
       type: "memory",
       char: pick.id,
@@ -75,7 +76,7 @@ export function decideDecree(db: ContentDB, state: GameState, seedKey: string): 
         summary,
         strength: dir === "demote" ? 70 : 55,
         retention: dir === "demote" ? "permanent" : "slow",
-        subjectIds: ["shen_zhibai", pick.id],
+        subjectIds: [activeEmpressId(state) ?? "shen_zhibai", pick.id],
         perspective: "target",
         triggerTags: ["empress", dir],
         unresolved: dir === "demote",

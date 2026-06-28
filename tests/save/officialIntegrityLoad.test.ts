@@ -14,6 +14,7 @@ import { createMemoryStorage } from "../../src/engine/save/storage";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
@@ -83,7 +84,9 @@ describe("readSlot rejects a save with a broken official world", () => {
 
   it("consort birthFamilyId moved to another family while mother edge kept", () => {
     expectQuarantineAfter((s) => {
-      s.standing["shen_zhibai"] = { ...s.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
+      // shen_zhibai is now event_only; inject her with correct standing then set wrong birthFamilyId
+      const shenSt = withConsort(s, db, "shen_zhibai").standing["shen_zhibai"]!;
+      s.standing["shen_zhibai"] = { ...shenSt, birthFamilyId: "fam_lu_main" };
     }, 1008);
   });
 
@@ -117,7 +120,9 @@ describe("readSlot rejects a save with a broken official world", () => {
 
   it("maternalClan.familyId disagreeing with birthFamilyId", () => {
     expectQuarantineAfter((s) => {
-      s.standing["shen_zhibai"] = { ...s.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
+      // shen_zhibai is now event_only; inject her with correct standing then set wrong birthFamilyId
+      const shenSt = withConsort(s, db, "shen_zhibai").standing["shen_zhibai"]!;
+      s.standing["shen_zhibai"] = { ...shenSt, birthFamilyId: "fam_lu_main" };
     }, 1011);
   });
 

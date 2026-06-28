@@ -26,7 +26,7 @@ import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const COLD_PALACE_ID = "changmengong";
-const STORY_CONSORT_IDS = ["lu_huaijin", "xu_qinghuan", "wenya"];
+const STORY_CONSORT_IDS = ["lu_huaijin", "xu_qinghuan", "wenya", "shen_zhibai"];
 const TIER2_RANKS = new Set(["xianfu", "liangfu", "defu", "fu"]);
 const VALID_RANK_IDS = new Set(db.world.ranks.map((r) => r.id));
 
@@ -34,24 +34,43 @@ function generatedConsortIds(state: ReturnType<typeof createNewGameState>): stri
   return Object.keys(state.generatedConsorts);
 }
 
-// ── R1 固定皇后 ───────────────────────────────────────────────────────────────
+function regularGeneratedIds(state: ReturnType<typeof createNewGameState>): string[] {
+  return Object.keys(state.generatedConsorts).filter((id) => !id.startsWith("generated_empress_"));
+}
 
-describe("R1: 固定皇后", () => {
-  it("shen_zhibai 始终在 state.standing", () => {
+// ── R1 随机皇后 ───────────────────────────────────────────────────────────────
+
+describe("R1: 随机皇后", () => {
+  it("新游戏有且仅有一位皇后（rank=huanghou）", () => {
     const s = createNewGameState(db);
-    expect(s.standing["shen_zhibai"]).toBeDefined();
+    const empressEntries = Object.entries(s.standing).filter(([, st]) => st.rank === "huanghou");
+    expect(empressEntries).toHaveLength(1);
   });
 
-  it("皇后封号为 huanghou", () => {
-    const s = createNewGameState(db);
-    expect(s.standing["shen_zhibai"]!.rank).toBe("huanghou");
+  it("皇后 id 格式为 generated_empress_{seed}", () => {
+    const s = createNewGameState(db, 1);
+    const empressId = Object.keys(s.standing).find((id) => s.standing[id]?.rank === "huanghou");
+    expect(empressId).toMatch(/^generated_empress_1$/);
   });
 
   it("皇后居所为 kunninggong", () => {
     const s = createNewGameState(db);
-    const residence = s.standing["shen_zhibai"]!.residence
-      ?? db.characters["shen_zhibai"]?.defaultLocation;
+    const empressId = Object.keys(s.standing).find((id) => s.standing[id]?.rank === "huanghou");
+    expect(empressId).toBeDefined();
+    const residence = s.standing[empressId!]!.residence ?? s.generatedConsorts[empressId!]?.defaultLocation;
     expect(residence).toBe("kunninggong");
+  });
+
+  it("皇后数据存入 generatedConsorts", () => {
+    const s = createNewGameState(db);
+    const empressId = Object.keys(s.standing).find((id) => s.standing[id]?.rank === "huanghou");
+    expect(empressId).toBeDefined();
+    expect(s.generatedConsorts[empressId!]).toBeDefined();
+  });
+
+  it("shen_zhibai 不在 state.standing（已改为随机生成）", () => {
+    const s = createNewGameState(db);
+    expect(s.standing["shen_zhibai"]).toBeUndefined();
   });
 });
 
@@ -77,9 +96,9 @@ describe("R2 / R17: 剧情侍君不自动入宫", () => {
 // ── R3 生成人数 1–5，总人数 2–6 ───────────────────────────────────────────────
 
 describe("R3: 开局后宫人数", () => {
-  it("seed=1: 生成侍君数在 1–5", () => {
+  it("seed=1: 生成侍君数（不含皇后）在 1–5", () => {
     const s = createNewGameState(db, 1);
-    const count = generatedConsortIds(s).length;
+    const count = regularGeneratedIds(s).length;
     expect(count).toBeGreaterThanOrEqual(1);
     expect(count).toBeLessThanOrEqual(5);
   });
@@ -95,9 +114,9 @@ describe("R3: 开局后宫人数", () => {
     expect(consortStandingCount).toBeLessThanOrEqual(6);
   });
 
-  it("多种 seed 均满足 1–5 随机人数", () => {
+  it("多种 seed 均满足 1–5 随机人数（不含皇后）", () => {
     const counts = [1, 2, 3, 42, 100, 999].map((seed) =>
-      generatedConsortIds(createNewGameState(db, seed)).length,
+      regularGeneratedIds(createNewGameState(db, seed)).length,
     );
     for (const c of counts) {
       expect(c).toBeGreaterThanOrEqual(1);
@@ -121,10 +140,10 @@ describe("R4: 生成侍君存入 generatedConsorts", () => {
     }
   });
 
-  it("生成侍君 id 格式为 generated_consort_{seed}_{index}", () => {
+  it("生成侍君 id 格式为 generated_consort_{seed}_{index} 或 generated_empress_{seed}", () => {
     const s = createNewGameState(db, 7);
     for (const [id, c] of Object.entries(s.generatedConsorts)) {
-      expect(id).toMatch(/^generated_consort_7_\d+$/);
+      expect(id).toMatch(/^generated_(consort_7_\d+|empress_7)$/);
       expect(c.id).toBe(id);
     }
   });
@@ -206,8 +225,8 @@ describe("R9: 贵驸封号约束", () => {
 
   it.each(seeds)("seed=%i: 贵驸最多 1 位", (seed) => {
     const s = createNewGameState(db, seed);
-    // Directly count from standing
-    const guifuCount = Object.keys(s.generatedConsorts).filter(
+    // Only count regular consorts (empress uses huanghou, not guifu)
+    const guifuCount = regularGeneratedIds(s).filter(
       (id) => s.standing[id]?.rank === "guifu",
     ).length;
     expect(guifuCount).toBeLessThanOrEqual(1);
@@ -221,7 +240,7 @@ describe("R10: 贤/良/德/驸 合计约束", () => {
 
   it.each(seeds)("seed=%i: 贤/良/德/驸 合计最多 2 位", (seed) => {
     const s = createNewGameState(db, seed);
-    const tier2Count = Object.keys(s.generatedConsorts).filter(
+    const tier2Count = regularGeneratedIds(s).filter(
       (id) => TIER2_RANKS.has(s.standing[id]?.rank ?? ""),
     ).length;
     expect(tier2Count).toBeLessThanOrEqual(2);
@@ -239,9 +258,9 @@ describe("R11: 封号为有效 rank id", () => {
     }
   });
 
-  it("封号不为 huanghou（皇后专用）", () => {
+  it("普通侍君封号不为 huanghou（皇后专用）", () => {
     const s = createNewGameState(db);
-    for (const id of Object.keys(s.generatedConsorts)) {
+    for (const id of regularGeneratedIds(s)) {
       expect(s.standing[id]!.rank).not.toBe("huanghou");
     }
   });

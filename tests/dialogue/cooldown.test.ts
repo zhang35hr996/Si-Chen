@@ -24,6 +24,7 @@ import { loadRealContent } from "../helpers/contentFixture";
 import type { CourtEvent, GameState } from "../../src/engine/state/types";
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 import { toGameTime } from "../../src/engine/calendar/time";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const SPEAKER = "shen_zhibai";
@@ -51,7 +52,8 @@ function makeEligibleEvent(id: string, dayIndex = 0): CourtEvent {
 }
 
 function stateWithEvent(event: CourtEvent): GameState {
-  return { ...createNewGameState(db), chronicle: [event] };
+  // shen_zhibai is now event_only; inject her so she is "currently present" and can know events
+  return { ...withConsort(createNewGameState(db), db, "shen_zhibai"), chronicle: [event] };
 }
 
 function makeGenerativeProvider(): DialogueProvider {

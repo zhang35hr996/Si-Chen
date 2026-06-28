@@ -6,7 +6,18 @@ import { withConsort } from "../helpers/consortFixture";
 import { MAO_SLOT } from "../../src/engine/calendar/time";
 
 const db = loadRealContent();
-const baseState = createNewGameState(db);
+// shen_zhibai is now event_only; inject her as empress (replacing the generated empress)
+// so that presence tests expecting "shen_zhibai" at "kunninggong" continue to work.
+const baseState = (() => {
+  let s = createNewGameState(db);
+  const genEmpressId = Object.keys(s.standing).find((id) => s.standing[id]!.rank === "huanghou");
+  if (genEmpressId) {
+    const { [genEmpressId]: _st, ...restSt } = s.standing;
+    const { [genEmpressId]: _gc, ...restGc } = s.generatedConsorts;
+    s = { ...s, standing: restSt, generatedConsorts: restGc };
+  }
+  return withConsort(s, db, "shen_zhibai");
+})();
 // Inject lu_huaijin at zhongcui_gong for presence tests that need a specific consort.
 const state = withConsort(baseState, db, "lu_huaijin");
 

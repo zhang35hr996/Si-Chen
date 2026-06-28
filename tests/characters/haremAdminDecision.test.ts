@@ -33,7 +33,16 @@ const db = loadRealContent();
 // ─── 共用工具 ────────────────────────────────────────────────────────────────
 
 function baseState(): GameState {
-  return withConsort(createNewGameState(db), db, "wenya");
+  // shen_zhibai is now event_only; inject her as empress (replacing the generated empress)
+  let s = createNewGameState(db);
+  const genEmpressId = Object.keys(s.standing).find((id) => s.standing[id]!.rank === "huanghou");
+  if (genEmpressId) {
+    const { [genEmpressId]: _st, ...restSt } = s.standing;
+    const { [genEmpressId]: _gc, ...restGc } = s.generatedConsorts;
+    s = { ...s, standing: restSt, generatedConsorts: restGc };
+  }
+  s = withConsort(s, db, "shen_zhibai");
+  return withConsort(s, db, "wenya");
 }
 
 /**
