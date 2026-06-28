@@ -94,4 +94,17 @@ describe("毓庆宫夜访 UI", () => {
     expect(within(result.container).queryByText(/阿囡/)).not.toBeInTheDocument();
     expect(within(result.container).getByText(/尚无皇嗣迁居于此/)).toBeInTheDocument();
   });
+
+  it("已故且达迁居龄的皇嗣不出现在名册", () => {
+    const dead = minorHeir({ id: "heir_dead", givenName: "夭夭", lifecycle: "deceased" }); // age 7, deceased
+    const { result } = renderScreen(stateAt(1, [dead]));
+    expect(within(result.container).queryByText(/夭夭/)).not.toBeInTheDocument();
+    expect(within(result.container).getByText(/尚无皇嗣迁居于此/)).toBeInTheDocument();
+  });
+
+  it("仅有已故皇嗣时显示空名册提示", () => {
+    const dead = minorHeir({ id: "heir_dead", lifecycle: "deceased" });
+    const { result } = renderScreen(stateAt(1, [dead]));
+    expect(within(result.container).getByText(/尚无皇嗣迁居于此/)).toBeInTheDocument();
+  });
 });
