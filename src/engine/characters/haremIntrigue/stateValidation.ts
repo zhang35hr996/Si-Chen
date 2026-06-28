@@ -9,6 +9,7 @@ import type {
   HaremIncident,
   HaremIntrigueReport,
 } from "../../state/types";
+import { validateHaremIntriguePlan, validateHaremIntrigueOutcome } from "./validation";
 
 export interface HaremIntrigueValidationInput {
   haremSchemes: HaremScheme[];
@@ -52,6 +53,34 @@ export function validateHaremIntrigueLinks(
     if (scheme.status === "resolved" && !scheme.outcome) {
       errors.push(stateError("INTRIGUE_RESOLVED_NO_OUTCOME", `haremSchemes[id=${scheme.id}]: status=resolved 但无 outcome`));
     }
+
+    // plan.sourceKey must match scheme.sourceKey
+    if (scheme.plan.sourceKey !== scheme.sourceKey) {
+      errors.push(stateError("INTRIGUE_SOURCE_KEY_MISMATCH", `haremSchemes[id=${scheme.id}]: plan.sourceKey="${scheme.plan.sourceKey}" !== scheme.sourceKey="${scheme.sourceKey}"`));
+    }
+
+    // Domain validators: plan invariants
+    const planFindings = validateHaremIntriguePlan(scheme.plan);
+    for (const f of planFindings) {
+      errors.push(stateError(f.code, `haremSchemes[id=${scheme.id}].plan: ${f.message}`));
+    }
+
+    // Domain validators: outcome invariants (when present)
+    if (scheme.outcome !== undefined) {
+      const outcomeFindings = validateHaremIntrigueOutcome(scheme.plan, scheme.outcome);
+      for (const f of outcomeFindings) {
+        errors.push(stateError(f.code, `haremSchemes[id=${scheme.id}].outcome: ${f.message}`));
+      }
+    }
+  }
+
+  // settledHaremIntriguePeriods: no duplicates
+  const seenPeriods = new Set<string>();
+  for (const period of data.settledHaremIntriguePeriods) {
+    if (seenPeriods.has(period)) {
+      errors.push(stateError("INTRIGUE_DUP_SOURCE_KEY", `settledHaremIntriguePeriods: 重复期号 "${period}"`));
+    }
+    seenPeriods.add(period);
   }
 
   const incidentBySchemeId = new Map<string, HaremIncident>();

@@ -43,7 +43,7 @@ function makeMinimalScheme(id: string, actorId: string, targetId: string): Recor
     sourceKey: "harem_intrigue:1:03",
     scheduledForYear: 1,
     scheduledForMonth: 3,
-    status: "resolved",
+    status: "pending",
     plan: {
       sourceKey: "harem_intrigue:1:03",
       plannedAt: AT_Y1M3,
@@ -87,26 +87,6 @@ function makeMinimalScheme(id: string, actorId: string, targetId: string): Recor
         household: { ...HOUSEHOLD, servantOpinion: 60 },
       },
       rationale: ["favor_gap"],
-    },
-    outcome: {
-      status: "resolved",
-      resolvedAt: AT_Y1M3,
-      successRoll: 0.4,
-      successThreshold: 0.5,
-      success: true,
-      discoveryRoll: 0.9,
-      discoveryThreshold: 0.5,
-      discovered: true,
-      consequences: {
-        standing: [],
-        household: [],
-        nation: {},
-      },
-      knowledge: {
-        actorKnowsOwnAction: true,
-        targetKnowsInstigator: true,
-        palacePublic: true,
-      },
     },
   };
 }
@@ -208,6 +188,7 @@ describe("save migration v32 → v33: haremIncidents.discovered → observationL
         month: 2,
         plannedAt: AT_Y1M2,
         kind: "steal_credit",
+        motive: "ambition",
       },
     };
     const inc_a = makeMinimalIncident("scheme_a", "actor_001", "target_001", true);
@@ -319,6 +300,7 @@ describe("save migration v32 → v33: pendingIntrigueNotifications → haremIntr
       plan: {
         ...(makeMinimalScheme("scheme_003", "actor_001", "target_001").plan as Record<string, unknown>),
         kind: "false_accusation",
+        motive: "resentment",
       },
     };
     const incident = {

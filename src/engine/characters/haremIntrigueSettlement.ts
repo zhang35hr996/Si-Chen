@@ -128,7 +128,7 @@ function buildReport(
     suspectedKinds: [],
     knownOutcome: resolved.success ? "harm_observed" : "attempt_observed",
     confidence: "tenuous",
-    summaryCode: `anomaly_${plan.kind}`,
+    summaryCode: "anomaly_unexplained_harm",
   };
 }
 
@@ -330,14 +330,9 @@ export function settleHaremIntrigue(
     const result = resolveIntrigueOutcome(db, next, plan, at);
 
     if (!result.ok) {
-      // 合约违规 → 取消 scheme，不产生 incident
-      next = {
-        ...next,
-        haremSchemes: next.haremSchemes.map((s) =>
-          s.id === scheme.id ? { ...s, status: "cancelled" as const } : s,
-        ),
-      };
-      continue;
+      // 合约违规（plan 校验失败）→ 整个 settlement 失败并回滚
+      const detail = result.error.map((f) => f.message).join("; ");
+      return err([stateError("INTRIGUE_SETTLEMENT_FAILED", `scheme ${scheme.id}: ${detail}`)]);
     }
 
     const outcome = result.value;
@@ -387,16 +382,32 @@ export function settleHaremIntrigue(
       emotions: resolved.success ? { guilt: 20 } : { shame: 20 },
     }, at);
 
-    next = appendMemory(next, plan.targetId, {
-      kind: resolved.discovered ? "grievance" : "episodic",
-      summary: buildTargetConsequenceSummary(plan, resolved),
-      strength: resolved.success ? 55 : 30,
-      retention: "slow",
-      subjectIds: resolved.discovered ? [plan.actorId] : [plan.targetId],
-      perspective: "witness",
-      unresolved: resolved.discovered,
-      emotions: buildTargetEmotions(resolved),
-    }, at);
+    // Target memory: only written when observationLevel reveals perceptible harm
+    if (observationLevel === "exposed") {
+      next = appendMemory(next, plan.targetId, {
+        kind: "grievance",
+        summary: buildTargetConsequenceSummary(plan, resolved),
+        strength: resolved.success ? 55 : 30,
+        retention: "slow",
+        subjectIds: [plan.actorId],
+        perspective: "witness",
+        unresolved: true,
+        emotions: buildTargetEmotions(resolved),
+      }, at);
+    } else if (observationLevel === "anomaly") {
+      // Hidden but noticeable harm: generic memory, never reveals actor or kind
+      next = appendMemory(next, plan.targetId, {
+        kind: "episodic",
+        summary: "近来似有人暗中算计，然无从查起。",
+        strength: 40,
+        retention: "slow",
+        subjectIds: [plan.targetId],
+        perspective: "witness",
+        unresolved: false,
+        emotions: { grief: 30, fear: 20 },
+      }, at);
+    }
+    // observationLevel === "none" → no target memory (hidden and undetectable)
 
     // E. Exposed → CourtEvent（必须成功，否则 settlement 整体失败）
     let courtEventId: string | undefined;
