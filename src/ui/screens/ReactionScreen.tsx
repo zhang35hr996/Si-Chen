@@ -1,7 +1,7 @@
 /** Plays a 位分/封号 reaction (1–N lines) through the dialogue seam so the consort's NEW 称呼 + self-ref render. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AssetRegistry } from "../../engine/assets/registry";
-import { timeOfDay } from "../../engine/calendar/time";
+import { timeOfDay, toGameTime } from "../../engine/calendar/time";
 import type { ContentDB } from "../../engine/content/loader";
 import { assembleDialogueRequest, produceDialogueTurn } from "../../engine/dialogue/orchestrator";
 import { mockProvider } from "../../engine/dialogue/providers/mockProvider";
@@ -19,6 +19,7 @@ export function ReactionScreen({
   generatedLine,
   onChoice,
   choicePending,
+  record,
   onDone,
 }: {
   db: ContentDB;
@@ -39,12 +40,17 @@ export function ReactionScreen({
   onChoice?: (choice: { id: string; text: string; tone?: string }) => void;
   /** True while onChoice is in-flight; disables all choice buttons. */
   choicePending?: boolean;
+  /** 缺省/true：把实际显示的每一行写入对话历史；false：本反应不记录（如「（对话暂时中断）」错误提示）。 */
+  record?: boolean;
   onDone: () => void;
 }) {
   const state = useGameState(store);
   const [index, setIndex] = useState(0);
   // Scripted-path local state only. Generative path reads generatedLine directly from the prop.
   const [scriptedLine, setScriptedLine] = useState<DialogueLine | null>(null);
+  // 历史对话：以"实际显示的 line 对象身份"为去重键——每行/每个生成回合的 line 对象只变一次，
+  // 故同一对象的 rerender / StrictMode 双调用不会重复记录。中途离开不影响已记录的行。
+  const recordedLineRef = useRef<DialogueLine | null>(null);
 
   // generatedLine is authoritative in the generative path — it is not mirrored into local state.
   // Rendering directly from the prop means a new turn from App replaces the displayed line
@@ -72,6 +78,14 @@ export function ReactionScreen({
       alive = false;
     };
   }, [index, generatedLine]); // re-run when index advances (scripted) or generatedLine appears/disappears
+
+  // 记录实际显示给玩家的每一行（含逐行脚本与生成式回合）。去重键 = line 对象身份。
+  useEffect(() => {
+    if (!line || record === false) return;
+    if (recordedLineRef.current === line) return; // 同一行的 rerender / StrictMode 双调用：跳过
+    recordedLineRef.current = line;
+    store.appendNarrativeLog([{ at: toGameTime(store.getState().calendar), speakerId, lines: [line.text] }]);
+  }, [line, record, speakerId, store]);
 
   if (!line) return null;
 

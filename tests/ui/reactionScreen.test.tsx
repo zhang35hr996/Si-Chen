@@ -253,6 +253,74 @@ describe("generatedLine direct prop rendering", () => {
   });
 });
 
+// ── 5b. 历史对话记录（显示边界）─────────────────────────────────────────────
+
+describe("narrativeLog recording at display boundary", () => {
+  it("生成式回合：实际显示的 NPC 行写入历史一次（同一 line 对象 rerender 不重复）", () => {
+    const line = makeGeneratedLine([{ id: "c1", text: "询问" }]);
+    const { rerender } = render(
+      <ReactionScreen
+        db={db}
+        store={store}
+        registry={makeRegistry()}
+        speakerId="shen_zhibai"
+        lines={[line.text]}
+        generatedLine={line}
+        onChoice={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    );
+    // 同一 line 对象 rerender：不应重复记录
+    rerender(
+      <ReactionScreen
+        db={db}
+        store={store}
+        registry={makeRegistry()}
+        speakerId="shen_zhibai"
+        lines={[line.text]}
+        generatedLine={line}
+        onChoice={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    );
+    const log = store.getState().narrativeLog ?? [];
+    const mine = log.filter((e) => e.speakerId === "shen_zhibai" && e.lines.includes(line.text));
+    expect(mine).toHaveLength(1);
+  });
+
+  it("record=false（如「（对话暂时中断）」）不写入历史", () => {
+    const line = makeGeneratedLine();
+    render(
+      <ReactionScreen
+        db={db}
+        store={store}
+        registry={makeRegistry()}
+        speakerId="shen_zhibai"
+        lines={[line.text]}
+        generatedLine={line}
+        record={false}
+        onDone={vi.fn()}
+      />,
+    );
+    const log = store.getState().narrativeLog ?? [];
+    expect(log.some((e) => e.lines.includes(line.text))).toBe(false);
+  });
+
+  it("新生成回合替换 line 对象 → 各记录一次", () => {
+    const line1 = makeGeneratedLine();
+    const line2: DialogueLine = { ...makeGeneratedLine(), text: "臣已明白。" };
+    const { rerender } = render(
+      <ReactionScreen db={db} store={store} registry={makeRegistry()} speakerId="shen_zhibai" lines={[line1.text]} generatedLine={line1} onDone={vi.fn()} />,
+    );
+    rerender(
+      <ReactionScreen db={db} store={store} registry={makeRegistry()} speakerId="shen_zhibai" lines={[line2.text]} generatedLine={line2} onDone={vi.fn()} />,
+    );
+    const log = store.getState().narrativeLog ?? [];
+    expect(log.some((e) => e.lines.includes(line1.text))).toBe(true);
+    expect(log.some((e) => e.lines.includes(line2.text))).toBe(true);
+  });
+});
+
 // ── 5. Failure-path interruption notice ──────────────────────────────────────
 
 describe("failure-path interruption notice", () => {

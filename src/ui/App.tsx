@@ -53,7 +53,7 @@ import type { GameStore } from "../store/gameStore";
 import { buildRankOp, type RankOpRequest } from "../store/rankOps";
 
 import type { HaremAdministrationTarget } from "../store/haremAdminTransfer";
-import { monthOrdinal, isGreetingSlot, timeOfDay } from "../engine/calendar/time";
+import { monthOrdinal, isGreetingSlot, timeOfDay, toGameTime } from "../engine/calendar/time";
 import { getCharacterLocation } from "../engine/characters/presence";
 import {
   audienceCount,
@@ -246,7 +246,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [housingQueue, setHousingQueue] = useState<{ charId: string; name: string; rankId: string }[]>([]);
   const [restoreCharId, setRestoreCharId] = useState<string | null>(null);
   const [coldPalaceInterventionTarget, setColdPalaceInterventionTarget] = useState<string | null>(null);
-  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine } | null>(null);
+  const [reaction, setReaction] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine; record?: boolean } | null>(null);
   /** 当前展示的乘风年度例核禀报 id（瞬时，不持久化）；onDone 时才 acknowledge。 */
   const [pendingHaremAdminReviewId, setPendingHaremAdminReviewId] = useState<string | null>(null);
   const [postBirthPromoteId, setPostBirthPromoteId] = useState<string | null>(null);
@@ -292,7 +292,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [childReaction, setChildReaction] = useState<HeirAudiencePlan | null>(null);
   const [namePetHeirIds, setNamePetHeirIds] = useState<string[]>([]);
   const namePetHeirId = namePetHeirIds[0] ?? null;
-  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine }[]>([]);
+  const [reactionQueue, setReactionQueue] = useState<{ speakerId: string; lines: string[]; backgroundKey?: string; generatedLine?: DialogueLine; record?: boolean }[]>([]);
   const [resourcePanelOpen, setResourcePanelOpen] = useState(false);
   // 国库与国情一致：浮层，任意画面可开，关闭后回到原处（不切 view）。
   const [storehouseOpen, setStorehouseOpen] = useState(false);
@@ -947,9 +947,8 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     if (request !== "preserve") {
       pendingReactionDispatch({ type: "begin", request }); // 非空登记请求；null 覆盖清空
     }
-    // 对话历史：一批 beats 全部写入日志（台词内容在发送时已确定）。
-    const now = store.getState().calendar;
-    store.appendNarrativeLog(beats.map((b) => ({ at: now, speakerId: b.speakerId, lines: b.lines })));
+    // 对话历史不在此整批预写：每条反应在 ReactionScreen 实际显示时逐行记录（见 ReactionScreen），
+    // 故队列中尚未显示的后续台词不会提前入历史。
     setReaction(beats[0]!);
     setReactionQueue(beats.slice(1));
   };
@@ -1622,6 +1621,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     const currentLine = reaction.generatedLine;
     const speakerId = reaction.speakerId;
 
+    // 历史对话：记录玩家实际点击的生成式选项（单飞门已通过，每次点击仅记一次）。
+    store.appendNarrativeLog([{ at: toGameTime(store.getState().calendar), speakerId: "player", lines: [choice.text] }]);
+
     try {
       // Append speaker's last line + player's chosen response
       const transcript = [
@@ -1639,7 +1641,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       if (!reqResult.ok) {
         if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：失效后不得改界面
         // Assembly failed — strip generatedLine so normal onDone drains the queue/rollover
-        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        setReaction({ speakerId, lines: ["（对话暂时中断）"], record: false });
         return;
       }
 
@@ -1647,14 +1649,14 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       if (!isCurrentDialogueOp(dialogueOpRef.current, opToken)) return; // stale：读档/新局/驾崩已发生，忽略本次完成
       if (!turnResult.ok) {
         // Turn failed — same graceful path
-        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        setReaction({ speakerId, lines: ["（对话暂时中断）"], record: false });
         return;
       }
 
       const committed = store.commitDialogueState(expectedState, turnResult.value.nextState);
       if (!committed) {
         // CAS failed (stale state) — same graceful path
-        setReaction({ speakerId, lines: ["（对话暂时中断）"] });
+        setReaction({ speakerId, lines: ["（对话暂时中断）"], record: false });
         return;
       }
 
@@ -2672,6 +2674,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
           lines={reaction.lines}
           backgroundKey={reaction.backgroundKey}
           generatedLine={reaction.generatedLine}
+          record={reaction.record}
           onChoice={reaction?.generatedLine && dialogueRuntime ? onConverseChoice : undefined}
           choicePending={choicePendingToken !== null}
           onDone={() => {
