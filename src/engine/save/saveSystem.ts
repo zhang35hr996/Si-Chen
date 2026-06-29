@@ -18,6 +18,7 @@ import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState, Official, OfficialAptitude, TreasuryLedgerEntry, FrontierAssessment } from "../state/types";
+import { SOVEREIGN_PERSON_ID } from "../state/types";
 import { deriveOfficialAptitude, initialReviewState } from "../officials/careerMetrics";
 import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
@@ -737,24 +738,31 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     return { ...env, formatVersion: 38, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 
-  // v38 → v39: 宗亲 Slice A — Heir.adoptiveFatherId 重命名为 custodianId；faction "adoptive" → "custodian"。
+  // v38 → v39: 宗亲 Slice A 亲缘数据基础。回填 parentage（legal=bio，母=sovereign）；
+  // Heir.adoptiveFatherId → custodianId；faction "adoptive" → "custodian"；
+  // 新增 adoptionRecords / royalResidences 容器 + adoptionNextSeq / royalResidenceNextSeq。
   38: (old): SaveEnvelope => {
     const env = old as SaveEnvelope;
     const state = structuredClone(env.state) as Record<string, unknown>;
-    const resources = (state["resources"] ?? {}) as Record<string, unknown>;
-    const bloodline = (resources["bloodline"] ?? {}) as Record<string, unknown>;
-    const heirs = Array.isArray(bloodline["heirs"])
-      ? (bloodline["heirs"] as Array<Record<string, unknown>>)
-      : [];
-    for (const h of heirs) {
-      if (h["adoptiveFatherId"] !== undefined) {
-        h["custodianId"] = h["adoptiveFatherId"];
-        delete h["adoptiveFatherId"];
-      }
-      if (h["faction"] === "adoptive") {
-        h["faction"] = "custodian";
-      }
+    const bl = (state["resources"] as Record<string, unknown> | undefined)?.["bloodline"] as
+      { heirs?: Array<Record<string, unknown>> } | undefined;
+    const parentage = (state["parentage"] as Record<string, unknown>) ?? {};
+    for (const heir of bl?.heirs ?? []) {
+      // 不做 `?? null`：null=自孕、undefined=损坏。原值原样保留，坏档由 required schema 拒绝。
+      const fatherId = heir["fatherId"];
+      parentage[heir["id"] as string] = {
+        biologicalMotherId: SOVEREIGN_PERSON_ID, biologicalFatherId: fatherId,
+        legalMotherId: SOVEREIGN_PERSON_ID, legalFatherId: fatherId,
+      };
+      heir["custodianId"] = heir["adoptiveFatherId"]; // 可能 undefined
+      delete heir["adoptiveFatherId"];
+      if (heir["faction"] === "adoptive") heir["faction"] = "custodian";
     }
+    state["parentage"] = parentage;
+    if (typeof state["adoptionRecords"] !== "object" || state["adoptionRecords"] == null) state["adoptionRecords"] = {};
+    if (typeof state["royalResidences"] !== "object" || state["royalResidences"] == null) state["royalResidences"] = {};
+    if (typeof state["adoptionNextSeq"] !== "number") state["adoptionNextSeq"] = 1;
+    if (typeof state["royalResidenceNextSeq"] !== "number") state["royalResidenceNextSeq"] = 1;
     return { ...env, formatVersion: 39, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
