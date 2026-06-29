@@ -18,11 +18,38 @@ import { createHeirHealthAnomalyBundle } from "../../src/engine/characters/harem
 import { createInvestigationCaseFromAnomalyReport } from "../../src/engine/characters/haremInvestigation/createCaseFromAnomaly";
 import { availableInvestigationActions } from "../../src/engine/characters/haremInvestigation/actions";
 import { loadRealContent } from "../helpers/contentFixture";
-import { toGameTime } from "../../src/engine/calendar/time";
-import type { GameState } from "../../src/engine/state/types";
+import { makeGameTime, toGameTime } from "../../src/engine/calendar/time";
+import type { GameState, Heir } from "../../src/engine/state/types";
 
 const db = loadRealContent();
 const base = createNewGameState(db);
+
+// medical_examination 需要受害皇嗣（heir_001）在 bloodline.heirs 中存活
+const VICTIM_HEIR_IB: Heir = {
+  id: "heir_001",
+  sex: "son",
+  fatherId: null,
+  bearer: "sovereign",
+  birthAt: makeGameTime(1, 1, "early"),
+  favor: 0,
+  legitimate: false,
+  petName: "",
+  education: { scholarship: 0, martial: 0, virtue: 0 },
+  health: 80,
+  talent: 50,
+  diligence: 50,
+  personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+  interests: [],
+  imperialFear: 0,
+  neglect: 0,
+  custodianBond: 0,
+  portraitVariants: { baby: "p_baby", kid: "p_kid", child: "p_child", teen: "p_teen" },
+  ambition: 50,
+  closeness: 50,
+  support: 50,
+  faction: "none",
+  lifecycle: "alive",
+};
 
 function makeState(): GameState {
   const augmentedStanding = Object.fromEntries(
@@ -41,7 +68,14 @@ function makeState(): GameState {
       },
     ]),
   );
-  return { ...base, standing: augmentedStanding };
+  return {
+    ...base,
+    standing: augmentedStanding,
+    resources: {
+      ...base.resources,
+      bloodline: { ...base.resources.bloodline, heirs: [VICTIM_HEIR_IB] },
+    },
+  };
 }
 
 const PARAMS = {

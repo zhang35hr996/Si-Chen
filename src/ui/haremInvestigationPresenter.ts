@@ -148,10 +148,18 @@ export interface InvestigationDetailPresentation extends HaremInvestigationPrese
   canConfirmCulprit: boolean;
 }
 
-const METHOD_LABELS: Record<string, string> = {
+const METHOD_LABELS: Record<InvestigationMethod, string> = {
+  // legacy
   question_target: "询问受害者",
   question_suspect: "传问嫌疑人",
   quiet_inquiry: "暗中查访",
+  // evidence-driven
+  medical_examination: "查验脉案与药物",
+  question_servants: "询问宫人",
+  reconstruct_timeline: "重查事发时序",
+  trace_money: "追查钱物流向",
+  search_quarters: "搜查相关住处",
+  obtain_testimony: "获取关键证词",
 };
 
 const LEAD_STRENGTH_LABELS: Record<string, string> = {

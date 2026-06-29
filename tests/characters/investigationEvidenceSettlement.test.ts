@@ -11,11 +11,38 @@ import { fromTurnIndex, makeGameTime } from "../../src/engine/calendar/time";
 import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { loadRealContent } from "../helpers/contentFixture";
-import type { GameState } from "../../src/engine/state/types";
+import type { GameState, Heir } from "../../src/engine/state/types";
 
 const db = loadRealContent();
 const base = createNewGameState(db);
 const AT = makeGameTime(1, 1, "early");
+
+// medical_examination 需要受害皇嗣（heir_001）存在于 bloodline.heirs 且存活
+const VICTIM_HEIR: Heir = {
+  id: "heir_001",
+  sex: "son",
+  fatherId: null,
+  bearer: "sovereign",
+  birthAt: AT,
+  favor: 0,
+  legitimate: false,
+  petName: "",
+  education: { scholarship: 0, martial: 0, virtue: 0 },
+  health: 80,
+  talent: 50,
+  diligence: 50,
+  personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+  interests: [],
+  imperialFear: 0,
+  neglect: 0,
+  custodianBond: 0,
+  portraitVariants: { baby: "p_baby", kid: "p_kid", child: "p_child", teen: "p_teen" },
+  ambition: 50,
+  closeness: 50,
+  support: 50,
+  faction: "none",
+  lifecycle: "alive",
+};
 
 function makeState(): GameState {
   const standing = Object.fromEntries(
@@ -34,7 +61,14 @@ function makeState(): GameState {
       },
     ]),
   );
-  return { ...base, standing };
+  return {
+    ...base,
+    standing,
+    resources: {
+      ...base.resources,
+      bloodline: { ...base.resources.bloodline, heirs: [VICTIM_HEIR] },
+    },
+  };
 }
 
 const PARAMS = {

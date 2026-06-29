@@ -35,6 +35,13 @@ function isAlive(state: GameState, charId: string): boolean {
   return !!st && st.lifecycle !== "deceased";
 }
 
+/** 皇嗣是否仍存活（在 bloodline.heirs 中且 lifecycle=alive）。不同于角色，皇嗣不在 standing 中。 */
+function isLivingHeir(state: GameState, heirId: string): boolean {
+  return state.resources.bloodline.heirs.some(
+    (heir) => heir.id === heirId && heir.lifecycle === "alive",
+  );
+}
+
 function actionOf(method: InvestigationMethod, subjectCandidateIds?: string[]): AvailableInvestigationAction {
   return {
     method,
@@ -59,7 +66,7 @@ export function availableInvestigationActions(
 
   // 5B-2B2a：按案件来源分流可用行动
   return c.source.kind === "investigation_incident"
-    ? availableEvidenceActions()
+    ? availableEvidenceActions(state, c)
     : availableLegacyActions(state, c);
 }
 
@@ -88,18 +95,28 @@ function availableLegacyActions(
  * 证据驱动案件（investigation_incident）的调查行动（5B-2B2a）。
  * 只读玩家已知字段决定可用性，绝不读取 InvestigationTruth（否则泄露后台事实）。
  */
-function availableEvidenceActions(): AvailableInvestigationAction[] {
-  // v1：证据节点尚无 subject 绑定，搜查所发现的证据与所选人物无关，
-  // 因此 search_quarters 暂不要求/不提供人物选择（避免误导玩家）。
-  // 后续蓝图加入 subjectRef（culprit/framing_target/...）后再由 resolver 绑定真实人物。
-  return [
-    actionOf("medical_examination"),
+function availableEvidenceActions(
+  state: GameState,
+  c: IntrigueInvestigationCase,
+): AvailableInvestigationAction[] {
+  const actions: AvailableInvestigationAction[] = [];
+
+  // 查验脉案：受害皇嗣仍存活时才出现（皇嗣在 bloodline.heirs，不在 standing）
+  const hasLivingHeir = c.knownTargetIds.some((id) => isLivingHeir(state, id));
+  if (hasLivingHeir) {
+    actions.push(actionOf("medical_examination"));
+  }
+
+  // 其余五种行动始终可用（不绑定具体对象；待 HiddenEvidenceNode.discoverySubjectIds 模型建立后再恢复对象筛选）
+  actions.push(
     actionOf("question_servants"),
     actionOf("reconstruct_timeline"),
     actionOf("trace_money"),
     actionOf("obtain_testimony"),
     actionOf("search_quarters"),
-  ];
+  );
+
+  return actions;
 }
 
 /** 验证指定案件是否可以接受新调查任务（单独暴露给 store 使用）。 */
@@ -124,7 +141,15 @@ export function validateCanStartTask(
     if (!EVIDENCE_INVESTIGATION_METHODS.has(method)) {
       return `证据驱动案件 "${c.id}" 不接受调查方法 "${method}"`;
     }
-    // v1：证据案件行动均不要求指定人物（含 search_quarters）
+    // 证据调查行动均为非对象型；subjectId 无语义，拒绝以维持不变量
+    if (subjectId !== undefined) {
+      return `证据驱动调查行动 "${method}" 不接受指定对象`;
+    }
+    // medical_examination 须有存活受害皇嗣（皇嗣在 bloodline.heirs，不在 standing）
+    if (method === "medical_examination") {
+      const hasLivingHeir = c.knownTargetIds.some((id) => isLivingHeir(state, id));
+      if (!hasLivingHeir) return "受害皇嗣已不在人世，无法查验脉案";
+    }
     return null;
   }
 
