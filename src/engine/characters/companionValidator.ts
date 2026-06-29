@@ -11,6 +11,11 @@ function expectedCompanionSex(heirSex: "daughter" | "son"): PersonSex {
   return heirSex === "daughter" ? "female" : "male";
 }
 
+function companionAssignmentSequence(id: string): number | null {
+  const match = /^companion_assignment_.+_(\d+)$/.exec(id);
+  return match ? Number(match[1]) : null;
+}
+
 export function validateCompanionWorld(state: GameState): GameError[] {
   const errors: GameError[] = [];
 
@@ -43,12 +48,12 @@ export function validateCompanionWorld(state: GameState): GameError[] {
     }
 
     // 性别：皇子→女、皇郎→男（须与快照及 live 人物一致）
-    if (heir && personSex !== null) {
+    if (heir) {
       const want = expectedCompanionSex(heir.sex);
       if (a.profile.sex !== want) {
         errors.push(stateError("COMPANION_SEX_MISMATCH", `heir "${a.heirId}" (${heir.sex}) companion profile.sex="${a.profile.sex}" expected "${want}"`));
       }
-      if (personSex !== want) {
+      if (personSex !== null && personSex !== want) {
         errors.push(stateError("COMPANION_SEX_MISMATCH", `heir "${a.heirId}" (${heir.sex}) companion person sex="${personSex}" expected "${want}"`));
       }
     }
@@ -69,7 +74,7 @@ export function validateCompanionWorld(state: GameState): GameError[] {
     }
   }
 
-  // ── 历史（endedCompanionAssignments）：append-only，人物可已死 ──
+  // ── 历史（endedCompanionAssignments）：append-only；人物可已故，但记录不得悬空 ──
   for (const a of state.endedCompanionAssignments) {
     if (a.status !== "ended") {
       errors.push(stateError("COMPANION_HISTORY_NOT_ENDED", `history assignment "${a.id}" has status="${a.status}"`));
@@ -77,26 +82,50 @@ export function validateCompanionWorld(state: GameState): GameError[] {
     if (a.endedAt === undefined || a.endReason === undefined) {
       errors.push(stateError("COMPANION_ENDED_MISSING_FIELDS", `history assignment "${a.id}" (heir ${a.heirId}) missing endedAt/endReason`));
     }
-    // 历史人物**允许**已死/缺失；若来源仍存在，性别仍须与皇嗣相符（命名空间正确性的代理）。
+
     const heir = state.resources.bloodline.heirs.find((h) => h.id === a.heirId);
+    if (!heir) {
+      errors.push(stateError("COMPANION_DANGLING_HEIR", `history assignment "${a.id}" references unknown heir "${a.heirId}"`));
+    }
+
+    const personId = a.companion.personId;
     const personSex = resolvePersonSex(state, a);
-    if (heir && personSex !== null) {
+    if (personSex === null) {
+      errors.push(stateError("COMPANION_DANGLING_PERSON", `history assignment "${a.id}" companion "${personId}" not found`));
+    }
+
+    if (heir) {
       const want = expectedCompanionSex(heir.sex);
-      if (personSex !== want) {
+      if (a.profile.sex !== want) {
+        errors.push(stateError("COMPANION_SEX_MISMATCH", `history assignment "${a.id}" profile.sex="${a.profile.sex}" expected "${want}"`));
+      }
+      if (personSex !== null && personSex !== want) {
         errors.push(stateError("COMPANION_SEX_MISMATCH", `history assignment "${a.id}" person sex="${personSex}" expected "${want}"`));
       }
     }
   }
 
-  // ── 全局 id 唯一性：跨 active + history 不重复 ──
+  // ── 全局 id 唯一性 + 单调序列 ──
   const seenIds = new Set<string>();
   const allAssignments = [...Object.values(state.heirCompanions), ...state.endedCompanionAssignments];
+  let maxNumericSequence = -1;
   for (const a of allAssignments) {
     if (seenIds.has(a.id)) {
       errors.push(stateError("COMPANION_DUPLICATE_ID", `duplicate companion assignment id "${a.id}"`));
     } else {
       seenIds.add(a.id);
     }
+    const seq = companionAssignmentSequence(a.id);
+    if (seq !== null) maxNumericSequence = Math.max(maxNumericSequence, seq);
+  }
+
+  if (state.nextCompanionAssignmentSeq <= maxNumericSequence) {
+    errors.push(
+      stateError(
+        "COMPANION_SEQUENCE_NOT_AHEAD",
+        `nextCompanionAssignmentSeq=${state.nextCompanionAssignmentSeq} must be greater than existing max sequence ${maxNumericSequence}`,
+      ),
+    );
   }
 
   return errors;
