@@ -4,7 +4,13 @@
  */
 import type { GameState } from "../../state/types";
 import type { IntrigueInvestigationCase } from "./types";
-import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS, isActiveCase } from "./types";
+import {
+  INVESTIGATION_METHOD_AP,
+  INVESTIGATION_METHOD_DAYS,
+  EVIDENCE_INVESTIGATION_METHODS,
+  LEGACY_INVESTIGATION_METHODS,
+  isActiveCase,
+} from "./types";
 import type { InvestigationMethod } from "./types";
 
 export interface AvailableInvestigationAction {
@@ -29,6 +35,15 @@ function isAlive(state: GameState, charId: string): boolean {
   return !!st && st.lifecycle !== "deceased";
 }
 
+function actionOf(method: InvestigationMethod, subjectCandidateIds?: string[]): AvailableInvestigationAction {
+  return {
+    method,
+    ...(subjectCandidateIds ? { subjectCandidateIds } : {}),
+    apCost: INVESTIGATION_METHOD_AP[method],
+    durationDays: INVESTIGATION_METHOD_DAYS[method],
+  };
+}
+
 export function availableInvestigationActions(
   state: GameState,
   caseId: string,
@@ -36,49 +51,55 @@ export function availableInvestigationActions(
   const c = state.haremInvestigationCases.find((x) => x.id === caseId);
   if (!c) return [];
 
-  // 5B-2B1 临时封锁：证据驱动事件族（investigation_incident）的调查行动尚未接入
-  // （留待 5B-2B2）。在此之前，禁止此类案件启动旧结算器任务，避免读取不到旧
-  // haremIncidents 真相而生成错误线索（误排除嫌疑人 / 凭空抬高置信度）。
-  if (c.source.kind === "investigation_incident") return [];
-
   // 已关闭/取消/待裁定（裁定后才关闭）→ 不允许新任务
   if (!isActiveCase(c.status) || c.status === "ready_for_review") return [];
 
   // 已有 pending 任务 → 等待结算
   if (hasPendingTask(state, caseId)) return [];
 
+  // 5B-2B2a：按案件来源分流可用行动
+  return c.source.kind === "investigation_incident"
+    ? availableEvidenceActions()
+    : availableLegacyActions(state, c);
+}
+
+/** 旧宫斗案件（legacy_intrigue）的三种调查行动（行为不变）。 */
+function availableLegacyActions(
+  state: GameState,
+  c: IntrigueInvestigationCase,
+): AvailableInvestigationAction[] {
   const actions: AvailableInvestigationAction[] = [];
 
-  // 询问受害者：须有已知目标且目标仍存活（H3：返回候选列表）
   const aliveTargets = c.knownTargetIds.filter((id) => isAlive(state, id));
   if (aliveTargets.length > 0) {
-    actions.push({
-      method: "question_target",
-      subjectCandidateIds: aliveTargets,
-      apCost: INVESTIGATION_METHOD_AP.question_target,
-      durationDays: INVESTIGATION_METHOD_DAYS.question_target,
-    });
+    actions.push(actionOf("question_target", aliveTargets));
   }
 
-  // 传问嫌疑人：须有嫌疑人且至少一人仍存活
   const aliveSuspects = c.suspectIds.filter((id) => isAlive(state, id));
   if (aliveSuspects.length > 0) {
-    actions.push({
-      method: "question_suspect",
-      subjectCandidateIds: aliveSuspects,
-      apCost: INVESTIGATION_METHOD_AP.question_suspect,
-      durationDays: INVESTIGATION_METHOD_DAYS.question_suspect,
-    });
+    actions.push(actionOf("question_suspect", aliveSuspects));
   }
 
-  // 暗中查访：案件活跃即可
-  actions.push({
-    method: "quiet_inquiry",
-    apCost: INVESTIGATION_METHOD_AP.quiet_inquiry,
-    durationDays: INVESTIGATION_METHOD_DAYS.quiet_inquiry,
-  });
-
+  actions.push(actionOf("quiet_inquiry"));
   return actions;
+}
+
+/**
+ * 证据驱动案件（investigation_incident）的调查行动（5B-2B2a）。
+ * 只读玩家已知字段决定可用性，绝不读取 InvestigationTruth（否则泄露后台事实）。
+ */
+function availableEvidenceActions(): AvailableInvestigationAction[] {
+  // v1：证据节点尚无 subject 绑定，搜查所发现的证据与所选人物无关，
+  // 因此 search_quarters 暂不要求/不提供人物选择（避免误导玩家）。
+  // 后续蓝图加入 subjectRef（culprit/framing_target/...）后再由 resolver 绑定真实人物。
+  return [
+    actionOf("medical_examination"),
+    actionOf("question_servants"),
+    actionOf("reconstruct_timeline"),
+    actionOf("trace_money"),
+    actionOf("obtain_testimony"),
+    actionOf("search_quarters"),
+  ];
 }
 
 /** 验证指定案件是否可以接受新调查任务（单独暴露给 store 使用）。 */
@@ -88,10 +109,6 @@ export function validateCanStartTask(
   method: InvestigationMethod,
   subjectId?: string,
 ): string | null {
-  // 5B-2B1 临时封锁：证据驱动事件族的证据调查尚未接入（留待 5B-2B2）
-  if (c.source.kind === "investigation_incident") {
-    return `案件 "${c.id}" 的证据调查尚未接入，暂不能下令`;
-  }
   if (!isActiveCase(c.status)) {
     return `案件 "${c.id}" 状态 "${c.status}" 不允许新增调查任务`;
   }
@@ -100,6 +117,20 @@ export function validateCanStartTask(
   }
   if (hasPendingTask(state, c.id)) {
     return `案件 "${c.id}" 已有待结算调查任务，请等待结算后再下令`;
+  }
+
+  // 方法必须与案件来源匹配（两套调查模型不得混用）
+  if (c.source.kind === "investigation_incident") {
+    if (!EVIDENCE_INVESTIGATION_METHODS.has(method)) {
+      return `证据驱动案件 "${c.id}" 不接受调查方法 "${method}"`;
+    }
+    // v1：证据案件行动均不要求指定人物（含 search_quarters）
+    return null;
+  }
+
+  // legacy_intrigue
+  if (!LEGACY_INVESTIGATION_METHODS.has(method)) {
+    return `旧宫斗案件 "${c.id}" 不接受调查方法 "${method}"`;
   }
   if (method === "question_suspect") {
     if (!subjectId) return "传问嫌疑人须指定调查对象";

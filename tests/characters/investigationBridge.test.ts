@@ -81,6 +81,7 @@ describe("5B-2B1: anomaly bundle generation", () => {
     const r = createHeirHealthAnomalyBundle(makeState(), PARAMS);
     if (!r.ok) throw new Error("bundle failed");
     const report = r.value.state.investigationPublicReports[0]!;
+    if (report.reportKind !== "anomaly") throw new Error("expected anomaly report");
 
     for (const k of FORBIDDEN_TRUTH_KEYS) {
       expect(report).not.toHaveProperty(k);
@@ -149,7 +150,7 @@ describe("5B-2B1: open case from anomaly report", () => {
   it("IB-05: 从公开报告立案 → source.kind=investigation_incident，报告转 investigating", () => {
     const store = createGameStore();
     store.loadState(makeState());
-    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    const made = store.createHeirHealthAnomaly(PARAMS);
     expect(made.ok).toBe(true);
     if (!made.ok) return;
     const { reportId, incidentId } = made.value;
@@ -173,7 +174,7 @@ describe("5B-2B1: open case from anomaly report", () => {
   it("IB-06: 重复立案幂等，仅一个案件", () => {
     const store = createGameStore();
     store.loadState(makeState());
-    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    const made = store.createHeirHealthAnomaly(PARAMS);
     if (!made.ok) return;
     const a = store.openInvestigationFromAnomalyReport(made.value.reportId);
     const b = store.openInvestigationFromAnomalyReport(made.value.reportId);
@@ -208,7 +209,7 @@ describe("5B-2B1: open case from anomaly report", () => {
     const storage = createMemoryStorage();
     const store = createGameStore();
     store.loadState(makeState());
-    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    const made = store.createHeirHealthAnomaly(PARAMS);
     if (!made.ok) return;
     store.openInvestigationFromAnomalyReport(made.value.reportId);
 
@@ -223,22 +224,30 @@ describe("5B-2B1: open case from anomaly report", () => {
   });
 });
 
-describe("5B-2B1: investigation_incident 暂禁旧任务结算", () => {
-  it("IB-10: investigation_incident 案件无任何可用旧调查行动", () => {
+describe("5B-2B2a: investigation_incident 行动按来源分流", () => {
+  it("IB-10: investigation_incident 案件开放证据行动、不含旧宫斗方法", () => {
     const store = createGameStore();
     store.loadState(makeState());
-    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    const made = store.createHeirHealthAnomaly(PARAMS);
     if (!made.ok) return;
     const opened = store.openInvestigationFromAnomalyReport(made.value.reportId);
     if (!opened.ok) return;
-    const actions = availableInvestigationActions(store.getState(), opened.value.caseId);
-    expect(actions).toEqual([]);
+    const methods = availableInvestigationActions(store.getState(), opened.value.caseId).map((a) => a.method);
+    // 含证据行动
+    expect(methods).toContain("medical_examination");
+    expect(methods).toContain("question_servants");
+    expect(methods).toContain("reconstruct_timeline");
+    expect(methods).toContain("trace_money");
+    // 不含旧宫斗方法
+    expect(methods).not.toContain("quiet_inquiry");
+    expect(methods).not.toContain("question_suspect");
+    expect(methods).not.toContain("question_target");
   });
 
-  it("IB-11: 直接 startHaremInvestigationTask → 报错，不扣 AP，不建 task，案件保持 open", () => {
+  it("IB-11: 对证据案件下达旧宫斗方法 → 报错，不扣 AP，不建 task，案件保持 open", () => {
     const store = createGameStore();
     store.loadState(makeState());
-    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    const made = store.createHeirHealthAnomaly(PARAMS);
     if (!made.ok) return;
     const opened = store.openInvestigationFromAnomalyReport(made.value.reportId);
     if (!opened.ok) return;
@@ -261,7 +270,7 @@ describe("5B-2B1: legacy intrigue unchanged", () => {
     // 直接调用纯函数，验证 source 判别字段
     const store = createGameStore();
     store.loadState(makeState());
-    const made = store.createHeirHealthAnomalyIncident(PARAMS);
+    const made = store.createHeirHealthAnomaly(PARAMS);
     if (!made.ok) return;
     const at = toGameTime(store.getState().calendar);
     const r = createInvestigationCaseFromAnomalyReport(store.getState(), made.value.reportId, at);

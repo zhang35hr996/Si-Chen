@@ -5,7 +5,7 @@
 import type { GameTime } from "../../calendar/time";
 import type { HaremIntrigueKind } from "../haremIntrigue/types";
 import type { HaremIntrigueReportConfidence } from "../../state/types";
-import type { HeirHealthSymptom } from "./truth/types";
+import type { HeirHealthSymptom, InvestigationCauseType, IncidentMechanism } from "./truth/types";
 
 /** 可立案的报告种类（排除调查进行中的中间报告）。 */
 export type InvestigatableReportKind = "anomaly" | "rumor" | "exposure";
@@ -85,7 +85,8 @@ export interface IntrigueInvestigationCase {
 
 export type InvestigationPublicReportStatus = "unread" | "acknowledged" | "investigating";
 
-export interface InvestigationPublicReport {
+/** 皇嗣异常立案报告（玩家立案入口）。 */
+export interface HeirHealthAnomalyPublicReport {
   /** "iarep_{incidentId}" */
   id: string;
   source: { kind: "investigation_incident"; incidentId: string };
@@ -111,6 +112,35 @@ export interface InvestigationPublicReport {
   linkedInvestigationId?: string;
 }
 
+/**
+ * 证据驱动案件的调查进展通报（5B-2B2a）。新案件的 update/final 通报走此处，
+ * 绝不塞入旧 `haremIntrigueReports`。只复制案件玩家知识，不含 truth。
+ */
+export interface InvestigationProgressPublicReport {
+  /** "iprog_{taskId}" */
+  id: string;
+  source: { kind: "investigation_incident"; incidentId: string };
+  reportKind: "investigation_update" | "investigation_final";
+  createdAt: GameTime;
+  status: "unread" | "acknowledged";
+  /** 必链接到来源案件。 */
+  linkedInvestigationId: string;
+  knownTargetIds: string[];
+  suspectedActorIds: string[];
+  confidence: HaremIntrigueReportConfidence;
+  summaryCode: string;
+  acknowledgedAt?: GameTime;
+}
+
+/**
+ * `investigationPublicReports` 元素：按 `reportKind` 判别。
+ * `anomaly` = 立案报告（旧存档即此形态，无需迁移）；
+ * `investigation_update/final` = 进展通报（5B-2B2a 新增成员）。
+ */
+export type InvestigationPublicReport =
+  | HeirHealthAnomalyPublicReport
+  | InvestigationProgressPublicReport;
+
 /** 任务/线索 ID 格式正则（与 Zod schema 保持同步）。 */
 export const TASK_ID_REGEX = /^itask_\d{6}$/;
 export const LEAD_ID_REGEX = /^ilead_\d{6}$/;
@@ -118,20 +148,52 @@ export const LEAD_ID_REGEX = /^ilead_\d{6}$/;
 // ── 5B-2：调查任务 ────────────────────────────────────────────────────
 
 export type InvestigationMethod =
+  // 旧宫斗（legacy_intrigue）专用
   | "question_target"    // 询问受害者（1 AP，1 行动日）
   | "question_suspect"   // 传问嫌疑人（1 AP，1 行动日）
-  | "quiet_inquiry";     // 暗中查访（1 AP，2 行动日）
+  | "quiet_inquiry"      // 暗中查访（1 AP，2 行动日）
+  // 证据驱动（investigation_incident）专用（5B-2B2a）；
+  // 取值与 truth 层 EvidenceDiscoveryAction 一致，便于 node.discoverableBy 匹配
+  | "medical_examination"   // 命太医验看（1 AP，1 旬）
+  | "question_servants"     // 盘问宫人（1 AP，1 旬）
+  | "reconstruct_timeline"  // 重查出入时序（1 AP，1 旬）
+  | "search_quarters"       // 搜查住处（1 AP，1 旬）
+  | "trace_money"           // 暗查银钱（1 AP，2 旬）
+  | "obtain_testimony";     // 深审口供（1 AP，1 旬）
+
+/** 旧宫斗案件（legacy_intrigue）允许的调查方法。 */
+export const LEGACY_INVESTIGATION_METHODS: ReadonlySet<InvestigationMethod> = new Set([
+  "question_target", "question_suspect", "quiet_inquiry",
+]);
+
+/** 证据驱动案件（investigation_incident）允许的调查方法。 */
+export const EVIDENCE_INVESTIGATION_METHODS: ReadonlySet<InvestigationMethod> = new Set([
+  "medical_examination", "question_servants", "reconstruct_timeline",
+  "search_quarters", "trace_money", "obtain_testimony",
+]);
 
 export const INVESTIGATION_METHOD_AP: Record<InvestigationMethod, number> = {
   question_target: 1,
   question_suspect: 1,
   quiet_inquiry: 1,
+  medical_examination: 1,
+  question_servants: 1,
+  reconstruct_timeline: 1,
+  search_quarters: 1,
+  trace_money: 1,
+  obtain_testimony: 1,
 };
 
 export const INVESTIGATION_METHOD_DAYS: Record<InvestigationMethod, number> = {
   question_target: 1,
   question_suspect: 1,
   quiet_inquiry: 2,
+  medical_examination: 3,
+  question_servants: 3,
+  reconstruct_timeline: 3,
+  search_quarters: 3,
+  trace_money: 6,
+  obtain_testimony: 6,
 };
 
 export type InvestigationTaskStatus = "pending" | "resolved" | "cancelled";
@@ -165,6 +227,18 @@ export function leadStrengthToConfidence(strength: InvestigationLeadStrength): H
   return strength;
 }
 
+/**
+ * 玩家知识层的线索结论（5B-2B2a）。由证据节点 claim 脱敏而来，
+ * 但只表达「玩家如今知道什么」，绝不含 truthId / evidenceNodeId 等后台引用。
+ * characterRef 为已解析的角色 ID（公开层）。
+ */
+export type InvestigationLeadClaim =
+  | { kind: "implicates_character"; characterId: string; strength: "weak" | "moderate" | "strong" }
+  | { kind: "exonerates_character"; characterId: string; strength: "weak" | "moderate" | "strong" }
+  | { kind: "supports_cause"; causeType: InvestigationCauseType }
+  | { kind: "reveals_mechanism"; mechanism: IncidentMechanism }
+  | { kind: "establishes_fact"; factCode: string };
+
 export interface IntrigueInvestigationLead {
   id: string;
   caseId: string;
@@ -182,6 +256,15 @@ export interface IntrigueInvestigationLead {
   /** 玩家通过本线索基本排除的人。 */
   clearedIds: string[];
 
-  /** 玩家新确认的宫斗手段。 */
+  /** 玩家新确认的宫斗手段（旧宫斗案件用；证据案件改用 claims）。 */
   revealedKinds: HaremIntrigueKind[];
+
+  // ── 5B-2B2a 证据驱动扩展（可选；旧存档无此字段，无需迁移）──────────
+  /**
+   * 本线索来源的隐藏证据节点 ID。仅用于结算去重（推导案件已发现节点集合），
+   * 绝不传入 Presenter / LLM。证据驱动案件设置；旧宫斗案件留空。
+   */
+  sourceEvidenceNodeId?: string;
+  /** 结构化结论（证据驱动案件）；脱敏后的玩家知识，可安全展示。 */
+  claims?: InvestigationLeadClaim[];
 }

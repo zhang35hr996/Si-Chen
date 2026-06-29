@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { validateInvestigationPublicReports } from "../../src/engine/characters/haremInvestigation/stateValidation";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import type { HeirHealthAnomalyIncident } from "../../src/engine/characters/haremInvestigation/truth/types";
-import type { InvestigationPublicReport, IntrigueInvestigationCase } from "../../src/engine/characters/haremInvestigation/types";
+import type { InvestigationPublicReport, HeirHealthAnomalyPublicReport, IntrigueInvestigationCase } from "../../src/engine/characters/haremInvestigation/types";
 
 const AT = makeGameTime(1, 1, "early");
 
@@ -22,7 +22,7 @@ const INCIDENT: HeirHealthAnomalyIncident = {
   publicFactCodes: ["heir_fell_ill"],
 };
 
-function makeReport(overrides: Partial<InvestigationPublicReport> = {}): InvestigationPublicReport {
+function makeReport(overrides: Partial<HeirHealthAnomalyPublicReport> = {}): HeirHealthAnomalyPublicReport {
   return {
     id: "iarep_heir_health_heir_001_abc",
     source: { kind: "investigation_incident", incidentId: INCIDENT.id },

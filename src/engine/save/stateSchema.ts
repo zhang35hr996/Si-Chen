@@ -35,6 +35,30 @@ export const gameTimeSchema = z.strictObject({
   dayIndex: z.number().int().min(0),
 });
 
+// 调查方法（旧宫斗 3 种 + 5B-2B2a 证据 6 种）。与 InvestigationMethod 保持同步。
+const investigationMethodEnum = z.enum([
+  "question_target", "question_suspect", "quiet_inquiry",
+  "medical_examination", "question_servants", "reconstruct_timeline",
+  "search_quarters", "trace_money", "obtain_testimony",
+]);
+
+const investigationCauseTypeEnum = z.enum([
+  "natural_illness", "accident", "negligence", "intentional_harm", "framing", "false_accusation",
+]);
+const incidentMechanismEnum = z.enum([
+  "none", "wrong_dosage", "tampered_medicine", "hallucinogenic_herb", "fabricated_testimony",
+  "induced_symptoms", "contaminated_medicine", "treatment_delay", "medicine_mixup",
+]);
+
+// 玩家知识层线索结论（5B-2B2a）。与 InvestigationLeadClaim 保持同步。
+const investigationLeadClaimSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("implicates_character"), characterId: idSchema, strength: z.enum(["weak", "moderate", "strong"]) }),
+  z.strictObject({ kind: z.literal("exonerates_character"), characterId: idSchema, strength: z.enum(["weak", "moderate", "strong"]) }),
+  z.strictObject({ kind: z.literal("supports_cause"), causeType: investigationCauseTypeEnum }),
+  z.strictObject({ kind: z.literal("reveals_mechanism"), mechanism: incidentMechanismEnum }),
+  z.strictObject({ kind: z.literal("establishes_fact"), factCode: z.string().min(1) }),
+]);
+
 // 伴读/宗室共用子 schema（HeirPersonality 六维 + 伴读人物引用）。
 const companionPersonalitySchema = z.object({
   empathy: percent,
@@ -1155,7 +1179,7 @@ export const gameStateSchema = z.strictObject({
   haremInvestigationTasks: z.record(z.string().regex(/^itask_\d{6}$/), z.strictObject({
     id: z.string().regex(/^itask_\d{6}$/),
     caseId: z.string().min(1),
-    method: z.enum(["question_target", "question_suspect", "quiet_inquiry"]),
+    method: investigationMethodEnum,
     subjectId: idSchema.optional(),
     requestedAt: gameTimeSchema,
     dueAt: gameTimeSchema,
@@ -1167,35 +1191,58 @@ export const gameStateSchema = z.strictObject({
     id: z.string().regex(/^ilead_\d{6}$/),
     caseId: z.string().min(1),
     discoveredAt: gameTimeSchema,
-    method: z.enum(["question_target", "question_suspect", "quiet_inquiry"]),
+    method: investigationMethodEnum,
     summaryCode: z.string().min(1),
     strength: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
     implicatedIds: z.array(idSchema),
     clearedIds: z.array(idSchema),
     revealedKinds: z.array(z.enum(["slander", "false_accusation", "steal_credit", "faction_pressure", "servant_subversion"])),
+    // 5B-2B2a 证据驱动可选扩展（旧存档无此字段）
+    sourceEvidenceNodeId: z.string().min(1).optional(),
+    claims: z.array(investigationLeadClaimSchema).optional(),
   })).default({}),
   haremInvestigationNextSeq: z.number().int().min(1).default(1),
   investigationIncidents: z.array(heirHealthAnomalyIncidentSchema).default([]),
   investigationTruths: z.array(investigationTruthSchema).default([]),
-  investigationPublicReports: z.array(z.strictObject({
-    id: z.string().min(1),
-    source: z.strictObject({
-      kind: z.literal("investigation_incident"),
-      incidentId: z.string().min(1),
+  investigationPublicReports: z.array(z.discriminatedUnion("reportKind", [
+    // 立案报告（5B-2B1）
+    z.strictObject({
+      id: z.string().min(1),
+      source: z.strictObject({
+        kind: z.literal("investigation_incident"),
+        incidentId: z.string().min(1),
+      }),
+      reportKind: z.literal("anomaly"),
+      eventFamily: z.literal("heir_health_anomaly"),
+      createdAt: gameTimeSchema,
+      status: z.enum(["unread", "acknowledged", "investigating"]),
+      knownTargetIds: z.array(idSchema),
+      suspectedActorIds: z.array(idSchema),
+      confidence: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
+      symptomCode: z.enum(["hysteria", "acute_pain", "high_fever", "convulsions", "excessive_drowsiness"]),
+      publicFactCodes: z.array(z.string().min(1)),
+      accuserIds: z.array(idSchema),
+      acknowledgedAt: gameTimeSchema.optional(),
+      linkedInvestigationId: z.string().optional(),
     }),
-    reportKind: z.literal("anomaly"),
-    eventFamily: z.literal("heir_health_anomaly"),
-    createdAt: gameTimeSchema,
-    status: z.enum(["unread", "acknowledged", "investigating"]),
-    knownTargetIds: z.array(idSchema),
-    suspectedActorIds: z.array(idSchema),
-    confidence: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
-    symptomCode: z.enum(["hysteria", "acute_pain", "high_fever", "convulsions", "excessive_drowsiness"]),
-    publicFactCodes: z.array(z.string().min(1)),
-    accuserIds: z.array(idSchema),
-    acknowledgedAt: gameTimeSchema.optional(),
-    linkedInvestigationId: z.string().optional(),
-  })).default([]),
+    // 进展通报（5B-2B2a）
+    z.strictObject({
+      id: z.string().min(1),
+      source: z.strictObject({
+        kind: z.literal("investigation_incident"),
+        incidentId: z.string().min(1),
+      }),
+      reportKind: z.enum(["investigation_update", "investigation_final"]),
+      createdAt: gameTimeSchema,
+      status: z.enum(["unread", "acknowledged"]),
+      linkedInvestigationId: z.string().min(1),
+      knownTargetIds: z.array(idSchema),
+      suspectedActorIds: z.array(idSchema),
+      confidence: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
+      summaryCode: z.string().min(1),
+      acknowledgedAt: gameTimeSchema.optional(),
+    }),
+  ])).default([]),
   settledHaremIntriguePeriods: z.array(z.string().regex(/^harem_intrigue_settlement:\d+:\d{2}$/)).default([]),
   haremDisciplineIncidents: z.array(z.strictObject({
     id: idSchema,
@@ -1337,6 +1384,7 @@ export const gameStateSchema = z.strictObject({
       incidentIds: new Set((data as Parameters<typeof validateHaremIntrigueLinks>[0]).haremIncidents.map((i) => i.id)),
       investigationPublicReports: (data as { investigationPublicReports: Parameters<typeof validateHaremInvestigationLinks>[0]["investigationPublicReports"] }).investigationPublicReports,
       investigationIncidentIds: new Set((data as { investigationIncidents: { id: string }[] }).investigationIncidents.map((i) => i.id)),
+      investigationTruths: (data as { investigationTruths: Parameters<typeof validateHaremInvestigationLinks>[0]["investigationTruths"] }).investigationTruths,
     }),
     ...validateInvestigationIncidents({
       investigationIncidents: (data as { investigationIncidents: Parameters<typeof validateInvestigationIncidents>[0]["investigationIncidents"] }).investigationIncidents,

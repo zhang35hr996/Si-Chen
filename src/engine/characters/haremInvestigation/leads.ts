@@ -52,7 +52,11 @@ export function applyInvestigationLead(
   const newConfidence = maxConfidence(c.confidence, leadStrengthToConfidence(lead.strength));
 
   // 状态升级：合并后置信度达到 strong/confirmed → ready_for_review（H1 修复：依据 newConfidence 而非 lead.strength）
+  // 5B-2B2a：证据驱动案件（investigation_incident）的裁定评估留待 5B-2B2b，
+  // 本阶段不依据单条线索强度自动进入 ready_for_review，结算后回到 open。
+  const isEvidenceCase = c.source.kind === "investigation_incident";
   const nextStatus =
+    !isEvidenceCase &&
     (newConfidence === "strong" || newConfidence === "confirmed") &&
     (c.status === "in_progress" || c.status === "open")
       ? "ready_for_review"

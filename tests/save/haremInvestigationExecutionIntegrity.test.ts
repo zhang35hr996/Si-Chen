@@ -262,3 +262,86 @@ describe("validateHaremInvestigationLinks — execution integrity", () => {
     expect(errs.some((e) => e.code === "INTRIGUE_LEAD_NOT_IN_CASE")).toBe(true);
   });
 });
+
+// ── 5B-2B2a：证据线索 sourceEvidenceNodeId / claims 引用完整性 ──────────
+describe("5B-2B2a: evidence lead reference integrity", () => {
+  const EAT = makeGameTime(1, 1, "early");
+  const TRUTH = {
+    id: "itruth_inc_ev", incidentId: "inc_ev", eventFamily: "heir_health_anomaly",
+    causeType: "natural_illness", culpritIds: [], accusedIds: [], framingTargetIds: [],
+    method: "none", motive: "none", concealment: 0,
+    evidenceNodes: [{
+      id: "n_med", type: "medical", factCode: "diag",
+      claims: [{ kind: "supports_cause", causeType: "natural_illness" }],
+      difficulty: 10, decayPerPeriod: 0, discoverableBy: ["medical_examination"],
+      prerequisiteEvidenceIds: [], misleading: false,
+    }],
+    generatedAt: EAT, sourceKey: "k",
+  };
+  const EV_CASE = {
+    id: "icase_ev", source: { kind: "investigation_incident", reportId: "iarep_ev", incidentId: "inc_ev" },
+    openedAt: EAT, openedFromReportKind: "anomaly", status: "open",
+    knownTargetIds: ["heir_001"], suspectIds: ["lu_huaijin"], suspectedKinds: [],
+    confidence: "plausible", leadIds: ["ilead_000001"],
+  };
+  const LEGACY_CASE = {
+    id: "icase_leg", source: { kind: "legacy_intrigue", reportId: "ireport_leg", incidentId: "inc_leg" },
+    openedAt: EAT, openedFromReportKind: "exposure", status: "open",
+    knownTargetIds: ["x"], suspectIds: [], suspectedKinds: [], confidence: "tenuous", leadIds: ["ilead_000002"],
+  };
+
+  function codesFor(leads: Record<string, unknown>, cases: unknown[] = [EV_CASE]) {
+    return validateHaremInvestigationLinks({
+      haremIntrigueReports: [],
+      haremInvestigationCases: cases,
+      haremInvestigationTasks: {},
+      haremInvestigationLeads: leads,
+      haremInvestigationNextSeq: 999,
+      incidentIds: new Set(),
+      investigationPublicReports: [],
+      investigationIncidentIds: new Set(["inc_ev"]),
+      investigationTruths: [TRUTH],
+    } as unknown as Parameters<typeof validateHaremInvestigationLinks>[0]).map((e) => e.code);
+  }
+
+  const evLead = (over: Record<string, unknown>) => ({
+    id: "ilead_000001", caseId: "icase_ev", discoveredAt: EAT, method: "medical_examination",
+    summaryCode: "evidence_diag", strength: "plausible", implicatedIds: [], clearedIds: [], revealedKinds: [],
+    ...over,
+  });
+
+  it("LV-01: sourceEvidenceNodeId 指向不存在节点 → ORPHAN_NODE", () => {
+    expect(codesFor({ ilead_000001: evLead({ sourceEvidenceNodeId: "ghost" }) })).toContain("INTRIGUE_LEAD_EVIDENCE_ORPHAN_NODE");
+  });
+
+  it("LV-02: 节点 discoverableBy 不含 lead.method → METHOD_MISMATCH", () => {
+    expect(codesFor({ ilead_000001: evLead({ sourceEvidenceNodeId: "n_med", method: "obtain_testimony" }) })).toContain("INTRIGUE_LEAD_EVIDENCE_METHOD_MISMATCH");
+  });
+
+  it("LV-03: 同案件同节点重复发现 → DUP_NODE", () => {
+    const leads = {
+      ilead_000001: evLead({ sourceEvidenceNodeId: "n_med" }),
+      ilead_000003: evLead({ id: "ilead_000003", sourceEvidenceNodeId: "n_med" }),
+    };
+    const caseWithBoth = { ...EV_CASE, leadIds: ["ilead_000001", "ilead_000003"] };
+    expect(codesFor(leads, [caseWithBoth])).toContain("INTRIGUE_LEAD_EVIDENCE_DUP_NODE");
+  });
+
+  it("LV-04: 旧宫斗案件线索携带 sourceEvidenceNodeId → EVIDENCE_ON_LEGACY", () => {
+    const legacyLead = { id: "ilead_000002", caseId: "icase_leg", discoveredAt: EAT, method: "quiet_inquiry", summaryCode: "x", strength: "tenuous", implicatedIds: [], clearedIds: [], revealedKinds: [], sourceEvidenceNodeId: "n_med" };
+    expect(codesFor({ ilead_000002: legacyLead }, [LEGACY_CASE])).toContain("INTRIGUE_LEAD_EVIDENCE_ON_LEGACY");
+  });
+
+  it("LV-05: claims 与 implicatedIds 不一致 → CLAIM_MISMATCH", () => {
+    const lead = evLead({ sourceEvidenceNodeId: "n_med", implicatedIds: ["someone"], claims: [] });
+    expect(codesFor({ ilead_000001: lead })).toContain("INTRIGUE_LEAD_CLAIM_MISMATCH");
+  });
+
+  it("LV-06: 合法证据线索无以上任何错误", () => {
+    const lead = evLead({ sourceEvidenceNodeId: "n_med", claims: [{ kind: "supports_cause", causeType: "natural_illness" }] });
+    const codes = codesFor({ ilead_000001: lead });
+    for (const c of ["INTRIGUE_LEAD_EVIDENCE_ORPHAN_NODE", "INTRIGUE_LEAD_EVIDENCE_METHOD_MISMATCH", "INTRIGUE_LEAD_EVIDENCE_DUP_NODE", "INTRIGUE_LEAD_EVIDENCE_ON_LEGACY", "INTRIGUE_LEAD_CLAIM_MISMATCH"]) {
+      expect(codes).not.toContain(c);
+    }
+  });
+});

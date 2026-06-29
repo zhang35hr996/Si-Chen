@@ -52,12 +52,12 @@ const INCIDENT_PARAMS = {
 };
 
 describe("investigationTruth: save round-trip", () => {
-  it("ITP-01: createHeirHealthAnomalyIncident → createSaveData → readSlot → truth intact", () => {
+  it("ITP-01: createHeirHealthAnomaly → createSaveData → readSlot → truth intact", () => {
     const storage = createMemoryStorage();
     const store = createGameStore();
     store.loadState(makeStateWithCandidates());
 
-    const r = store.createHeirHealthAnomalyIncident(INCIDENT_PARAMS);
+    const r = store.createHeirHealthAnomaly(INCIDENT_PARAMS);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const { incidentId, truthId } = r.value;
@@ -95,8 +95,8 @@ describe("investigationTruth: save round-trip", () => {
     const store = createGameStore();
     store.loadState(makeStateWithCandidates());
 
-    const r1 = store.createHeirHealthAnomalyIncident(INCIDENT_PARAMS);
-    const r2 = store.createHeirHealthAnomalyIncident(INCIDENT_PARAMS);
+    const r1 = store.createHeirHealthAnomaly(INCIDENT_PARAMS);
+    const r2 = store.createHeirHealthAnomaly(INCIDENT_PARAMS);
     expect(r1.ok).toBe(true);
     expect(r2.ok).toBe(true);
     if (!r1.ok || !r2.ok) return;
@@ -120,7 +120,7 @@ describe("investigationTruth: save round-trip", () => {
     const store = createGameStore();
     store.loadState(makeStateWithCandidates());
 
-    const r = store.createHeirHealthAnomalyIncident(INCIDENT_PARAMS);
+    const r = store.createHeirHealthAnomaly(INCIDENT_PARAMS);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
 
@@ -139,8 +139,8 @@ describe("investigationTruth: save round-trip", () => {
     const store = createGameStore();
     store.loadState(makeStateWithCandidates());
 
-    const r1 = store.createHeirHealthAnomalyIncident({ ...INCIDENT_PARAMS, victimHeirId: "heir_001" });
-    const r2 = store.createHeirHealthAnomalyIncident({ ...INCIDENT_PARAMS, victimHeirId: "heir_002" });
+    const r1 = store.createHeirHealthAnomaly({ ...INCIDENT_PARAMS, victimHeirId: "heir_001" });
+    const r2 = store.createHeirHealthAnomaly({ ...INCIDENT_PARAMS, victimHeirId: "heir_002" });
     expect(r1.ok).toBe(true);
     expect(r2.ok).toBe(true);
     if (!r1.ok || !r2.ok) return;
