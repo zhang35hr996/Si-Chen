@@ -4,6 +4,7 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import type { CharacterStanding, GameState, Heir } from "../../src/engine/state/types";
 import {
+  applyImperialDamping,
   applyMonthlyHeirUpbringing,
   planMonthlyHeirUpbringing,
   upbringingMonthKey,
@@ -113,6 +114,104 @@ describe("无有效抚养人", () => {
     const plan = planMonthlyHeirUpbringing(db, s, now);
     const c = plan.changes[0]!;
     expect(c.neglectDelta).toBe(4); // 6 - 2
+  });
+});
+
+// ── applyImperialDamping（只削弱正增量，绝不再降零/负） ───────────────────────
+
+describe("applyImperialDamping", () => {
+  it("增量 ≤0 原样返回（不重复降忽视）", () => {
+    expect(applyImperialDamping(0, 2)).toBe(0);   // ordinary care + 2月前召见
+    expect(applyImperialDamping(-1, 2)).toBe(-1); // attentive care + 2月前召见
+    expect(applyImperialDamping(0, 0)).toBe(0);
+    expect(applyImperialDamping(-1, 0)).toBe(-1);
+  });
+
+  it("正增量 + ≤1 月 → 截到 0", () => {
+    expect(applyImperialDamping(2, 0)).toBe(0);
+    expect(applyImperialDamping(6, 1)).toBe(0);
+  });
+
+  it("正增量 + 2 月 → −2，不低于 0", () => {
+    expect(applyImperialDamping(6, 2)).toBe(4);
+    expect(applyImperialDamping(2, 2)).toBe(0); // +2 → 0（不为 -0/负）
+  });
+
+  it("正增量 + ≥3 月或从未 → 无保护", () => {
+    expect(applyImperialDamping(6, 3)).toBe(6);
+    expect(applyImperialDamping(4, Infinity)).toBe(4);
+  });
+});
+
+// ── 太后照料（显式基准，不回退侍君默认值） ─────────────────────────────────────
+
+describe("太后抚养", () => {
+  it("太后为养父 → 用显式基准 careScore，合法 careOutcome 且 bond 可增", () => {
+    const heir = makeHeir("h1", { adoptiveFatherId: "taihou", custodianBond: 50, lastImperialInteractionAt: undefined });
+    const s = makeState([heir]);
+    // 太后在世（createNewGameState 默认 taihou 未亡）
+    const c = planMonthlyHeirUpbringing(db, s, NOW).changes[0]!;
+    expect(["attentive_custodian", "ordinary_custodian", "inattentive_custodian"]).toContain(c.careOutcome);
+    // 太后被视作有效抚养人（非 no_effective_custodian）
+    expect(c.careOutcome).not.toBe("no_effective_custodian");
+  });
+
+  it("太后已故 → 按无有效抚养人处理", () => {
+    const heir = makeHeir("h1", { adoptiveFatherId: "taihou" });
+    const s = makeState([heir]);
+    s.taihou = { ...s.taihou, deceased: true };
+    const c = planMonthlyHeirUpbringing(db, s, NOW).changes[0]!;
+    expect(c.careOutcome).toBe("no_effective_custodian");
+  });
+});
+
+// ── 抚养人六态（禁足/冷宫/候选/已故 视作无人照料；解除后恢复） ──────────────────
+
+describe("抚养人六态对月结的影响", () => {
+  function withCustodian(lifecycle: "normal" | "candidate" | "deceased", opts: { confined?: boolean } = {}): GameState {
+    const heir = makeHeir("h1", { adoptiveFatherId: "cust1" });
+    const s = makeState([heir]);
+    s.standing["cust1"] = consortStanding({ lifecycle });
+    s.generatedConsorts["cust1"] = {
+      id: "cust1", kind: "consort", profile: { name: "娘娘", surname: "林", age: 25 }, defaultLocation: "p",
+    } as unknown as GameState["generatedConsorts"][string];
+    if (opts.confined) {
+      s.statusEffects = [
+        ...s.statusEffects,
+        {
+          id: "status_cust1_000001", kind: "confinement", characterId: "cust1",
+          startTurn: 0, endTurnExclusive: null, imposedAt: makeGameTime(8, 1, "early"), imposedBy: "emperor",
+        } as unknown as GameState["statusEffects"][number],
+      ];
+    }
+    return s;
+  }
+
+  it("候选(candidate) → 无有效抚养人", () => {
+    const c = planMonthlyHeirUpbringing(db, withCustodian("candidate"), NOW).changes[0]!;
+    expect(c.careOutcome).toBe("no_effective_custodian");
+  });
+
+  it("已故(deceased) → 无有效抚养人", () => {
+    const c = planMonthlyHeirUpbringing(db, withCustodian("deceased"), NOW).changes[0]!;
+    expect(c.careOutcome).toBe("no_effective_custodian");
+  });
+
+  it("禁足(confined) → 无有效抚养人", () => {
+    const c = planMonthlyHeirUpbringing(db, withCustodian("normal", { confined: true }), NOW).changes[0]!;
+    expect(c.careOutcome).toBe("no_effective_custodian");
+  });
+
+  it("在世正常(available) → 有效抚养人（非 no_effective_custodian）", () => {
+    const c = planMonthlyHeirUpbringing(db, withCustodian("normal"), NOW).changes[0]!;
+    expect(c.careOutcome).not.toBe("no_effective_custodian");
+  });
+
+  it("禁足解除后恢复有效照料", () => {
+    const confinedState = withCustodian("normal", { confined: true });
+    expect(planMonthlyHeirUpbringing(db, confinedState, NOW).changes[0]!.careOutcome).toBe("no_effective_custodian");
+    const released = { ...confinedState, statusEffects: [] };
+    expect(planMonthlyHeirUpbringing(db, released, NOW).changes[0]!.careOutcome).not.toBe("no_effective_custodian");
   });
 });
 

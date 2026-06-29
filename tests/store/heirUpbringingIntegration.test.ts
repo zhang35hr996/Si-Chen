@@ -61,6 +61,47 @@ describe("成长环境月结集成", () => {
     expect(st.resources.bloodline.heirs[0]!.neglect).toBeGreaterThan(beforeNeglect);
   });
 
+  it("同月普通 SPEND_AP（未跨月）不结算：无月键、neglect 不变", () => {
+    const store = storeWithHeir();
+    const beforeNeglect = store.getState().resources.bloodline.heirs[0]!.neglect;
+    const beforeMonth = monthOrdinal(store.getState().calendar);
+    // 满 AP 起单步 SPEND_AP，停留在本月（不跨月）。
+    const r = store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    expect(r.ok).toBe(true);
+    expect(monthOrdinal(store.getState().calendar)).toBe(beforeMonth); // 未跨月
+    const st = store.getState();
+    expect(st.settledHeirUpbringingMonths).toHaveLength(0); // 未结算
+    expect(st.resources.bloodline.heirs[0]!.neglect).toBe(beforeNeglect); // neglect 不变
+  });
+
+  it("月中出生的皇嗣直到下次跨月才首次结算", () => {
+    const store = new GameStore();
+    store.newGame(db);
+    // 本月先做一次普通行动（不跨月）：此时无皇嗣，无结算。
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    // 皇嗣在本月「出生」（高 neglect 起点，便于观测是否被结算）。
+    const s = store.getState();
+    store.loadState({ ...s, resources: { ...s.resources, bloodline: { ...s.resources.bloodline, heirs: [minorHeir()] } } });
+    const bornNeglect = store.getState().resources.bloodline.heirs[0]!.neglect;
+
+    // 同月继续行动（未跨月）→ 新生皇嗣不被结算。
+    const beforeMonth = monthOrdinal(store.getState().calendar);
+    store.advanceTime(db, { type: "SPEND_AP", amount: 1 });
+    if (monthOrdinal(store.getState().calendar) === beforeMonth) {
+      expect(store.getState().resources.bloodline.heirs[0]!.neglect).toBe(bornNeglect);
+    }
+
+    // 跨入下月 → 首次结算（无养父，neglect 上升）。
+    let crossed = false;
+    for (let i = 0; i < 8 && !crossed; i++) {
+      const before = monthOrdinal(store.getState().calendar);
+      store.advanceTime(db, { type: "SKIP_REMAINDER" });
+      if (monthOrdinal(store.getState().calendar) > before) crossed = true;
+    }
+    expect(crossed).toBe(true);
+    expect(store.getState().resources.bloodline.heirs[0]!.neglect).toBeGreaterThan(bornNeglect);
+  });
+
   it("同一月份不重复结算（月键不重复）", () => {
     const store = storeWithHeir();
     for (let i = 0; i < 10; i++) {

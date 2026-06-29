@@ -2014,8 +2014,9 @@ export class GameStore {
     candidate = swept.value;
     collector?.capturePhaseScheduled("sweep_expired_confinements", diffGameState(beforeSweep, candidate));
 
-    // 皇嗣成长环境月结（每月一次幂等键守卫；先于伴读 reconciliation，使本月养父照料/忽视先更新）。
-    {
+    // 皇嗣成长环境月结（仅跨月触发，使结果与跨月前是否做过无关行动无关；月键再保幂等）。
+    // 先于伴读 reconciliation，使本月养父照料/忽视先更新。
+    if (monthChanged) {
       const beforeUpbringing = candidate;
       const now = toGameTime(candidate.calendar);
       const upbringingPlan = planMonthlyHeirUpbringing(db, candidate, now);
