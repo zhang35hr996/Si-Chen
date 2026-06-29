@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 38;
+export const SAVE_FORMAT_VERSION = 39;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -659,7 +659,9 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       if (h["imperialFear"] === undefined) h["imperialFear"] = 20;
       if (h["neglect"] === undefined) h["neglect"] = 30;
       if (h["custodianBond"] === undefined) {
-        h["custodianBond"] = h["custodianId"] !== undefined ? 50 : 0;
+        // legacy field — v33 raw heirs still carry pre-rename `adoptiveFatherId`
+        // (rename to custodianId happens later at the v38→v39 migration).
+        h["custodianBond"] = h["adoptiveFatherId"] !== undefined ? 50 : 0;
       }
       if (h["portraitVariants"] === undefined) {
         const sexPrefix = h["sex"] === "daughter" ? "girl" : "boy";
@@ -733,6 +735,27 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       });
     }
     return { ...env, formatVersion: 38, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+
+  // v38 → v39: 宗亲 Slice A — Heir.adoptiveFatherId 重命名为 custodianId；faction "adoptive" → "custodian"。
+  38: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    const resources = (state["resources"] ?? {}) as Record<string, unknown>;
+    const bloodline = (resources["bloodline"] ?? {}) as Record<string, unknown>;
+    const heirs = Array.isArray(bloodline["heirs"])
+      ? (bloodline["heirs"] as Array<Record<string, unknown>>)
+      : [];
+    for (const h of heirs) {
+      if (h["adoptiveFatherId"] !== undefined) {
+        h["custodianId"] = h["adoptiveFatherId"];
+        delete h["adoptiveFatherId"];
+      }
+      if (h["faction"] === "adoptive") {
+        h["faction"] = "custodian";
+      }
+    }
+    return { ...env, formatVersion: 39, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

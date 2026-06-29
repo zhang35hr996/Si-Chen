@@ -24,7 +24,7 @@ describe("save migration v2 (no-save-backcompat: rejected as obsolete)", () => {
     const v2State = structuredClone(current.state) as unknown as Record<string, unknown>;
     const bloodline = (v2State.resources as { bloodline: Record<string, unknown> }).bloodline;
     for (const h of bloodline.heirs as Record<string, unknown>[]) {
-      delete h.petName; delete h.givenName; delete h.education; delete h.custodianId;
+      delete h.petName; delete h.givenName; delete h.education; delete h.adoptiveFatherId;
     }
     const envelope = { ...current, formatVersion: 2, state: v2State, checksum: checksumOf(v2State) };
     storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(envelope));
