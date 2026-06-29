@@ -3,13 +3,13 @@
  * 纯函数：只读取玩家知识层，不读取 haremIncidents/haremSchemes 真相。
  */
 import type { GameState } from "../../state/types";
-import type { EvidenceDiscoveryAction, IntrigueInvestigationCase } from "./types";
+import type { IntrigueInvestigationCase } from "./types";
 import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS, isActiveCase } from "./types";
 import type { InvestigationMethod } from "./types";
 
 export interface AvailableInvestigationAction {
   method: InvestigationMethod;
-  /** question_target / question_suspect / search_quarters / obtain_testimony 时的候选对象列表。 */
+  /** question_target / question_suspect 时的候选对象列表。 */
   subjectCandidateIds?: string[];
   apCost: number;
   durationDays: number;
@@ -36,34 +36,6 @@ function isLivingHeir(state: GameState, heirId: string): boolean {
   );
 }
 
-/**
- * 计算指定证据方法的合法 subjectCandidateIds（UI 展示层与 Store 校验共用同一来源）。
- * 返回 undefined 表示该方法不需要 subject。
- */
-export function evidenceSubjectCandidates(
-  state: GameState,
-  c: IntrigueInvestigationCase,
-  method: EvidenceDiscoveryAction,
-): string[] | undefined {
-  switch (method) {
-    case "search_quarters":
-      return c.suspectIds.filter((id) => isAliveChar(state, id));
-    case "obtain_testimony": {
-      const publicReport = state.investigationPublicReports.find(
-        (r) => r.source.incidentId === c.source.incidentId && r.reportKind === "anomaly",
-      );
-      if (!publicReport || publicReport.reportKind !== "anomaly") return [];
-      const seen = new Set<string>();
-      return [...publicReport.accuserIds, ...publicReport.suspectedActorIds].filter((id) => {
-        if (seen.has(id)) return false;
-        seen.add(id);
-        return isAliveChar(state, id);
-      });
-    }
-    default:
-      return undefined;
-  }
-}
 
 export function availableInvestigationActions(
   state: GameState,
@@ -144,25 +116,12 @@ function availableEvidenceActions(
     });
   }
 
-  // 搜查住处：候选来自存活嫌疑人（standing 角色）
-  const searchCandidates = evidenceSubjectCandidates(state, c, "search_quarters");
-  if (searchCandidates && searchCandidates.length > 0) {
+  // 搜查相关住处 / 获取关键证词：始终可用（不绑定具体对象，后续加 discoverySubjectIds 后再恢复）
+  for (const method of ["search_quarters", "obtain_testimony"] as const) {
     actions.push({
-      method: "search_quarters",
-      subjectCandidateIds: searchCandidates,
-      apCost: INVESTIGATION_METHOD_AP.search_quarters,
-      durationDays: INVESTIGATION_METHOD_DAYS.search_quarters,
-    });
-  }
-
-  // 获取关键证词：候选来自公开报告的指控者 + 被指控者（standing 角色）
-  const testimonyCandidates = evidenceSubjectCandidates(state, c, "obtain_testimony");
-  if (testimonyCandidates && testimonyCandidates.length > 0) {
-    actions.push({
-      method: "obtain_testimony",
-      subjectCandidateIds: testimonyCandidates,
-      apCost: INVESTIGATION_METHOD_AP.obtain_testimony,
-      durationDays: INVESTIGATION_METHOD_DAYS.obtain_testimony,
+      method,
+      apCost: INVESTIGATION_METHOD_AP[method],
+      durationDays: INVESTIGATION_METHOD_DAYS[method],
     });
   }
 
@@ -218,14 +177,8 @@ export function validateCanStartTask(
     const aliveHeirs = c.knownTargetIds.filter((id) => isLivingHeir(state, id));
     if (aliveHeirs.length === 0) return "受害皇嗣已不在人世，无法查验脉案";
   }
-  if (method === "search_quarters" || method === "obtain_testimony") {
-    if (!subjectId) return `${method === "search_quarters" ? "搜查住处" : "获取证词"}须指定具体对象`;
-    // 必须在从同一函数派生的候选名单中
-    const candidates = evidenceSubjectCandidates(state, c, method);
-    if (!candidates || !candidates.includes(subjectId)) {
-      return `"${subjectId}" 不在 ${method} 的合法候选名单中`;
-    }
-  }
+  // search_quarters / obtain_testimony 为非对象型行动，不验证 subjectId。
+  // 待 HiddenEvidenceNode.discoverySubjectIds 模型建立后再恢复对象筛选。
 
   return null; // OK
 }

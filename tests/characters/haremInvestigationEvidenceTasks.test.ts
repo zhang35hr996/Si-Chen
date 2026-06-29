@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { makeGameTime } from "../../src/engine/calendar/time";
-import type { GameState } from "../../src/engine/state/types";
+import type { GameState, Heir } from "../../src/engine/state/types";
 import type { InvestigationTruth, HiddenEvidenceNode, HeirHealthAnomalyIncident } from "../../src/engine/characters/haremInvestigation/truth/types";
 import type { IntrigueInvestigationCase, InvestigationProgressPublicReport, HeirHealthAnomalyPublicReport } from "../../src/engine/characters/haremInvestigation/types";
 import { availableInvestigationActions } from "../../src/engine/characters/haremInvestigation/actions";
@@ -41,6 +41,33 @@ function makeBase(): GameState {
 // 使用初始就在宫中（spawnMode=auto）的角色 ID 通过存档校验
 const CULPRIT_ID = "cheng_feng";
 const ACCUSED_ID = "wei_sui";
+
+// 最小存活皇嗣 fixture（isLivingHeir 只检查 id + lifecycle）
+const LIVING_HEIR_FIXTURE: Heir = {
+  id: "heir_ev_001",
+  sex: "son",
+  fatherId: null,
+  bearer: "sovereign",
+  birthAt: makeGameTime(1, 1, "early"),
+  favor: 0,
+  legitimate: false,
+  petName: "",
+  education: { scholarship: 0, martial: 0, virtue: 0 },
+  health: 80,
+  talent: 50,
+  diligence: 50,
+  personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+  interests: [],
+  imperialFear: 0,
+  neglect: 0,
+  custodianBond: 0,
+  portraitVariants: { baby: "p_baby", kid: "p_kid", child: "p_child", teen: "p_teen" },
+  ambition: 50,
+  closeness: 50,
+  support: 50,
+  faction: "none",
+  lifecycle: "alive",
+};
 
 const INCIDENT: HeirHealthAnomalyIncident = {
   id: "heir_health_heir_ev_abc",
@@ -200,35 +227,37 @@ describe("availableInvestigationActions — evidence-driven", () => {
     expect(methods).not.toContain("medical_examination");
   });
 
-  it("EV-01b: 受害皇嗣存活时 medical_examination 出现", () => {
+  it("EV-01b: 受害皇嗣存活时 medical_examination 出现（确定性注入）", () => {
     const base = makeStateWithCase();
-    // 借用已有皇嗣（若无则跳过），或用强转注入最小 fixture
-    const existingHeir = base.resources.bloodline.heirs.find((h) => h.lifecycle === "alive");
-    const heirId = existingHeir?.id ?? "heir_ev_001";
-    const stateWithHeir: GameState = existingHeir
-      ? {
-          ...base,
-          haremInvestigationCases: [makeCase({ knownTargetIds: [heirId] })],
-        }
-      : base; // no real heirs in new game — skip assertion
+    const stateWithHeir: GameState = {
+      ...base,
+      resources: {
+        ...base.resources,
+        bloodline: {
+          ...base.resources.bloodline,
+          heirs: [...base.resources.bloodline.heirs, LIVING_HEIR_FIXTURE],
+        },
+      },
+      haremInvestigationCases: [makeCase({ knownTargetIds: ["heir_ev_001"] })],
+    };
     const actions = availableInvestigationActions(stateWithHeir, makeCase().id);
-    const methods = actions.map((a) => a.method);
-    if (existingHeir) {
-      // real heir in case's knownTargetIds → medical_examination should appear
-      expect(methods).toContain("medical_examination");
-    } else {
-      // no heirs in base state → medical_examination stays absent
-      expect(methods).not.toContain("medical_examination");
-    }
+    expect(actions.map((a) => a.method)).toContain("medical_examination");
   });
 
-  it("EV-02: search_quarters 返回存活嫌疑人作为候选（wei_sui 始终存活于 standing）", () => {
+  it("EV-02: search_quarters 始终可用（非对象型行动，不附候选名单）", () => {
     const state = makeStateWithCase();
     const actions = availableInvestigationActions(state, makeCase().id);
     const sq = actions.find((a) => a.method === "search_quarters");
-    // ACCUSED_ID="wei_sui" 是 spawnMode=auto 角色，始终在 standing 且存活
     expect(sq).toBeDefined();
-    expect(sq!.subjectCandidateIds).toContain(ACCUSED_ID);
+    expect(sq!.subjectCandidateIds).toBeUndefined();
+  });
+
+  it("EV-02b: obtain_testimony 始终可用（非对象型行动，不附候选名单）", () => {
+    const state = makeStateWithCase();
+    const actions = availableInvestigationActions(state, makeCase().id);
+    const ot = actions.find((a) => a.method === "obtain_testimony");
+    expect(ot).toBeDefined();
+    expect(ot!.subjectCandidateIds).toBeUndefined();
   });
 
   it("EV-03: in_progress 时无可用行动（已有 pending task）", () => {
@@ -593,5 +622,41 @@ describe("save round-trip — evidence-driven investigation", () => {
     expect(rtLead).toBeDefined();
     expect(rtLead!.claims).toHaveLength(5);
     expect(rtLead!.sourceEvidenceNodeId).toBe("node_medical_001");
+  });
+});
+
+// ── presenter labels ──────────────────────────────────────────────────────────
+
+describe("haremInvestigationPresenter — method labels", () => {
+  // 引入 presenter 做静态断言：全部 9 种方法不得显示英文 token
+  it("EV-50: 所有 9 种调查方法在 presenter 均有中文标签，不暴露英文 token", async () => {
+    const { presentHaremInvestigationDetail } = await import(
+      "../../src/ui/haremInvestigationPresenter"
+    );
+    const { availableInvestigationActions: getActions } = await import(
+      "../../src/engine/characters/haremInvestigation/actions"
+    );
+
+    const state = makeStateWithCase();
+    const c = state.haremInvestigationCases[0]!;
+    const actions = getActions(state, c.id);
+
+    const nameOf = (id: string) => `NAME_${id}`;
+    const detail = presentHaremInvestigationDetail(c, [], [], actions, nameOf);
+
+    const ENGLISH_TOKENS = [
+      "medical_examination", "question_servants", "reconstruct_timeline",
+      "trace_money", "search_quarters", "obtain_testimony",
+      "question_target", "question_suspect", "quiet_inquiry",
+    ];
+    for (const view of detail.availableActionViews) {
+      for (const token of ENGLISH_TOKENS) {
+        expect(view.label).not.toBe(token);
+      }
+    }
+    // 所有行动均有非空标签
+    for (const view of detail.availableActionViews) {
+      expect(view.label.length).toBeGreaterThan(0);
+    }
   });
 });
