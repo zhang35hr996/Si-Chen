@@ -305,12 +305,15 @@ export function buildRoyalFallbackCompanion(
 
 // ── assignment 构建 ──────────────────────────────────────────────────────────
 
+/** 择定草案：除 id 外的全部 active assignment 字段；id 在 apply 由单调序列分配。 */
+export type CompanionAssignmentDraft = Omit<HeirCompanionAssignment, "id">;
+
 function buildAssignmentFromFamilyMember(
   state: GameState,
   member: FamilyMember,
   heirId: string,
   now: GameTime,
-): HeirCompanionAssignment {
+): CompanionAssignmentDraft {
   const profile = deriveFamilyYouthProfile(state, member);
   const family = state.officialFamilies[member.familyId];
   return {
@@ -335,7 +338,7 @@ function buildAssignmentFromRoyalRelative(
   relative: RoyalRelative,
   heirId: string,
   now: GameTime,
-): HeirCompanionAssignment {
+): CompanionAssignmentDraft {
   return {
     heirId,
     companion: { kind: "royal_relative", personId: relative.id },
@@ -402,11 +405,13 @@ export function resolveCompanionView(
 
 export interface EndedAssignment {
   heirId: string;
+  /** 被结束的关系 id（apply 据此幂等：active 槽位已是别的 id 时跳过，不重复入历史）。 */
+  assignmentId: string;
   reason: CompanionEndReason;
 }
 
 export interface CompanionReconciliationPlan {
-  newAssignments: HeirCompanionAssignment[];
+  newAssignments: CompanionAssignmentDraft[];
   endedAssignments: EndedAssignment[];
   newRoyalRelatives: RoyalRelative[];
 }
@@ -444,10 +449,10 @@ export function planCompanionReconciliation(
   for (const [heirId, assignment] of Object.entries(state.heirCompanions)) {
     if (assignment.status !== "active") continue;
     if (!studentIds.has(heirId)) {
-      plan.endedAssignments.push({ heirId, reason: "heir_left_school" });
+      plan.endedAssignments.push({ heirId, assignmentId: assignment.id, reason: "heir_left_school" });
       endedHeirIds.add(heirId);
     } else if (!companionIsAlive(state, assignment)) {
-      plan.endedAssignments.push({ heirId, reason: "companion_deceased" });
+      plan.endedAssignments.push({ heirId, assignmentId: assignment.id, reason: "companion_deceased" });
       endedHeirIds.add(heirId);
     }
   }
@@ -492,7 +497,20 @@ export function planCompanionReconciliation(
   return plan;
 }
 
-/** 不可变变换：返回应用 plan 后的新 state（绝不原地改输入或其嵌套对象）。 */
+/** 伴读关系 id 生成（不靠扫描数组长度；用 state.nextCompanionAssignmentSeq）。 */
+export function companionAssignmentId(heirId: string, seq: number): string {
+  return `companion_assignment_${heirId}_${seq}`;
+}
+
+/**
+ * 不可变变换：返回应用 plan 后的新 state（绝不原地改输入或其嵌套对象）。
+ *
+ * 关系结束 = 从 active map 取出 → 整体 append 到 endedCompanionAssignments（带 endedAt/endReason）
+ * → 从 active map 删除。绝不在 active map 中标 ended 后被替补覆盖。
+ *
+ * 按 assignment id 幂等：重复 apply 同一 plan 时，已结束的关系不会再次入历史，已写入的
+ * 替补不会重复分配新 id。
+ */
 export function applyCompanionReconciliation(
   state: GameState,
   plan: CompanionReconciliationPlan,
@@ -506,21 +524,68 @@ export function applyCompanionReconciliation(
     return state;
   }
 
-  const heirCompanions = { ...state.heirCompanions };
+  const active = { ...state.heirCompanions };
+  const history = [...state.endedCompanionAssignments];
   const royalRelatives = { ...state.royalRelatives };
+  let seq = state.nextCompanionAssignmentSeq;
 
-  for (const { heirId, reason } of plan.endedAssignments) {
-    const a = heirCompanions[heirId];
-    if (a && a.status === "active") {
-      heirCompanions[heirId] = { ...a, status: "ended", endedAt: now, endReason: reason };
-    }
+  // 1) 结束：仅当 active 槽位仍是 plan 指定的那段关系（按 id）才移入历史，保证幂等。
+  for (const { heirId, assignmentId, reason } of plan.endedAssignments) {
+    const current = active[heirId];
+    if (!current || current.id !== assignmentId) continue;
+    history.push({ ...current, status: "ended", endedAt: now, endReason: reason });
+    delete active[heirId];
   }
+
+  // 2) 新宗室人物。
   for (const rel of plan.newRoyalRelatives) {
     royalRelatives[rel.id] = rel;
   }
-  for (const assignment of plan.newAssignments) {
-    heirCompanions[assignment.heirId] = assignment;
+
+  // 3) 写入替补/新择定：槽位已被同一人物占据则视作已应用，跳过（幂等）。
+  for (const draft of plan.newAssignments) {
+    const existing = active[draft.heirId];
+    if (existing && existing.companion.personId === draft.companion.personId) continue;
+    const id = companionAssignmentId(draft.heirId, seq);
+    seq += 1;
+    active[draft.heirId] = { ...draft, id };
   }
 
-  return { ...state, heirCompanions, royalRelatives };
+  return {
+    ...state,
+    heirCompanions: active,
+    endedCompanionAssignments: history,
+    royalRelatives,
+    nextCompanionAssignmentSeq: seq,
+  };
+}
+
+// ── 历史 / 关系 selectors ─────────────────────────────────────────────────────
+
+/** 当前 active 伴读（无则 undefined）。 */
+export function getActiveCompanion(state: GameState, heirId: string): HeirCompanionAssignment | undefined {
+  return state.heirCompanions[heirId];
+}
+
+/** 历任（已结束）伴读，按结束时间倒序（最近在前）。 */
+export function getFormerCompanions(state: GameState, heirId: string): HeirCompanionAssignment[] {
+  return state.endedCompanionAssignments
+    .filter((a) => a.heirId === heirId)
+    .sort((a, b) => companionEndOrdinal(b) - companionEndOrdinal(a));
+}
+
+/** 按 assignment id 查找（active 优先，再查历史）。事件/记忆/婚恋线统一据此引用关系。 */
+export function getCompanionAssignmentById(
+  state: GameState,
+  assignmentId: string,
+): HeirCompanionAssignment | undefined {
+  for (const a of Object.values(state.heirCompanions)) {
+    if (a.id === assignmentId) return a;
+  }
+  return state.endedCompanionAssignments.find((a) => a.id === assignmentId);
+}
+
+function companionEndOrdinal(a: HeirCompanionAssignment): number {
+  const t = a.endedAt ?? a.assignedAt;
+  return ((t.year * 12 + t.month) * 3) + ({ early: 0, mid: 1, late: 2 } as const)[t.period] + t.dayIndex / 1000;
 }

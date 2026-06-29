@@ -170,6 +170,8 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     haremDisciplineIncidents: [],
     royalRelatives: {},
     heirCompanions: {},
+    endedCompanionAssignments: [],
+    nextCompanionAssignmentSeq: 0,
     templateEventNextSeq: 0,
     templateEventRecords: {},
     justice: createEmptyJusticeState(),

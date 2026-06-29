@@ -266,7 +266,24 @@ export type CompanionEndReason = "heir_left_school" | "companion_deceased" | "di
  * resolveCompanionView 从 live 来源（familyMembers / royalRelatives）解析，
  * 否则入学时的年龄会永久停留。ageAtAssignment 仅作择定时记录。
  */
+/** 择定时稳定身份快照，不随后续家族变化漂移（年龄除外）。 */
+export interface CompanionProfileSnapshot {
+  name: string;
+  sex: PersonSex;
+  legitimate: boolean;
+  personality: HeirPersonality;
+  familyName?: string;
+  familyRole?: string;
+}
+
+/**
+ * 一段伴读关系。每段有独立稳定 id（"companion_assignment_<heirId>_<seq>"），结束后整体
+ * 移入 endedCompanionAssignments（append-only 历史）——绝不在 active map 中被替补覆盖，
+ * 以便事件/记忆/婚恋线可靠引用「当时是哪一任伴读」。
+ */
 export interface HeirCompanionAssignment {
+  /** 关系稳定身份（全局唯一，跨 active/history 不重复）。 */
+  id: string;
   heirId: string;
   companion: CompanionPersonRef;
   assignedAt: GameTime;
@@ -277,15 +294,7 @@ export interface HeirCompanionAssignment {
   bond: number;
   /** 择定时年龄快照（仅记录；当前年龄经 resolveCompanionView 取 live 值）。 */
   ageAtAssignment: number;
-  /** 择定时稳定身份快照，不随后续家族变化漂移（年龄除外）。 */
-  profile: {
-    name: string;
-    sex: PersonSex;
-    legitimate: boolean;
-    personality: HeirPersonality;
-    familyName?: string;
-    familyRole?: string;
-  };
+  profile: CompanionProfileSnapshot;
 }
 
 // ── 官员家族青年派生资料 ──────────────────────────────────────────────────────
@@ -1552,8 +1561,12 @@ export interface GameState {
   haremDisciplineIncidents: HaremDisciplineIncident[];
   /** 宗室青年人物（按需生成；id="royal_youth_*"）。 */
   royalRelatives: Record<string, RoyalRelative>;
-  /** 皇嗣伴读关系（key = heirId；每名皇嗣至多一条 active）。 */
+  /** 皇嗣当前伴读关系（key = heirId；**仅 active**，每名皇嗣至多一条；status 恒 active、无结束字段）。 */
   heirCompanions: Record<string, HeirCompanionAssignment>;
+  /** 历任（已结束）伴读关系（append-only；每条 status="ended" 且有 endedAt/endReason；人物可已死，绝不删除）。 */
+  endedCompanionAssignments: HeirCompanionAssignment[];
+  /** 伴读关系 id 单调序列号（分配 active assignment id 用，绝不靠扫描数组长度）。 */
+  nextCompanionAssignmentSeq: number;
   /** 动态模板事件实例序列号（每次实例化递增，用于确定性 ID 生成）。 */
   templateEventNextSeq: number;
   /** 已生成/已解决的模板事件实例（按 instanceId 索引）；存档校验据此跳过 MISSING_REF 检查。 */

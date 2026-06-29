@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 38;
+export const SAVE_FORMAT_VERSION = 39;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -733,6 +733,39 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       });
     }
     return { ...env, formatVersion: 38, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+  // v38 → v39: 伴读关系身份与历任历史（PR4C-1）。给 active assignment 补稳定 id；把遗留
+  // 的 ended map 条目迁入 endedCompanionAssignments；补 nextCompanionAssignmentSeq。
+  // 这是结构重排，不只是新增空数组，故显式 normalize，不只依赖 schema 默认值。
+  38: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    const rawCompanions = (state["heirCompanions"] ?? {}) as Record<string, Record<string, unknown>>;
+    const active: Record<string, Record<string, unknown>> = {};
+    const history = Array.isArray(state["endedCompanionAssignments"])
+      ? [...(state["endedCompanionAssignments"] as Record<string, unknown>[])]
+      : [];
+    let seq = typeof state["nextCompanionAssignmentSeq"] === "number" ? (state["nextCompanionAssignmentSeq"] as number) : 0;
+
+    for (const [heirId, a] of Object.entries(rawCompanions)) {
+      const assignment = { ...a };
+      if (typeof assignment["id"] !== "string") {
+        assignment["id"] = `companion_assignment_legacy_${heirId}`;
+      }
+      if (assignment["status"] === "ended") {
+        // 遗留：active map 中的已结束条目 → 迁入历史，离开 active。
+        history.push(assignment);
+      } else {
+        active[heirId] = assignment;
+      }
+    }
+    // seq 至少越过已分配的 legacy 数量，避免未来 id 冲突。
+    seq = Math.max(seq, Object.keys(rawCompanions).length);
+
+    state["heirCompanions"] = active;
+    state["endedCompanionAssignments"] = history;
+    state["nextCompanionAssignmentSeq"] = seq;
+    return { ...env, formatVersion: 39, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 

@@ -106,7 +106,7 @@ describe("buildHeirNightVisit", () => {
     const heir = makeHeir("h1");
     const s = nightState([heir]);
     s.heirCompanions["h1"] = {
-      heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
+      id: "companion_assignment_h1_0", heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
       assignedAt: makeGameTime(7, 1, "early"), status: "active", bond: 5, ageAtAssignment: 7,
       profile: { name: "宗室小友", sex: "female", legitimate: true, personality: defaultPersonality },
     };

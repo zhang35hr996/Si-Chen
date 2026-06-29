@@ -53,8 +53,10 @@ export function validateCompanionWorld(state: GameState): GameError[] {
       }
     }
 
-    // active：唯一占用；不应有结束字段
-    if (a.status === "active") {
+    // active map 内只允许 active；唯一占用；不应有结束字段
+    if (a.status !== "active") {
+      errors.push(stateError("COMPANION_ACTIVE_MAP_NOT_ACTIVE", `heirCompanions["${key}"] has status="${a.status}" (active map is active-only)`));
+    } else {
       const prior = activePersonIds.get(personId);
       if (prior) {
         errors.push(stateError("COMPANION_DOUBLE_BOOKED", `person "${personId}" active for both heir "${prior}" and "${a.heirId}"`));
@@ -64,11 +66,36 @@ export function validateCompanionWorld(state: GameState): GameError[] {
       if (a.endedAt !== undefined || a.endReason !== undefined) {
         errors.push(stateError("COMPANION_ACTIVE_HAS_END", `active companion for heir "${a.heirId}" has end fields`));
       }
-    } else {
-      // ended：须有 endedAt + endReason
-      if (a.endedAt === undefined || a.endReason === undefined) {
-        errors.push(stateError("COMPANION_ENDED_MISSING_FIELDS", `ended companion for heir "${a.heirId}" missing endedAt/endReason`));
+    }
+  }
+
+  // ── 历史（endedCompanionAssignments）：append-only，人物可已死 ──
+  for (const a of state.endedCompanionAssignments) {
+    if (a.status !== "ended") {
+      errors.push(stateError("COMPANION_HISTORY_NOT_ENDED", `history assignment "${a.id}" has status="${a.status}"`));
+    }
+    if (a.endedAt === undefined || a.endReason === undefined) {
+      errors.push(stateError("COMPANION_ENDED_MISSING_FIELDS", `history assignment "${a.id}" (heir ${a.heirId}) missing endedAt/endReason`));
+    }
+    // 历史人物**允许**已死/缺失；若来源仍存在，性别仍须与皇嗣相符（命名空间正确性的代理）。
+    const heir = state.resources.bloodline.heirs.find((h) => h.id === a.heirId);
+    const personSex = resolvePersonSex(state, a);
+    if (heir && personSex !== null) {
+      const want = expectedCompanionSex(heir.sex);
+      if (personSex !== want) {
+        errors.push(stateError("COMPANION_SEX_MISMATCH", `history assignment "${a.id}" person sex="${personSex}" expected "${want}"`));
       }
+    }
+  }
+
+  // ── 全局 id 唯一性：跨 active + history 不重复 ──
+  const seenIds = new Set<string>();
+  const allAssignments = [...Object.values(state.heirCompanions), ...state.endedCompanionAssignments];
+  for (const a of allAssignments) {
+    if (seenIds.has(a.id)) {
+      errors.push(stateError("COMPANION_DUPLICATE_ID", `duplicate companion assignment id "${a.id}"`));
+    } else {
+      seenIds.add(a.id);
     }
   }
 

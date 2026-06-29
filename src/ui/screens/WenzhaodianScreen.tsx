@@ -7,7 +7,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { GameStore } from "../../store/gameStore";
 import { useGameState } from "../../store/useGameState";
 import { courseLabel } from "../../store/heirEducation";
-import { resolveCompanionView } from "../../engine/characters/companionReconciliation";
+import { getFormerCompanions, resolveCompanionView } from "../../engine/characters/companionReconciliation";
 import { sovereignGestationDisplay } from "../format/gestationDisplay";
 import { GameShell } from "../components/GameShell";
 import { breadcrumbFor } from "../components/breadcrumb";
@@ -48,6 +48,7 @@ export function WenzhaodianScreen({
   const companion = selected ? state.heirCompanions[selected.heir.id] : undefined;
   const activeCompanion = companion?.status === "active" ? companion : undefined;
   const companionView = activeCompanion ? resolveCompanionView(state, activeCompanion) : undefined;
+  const formerCompanions = selected ? getFormerCompanions(state, selected.heir.id) : [];
 
   return (
     <GameShell
@@ -119,6 +120,21 @@ export function WenzhaodianScreen({
                 ) : (
                   <div className="wenzhao-screen__companion wenzhao-screen__companion--empty" data-testid="companion-empty">
                     <span>尚无伴读</span>
+                  </div>
+                )}
+                {formerCompanions.length > 0 && (
+                  <div className="wenzhao-screen__former-companions" data-testid="former-companions">
+                    <h3>历任伴读</h3>
+                    <ul>
+                      {formerCompanions.map((a) => (
+                        <li key={a.id}>
+                          {a.profile.name}
+                          <span className="former-companion__reason">
+                            {a.endReason === "companion_deceased" ? "（已故）" : a.endReason === "dismissed" ? "（撤换）" : "（离馆）"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
                 <div className="wenzhao-screen__subject-picker">
