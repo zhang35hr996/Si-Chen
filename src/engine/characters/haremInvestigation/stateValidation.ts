@@ -151,6 +151,14 @@ export function validateHaremInvestigationLinks(
       errors.push(stateError("INTRIGUE_CASE_CULPRIT_WRONG_STATUS", `haremInvestigationCases[id=${c.id}]: status=${c.status} 不得有 confirmedCulpritId`));
     }
 
+    // 全状态 closureReason 约束
+    if (c.status === "closed_unresolved" && c.closureReason && c.closureReason !== "insufficient_evidence") {
+      errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=closed_unresolved 但 closureReason="${c.closureReason}"，期望 insufficient_evidence`));
+    }
+    if (c.status === "cancelled" && c.closureReason && c.closureReason !== "player_cancelled") {
+      errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=cancelled 但 closureReason="${c.closureReason}"，期望 player_cancelled`));
+    }
+
     // 5B-2B2b：closed_explained → benign_cause_confirmed + confirmedBenignCause；其余状态不得有 confirmedBenignCause
     if (c.status === "closed_explained") {
       if (c.closureReason !== "benign_cause_confirmed") {

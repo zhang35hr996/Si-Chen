@@ -116,17 +116,21 @@ export function assessEvidenceDrivenCase(state: GameState, caseId: string): Evid
       }
     }
   }
-  const benignReady = naturalNodes.size >= 2 && !hasOtherCauseSupport && !hasAnyImplication;
+  // ≥2 不同非误导自然支持节点且无其他 cause 支持 → 自然结论成立（独立于是否有指认）。
+  // 拆开以便检测"culprit_ready 与自然结论共存"这一矛盾状态。
+  const naturalConclusionSupported = naturalNodes.size >= 2 && !hasOtherCauseSupport;
 
-  // 两套结论因果互斥（有人加害 vs 并非人为加害）。同时成立 = 证据矛盾 → 不可裁定。
-  // 正常蓝图下不会出现（culprit 需指认、benign 要求无指认），但需安全处理未来蓝图/
-  // 手工 fixture/损坏状态。
-  if (culpritReady && benignReady) {
+  // 两套结论因果互斥（有人加害 vs 并非人为加害）。
+  // 正常蓝图下 culprit_ready 需要指认，而自然结论不阻止有指认的情况，
+  // 所以矛盾状态在实践中可出现（如嫁祸案同时发现自然支持节点），须明确处理为 insufficient。
+  if (culpritReady && naturalConclusionSupported) {
     return { kind: "insufficient", confidence: caseConfidence(state, caseId) };
   }
   if (culpritReady) {
     return { kind: "culprit_ready", confidence: "confirmed", confirmableCulpritIds };
   }
+  // benign_ready：自然结论成立且无任何指认（指认存在说明存在其他解释，不能归结为自然病因）。
+  const benignReady = naturalConclusionSupported && !hasAnyImplication;
   if (benignReady) {
     return { kind: "benign_ready", confidence: "confirmed", causeType: "natural_illness" };
   }
