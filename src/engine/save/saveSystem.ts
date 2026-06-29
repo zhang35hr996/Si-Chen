@@ -14,6 +14,7 @@ import { validateOfficialWorld } from "../officials/validation";
 import { validateMemorials } from "../court/memorials";
 import { validateTreasuryLedger } from "../court/treasuryLedger";
 import { validateFrontierAssessments } from "../court/frontierAssessment";
+import { validateParentage } from "./parentageValidation";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
@@ -1012,6 +1013,19 @@ function validateSave(
     return err({
       error: saveError("FRONTIER_INTEGRITY", `存档边情评估完整性校验失败（${first.code}）：${first.message}`, {
         context: { diagnostics: frontierErrors.map((e) => ({ code: e.code, message: e.message })) },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // 亲缘 cross-link 不变量（宗亲 Slice A 约束 8）：每个皇嗣必有 parentage、镜像一致、
+  // 无自指/未知引用/环、过继记录双向自洽、map key 自洽。任一 error → 拒绝并 quarantine。
+  const parentageErrors = validateParentage(state, db);
+  if (parentageErrors.length > 0) {
+    const first = parentageErrors[0]!;
+    return err({
+      error: saveError("PARENTAGE_INTEGRITY", `存档亲缘数据完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: parentageErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });

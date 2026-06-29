@@ -64,6 +64,11 @@ function addHeirToState(state: GameState, heir: Heir): GameState {
     ...state.resources.bloodline.heirs.filter((h) => h.id !== heir.id),
     heir,
   ];
+  // 真实皇嗣恒有 parentage（legal=bio，母=sovereign，父=fatherId）——满足 load 期校验与镜像不变量。
+  state.parentage[heir.id] = {
+    biologicalMotherId: "sovereign", biologicalFatherId: heir.fatherId,
+    legalMotherId: "sovereign", legalFatherId: heir.fatherId,
+  };
   return state;
 }
 
