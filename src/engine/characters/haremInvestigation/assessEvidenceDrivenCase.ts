@@ -99,9 +99,7 @@ export function assessEvidenceDrivenCase(state: GameState, caseId: string): Evid
     }
   }
   confirmableCulpritIds.sort();
-  if (confirmableCulpritIds.length > 0) {
-    return { kind: "culprit_ready", confidence: "confirmed", confirmableCulpritIds };
-  }
+  const culpritReady = confirmableCulpritIds.length > 0;
 
   // ── 确认自然病因：≥2 个不同非误导节点 supports_cause natural_illness，
   //    且无任何非误导节点指认他人、亦无其他 causeType 的非误导 supports_cause ──
@@ -118,7 +116,18 @@ export function assessEvidenceDrivenCase(state: GameState, caseId: string): Evid
       }
     }
   }
-  if (naturalNodes.size >= 2 && !hasOtherCauseSupport && !hasAnyImplication) {
+  const benignReady = naturalNodes.size >= 2 && !hasOtherCauseSupport && !hasAnyImplication;
+
+  // 两套结论因果互斥（有人加害 vs 并非人为加害）。同时成立 = 证据矛盾 → 不可裁定。
+  // 正常蓝图下不会出现（culprit 需指认、benign 要求无指认），但需安全处理未来蓝图/
+  // 手工 fixture/损坏状态。
+  if (culpritReady && benignReady) {
+    return { kind: "insufficient", confidence: caseConfidence(state, caseId) };
+  }
+  if (culpritReady) {
+    return { kind: "culprit_ready", confidence: "confirmed", confirmableCulpritIds };
+  }
+  if (benignReady) {
     return { kind: "benign_ready", confidence: "confirmed", causeType: "natural_illness" };
   }
 

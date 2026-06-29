@@ -17,6 +17,7 @@ import type { HaremIntrigueKind } from "../engine/characters/haremIntrigue/types
 import type { HaremIntrigueReportConfidence } from "../engine/state/types";
 import type { AvailableInvestigationAction } from "../engine/characters/haremInvestigation/actions";
 import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
+import type { EvidenceCaseAssessment } from "../engine/characters/haremInvestigation/assessEvidenceDrivenCase";
 
 export interface HaremInvestigationPresentation {
   /** 案件标题（含嫌疑人/目标/手段语境） */
@@ -45,6 +46,7 @@ export const CASE_STATUS_LABELS: Record<IntrigueInvestigationStatus, string> = {
   ready_for_review: "待裁定",
   closed_unresolved: "未能查明",
   closed_confirmed: "已经查明",
+  closed_explained: "并非人为加害",
   cancelled: "已终止",
 };
 
@@ -144,8 +146,18 @@ export interface InvestigationDetailPresentation extends HaremInvestigationPrese
   confirmedCulpritLabel?: string;
   /** 当前嫌疑人 {id, label} 列表，供 ready_for_review 裁定选人使用。 */
   suspectViews: Array<{ id: string; label: string }>;
-  /** 是否允许确认主谋：仅当 case.confidence === "confirmed" 时为 true。 */
+  /** 是否允许确认主谋（旧宫斗案件：confidence===confirmed；证据案件见 verdictOptions）。 */
   canConfirmCulprit: boolean;
+  /**
+   * 证据驱动案件的裁定选项（5B-2B2b）。由 assessment 派生：
+   * 只把 assessment 判定可确认的人放入 confirmableSuspects（非全部 suspectIds）。
+   */
+  verdictOptions: {
+    canConfirmCulprit: boolean;
+    confirmableSuspects: Array<{ id: string; label: string }>;
+    canConfirmBenignCause: boolean;
+    benignCauseLabel?: string;
+  };
 }
 
 const METHOD_LABELS: Record<InvestigationMethod, string> = {
@@ -188,6 +200,27 @@ const LEAD_SUMMARY_LABELS: Record<string, string> = {
   inquiry_found_suspicious_pattern: "发现可疑规律，需进一步核实",
   inquiry_revealed_scheme_method: "查访揭示了作案手段的部分情况",
   inquiry_limited_findings: "暗中查访所得有限，线索仍不充分",
+  // 5B-2B2a/b 证据驱动线索（evidence_{factCode} 结构化文案）
+  investigation_no_new_evidence: "查访一番，未获新证",
+  evidence_diagnosis_matches_old_illness: "太医复核脉案，症候与旧疾相合",
+  evidence_drug_residue_normal: "所用药物残留未见异常",
+  evidence_timeline_precedes_suspect_arrival: "病症发作早于被疑之人到场",
+  evidence_no_outside_contact_path: "查无外人接触的可能路径",
+  evidence_dosage_mismatch_prescription: "所进汤药与医嘱剂量不符",
+  evidence_missing_decoction_record: "煎药记档有缺失",
+  evidence_inconsistent_servant_testimony: "宫人供词前后不一",
+  evidence_abnormal_drug_residue: "查得药中残留异常",
+  evidence_unexplained_payment_to_servant: "查得一笔来历不明的银钱往来",
+  evidence_suspect_contact_with_servant: "查得被疑之人与宫人私下往来",
+  evidence_servant_final_confession: "宫人最终供认实情",
+  evidence_surface_evidence_points_to_framed_person: "表面证据直指某人，似有蹊跷",
+  evidence_medicine_left_unattended: "汤药曾无人看管",
+  evidence_framers_servant_near_scene: "有可疑宫人曾在近旁出没",
+  evidence_suspicious_money_or_letter: "查得可疑银钱或书信",
+  evidence_illness_not_man_made: "查明病症并非人为所致",
+  evidence_timeline_conflict_in_accusation: "指控与时序相互矛盾",
+  evidence_servants_pressured_unified_testimony: "宫人口供似受人胁迫而趋一致",
+  evidence_accuser_has_old_grievance: "指控之人与被指者素有旧怨",
   // misc
   orphan_task_skipped: "（调查记录缺失）",
 };
@@ -203,6 +236,8 @@ export function presentHaremInvestigationDetail(
   leads: IntrigueInvestigationLead[],
   availableActions: AvailableInvestigationAction[],
   resolveCharacterName: (id: string) => string,
+  /** 证据案件的后台评估（5B-2B2b）；旧宫斗案件传 undefined。 */
+  assessment?: EvidenceCaseAssessment,
 ): InvestigationDetailPresentation {
   const base = presentHaremInvestigationCase(investigationCase, resolveCharacterName);
 
@@ -246,8 +281,29 @@ export function presentHaremInvestigationDetail(
     subjects: a.subjectCandidateIds?.map((id) => ({ id, label: resolveCharacterName(id) })),
   }));
 
-  const canConfirmCulprit =
-    investigationCase.status === "ready_for_review" && investigationCase.confidence === "confirmed";
+  const isEvidenceCase = investigationCase.source.kind === "investigation_incident";
+
+  // 旧宫斗案件保留原行为；证据案件的确认主谋以 assessment 为准（见 verdictOptions）
+  const canConfirmCulprit = !isEvidenceCase
+    ? investigationCase.status === "ready_for_review" && investigationCase.confidence === "confirmed"
+    : assessment?.kind === "culprit_ready";
+
+  const verdictOptions = isEvidenceCase
+    ? {
+        canConfirmCulprit: assessment?.kind === "culprit_ready",
+        confirmableSuspects:
+          assessment?.kind === "culprit_ready"
+            ? assessment.confirmableCulpritIds.map((id) => ({ id, label: resolveCharacterName(id) }))
+            : [],
+        canConfirmBenignCause: assessment?.kind === "benign_ready",
+        benignCauseLabel: assessment?.kind === "benign_ready" ? "皇嗣自身旧疾发作" : undefined,
+      }
+    : {
+        // 旧宫斗案件：沿用 confidence 门控、可指认任一在册嫌疑人，无自然病因出口
+        canConfirmCulprit,
+        confirmableSuspects: suspectViews,
+        canConfirmBenignCause: false,
+      };
 
   return {
     ...base,
@@ -257,5 +313,6 @@ export function presentHaremInvestigationDetail(
     confirmedCulpritLabel,
     suspectViews,
     canConfirmCulprit,
+    verdictOptions,
   };
 }

@@ -13,7 +13,8 @@ import type { GameTime } from "../../engine/calendar/time";
 export type InvestigationReviewDecision =
   | { type: "continue" }
   | { type: "close_unresolved" }
-  | { type: "confirm"; suspectId: string };
+  | { type: "confirm"; suspectId: string }
+  | { type: "confirm_benign_cause" };
 
 export interface HaremInvestigationCaseView {
   id: string;
@@ -182,7 +183,7 @@ function CaseDetail({
     if (err) setError(err);
   }
 
-  async function handleReview(intent: "confirm" | "close_unresolved" | "continue") {
+  async function handleReview(intent: "confirm" | "confirm_benign" | "close_unresolved" | "continue") {
     if (intent === "confirm" && !selectedSuspectForReview) {
       setError("请先选择确认主谋");
       return;
@@ -190,9 +191,11 @@ function CaseDetail({
     const decision: InvestigationReviewDecision =
       intent === "confirm"
         ? { type: "confirm", suspectId: selectedSuspectForReview! }
-        : intent === "close_unresolved"
-          ? { type: "close_unresolved" }
-          : { type: "continue" };
+        : intent === "confirm_benign"
+          ? { type: "confirm_benign_cause" }
+          : intent === "close_unresolved"
+            ? { type: "close_unresolved" }
+            : { type: "continue" };
     setPending(true);
     setError(null);
     const err = await callbacks.onReviewCase(caseId, decision);
@@ -201,7 +204,9 @@ function CaseDetail({
     else setSelectedSuspectForReview(null);
   }
 
-  const canConfirmCulprit = pres.canConfirmCulprit;
+  const verdict = pres.verdictOptions;
+  const canConfirmCulprit = verdict.canConfirmCulprit;
+  const canConfirmBenign = verdict.canConfirmBenignCause;
 
   return (
     <div className="investigation-drawer__detail">
@@ -322,30 +327,51 @@ function CaseDetail({
       {status === "ready_for_review" && (
         <section className="investigation-drawer__review">
           <h4>待圣上裁定</h4>
-          {canConfirmCulprit && pres.suspectViews.length > 0 && (
-            <div className="investigation-action">
-              <select
-                className="investigation-action__select"
-                value={selectedSuspectForReview ?? ""}
-                onChange={(e) => setSelectedSuspectForReview(e.target.value || null)}
+          {canConfirmBenign ? (
+            <p className="investigation-drawer__verdict-note">
+              现有证据表明，此事系皇嗣自身病症{verdict.benignCauseLabel ? `（${verdict.benignCauseLabel}）` : ""}，并非人为加害。
+            </p>
+          ) : canConfirmCulprit ? (
+            <>
+              <p className="investigation-drawer__verdict-note">现有证据已能相互印证，可据此认定主谋。</p>
+              {verdict.confirmableSuspects.length > 0 && (
+                <div className="investigation-action">
+                  <select
+                    className="investigation-action__select"
+                    value={selectedSuspectForReview ?? ""}
+                    onChange={(e) => setSelectedSuspectForReview(e.target.value || null)}
+                    disabled={pending}
+                  >
+                    <option value="">— 选择主谋 —</option>
+                    {verdict.confirmableSuspects.map(({ id, label }) => (
+                      <option key={id} value={id}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          ) : null}
+          <div className="investigation-drawer__review-buttons">
+            {canConfirmBenign && (
+              <button
+                type="button"
+                className="investigation-action__btn investigation-action__btn--primary"
+                onClick={() => handleReview("confirm_benign")}
                 disabled={pending}
               >
-                <option value="">— 选择主谋 —</option>
-                {pres.suspectViews.map(({ id, label }) => (
-                  <option key={id} value={id}>{label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="investigation-drawer__review-buttons">
-            <button
-              type="button"
-              className="investigation-action__btn investigation-action__btn--primary"
-              onClick={() => handleReview("confirm")}
-              disabled={pending || !canConfirmCulprit || !selectedSuspectForReview}
-            >
-              确认主谋
-            </button>
+                确认并非人为加害
+              </button>
+            )}
+            {canConfirmCulprit && (
+              <button
+                type="button"
+                className="investigation-action__btn investigation-action__btn--primary"
+                onClick={() => handleReview("confirm")}
+                disabled={pending || !selectedSuspectForReview}
+              >
+                确认主谋
+              </button>
+            )}
             <button
               type="button"
               className="investigation-action__btn"
@@ -367,9 +393,10 @@ function CaseDetail({
       )}
 
       {/* 已结案 */}
-      {(status === "closed_confirmed" || status === "closed_unresolved" || status === "cancelled") && (
+      {(status === "closed_confirmed" || status === "closed_unresolved" || status === "closed_explained" || status === "cancelled") && (
         <div className="investigation-drawer__closed">
           {status === "closed_confirmed" && <p>已经查明，认定主谋：{pres.confirmedCulpritLabel ?? "—"}</p>}
+          {status === "closed_explained" && <p>此案已经查明：皇嗣因自身旧疾发作，并非人为加害。</p>}
           {status === "closed_unresolved" && <p>证据不足，未能查明。</p>}
           {status === "cancelled" && <p>圣上已下令终止调查。</p>}
         </div>

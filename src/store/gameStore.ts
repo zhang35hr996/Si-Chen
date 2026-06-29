@@ -102,6 +102,7 @@ import { INVESTIGATION_METHOD_AP, INVESTIGATION_METHOD_DAYS } from "../engine/ch
 import type { InvestigationMethod } from "../engine/characters/haremInvestigation/types";
 import { createHeirHealthAnomalyBundle } from "../engine/characters/haremInvestigation/createAnomalyBundle";
 import { createInvestigationCaseFromAnomalyReport } from "../engine/characters/haremInvestigation/createCaseFromAnomaly";
+import { assessEvidenceDrivenCase } from "../engine/characters/haremInvestigation/assessEvidenceDrivenCase";
 import type { HeirHealthSymptom } from "../engine/characters/haremInvestigation/truth/types";
 import { applyCompanionReconciliation, planCompanionReconciliation } from "../engine/characters/companionReconciliation";
 import { applyMonthlyHeirUpbringing, planMonthlyHeirUpbringing } from "../engine/characters/heirUpbringingSettlement";
@@ -2942,7 +2943,8 @@ export class GameStore {
     decision:
       | { type: "continue" }
       | { type: "close_unresolved" }
-      | { type: "confirm"; suspectId: string },
+      | { type: "confirm"; suspectId: string }
+      | { type: "confirm_benign_cause" },
   ): Result<void, GameError[]> {
     const at = toGameTime(this.state.calendar);
     const c = this.state.haremInvestigationCases.find((x) => x.id === caseId);
@@ -2953,20 +2955,42 @@ export class GameStore {
       return err([stateError("INTRIGUE_CASE_WRONG_STATUS", `案件 "${caseId}" 状态 "${c.status}" 不可裁定，须为 ready_for_review`)]);
     }
 
+    const isEvidenceCase = c.source.kind === "investigation_incident";
+    // 证据案件：以重跑的 assessment 为准，不信任 case.confidence / Presenter 传入结论
+    const assessment = isEvidenceCase ? assessEvidenceDrivenCase(this.state, caseId) : undefined;
+
     const idx = this.state.haremInvestigationCases.findIndex((x) => x.id === caseId);
     let updated: typeof c;
 
     if (decision.type === "continue") {
+      // 保留全部 Lead，回到 open 等待继续调查
       updated = { ...c, status: "open" };
     } else if (decision.type === "close_unresolved") {
       updated = { ...c, status: "closed_unresolved", closedAt: at, closureReason: "insufficient_evidence" };
-    } else {
-      // confirm
-      if (c.confidence !== "confirmed") {
-        return err([stateError("INTRIGUE_CASE_CONFIRM_REQUIRES_CONFIRMED", `案件 "${caseId}" 置信度 "${c.confidence}" 须为 confirmed 才能确认主谋`)]);
+    } else if (decision.type === "confirm_benign_cause") {
+      if (!isEvidenceCase) {
+        return err([stateError("INTRIGUE_CASE_WRONG_DECISION", `旧宫斗案件 "${caseId}" 不支持确认自然病因`)]);
       }
-      if (!c.suspectIds.includes(decision.suspectId)) {
-        return err([stateError("INTRIGUE_CASE_SUSPECT_NOT_FOUND", `"${decision.suspectId}" 不在当前嫌疑人名单 suspectIds 中`)]);
+      if (assessment?.kind !== "benign_ready") {
+        return err([stateError("INTRIGUE_CASE_NOT_BENIGN_READY", `案件 "${caseId}" 现有证据不足以认定自然病因`)]);
+      }
+      updated = { ...c, status: "closed_explained", closedAt: at, closureReason: "benign_cause_confirmed", confirmedBenignCause: assessment.causeType };
+    } else {
+      // confirm 主谋
+      if (isEvidenceCase) {
+        if (assessment?.kind !== "culprit_ready") {
+          return err([stateError("INTRIGUE_CASE_NOT_CULPRIT_READY", `案件 "${caseId}" 现有证据不足以认定主谋`)]);
+        }
+        if (!assessment.confirmableCulpritIds.includes(decision.suspectId)) {
+          return err([stateError("INTRIGUE_CASE_SUSPECT_NOT_CONFIRMABLE", `"${decision.suspectId}" 不在可确认主谋名单中`)]);
+        }
+      } else {
+        if (c.confidence !== "confirmed") {
+          return err([stateError("INTRIGUE_CASE_CONFIRM_REQUIRES_CONFIRMED", `案件 "${caseId}" 置信度 "${c.confidence}" 须为 confirmed 才能确认主谋`)]);
+        }
+        if (!c.suspectIds.includes(decision.suspectId)) {
+          return err([stateError("INTRIGUE_CASE_SUSPECT_NOT_FOUND", `"${decision.suspectId}" 不在当前嫌疑人名单 suspectIds 中`)]);
+        }
       }
       updated = { ...c, status: "closed_confirmed", closedAt: at, closureReason: "culprit_confirmed", confirmedCulpritId: decision.suspectId };
     }
@@ -2981,6 +3005,13 @@ export class GameStore {
   /** 仅暴露供 UI 使用，不写 state。 */
   getAvailableInvestigationActions(caseId: string) {
     return availableInvestigationActions(this.state, caseId);
+  }
+
+  /** 证据案件后台评估（5B-2B2b）；旧宫斗案件返回 undefined。供 Presenter 派生裁定选项。 */
+  getEvidenceCaseAssessment(caseId: string) {
+    const c = this.state.haremInvestigationCases.find((x) => x.id === caseId);
+    if (!c || c.source.kind !== "investigation_incident") return undefined;
+    return assessEvidenceDrivenCase(this.state, caseId);
   }
 
   acknowledgeHaremAdminReview(reviewId: string): boolean {

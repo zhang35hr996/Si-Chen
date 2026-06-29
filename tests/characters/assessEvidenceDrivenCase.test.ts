@@ -154,6 +154,18 @@ describe("assessEvidenceDrivenCase: 确认自然病因", () => {
     expect(assessEvidenceDrivenCase(state, caseId).kind).toBe("insufficient");
   });
 
+  it("AS-14: 有指认时即便存在 ≥2 natural support 也不会 benign（互斥保障 + 防御冲突分支）", () => {
+    // 同时具备 2 条 natural support 与对 A 的双 strong 指认：
+    // benign 因 hasAnyImplication 被否决，结果为 culprit_ready（不会误判 benign）。
+    const { state, caseId } = build([
+      { nodeId: "n1", claims: [natural] },
+      { nodeId: "n2", claims: [natural] },
+      { nodeId: "n3", strength: "strong", claims: [impl("A", "strong")] },
+      { nodeId: "n4", strength: "strong", claims: [impl("A", "strong")] },
+    ]);
+    expect(assessEvidenceDrivenCase(state, caseId).kind).toBe("culprit_ready");
+  });
+
   it("AS-13: insufficient 时 confidence 反映最强线索（含 misleading strong）", () => {
     const { state, caseId } = build([{ nodeId: "n1", misleading: true, strength: "strong", claims: [impl("A", "strong")] }]);
     const a = assessEvidenceDrivenCase(state, caseId);
