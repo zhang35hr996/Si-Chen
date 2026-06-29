@@ -659,7 +659,7 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       if (h["imperialFear"] === undefined) h["imperialFear"] = 20;
       if (h["neglect"] === undefined) h["neglect"] = 30;
       if (h["custodianBond"] === undefined) {
-        h["custodianBond"] = h["adoptiveFatherId"] !== undefined ? 50 : 0;
+        h["custodianBond"] = h["custodianId"] !== undefined ? 50 : 0;
       }
       if (h["portraitVariants"] === undefined) {
         const sexPrefix = h["sex"] === "daughter" ? "girl" : "boy";

@@ -783,7 +783,7 @@ export const gameStateSchema = z.strictObject({
             martial: percent,
             virtue: percent,
           }),
-          adoptiveFatherId: idSchema.optional(),
+          custodianId: idSchema.optional(),
           health: percent,
           talent: percent,
           diligence: percent,
@@ -816,7 +816,7 @@ export const gameStateSchema = z.strictObject({
           faction: z.enum([
             "none",
             "empress",
-            "adoptive",
+            "custodian",
             "maternal",
             "scholars",
             "generals",

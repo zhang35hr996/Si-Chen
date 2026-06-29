@@ -43,7 +43,7 @@ export function FengxiandianScreen({
 
   const renderHeirRow = ({ heir, name }: { heir: Heir; name: string }) => {
     const isLegitimate = heir.legitimate;
-    const custodianId = heir.adoptiveFatherId;
+    const custodianId = heir.custodianId;
     // 嫡出且无显式抚养人=由皇后（或天子本人）亲育；非嫡且无抚养人才是"尚无抚养人"。
     const custodianText = custodianId
       ? `当前抚养人：${custodianLabel(custodianId)}`

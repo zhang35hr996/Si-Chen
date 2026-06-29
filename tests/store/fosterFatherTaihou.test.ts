@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { eligibleAdoptiveFathers, buildAdoptionReaction } from "../../src/store/adoption";
+import { eligibleFosterFathers, buildFosterFatherReaction } from "../../src/store/fosterFather";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { makeGameTime } from "../../src/engine/calendar/time";
-import type { Heir } from "../../src/engine/state/types";
+import type { GameState, Heir } from "../../src/engine/state/types";
 
 const loaded = loadGameContent();
 const db = loaded.ok ? loaded.value : (() => { throw new Error("content failed"); })();
@@ -18,16 +18,27 @@ const heir = (over: Partial<Heir>): Heir => ({
   ...over,
 });
 
-describe("养父池含太后", () => {
-  it("eligibleAdoptiveFathers includes taihou", () => {
+/** Helper: set parentage for an heir in state (biological father). */
+function withParentage(state: GameState, heirId: string, biologicalFatherId: string | null): GameState {
+  state.parentage[heirId] = {
+    biologicalMotherId: "sovereign",
+    biologicalFatherId,
+    legalMotherId: "sovereign",
+    legalFatherId: biologicalFatherId,
+  };
+  return state;
+}
+
+describe("抚养父候选池含太后", () => {
+  it("eligibleFosterFathers includes taihou", () => {
     const s = createNewGameState(db);
-    expect(eligibleAdoptiveFathers(db, s).some((c) => c.id === "taihou")).toBe(true);
+    expect(eligibleFosterFathers(db, s).some((c) => c.id === "taihou")).toBe(true);
   });
 
-  it("太后养父：单段欣然，无谢恩、无生父泪报（即便生父尚在宫）", () => {
-    const s = createNewGameState(db);
-    const h = heir({ fatherId: "xu_qinghuan" }); // bio father in palace
-    const beats = buildAdoptionReaction(db, s, h, "taihou");
+  it("太后抚养父：单段欣然，无谢恩、无生父泪报（即便生父尚在宫）", () => {
+    const s = withParentage(createNewGameState(db), "heir_000001", "xu_qinghuan"); // bio father in palace
+    const h = heir({ fatherId: "xu_qinghuan" });
+    const beats = buildFosterFatherReaction(db, s, h, "taihou");
     expect(beats.length).toBe(1);
     expect(beats[0]!.speakerId).toBe("taihou");
     expect(beats.some((b) => b.speakerId === "wei_sui")).toBe(false);

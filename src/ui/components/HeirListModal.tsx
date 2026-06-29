@@ -108,8 +108,8 @@ export function HeirListModal({
           <p className="heir-detail__field">年龄：{ageLabel}</p>
           <p className="heir-detail__field">生辰：{formatGameTime(h.birthAt)}</p>
           <p className="heir-detail__field">承嗣：{bearerLabel(h)}</p>
-          {h.adoptiveFatherId && (
-            <p className="heir-detail__field">养父：{nameOf(h.adoptiveFatherId)}</p>
+          {h.custodianId && (
+            <p className="heir-detail__field">养父：{nameOf(h.custodianId)}</p>
           )}
           <p className="heir-detail__field">健康：{describe("health", h.health)}　<HealthStatusChip status={h.healthStatus ?? "healthy"} health={h.health} /></p>
           <p className="heir-detail__field">宠爱：{describe("favor", h.favor, "heir")}</p>

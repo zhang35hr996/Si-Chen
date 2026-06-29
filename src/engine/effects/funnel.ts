@@ -353,7 +353,7 @@ export function validateEffects(
             break;
           }
         }
-        if (e.custodianId === heir.adoptiveFatherId) {
+        if (e.custodianId === heir.custodianId) {
           bad(index, "BAD_EFFECT", `heir_custody: custodian "${e.custodianId}" is already the current custodian`, { heir: e.heirId, custodian: e.custodianId });
           break;
         }
@@ -975,8 +975,8 @@ export function applyEffects(
       }
       case "heir_custody": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const changedCustodian = heir.adoptiveFatherId !== effect.custodianId;
-        heir.adoptiveFatherId = effect.custodianId;
+        const changedCustodian = heir.custodianId !== effect.custodianId;
+        heir.custodianId = effect.custodianId;
         if (changedCustodian) {
           heir.custodianBond = 30;
           heir.neglect = Math.max(0, heir.neglect - 10);

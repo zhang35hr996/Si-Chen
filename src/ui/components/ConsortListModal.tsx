@@ -93,7 +93,7 @@ export function ConsortListModal({
       toGameTime(state.calendar),
       bedchamberConfig(db).tiers,
     );
-    const raised = heirs.filter((h) => h.fatherId === c.id || h.adoptiveFatherId === c.id);
+    const raised = heirs.filter((h) => h.fatherId === c.id || h.custodianId === c.id);
     const isEmpress = st.rank === "huanghou";
     const lc = st.lifecycle;
     const confinement = activeConfinement(state, c.id);

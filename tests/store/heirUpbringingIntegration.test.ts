@@ -27,7 +27,7 @@ function minorHeir(): Heir {
     interests: [], imperialFear: 30, neglect: 30, custodianBond: 30,
     portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" },
     ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive",
-    // no adoptiveFatherId, no lastImperialInteractionAt → 无有效抚养人，忽视上升
+    // no custodianId, no lastImperialInteractionAt → 无有效抚养人，忽视上升
   };
 }
 

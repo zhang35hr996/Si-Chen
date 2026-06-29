@@ -44,7 +44,7 @@ describe("funnel: birth", () => {
     expect(heirs[0]!.petName).toBe("");
     expect(heirs[0]!.givenName).toBeUndefined();
     expect(heirs[0]!.education).toEqual({ scholarship: 5, martial: 5, virtue: 5 });
-    expect(heirs[0]!.adoptiveFatherId).toBeUndefined();
+    expect(heirs[0]!.custodianId).toBeUndefined();
     expect(heirs[0]!.fatherId).toBe("lu_huaijin");
     expect(r.value.standing.lu_huaijin!.lifecycle).toBe("delivered");
     expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBe(20);

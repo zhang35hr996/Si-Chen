@@ -149,7 +149,7 @@ describe("B. eligibleCustodiansForHeir", () => {
 
   it("B5: excludes current custodian from pool", () => {
     const state = createNewGameState(db);
-    const heir = baseHeir({ adoptiveFatherId: "taihou" });
+    const heir = baseHeir({ custodianId: "taihou" });
     addHeirToState(state, heir);
     const pool = eligibleCustodiansForHeir(db, state, heir);
     expect(pool.some((c) => c.id === "taihou")).toBe(false);
@@ -262,7 +262,7 @@ describe("B-recustody. 嫡出皇嗣重新抚养", () => {
   it("现抚养人有效 → 嫡出皇嗣仍锁定（空池）", () => {
     const state = createNewGameState(db);
     const empressId = findEmpressId(state);
-    const heir = baseHeir({ legitimate: true, adoptiveFatherId: empressId });
+    const heir = baseHeir({ legitimate: true, custodianId: empressId });
     addHeirToState(state, heir);
     expect(eligibleCustodiansForHeir(db, state, heir)).toHaveLength(0);
   });
@@ -270,7 +270,7 @@ describe("B-recustody. 嫡出皇嗣重新抚养", () => {
   it("现抚养人已故 → 解锁重新指定（非空池）", () => {
     const state = createNewGameState(db);
     const empressId = findEmpressId(state);
-    const heir = baseHeir({ legitimate: true, adoptiveFatherId: empressId });
+    const heir = baseHeir({ legitimate: true, custodianId: empressId });
     addHeirToState(state, heir);
     (state.standing[empressId] as { lifecycle: string }).lifecycle = "deceased";
     expect(eligibleCustodiansForHeir(db, state, heir).length).toBeGreaterThan(0);
@@ -278,7 +278,7 @@ describe("B-recustody. 嫡出皇嗣重新抚养", () => {
 
   it("无抚养人(missing) → 仍锁定（退化态，保持 B1 不变量）", () => {
     const state = createNewGameState(db);
-    const heir = baseHeir({ legitimate: true }); // no adoptiveFatherId
+    const heir = baseHeir({ legitimate: true }); // no custodianId
     addHeirToState(state, heir);
     expect(eligibleCustodiansForHeir(db, state, heir)).toHaveLength(0);
   });
@@ -286,7 +286,7 @@ describe("B-recustody. 嫡出皇嗣重新抚养", () => {
   it("养父已故后重新指定 → 成功且皇嗣仍嫡出、新抚养人不必皇后", () => {
     const state = createNewGameState(db);
     const empressId = findEmpressId(state);
-    const heir = baseHeir({ sex: "son", legitimate: true, adoptiveFatherId: empressId });
+    const heir = baseHeir({ sex: "son", legitimate: true, custodianId: empressId });
     addHeirToState(state, heir);
     (state.standing[empressId] as { lifecycle: string }).lifecycle = "deceased";
 
@@ -299,7 +299,7 @@ describe("B-recustody. 嫡出皇嗣重新抚养", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const updated = result.value.state.resources.bloodline.heirs.find((h) => h.id === heir.id);
-    expect(updated?.adoptiveFatherId).toBe(nonEmpress!.id);
+    expect(updated?.custodianId).toBe(nonEmpress!.id);
     expect(updated?.legitimate).toBe(true); // 仍嫡出
   });
 });
@@ -333,7 +333,7 @@ describe("C. planHeirCustodyTransfer – validation", () => {
 
   it("C4: rejects same custodian", () => {
     const state = createNewGameState(db);
-    const heir = baseHeir({ adoptiveFatherId: "taihou" });
+    const heir = baseHeir({ custodianId: "taihou" });
     addHeirToState(state, heir);
     const result = planHeirCustodyTransfer(db, state, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
     expect(result.ok).toBe(false);
@@ -411,7 +411,7 @@ describe("C. planHeirCustodyTransfer – validation", () => {
 // ── D. resolveHeirCustodyTransfer — state effects ────────────────────────────
 
 describe("D. resolveHeirCustodyTransfer – state effects", () => {
-  it("D1: adoptiveFatherId set to taihou after resolve", () => {
+  it("D1: custodianId set to taihou after resolve", () => {
     const state = createNewGameState(db);
     const heir = baseHeir({ sex: "son" });
     addHeirToState(state, heir);
@@ -419,7 +419,7 @@ describe("D. resolveHeirCustodyTransfer – state effects", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       const updated = result.value.state.resources.bloodline.heirs.find((h) => h.id === heir.id);
-      expect(updated?.adoptiveFatherId).toBe("taihou");
+      expect(updated?.custodianId).toBe("taihou");
     }
   });
 
@@ -442,7 +442,7 @@ describe("D. resolveHeirCustodyTransfer – state effects", () => {
     // Find a non-empress consort for old custodian — promote to guiren
     const oldCustodianId = promoteToRank(state, "guiren");
     const oldFavor = state.standing[oldCustodianId]!.favor;
-    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: oldCustodianId });
+    const heir = baseHeir({ sex: "daughter", custodianId: oldCustodianId });
     addHeirToState(state, heir);
     const result = resolveHeirCustodyTransfer(db, state, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
     expect(result.ok).toBe(true);
@@ -455,7 +455,7 @@ describe("D. resolveHeirCustodyTransfer – state effects", () => {
 
   it("D4: no favor penalty when previous custodian is taihou", () => {
     const state = createNewGameState(db);
-    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: "taihou" });
+    const heir = baseHeir({ sex: "daughter", custodianId: "taihou" });
     addHeirToState(state, heir);
     // taihou is current custodian — not in pool, use a guiren consort as new custodian instead.
     const guirenId = promoteToRank(state, "guiren");
@@ -523,7 +523,7 @@ describe("E. chronicle and reactions", () => {
   it("E3: fromCustodianId in chronicle when previous custodian existed", () => {
     const state = createNewGameState(db);
     const oldCustodianId = promoteToRank(state, "guiren");
-    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: oldCustodianId });
+    const heir = baseHeir({ sex: "daughter", custodianId: oldCustodianId });
     addHeirToState(state, heir);
     const empressId = findEmpressId(state);
     const plan = planHeirCustodyTransfer(db, state, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
@@ -549,7 +549,7 @@ describe("E. chronicle and reactions", () => {
   it("E5: wei_sui grief reaction appears when living consort loses custody", () => {
     const state = createNewGameState(db);
     const oldCustodianId = promoteToRank(state, "guiren");
-    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: oldCustodianId });
+    const heir = baseHeir({ sex: "daughter", custodianId: oldCustodianId });
     addHeirToState(state, heir);
     const empressId = findEmpressId(state);
     const plan = planHeirCustodyTransfer(db, state, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
@@ -561,7 +561,7 @@ describe("E. chronicle and reactions", () => {
 
   it("E6: no wei_sui reaction when previous custodian was taihou", () => {
     const state = createNewGameState(db);
-    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: "taihou" });
+    const heir = baseHeir({ sex: "daughter", custodianId: "taihou" });
     addHeirToState(state, heir);
     // Use a non-taihou, non-empress custodian
     const guirenId = promoteToRank(state, "guiren");
@@ -593,14 +593,14 @@ describe("F. GameStore.transferHeirCustodyAndAdvance – atomic transaction", ()
     expect(store.getState().calendar.ap).toBe(apBefore - 1);
   });
 
-  it("F2: adoptiveFatherId updated after successful transfer", () => {
+  it("F2: custodianId updated after successful transfer", () => {
     const state = createNewGameState(db);
     const heir = baseHeir({ sex: "son" });
     addHeirToState(state, heir);
     const store = makeStore(state);
     store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: "taihou", source: "fengxiandian" });
     const updated = store.getState().resources.bloodline.heirs.find((h) => h.id === heir.id);
-    expect(updated?.adoptiveFatherId).toBe("taihou");
+    expect(updated?.custodianId).toBe("taihou");
   });
 
   it("F3: heir becomes legitimate when assigned to empress", () => {
@@ -654,7 +654,7 @@ describe("F. GameStore.transferHeirCustodyAndAdvance – atomic transaction", ()
     const oldCustodianId = promoteToRank(state, "guiren");
     const empressId = findEmpressId(state);
     const oldFavor = state.standing[oldCustodianId]!.favor;
-    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: oldCustodianId });
+    const heir = baseHeir({ sex: "daughter", custodianId: oldCustodianId });
     addHeirToState(state, heir);
     const store = makeStore(state);
     store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
@@ -667,7 +667,7 @@ describe("F. GameStore.transferHeirCustodyAndAdvance – atomic transaction", ()
     const oldCustodianId = promoteToRank(state, "guiren");
     const empressId = findEmpressId(state);
     const oldAffection = state.standing[oldCustodianId]!.affection ?? 0;
-    const heir = baseHeir({ sex: "daughter", adoptiveFatherId: oldCustodianId });
+    const heir = baseHeir({ sex: "daughter", custodianId: oldCustodianId });
     addHeirToState(state, heir);
     const store = makeStore(state);
     store.transferHeirCustodyAndAdvance(db, { heirId: heir.id, toCustodianId: empressId, source: "fengxiandian" });
@@ -724,8 +724,34 @@ describe("G. save round-trip", () => {
     if (loaded.ok) {
       const loadedHeir = loaded.value.state.resources.bloodline.heirs.find((h) => h.id === heir.id);
       expect(loadedHeir?.legitimate).toBe(true);
-      expect(loadedHeir?.adoptiveFatherId).toBe(empressId);
+      expect(loadedHeir?.custodianId).toBe(empressId);
     }
+  });
+
+  it("H1: heir_custody to empress → legitimate=true, legalFatherId unchanged, adoptionRecords empty（抚养≠过继）", () => {
+    // 验收 #15：将皇嗣交皇后抚养 → 嫡出，但不生成过继记录、不修改 legalFatherId
+    const state = createNewGameState(db);
+    const heir = baseHeir({ sex: "daughter" });
+    addHeirToState(state, heir);
+    const heirId = heir.id;
+    const empressId = findEmpressId(state);
+
+    // Capture beforehand legalFatherId (from parentage, if set)
+    const beforeLegalFatherId = state.parentage[heirId]?.legalFatherId ?? null;
+
+    const store = new GameStore();
+    store.loadState(state);
+    store.transferHeirCustodyAndAdvance(db, { heirId, toCustodianId: empressId, source: "fengxiandian" });
+
+    const after = store.getState();
+    const afterHeir = after.resources.bloodline.heirs.find((h) => h.id === heirId);
+
+    // 1. heir becomes legitimate
+    expect(afterHeir?.legitimate).toBe(true);
+    // 2. legalFatherId in parentage is UNCHANGED (custody ≠ adoption, no parentage transfer)
+    expect(after.parentage[heirId]?.legalFatherId ?? null).toBe(beforeLegalFatherId);
+    // 3. no adoption record created
+    expect(after.adoptionRecords).toEqual({});
   });
 
   it("G4: schema parse fails for invalid chronicle type (guard test)", () => {

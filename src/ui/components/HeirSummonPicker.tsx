@@ -25,7 +25,7 @@ export function HeirSummonPicker({
   ].filter(({ heir }) => heir.lifecycle === "alive");
 
   const custodianName = (heir: Heir): string | undefined => {
-    const custId = heir.adoptiveFatherId;
+    const custId = heir.custodianId;
     if (!custId) return undefined;
     const c = db.characters[custId] ?? state.generatedConsorts[custId];
     if (!c) return custId;

@@ -60,7 +60,7 @@ export function CharacterProfileDrawer({
   const home = homeId ? db.locations[homeId]?.name : undefined;
   const displayName = character.profile.name; // 抽屉标题显本名；位分见 subtitle
   const heirs = state.resources.bloodline.heirs.filter(
-    (h) => h.fatherId === character.id || h.adoptiveFatherId === character.id,
+    (h) => h.fatherId === character.id || h.custodianId === character.id,
   );
   const memories = state.memories[character.id]?.entries ?? [];
 
@@ -175,7 +175,7 @@ export function CharacterProfileDrawer({
                   </span>
                   <span className="profile-children__meta">
                     {h.sex === "daughter" ? "皇子" : "皇郎"}
-                    {h.adoptiveFatherId === character.id ? " · 承养" : ""}
+                    {h.custodianId === character.id ? " · 承养" : ""}
                   </span>
                 </li>
               ))}

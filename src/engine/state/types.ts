@@ -113,7 +113,7 @@ export type HeirLifecycle = "alive" | "deceased";
 export type HeirFaction =
   | "none"
   | "empress"
-  | "adoptive"
+  | "custodian"
   | "maternal"
   | "scholars"
   | "generals"
@@ -189,8 +189,8 @@ export interface Heir {
   givenName?: string;
   /** 养成属性。 */
   education: HeirEducation;
-  /** 养父 charId；未指定为 undefined。 */
-  adoptiveFatherId?: string;
+  /** 抚养人 charId（抚养/监护）；未指定为 undefined。 */
+  custodianId?: string;
   // ── 明面养成元参数 ──
   /** 健康 0–100（夭折/生病）。 */
   health: number;

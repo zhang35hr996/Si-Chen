@@ -51,6 +51,11 @@ export function getBiologicalAncestors(
   return out;
 }
 
+/** 读取已登记的抚养人 ID（仅登记查询，不判资格/存活/冷宫状态）。 */
+export function getCurrentCustodian(state: GameState, childId: string): string | undefined {
+  return state.resources.bloodline.heirs.find((h) => h.id === childId)?.custodianId;
+}
+
 export function getLegalDescendants(
   state: GameState, parentId: PersonId, maxDepth = Infinity,
 ): string[] {
