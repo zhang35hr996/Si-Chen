@@ -1,21 +1,21 @@
 name: Apply PR 134 review fix
 
 on:
-  push:
-    branches:
-      - worktree-taihou-rebuke-gate
+  pull_request:
+    types:
+      - synchronize
 
 permissions:
   contents: write
 
 jobs:
   apply-fix:
-    if: github.event.head_commit.message == 'chore: bootstrap PR 134 fix'
+    if: github.event.pull_request.number == 134 && github.event.pull_request.head.ref == 'worktree-taihou-rebuke-gate'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: worktree-taihou-rebuke-gate
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
