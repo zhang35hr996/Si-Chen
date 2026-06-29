@@ -77,6 +77,8 @@ export const TAIHOU_REBUKE_CHANCE = 5;
 
 export interface RebukePlan {
   targetId: string;
+  /** 目标当前完整合法称谓（resolveDisplayName：姓+位分/封号；兼容固定角色与随机侍君）。 */
+  targetDisplayName: string;
   effects: EventEffect[];
   beats: { speakerId: string; lines: string[] }[];
 }
@@ -120,6 +122,7 @@ export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: stri
   const name = resolveDisplayName(char, st, st ? db.ranks[st.rank] : undefined);
   return {
     targetId: pickId,
+    targetDisplayName: name,
     effects: [
       { type: "favor", char: pickId, delta: -5 },
       {

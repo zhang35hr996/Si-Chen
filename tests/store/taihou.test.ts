@@ -65,6 +65,9 @@ describe("buildTaihouRebuke", () => {
     expect((db2.characters[plan.targetId] ?? s.generatedConsorts[plan.targetId])?.kind).toBe("consort");
     expect(plan.effects.some((e) => e.type === "favor" && e.char === plan.targetId && e.delta === -5)).toBe(true);
     expect(plan.beats.length).toBe(2);
+    // 稳定目标显示称谓（供乘风 prompt 使用），与首条现场台词中的称谓一致。
+    expect(plan.targetDisplayName).toBeTruthy();
+    expect(plan.beats[0]!.lines[0]).toContain(plan.targetDisplayName);
   });
 
   it("never targets 皇后 across many hits", () => {
