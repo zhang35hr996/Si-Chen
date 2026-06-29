@@ -45,6 +45,13 @@ export function DialogueScreen({
 }) {
   const state = useGameState(store);
   const runnerRef = useRef<SceneRunner | null>(null);
+  // 每个 SceneRunner 生命周期一个稳定世代号。start/advance 的异步结果只有在世代号未变、
+  // 且 runnerRef 仍指向发起请求的那个 runner 时才被处理；否则（StrictMode 第一代、组件卸载、
+  // 事件切换、quit）整体忽略——绝不把 stale 的 NO_SESSION 当用户错误显示。
+  const runnerGenerationRef = useRef(0);
+  // 同步在途守卫：start/advance 等待期间禁止再次提交 advance（防快速双击并行 run()）。
+  const pendingRef = useRef(false);
+  const [pending, setPending] = useState(false);
   const [frame, setFrame] = useState<DialogueFrame | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 历史对话去重集合：以 `${eventId}:${frameSeq}`（台词）/`…:choice:${id}`（玩家选择）为稳定键，
@@ -94,17 +101,54 @@ export function DialogueScreen({
     }
   };
 
+  /** 仅处理仍属当前 runner 世代的结果；stale 结果整体忽略，绝不解除新 runner 的 pending。 */
+  const consume = (generation: number, runner: SceneRunner, result: Result<RunnerStep, GameError>) => {
+    if (runnerGenerationRef.current !== generation || runnerRef.current !== runner) return;
+    pendingRef.current = false;
+    setPending(false);
+    handleStep(result);
+  };
+
+  /** 守卫式 advance：pending 期间拒绝再次提交；beforeSubmit 仅在确实推进时执行（如记录玩家选择）。 */
+  const submitAdvance = (choiceId: string | undefined, beforeSubmit?: () => void) => {
+    const runner = runnerRef.current;
+    if (!runner || pendingRef.current) return;
+    const generation = runnerGenerationRef.current;
+    pendingRef.current = true;
+    setPending(true);
+    beforeSubmit?.();
+    void runner.advance(choiceId).then((result) => consume(generation, runner, result));
+  };
+
   useEffect(() => {
+    const generation = ++runnerGenerationRef.current;
     const runner = new SceneRunner(db, { provider: mockProvider, logger });
     runnerRef.current = runner;
-    void runner.start(store.getState(), eventId).then(handleStep);
-    return () => runner.abandon();
+    setFrame(null);
+    setError(null);
+    pendingRef.current = true;
+    setPending(true);
+    void runner.start(store.getState(), eventId).then((result) => consume(generation, runner, result));
+    return () => {
+      // 先使本世代失效（旧 start/advance 的 Promise 解析时将被忽略），再 abandon。
+      if (runnerGenerationRef.current === generation) runnerGenerationRef.current += 1;
+      // 仅当 ref 仍指向本 runner 时清空——不能清掉 StrictMode 第二次 setup 新建的 runner。
+      if (runnerRef.current === runner) runnerRef.current = null;
+      runner.abandon();
+    };
     // deps: restart only when the event changes; store/db are stable for the app's lifetime
   }, [eventId]);
 
   const event = db.events[eventId];
   const quit = () => {
-    runnerRef.current?.abandon(); // discard: no AP spent, nothing applied
+    // 立即失效当前世代 + abandon + 清 ref：退出前发出的 provider 请求随后完成时整体忽略，
+    // 不得 setError/setFrame/commit 或再次 onDone。
+    runnerGenerationRef.current += 1;
+    const runner = runnerRef.current;
+    runnerRef.current = null;
+    pendingRef.current = false;
+    setPending(false);
+    runner?.abandon(); // discard: no AP spent, nothing applied
     onDone(false);
   };
 
@@ -175,16 +219,14 @@ export function DialogueScreen({
               <button
                 key={choice.id}
                 type="button"
-                onClick={() => {
-                  recordPlayerChoice(choice.id, choice.text);
-                  void runnerRef.current?.advance(choice.id).then(handleStep);
-                }}
+                disabled={pending}
+                onClick={() => submitAdvance(choice.id, () => recordPlayerChoice(choice.id, choice.text))}
               >
                 {choice.text}
               </button>
             ))
           ) : (
-            <button type="button" onClick={() => void runnerRef.current?.advance().then(handleStep)}>
+            <button type="button" disabled={pending} onClick={() => submitAdvance(undefined)}>
               （继续）
             </button>
           )}
