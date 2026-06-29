@@ -179,6 +179,10 @@ export function validateHaremInvestigationLinks(
       if (!isEvidence && !LEGACY_INVESTIGATION_METHODS.has(task.method)) {
         errors.push(stateError("INTRIGUE_TASK_METHOD_SOURCE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: method="${task.method}" 不适用于旧宫斗案件`));
       }
+      // 证据调查任务为非对象型，subjectId 不得持久化
+      if (isEvidence && task.subjectId !== undefined) {
+        errors.push(stateError("INTRIGUE_TASK_METHOD_SOURCE_MISMATCH", `haremInvestigationTasks[id=${task.id}]: 证据驱动任务不允许 subjectId`));
+      }
     }
     // pending task 不得有 resolvedAt / leadId
     if (task.status === "pending") {

@@ -185,15 +185,17 @@ export const INVESTIGATION_METHOD_AP: Record<InvestigationMethod, number> = {
 };
 
 export const INVESTIGATION_METHOD_DAYS: Record<InvestigationMethod, number> = {
+  // legacy（保持原值不变）
   question_target: 1,
   question_suspect: 1,
   quiet_inquiry: 2,
-  medical_examination: 3,
-  question_servants: 3,
-  reconstruct_timeline: 3,
-  search_quarters: 3,
-  trace_money: 6,
-  obtain_testimony: 6,
+  // evidence-driven（dayIndex 本身即旬序号，1 = 一旬）
+  medical_examination: 1,
+  question_servants: 1,
+  reconstruct_timeline: 1,
+  search_quarters: 1,
+  trace_money: 2,
+  obtain_testimony: 2,
 };
 
 export type InvestigationTaskStatus = "pending" | "resolved" | "cancelled";

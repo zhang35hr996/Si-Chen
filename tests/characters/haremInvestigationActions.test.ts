@@ -5,8 +5,9 @@ import { describe, expect, it } from "vitest";
 import { availableInvestigationActions, validateCanStartTask } from "../../src/engine/characters/haremInvestigation/actions";
 import { createIntrigueInvestigationCase } from "../../src/engine/characters/haremInvestigation/createCase";
 import { createInitialState } from "../../src/engine/state/initialState";
-import type { GameState } from "../../src/engine/state/types";
+import type { GameState, Heir } from "../../src/engine/state/types";
 import type { HaremIntrigueReport } from "../../src/engine/state/types";
+import type { IntrigueInvestigationCase } from "../../src/engine/characters/haremInvestigation/types";
 import { makeGameTime } from "../../src/engine/calendar/time";
 
 const AT = makeGameTime(1, 3, "early");
@@ -186,5 +187,153 @@ describe("validateCanStartTask", () => {
     };
     const c = s.haremInvestigationCases[0]!;
     expect(validateCanStartTask(withTask, c, "quiet_inquiry")).toMatch(/等待结算/);
+  });
+});
+
+// ── evidence-driven 案件行动（5B-2B2a follow-up）────────────────────────────
+
+const LIVING_HEIR: Heir = {
+  id: "heir_test_001",
+  sex: "son",
+  fatherId: null,
+  bearer: "sovereign",
+  birthAt: AT,
+  favor: 0,
+  legitimate: false,
+  petName: "",
+  education: { scholarship: 0, martial: 0, virtue: 0 },
+  health: 80,
+  talent: 50,
+  diligence: 50,
+  personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
+  interests: [],
+  imperialFear: 0,
+  neglect: 0,
+  custodianBond: 0,
+  portraitVariants: { baby: "p_baby", kid: "p_kid", child: "p_child", teen: "p_teen" },
+  ambition: 50,
+  closeness: 50,
+  support: 50,
+  faction: "none",
+  lifecycle: "alive",
+};
+
+function makeEvidenceCase(knownTargetIds = ["heir_test_001"]): IntrigueInvestigationCase {
+  return {
+    id: "icase_ev_001",
+    source: { kind: "investigation_incident", reportId: "iarep_ev_001", incidentId: "inc_ev_001" },
+    openedAt: AT,
+    openedFromReportKind: "anomaly",
+    status: "open",
+    knownTargetIds,
+    suspectIds: [],
+    suspectedKinds: [],
+    confidence: "tenuous",
+    leadIds: [],
+  };
+}
+
+function makeEvidenceState(opts: { withLivingHeir?: boolean; knownTargetIds?: string[] } = {}): GameState {
+  const base = createInitialState();
+  const c = makeEvidenceCase(opts.knownTargetIds ?? ["heir_test_001"]);
+  const heirs = opts.withLivingHeir ? [LIVING_HEIR] : [];
+  return {
+    ...base,
+    haremInvestigationCases: [c],
+    resources: {
+      ...base.resources,
+      bloodline: { ...base.resources.bloodline, heirs },
+    },
+  };
+}
+
+describe("availableEvidenceActions — evidence-driven", () => {
+  it("medical_examination 在受害皇嗣存活时出现", () => {
+    const s = makeEvidenceState({ withLivingHeir: true });
+    const actions = availableInvestigationActions(s, "icase_ev_001");
+    expect(actions.map((a) => a.method)).toContain("medical_examination");
+  });
+
+  it("medical_examination 在无存活皇嗣时不出现", () => {
+    const s = makeEvidenceState({ withLivingHeir: false });
+    const actions = availableInvestigationActions(s, "icase_ev_001");
+    expect(actions.map((a) => a.method)).not.toContain("medical_examination");
+  });
+
+  it("其余五种证据行动始终出现", () => {
+    const s = makeEvidenceState({ withLivingHeir: false });
+    const methods = availableInvestigationActions(s, "icase_ev_001").map((a) => a.method);
+    for (const m of ["question_servants", "reconstruct_timeline", "trace_money", "search_quarters", "obtain_testimony"]) {
+      expect(methods).toContain(m);
+    }
+  });
+
+  it("evidence 行动不附 subjectCandidateIds", () => {
+    const s = makeEvidenceState({ withLivingHeir: true });
+    const actions = availableInvestigationActions(s, "icase_ev_001");
+    for (const a of actions) {
+      expect(a.subjectCandidateIds).toBeUndefined();
+    }
+  });
+
+  it("evidence 行动耗时：单旬 1，双旬 2", () => {
+    const s = makeEvidenceState({ withLivingHeir: true });
+    const actions = availableInvestigationActions(s, "icase_ev_001");
+    const byMethod = Object.fromEntries(actions.map((a) => [a.method, a.durationDays]));
+    expect(byMethod["medical_examination"]).toBe(1);
+    expect(byMethod["question_servants"]).toBe(1);
+    expect(byMethod["reconstruct_timeline"]).toBe(1);
+    expect(byMethod["search_quarters"]).toBe(1);
+    expect(byMethod["trace_money"]).toBe(2);
+    expect(byMethod["obtain_testimony"]).toBe(2);
+  });
+});
+
+describe("validateCanStartTask — evidence-driven", () => {
+  it("medical_examination 无存活皇嗣 → 报错", () => {
+    const s = makeEvidenceState({ withLivingHeir: false });
+    const c = makeEvidenceCase();
+    expect(validateCanStartTask(s, c, "medical_examination")).toMatch(/皇嗣.*不在人世|查验脉案/);
+  });
+
+  it("medical_examination 有存活皇嗣 → 通过", () => {
+    const s = makeEvidenceState({ withLivingHeir: true });
+    const c = makeEvidenceCase();
+    expect(validateCanStartTask(s, c, "medical_examination")).toBeNull();
+  });
+
+  it("evidence 行动携带 subjectId → 报错", () => {
+    const s = makeEvidenceState({ withLivingHeir: true });
+    const c = makeEvidenceCase();
+    const result = validateCanStartTask(s, c, "question_servants", "some_char");
+    expect(result).toMatch(/不接受指定对象/);
+  });
+
+  it("legacy 方法不能用于 evidence 案件 → 报错", () => {
+    const s = makeEvidenceState();
+    const c = makeEvidenceCase();
+    expect(validateCanStartTask(s, c, "quiet_inquiry")).toMatch(/不接受/);
+  });
+});
+
+describe("haremInvestigationPresenter — method labels", () => {
+  it("所有 9 种方法有中文标签，不回退到英文 token", async () => {
+    const { presentHaremInvestigationDetail } = await import(
+      "../../src/ui/haremInvestigationPresenter"
+    );
+    const s = makeEvidenceState({ withLivingHeir: true });
+    const actions = availableInvestigationActions(s, "icase_ev_001");
+    const c = makeEvidenceCase();
+    const detail = presentHaremInvestigationDetail(c, [], [], actions, (id) => id);
+
+    const EN_TOKENS = [
+      "medical_examination", "question_servants", "reconstruct_timeline",
+      "trace_money", "search_quarters", "obtain_testimony",
+      "question_target", "question_suspect", "quiet_inquiry",
+    ];
+    for (const view of detail.availableActionViews) {
+      expect(EN_TOKENS).not.toContain(view.label);
+      expect(view.label.length).toBeGreaterThan(0);
+    }
   });
 });
