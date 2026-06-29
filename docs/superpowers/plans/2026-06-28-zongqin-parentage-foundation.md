@@ -29,7 +29,7 @@
 | 文件 | 责任 | 任务 |
 |------|------|------|
 | `src/engine/state/types.ts` | 新增实体/容器类型、`SOVEREIGN_PERSON_ID`、`ParentPair`；Heir 字段 rename | 1, 4 |
-| `src/engine/save/stateSchema.ts` | 新容器 zod schema；Heir `custodianId`/faction rename + reject-both | 1, 4 |
+| `src/engine/save/stateSchema.ts` | 新容器 zod schema；Heir `custodianId`/faction rename（strictObject 自动拒绝旧字段/旧枚举） | 1, 4 |
 | `src/engine/state/initialState.ts` | `createInitialState` 初始化三容器 + 两计数器 | 1 |
 | `src/engine/state/newGame.ts` | `createNewGameState` 同上 | 1 |
 | `src/engine/characters/parentage/parentageSelectors.ts` | 纯查询 selectors（bio/legal 两链 + getCurrentCustodian） | 2, 4 |
@@ -458,7 +458,7 @@ describe("establishBirthParentage", () => {
   it("初始化写入 parentage", () => {
     const r = establishBirthParentage(createInitialState(), { childId: "heir_000001", biologicalFatherId: "c1" });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.parentage["heir_000001"].legalFatherId).toBe("c1");
+    if (r.ok) expect(r.value.parentage["heir_000001"]?.legalFatherId).toBe("c1");
   });
   it("重复建立返回 PARENTAGE_ALREADY_ESTABLISHED 且不改输入", () => {
     const s = createInitialState();
@@ -590,7 +590,7 @@ git commit -m "feat(parentage): 出生经唯一写入口建立 parentage（legal
 
 **Files:**
 - Modify: `src/engine/state/types.ts`（`Heir.adoptiveFatherId`→`custodianId`；faction `"adoptive"`→`"custodian"`）
-- Modify: `src/engine/save/stateSchema.ts`（heir schema 同步；reject-both 校验）
+- Modify: `src/engine/save/stateSchema.ts`（heir schema 同步 rename；strictObject 自动拒绝残留旧字段/旧枚举）
 - Modify: `src/engine/characters/parentage/parentageSelectors.ts`（加 `getCurrentCustodian`）
 - Modify (rename 消费者，以 grep 为准): `src/engine/effects/funnel.ts`、`src/engine/characters/custodianAvailability.ts`、`src/engine/characters/companionReconciliation.ts`、`src/store/heirCustody.ts`、`src/ui/components/HeirListModal.tsx`、`src/ui/components/HeirSummonPicker.tsx`、`src/ui/components/CharacterProfileDrawer.tsx`、`src/ui/components/ConsortListModal.tsx`、`src/ui/screens/FengxiandianScreen.tsx`、`src/engine/content/schemas.ts`
 - Rename: `src/store/adoption.ts` → `src/store/fosterFather.ts`（API + 测试同步改抚养语义）
@@ -744,7 +744,7 @@ describe("v38→v39 parentage 迁移", () => {
       { id: "heir_000001", fatherId: "c1", adoptiveFatherId: "c2", faction: "adoptive" },
       { id: "heir_000002", fatherId: null, faction: "none" },
     ] } } } };
-    const out: any = MIGRATIONS[38](env);
+    const out: any = MIGRATIONS[38]!(env);
     expect(out.formatVersion).toBe(39);
     const h1 = out.state.resources.bloodline.heirs[0];
     expect(h1.custodianId).toBe("c2");
@@ -813,6 +813,7 @@ import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { checksumOf } from "../../src/engine/save/canonical";
+import { makeGameTime } from "../../src/engine/calendar/time";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -823,7 +824,7 @@ function makeV38Save(mutateHeir?: (h: any) => void): string {
   // 注入一名 v38 形态 heir
   (s.resources.bloodline.heirs as any).push({
     id: "heir_000001", sex: "daughter", fatherId: "lu_huaijin", bearer: "lu_huaijin",
-    birthAt: { year: 1, month: 1, dayIndex: 1 }, favor: 10, legitimate: true, petName: "",
+    birthAt: makeGameTime(1, 1, "early"), favor: 10, legitimate: true, petName: "",
     education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50,
     personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
     interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
@@ -899,6 +900,7 @@ git commit -m "feat(parentage): v38→v39 迁移回填 parentage 并消歧 custo
 // tests/save/parentageValidation.test.ts
 import { describe, it, expect } from "vitest";
 import { createInitialState } from "../../src/engine/state/initialState";
+import { makeGameTime } from "../../src/engine/calendar/time";
 import { validateParentage } from "../../src/engine/save/parentageValidation";
 
 const db: any = { characters: { c1: {} } };
@@ -955,7 +957,7 @@ describe("validateParentage", () => {
   });
   it("active AdoptionRecord 缺反向引用 → 失败", () => {
     const s = stateWithHeir({ heir_000001: { biologicalMotherId: "sovereign", biologicalFatherId: "c1", legalMotherId: "sovereign", legalFatherId: "c1" } });
-    s.adoptionRecords = { adopt_000001: { id: "adopt_000001", childId: "heir_000001", previousLegalMotherId: "sovereign", previousLegalFatherId: "c1", newLegalMotherId: "sovereign", newLegalFatherId: "c1", effectiveAt: { year: 1, month: 1, dayIndex: 1 } as any, reason: "preserve_branch", status: "active" } } as any;
+    s.adoptionRecords = { adopt_000001: { id: "adopt_000001", childId: "heir_000001", previousLegalMotherId: "sovereign", previousLegalFatherId: "c1", newLegalMotherId: "sovereign", newLegalFatherId: "c1", effectiveAt: makeGameTime(1, 1, "early"), reason: "preserve_branch", status: "active" } } as any;
     expect(validateParentage(s, db).map(e => e.code)).toContain("ADOPTION_RECORD_UNREFERENCED");
   });
 
@@ -975,7 +977,7 @@ describe("validateParentage", () => {
   const goodParentage = (legalFatherId: string | null = "c1", activeAdoptionRecordId?: string) =>
     ({ heir_000001: { biologicalMotherId: "sovereign", biologicalFatherId: "c1", legalMotherId: "sovereign", legalFatherId, ...(activeAdoptionRecordId ? { activeAdoptionRecordId } : {}) } });
   const rec = (over: Record<string, unknown> = {}) =>
-    ({ adopt_000001: { id: "adopt_000001", childId: "heir_000001", previousLegalMotherId: "sovereign", previousLegalFatherId: "c1", newLegalMotherId: "sovereign", newLegalFatherId: "c1", effectiveAt: { year: 1, month: 1, dayIndex: 1 }, reason: "preserve_branch", status: "active", ...over } });
+    ({ adopt_000001: { id: "adopt_000001", childId: "heir_000001", previousLegalMotherId: "sovereign", previousLegalFatherId: "c1", newLegalMotherId: "sovereign", newLegalFatherId: "c1", effectiveAt: makeGameTime(1, 1, "early"), reason: "preserve_branch", status: "active", ...over } });
 
   it.each([
     ["pointer 悬空（record 不存在）", () => { const s = stateWithHeir(goodParentage("c1", "adopt_000001")); return s; }, "ADOPTION_POINTER_INVALID"],
@@ -984,10 +986,32 @@ describe("validateParentage", () => {
   ])("%s → 失败", (_label, build, code) => {
     expect(validateParentage(build() as any, db).map(e => e.code)).toContain(code);
   });
+
+  it("active record legal 快照与当前 parentage 不一致 → 失败", () => {
+    const s = stateWithHeir(goodParentage("c1", "adopt_000001"), { id: "heir_000001", fatherId: "c1" });
+    s.adoptionRecords = rec({ newLegalFatherId: "c3" }) as any; // record 说 c3，parentage legal 是 c1
+    expect(validateParentage(s, db).map(e => e.code)).toContain("ADOPTION_RECORD_UNREFERENCED");
+  });
+
+  it("adoption map key 与 record.id 不一致 → 失败", () => {
+    const s = stateWithHeir(goodParentage());
+    s.adoptionRecords = { adopt_000001: { ...rec().adopt_000001, id: "adopt_000002", status: "revoked" } } as any;
+    expect(validateParentage(s, db).map(e => e.code)).toContain("ADOPTION_KEY_MISMATCH");
+  });
+
+  it("两条 active record 指向同一 child → 失败（同一 child 至多一条 active）", () => {
+    const s = stateWithHeir(goodParentage("c1", "adopt_000001"), { id: "heir_000001", fatherId: "c1" });
+    s.adoptionRecords = {
+      adopt_000001: rec().adopt_000001,
+      adopt_000002: { ...rec().adopt_000001, id: "adopt_000002" }, // 第二条 active，同 child
+    } as any;
+    // 第二条不被 parentage 反向引用 → ADOPTION_RECORD_UNREFERENCED
+    expect(validateParentage(s, db).map(e => e.code)).toContain("ADOPTION_RECORD_UNREFERENCED");
+  });
 });
 ```
 
-> 上面的 `goodParentage`/`rec` 帮手与已有 `stateWithHeir` 同文件；`it.each` 三行覆盖正向 pointer 的三种坏态。反向（active record 未被引用 / legal 快照不一致）已由「缺反向引用」用例覆盖。
+> `goodParentage`/`rec` 帮手与 `stateWithHeir` 同文件；`makeGameTime` 需在文件顶部 import。`it.each` 覆盖正向 pointer 三种坏态；后三条覆盖反向 legal 快照不一致、key 不符、同 child 两条 active。
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1040,7 +1064,7 @@ export function validateParentage(state: GameState, db: { characters: Record<str
   for (const h of heirs) {
     const p = state.parentage[h.id];
     if (!p) { errs.push(stateError("PARENTAGE_MISSING_FOR_HEIR", `heir ${h.id} lacks parentage`, { context: { char: h.id } })); continue; }
-    if ((h.fatherId ?? null) !== p.biologicalFatherId) {
+    if (h.fatherId !== p.biologicalFatherId) {   // 精确镜像：null===null，undefined≠null
       errs.push(stateError("PARENTAGE_MIRROR_MISMATCH", `heir ${h.id} fatherId != biologicalFatherId`, { context: { char: h.id } }));
     }
   }
@@ -1085,21 +1109,24 @@ export function validateParentage(state: GameState, db: { characters: Record<str
 }
 ```
 
-- [ ] **Step 4: Wire into load pipeline**
+- [ ] **Step 4: Wire into `validateSave`（不是 `readSlot`）**
 
-在 `saveSystem.ts` 的 `readSlot` 中，`gameStateSchema.safeParse` 成功、且 content-id cross-check / 官员世界 cross-collection validators 那一段（grep `readSlot` 函数体内现有的 cross-check 调用定位，约 §940 区段）追加：
+cross-collection 校验都在私有 `validateSave(db, save)` 内（它返回 `Result<LoadedSave, { error: GameError; quarantineWorthy: boolean }>`；`readSlot` 调用它并据 `quarantineWorthy` 统一 quarantine）。在 `validateSave` 中，紧跟既有 `validateOfficialWorld(state, db)` 失败返回之后（约 §942 区段，`state` 即已 parse/migrate 的状态）追加：
 
 ```ts
-const parentageErrors = validateParentage(parsedState.data, db);
+const parentageErrors = validateParentage(state, db);
 if (parentageErrors.length > 0) {
-  const key = quarantine(storage, slot, raw, options);
-  return err(saveError("PARENTAGE_INVALID",
-    `slot "${slot}" failed parentage validation; quarantined to ${key}`,
-    { context: { slot, quarantineKey: key, codes: parentageErrors.map((e) => e.code) } }));
+  const first = parentageErrors[0]!;
+  return err({
+    error: saveError("PARENTAGE_INTEGRITY",
+      `存档亲缘数据完整性校验失败（${first.code}）：${first.message}`,
+      { context: { diagnostics: parentageErrors.map((e) => ({ code: e.code, message: e.message })) } }),
+    quarantineWorthy: true,
+  });
 }
 ```
 
-（`parsedState`、`quarantine`、`raw`、`saveError` 均为 `readSlot` 内既有符号——以实际变量名为准；与相邻官员 cross-collection validator 的失败/quarantine 写法保持一致。）import `validateParentage` 于文件顶部。
+**不要**在 `readSlot` 里另调 `quarantine`——沿用 official validator 的 `{ error, quarantineWorthy: true }` 模式。文件顶部 import `validateParentage`。
 
 - [ ] **Step 5: Write failing load-pipeline integration test**
 
@@ -1110,6 +1137,7 @@ import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { checksumOf } from "../../src/engine/save/canonical";
+import { makeGameTime } from "../../src/engine/calendar/time";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
@@ -1120,7 +1148,7 @@ describe("readSlot parentage validation 接线", () => {
     // 注入一名 heir 但故意不给它 parentage（schema 仍通过——heir schema 不要求 parentage）
     s.resources.bloodline.heirs.push({
       id: "heir_000001", sex: "daughter", fatherId: null, bearer: "sovereign",
-      birthAt: { year: 1, month: 1, dayIndex: 1 }, favor: 10, legitimate: true, petName: "",
+      birthAt: makeGameTime(1, 1, "early"), favor: 10, legitimate: true, petName: "",
       education: { scholarship: 5, martial: 5, virtue: 5 }, health: 60, talent: 50, diligence: 50,
       personality: { empathy: 50, guile: 50, restraint: 50, sociability: 50, assertiveness: 50, curiosity: 50 },
       interests: [], imperialFear: 20, neglect: 40, custodianBond: 0,
@@ -1135,7 +1163,7 @@ describe("readSlot parentage validation 接线", () => {
 
     const loaded = readSlot(storage, db, "slot1");
     expect(loaded.ok).toBe(false);
-    if (!loaded.ok) expect(loaded.error.code).toBe("PARENTAGE_INVALID");
+    if (!loaded.ok) expect(loaded.error.code).toBe("PARENTAGE_INTEGRITY");
     // 已 quarantine：原 slot 不再可正常读出该状态
     expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
   });
