@@ -1566,6 +1566,16 @@ export interface GameState {
   settledHeirUpbringingMonths: string[];
   /** 对话历史日志（上限 NARRATIVE_LOG_MAX，溢出时从头删除）。*/
   narrativeLog?: NarrativeEntry[];
+  /** 亲缘数据（宗亲 Slice A）：charId → 亲缘记录，单一权威。 */
+  parentage: Record<CharacterId, CharacterParentage>;
+  /** 承养记录（宗亲 Slice A）：adoptionRecordId → 记录，append-mostly。 */
+  adoptionRecords: Record<AdoptionRecordId, AdoptionRecord>;
+  /** 封爵府邸（宗亲 Slice A）：residenceId → 府邸。 */
+  royalResidences: Record<RoyalResidenceId, RoyalResidence>;
+  /** 下一条承养记录序号（adopt_NNNNNN）。 */
+  adoptionNextSeq: number;
+  /** 下一条封爵府邸序号（res_NNNNNN）。 */
+  royalResidenceNextSeq: number;
   rngSeed: number;
 }
 
@@ -1573,4 +1583,58 @@ export interface GameState {
 export interface PendingDaxuan {
   kind: "announce" | "dianxuan";
   year: number;
+}
+
+// ── 亲缘数据基础（宗亲 Slice A）────────────────────────────────────────────────
+
+export const SOVEREIGN_PERSON_ID = "sovereign";
+export type PersonId = string;
+export type CharacterId = string;
+export type AdoptionRecordId = string;   // adopt_NNNNNN
+export type RoyalResidenceId = string;   // res_NNNNNN
+
+export interface ParentPair {
+  motherId: PersonId;
+  fatherId: PersonId | null;
+}
+
+export interface CharacterParentage {
+  biologicalMotherId: PersonId;
+  biologicalFatherId: PersonId | null;
+  legalMotherId: PersonId;
+  legalFatherId: PersonId | null;
+  activeAdoptionRecordId?: AdoptionRecordId;
+}
+
+export type AdoptionReason =
+  | "imperial_succession"
+  | "preserve_branch"
+  | "political_settlement";
+
+export interface AdoptionRecord {
+  id: AdoptionRecordId;
+  childId: CharacterId;
+  previousLegalMotherId: PersonId;
+  previousLegalFatherId: PersonId | null;
+  newLegalMotherId: PersonId;
+  newLegalFatherId: PersonId | null;
+  fromResidenceId?: RoyalResidenceId;
+  toResidenceId?: RoyalResidenceId;
+  effectiveAt: GameTime;
+  reason: AdoptionReason;
+  status: "active" | "revoked" | "superseded";
+}
+
+export type RoyalResidenceTitleType =
+  | "fengzhu" | "guizhu"
+  | "zhang_fengzhu" | "zhang_guizhu"
+  | "dazhang_fengzhu" | "dazhang_guizhu";
+
+export interface RoyalResidence {
+  id: RoyalResidenceId;
+  holderId: CharacterId;
+  titleType: RoyalResidenceTitleType;
+  spouseIds: CharacterId[];
+  legalHeirId?: CharacterId;
+  lineage: { founderId: CharacterId; parentResidenceId?: RoyalResidenceId };
 }
