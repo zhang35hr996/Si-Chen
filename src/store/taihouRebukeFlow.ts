@@ -6,6 +6,7 @@
  *  - 不必了：应用同一份 effects（训诫已发生），不播放现场台词。
  * 宫外（京城/郊外/慈恩寺等）：不掷骰、不提示、不应用任何 effects。
  */
+import { isGreetingSlot } from "../engine/calendar/time";
 import type { ContentDB } from "../engine/content/loader";
 import type { GameState } from "../engine/state/types";
 import { buildTaihouRebuke, type RebukePlan } from "./taihou";
@@ -20,6 +21,7 @@ export function maybeBuildRebukeForAction(
   presentedZone: string | undefined,
 ): RebukePlan | null {
   if (!isImperialInteriorZone(presentedZone)) return null;
+  if (state.playerLocation === "kunninggong" && isGreetingSlot(state.calendar)) return null;
   return buildTaihouRebuke(db, state, seedKey);
 }
 
@@ -27,7 +29,7 @@ export function maybeBuildRebukeForAction(
 export function buildTaihouRebukePrompt(plan: RebukePlan): ChengFengPrompt {
   return {
     speakerId: "cheng_feng",
-    line: `陛下，太后似乎正在慈宁宫训诫${plan.targetDisplayName}。陛下可要过去看看？`,
+    line: "陛下，太后似乎正在慈宁宫训诫" + plan.targetDisplayName + "。陛下可要过去看看？",
     choices: [
       { label: "去看看", action: { type: "taihouRebukeAttend" } },
       { label: "不必了", action: { type: "taihouRebukeDecline" } },
