@@ -1173,9 +1173,9 @@ export const gameStateSchema = z.strictObject({
     confidence: z.enum(["tenuous", "plausible", "strong", "confirmed"]),
     leadIds: z.array(z.string()),
     closedAt: gameTimeSchema.optional(),
-    closureReason: z.enum(["player_cancelled", "insufficient_evidence", "culprit_confirmed", "benign_cause_confirmed"]).optional(),
+    closureReason: z.enum(["player_cancelled", "insufficient_evidence", "culprit_confirmed", "cause_confirmed"]).optional(),
     confirmedCulpritId: idSchema.optional(),
-    confirmedBenignCause: z.enum(["natural_illness", "accident"]).optional(),
+    confirmedCause: z.enum(["natural_illness", "negligence", "accident"]).optional(),
   })).default([]),
   haremInvestigationTasks: z.record(z.string().regex(/^itask_\d{6}$/), z.strictObject({
     id: z.string().regex(/^itask_\d{6}$/),

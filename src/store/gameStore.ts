@@ -2944,7 +2944,7 @@ export class GameStore {
       | { type: "continue" }
       | { type: "close_unresolved" }
       | { type: "confirm"; suspectId: string }
-      | { type: "confirm_benign_cause" },
+      | { type: "confirm_cause"; causeType: import("../engine/characters/haremInvestigation/assessEvidenceDrivenCase").ConfirmableCause },
   ): Result<void, GameError[]> {
     const at = toGameTime(this.state.calendar);
     const c = this.state.haremInvestigationCases.find((x) => x.id === caseId);
@@ -2967,18 +2967,18 @@ export class GameStore {
       updated = { ...c, status: "open" };
     } else if (decision.type === "close_unresolved") {
       updated = { ...c, status: "closed_unresolved", closedAt: at, closureReason: "insufficient_evidence" };
-    } else if (decision.type === "confirm_benign_cause") {
+    } else if (decision.type === "confirm_cause") {
       if (!isEvidenceCase) {
-        return err([stateError("INTRIGUE_CASE_WRONG_DECISION", `旧宫斗案件 "${caseId}" 不支持确认自然病因`)]);
+        return err([stateError("INTRIGUE_CASE_WRONG_DECISION", `旧宫斗案件 "${caseId}" 不支持确认病因`)]);
       }
-      if (assessment?.kind !== "benign_ready") {
-        return err([stateError("INTRIGUE_CASE_NOT_BENIGN_READY", `案件 "${caseId}" 现有证据不足以认定自然病因`)]);
+      if (!assessment?.confirmableCauseTypes.includes(decision.causeType)) {
+        return err([stateError("INTRIGUE_CASE_NOT_CAUSE_READY", `案件 "${caseId}" 现有证据不足以认定病因 "${decision.causeType}"`)]);
       }
-      updated = { ...c, status: "closed_explained", closedAt: at, closureReason: "benign_cause_confirmed", confirmedBenignCause: assessment.causeType };
+      updated = { ...c, status: "closed_explained", closedAt: at, closureReason: "cause_confirmed", confirmedCause: decision.causeType };
     } else {
       // confirm 主谋
       if (isEvidenceCase) {
-        if (assessment?.kind !== "culprit_ready") {
+        if (!assessment || assessment.confirmableCulpritIds.length === 0) {
           return err([stateError("INTRIGUE_CASE_NOT_CULPRIT_READY", `案件 "${caseId}" 现有证据不足以认定主谋`)]);
         }
         if (!assessment.confirmableCulpritIds.includes(decision.suspectId)) {

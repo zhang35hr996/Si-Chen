@@ -159,16 +159,16 @@ export function validateHaremInvestigationLinks(
       errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=cancelled 但 closureReason="${c.closureReason}"，期望 player_cancelled`));
     }
 
-    // 5B-2B2b：closed_explained → benign_cause_confirmed + confirmedBenignCause；其余状态不得有 confirmedBenignCause
+    // 5B-2B2b：closed_explained → cause_confirmed + confirmedCause；其余状态不得有 confirmedCause
     if (c.status === "closed_explained") {
-      if (c.closureReason !== "benign_cause_confirmed") {
-        errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但 closureReason="${c.closureReason}"，期望 benign_cause_confirmed`));
+      if (c.closureReason !== "cause_confirmed") {
+        errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但 closureReason="${c.closureReason}"，期望 cause_confirmed`));
       }
-      if (!c.confirmedBenignCause) {
-        errors.push(stateError("INTRIGUE_CASE_MISSING_BENIGN_CAUSE", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但无 confirmedBenignCause`));
+      if (!c.confirmedCause) {
+        errors.push(stateError("INTRIGUE_CASE_MISSING_CAUSE", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但无 confirmedCause`));
       }
-    } else if (c.confirmedBenignCause) {
-      errors.push(stateError("INTRIGUE_CASE_BENIGN_WRONG_STATUS", `haremInvestigationCases[id=${c.id}]: status=${c.status} 不得有 confirmedBenignCause`));
+    } else if (c.confirmedCause) {
+      errors.push(stateError("INTRIGUE_CASE_CAUSE_WRONG_STATUS", `haremInvestigationCases[id=${c.id}]: status=${c.status} 不得有 confirmedCause`));
     }
 
     // B2：in_progress 案件 → 恰好 1 个 pending task

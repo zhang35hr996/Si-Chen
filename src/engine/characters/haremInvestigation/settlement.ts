@@ -474,7 +474,7 @@ export function settleDueInvestigationTasks(
       const assessment = assessEvidenceDrivenCase(state, c.id);
       const cIdx = state.haremInvestigationCases.findIndex((x) => x.id === task.caseId);
       const cases = [...state.haremInvestigationCases];
-      if (assessment.kind === "culprit_ready" || assessment.kind === "benign_ready") {
+      if (assessment.readyForReview) {
         cases[cIdx] = { ...c, status: "ready_for_review", confidence: "confirmed" };
       } else {
         cases[cIdx] = { ...c, status: "open", confidence: assessment.confidence };

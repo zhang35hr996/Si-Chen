@@ -1,44 +1,53 @@
 /**
  * 证据驱动案件评估（Phase 5B-2B2b）。
  *
- * 纯函数：只读取案件「已发现」证据（case leads 的 claims / sourceEvidenceNodeId），
- * 允许用 sourceEvidenceNodeId 回查对应 node 的 misleading/type（判断该已发现证据是否
- * 属于误导证据的内部元数据）。**绝不读取 truth.causeType / culpritIds / method** 等真相结论。
+ * 纯函数：只读取案件「已发现」证据的 claims / strength / sourceEvidenceNodeId，
+ * 用 sourceEvidenceNodeId 做独立性去重（同节点多 lead 算同一证据来源）。
  *
- * 据此判断案件是否具备一种合法裁定出口（确认主谋 / 确认自然病因），供 settlement 决定
- * 是否进入 ready_for_review、供 review 校验玩家裁定。
+ * 知识边界：
+ *  - 允许读取 lead.claims / lead.strength / lead.sourceEvidenceNodeId（脱敏结论）。
+ *  - 严禁读取 InvestigationTruth / node.misleading / truth.culpritIds / truth.causeType。
+ *
+ * 返回 EvidenceCaseAssessment（平坦接口），供 settlement 决定案件是否进入
+ * ready_for_review、供 review 校验玩家裁定。
  */
 import type { GameState } from "../../state/types";
 import type { HaremIntrigueReportConfidence } from "../../state/types";
 import type { InvestigationLeadStrength } from "./types";
 
-export type EvidenceCaseAssessment =
-  | { kind: "insufficient"; confidence: HaremIntrigueReportConfidence }
-  | { kind: "culprit_ready"; confidence: "confirmed"; confirmableCulpritIds: string[] }
-  | { kind: "benign_ready"; confidence: "confirmed"; causeType: "natural_illness" };
+/** 非人为加害且可通过证据确认的病因类型。 */
+export type ConfirmableCause = "natural_illness" | "negligence" | "accident";
+
+const CONFIRMABLE_CAUSES: readonly ConfirmableCause[] = ["natural_illness", "negligence", "accident"];
+
+export interface EvidenceCaseAssessment {
+  confidence: HaremIntrigueReportConfidence;
+  /** 可被确认为主谋的人物 ID（已排序）；空 = 尚不足以认定任何人。 */
+  confirmableCulpritIds: string[];
+  /** 可被确认的非人为病因类型；空 = 尚无充分病因证据。 */
+  confirmableCauseTypes: ConfirmableCause[];
+  /** 是否具备至少一种合法裁定出口（确认主谋或确认病因）。 */
+  readyForReview: boolean;
+}
 
 const STRENGTH_ORDER: InvestigationLeadStrength[] = ["tenuous", "plausible", "strong", "confirmed"];
 function maxStrength(a: InvestigationLeadStrength, b: InvestigationLeadStrength): InvestigationLeadStrength {
   return STRENGTH_ORDER.indexOf(a) >= STRENGTH_ORDER.indexOf(b) ? a : b;
 }
 
-/** 单个已发现证据节点的脱敏视图（来自一条 Lead + 其来源 node 元数据）。 */
+/** 单个已发现证据节点的脱敏视图（来自一条 Lead）。 */
 interface DiscoveredEvidence {
   nodeId: string;
-  misleading: boolean;
   claims: NonNullable<GameState["haremInvestigationLeads"][string]["claims"]>;
 }
 
 /**
  * 收集案件「已发现」的证据节点（去重：同 nodeId 只取一次）。
- * misleading 由来源 node 元数据决定；无对应 truth/node 时按非误导处理（防御）。
+ * 只读取 lead 公开字段，绝不访问 InvestigationTruth 或 node.misleading。
  */
 function collectDiscoveredEvidence(state: GameState, caseId: string): DiscoveredEvidence[] {
   const c = state.haremInvestigationCases.find((x) => x.id === caseId);
   if (!c || c.source.kind !== "investigation_incident") return [];
-  const truth = state.investigationTruths.find((t) => t.incidentId === c.source.incidentId);
-  const nodeMisleading = new Map<string, boolean>();
-  if (truth) for (const n of truth.evidenceNodes) nodeMisleading.set(n.id, n.misleading);
 
   const seen = new Set<string>();
   const out: DiscoveredEvidence[] = [];
@@ -47,11 +56,7 @@ function collectDiscoveredEvidence(state: GameState, caseId: string): Discovered
     if (!lead || !lead.sourceEvidenceNodeId || !lead.claims) continue;
     if (seen.has(lead.sourceEvidenceNodeId)) continue;
     seen.add(lead.sourceEvidenceNodeId);
-    out.push({
-      nodeId: lead.sourceEvidenceNodeId,
-      misleading: nodeMisleading.get(lead.sourceEvidenceNodeId) ?? false,
-      claims: lead.claims,
-    });
+    out.push({ nodeId: lead.sourceEvidenceNodeId, claims: lead.claims });
   }
   return out;
 }
@@ -69,29 +74,44 @@ function caseConfidence(state: GameState, caseId: string): HaremIntrigueReportCo
 
 export function assessEvidenceDrivenCase(state: GameState, caseId: string): EvidenceCaseAssessment {
   const evidence = collectDiscoveredEvidence(state, caseId);
-  const nonMisleading = evidence.filter((e) => !e.misleading);
+  const confidence = caseConfidence(state, caseId);
 
-  // ── 确认主谋：同一人 ≥2 个不同非误导节点指向，且至少一条 strong，且无 mod/strong 反证 ──
-  // 每个角色：指向其的非误导节点集合 + 是否有 strong implicates + 是否被 mod/strong exonerate
+  // ── 确认主谋：同一人 ≥2 个不同节点指向，且至少一条 strong，且无 mod/strong 反证 ──
   const implicatingNodes = new Map<string, Set<string>>(); // charId → nodeIds
   const hasStrongImplicate = new Set<string>();
   const blockedByExoneration = new Set<string>();
 
-  for (const ev of nonMisleading) {
+  // ── 病因收集：每种 ConfirmableCause 的支持节点集合 ──
+  const causeNodes = new Map<ConfirmableCause, Set<string>>();
+  for (const ct of CONFIRMABLE_CAUSES) causeNodes.set(ct, new Set<string>());
+  let hasNonConfirmableCauseSupport = false;
+  let hasAnyImplication = false;
+
+  for (const ev of evidence) {
     for (const claim of ev.claims) {
       if (claim.kind === "implicates_character") {
         const set = implicatingNodes.get(claim.characterId) ?? new Set<string>();
         set.add(ev.nodeId);
         implicatingNodes.set(claim.characterId, set);
         if (claim.strength === "strong") hasStrongImplicate.add(claim.characterId);
+        hasAnyImplication = true;
       } else if (claim.kind === "exonerates_character") {
         if (claim.strength === "moderate" || claim.strength === "strong") {
           blockedByExoneration.add(claim.characterId);
+        }
+      } else if (claim.kind === "supports_cause") {
+        const ct = claim.causeType as string;
+        const set = causeNodes.get(ct as ConfirmableCause);
+        if (set !== undefined) {
+          set.add(ev.nodeId);
+        } else {
+          hasNonConfirmableCauseSupport = true;
         }
       }
     }
   }
 
+  // ── 可确认主谋列表 ──
   const confirmableCulpritIds: string[] = [];
   for (const [charId, nodes] of implicatingNodes) {
     if (nodes.size >= 2 && hasStrongImplicate.has(charId) && !blockedByExoneration.has(charId)) {
@@ -101,39 +121,25 @@ export function assessEvidenceDrivenCase(state: GameState, caseId: string): Evid
   confirmableCulpritIds.sort();
   const culpritReady = confirmableCulpritIds.length > 0;
 
-  // ── 确认自然病因：≥2 个不同非误导节点 supports_cause natural_illness，
-  //    且无任何非误导节点指认他人、亦无其他 causeType 的非误导 supports_cause ──
-  const naturalNodes = new Set<string>();
-  let hasOtherCauseSupport = false;
-  let hasAnyImplication = false;
-  for (const ev of nonMisleading) {
-    for (const claim of ev.claims) {
-      if (claim.kind === "supports_cause") {
-        if (claim.causeType === "natural_illness") naturalNodes.add(ev.nodeId);
-        else hasOtherCauseSupport = true;
-      } else if (claim.kind === "implicates_character") {
-        hasAnyImplication = true;
-      }
+  // ── 病因结构性支持：≥2 独立节点支持某 ConfirmableCause，且无非 ConfirmableCause 的 cause support ──
+  // 「结构性支持」忽略是否有人物指认，仅看病因证据本身是否成形，用于矛盾检测。
+  const structurallySupportedCauses: ConfirmableCause[] = [];
+  if (!hasNonConfirmableCauseSupport) {
+    for (const ct of CONFIRMABLE_CAUSES) {
+      if (causeNodes.get(ct)!.size >= 2) structurallySupportedCauses.push(ct);
     }
   }
-  // ≥2 不同非误导自然支持节点且无其他 cause 支持 → 自然结论成立（独立于是否有指认）。
-  // 拆开以便检测"culprit_ready 与自然结论共存"这一矛盾状态。
-  const naturalConclusionSupported = naturalNodes.size >= 2 && !hasOtherCauseSupport;
+  const causeStructurallySupported = structurallySupportedCauses.length > 0;
 
-  // 两套结论因果互斥（有人加害 vs 并非人为加害）。
-  // 正常蓝图下 culprit_ready 需要指认，而自然结论不阻止有指认的情况，
-  // 所以矛盾状态在实践中可出现（如嫁祸案同时发现自然支持节点），须明确处理为 insufficient。
-  if (culpritReady && naturalConclusionSupported) {
-    return { kind: "insufficient", confidence: caseConfidence(state, caseId) };
-  }
-  if (culpritReady) {
-    return { kind: "culprit_ready", confidence: "confirmed", confirmableCulpritIds };
-  }
-  // benign_ready：自然结论成立且无任何指认（指认存在说明存在其他解释，不能归结为自然病因）。
-  const benignReady = naturalConclusionSupported && !hasAnyImplication;
-  if (benignReady) {
-    return { kind: "benign_ready", confidence: "confirmed", causeType: "natural_illness" };
+  // ── 矛盾检测：主谋成立 + 病因证据成形 = 证据指向两套互斥结论 → 不可裁定，两者均清空 ──
+  if (culpritReady && causeStructurallySupported) {
+    return { confidence, confirmableCulpritIds: [], confirmableCauseTypes: [], readyForReview: false };
   }
 
-  return { kind: "insufficient", confidence: caseConfidence(state, caseId) };
+  // ── 可确认病因：结构性支持 + 无任何人物指认（有指认即表示存在他人加害的解释）──
+  const confirmableCauseTypes: ConfirmableCause[] = hasAnyImplication ? [] : structurallySupportedCauses;
+  const causeReady = confirmableCauseTypes.length > 0;
+
+  const readyForReview = culpritReady || causeReady;
+  return { confidence, confirmableCulpritIds, confirmableCauseTypes, readyForReview };
 }

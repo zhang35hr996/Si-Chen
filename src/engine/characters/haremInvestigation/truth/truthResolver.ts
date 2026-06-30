@@ -49,7 +49,7 @@ type CauseWeight = Record<InvestigationCauseType, number>;
 const BASE_WEIGHTS: CauseWeight = {
   natural_illness: 40,
   accident: 0,       // reserved for scripted events; RNG doesn't generate it
-  negligence: 0,     // no verdict exit implemented yet; re-enable after 5B-2C adds negligence_ready
+  negligence: 25,    // 5B-2B2b: negligence 是 ConfirmableCause，closed_explained 出口已实现
   intentional_harm: 12,
   framing: 13,
   false_accusation: 10,

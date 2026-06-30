@@ -14,7 +14,7 @@ export type InvestigationReviewDecision =
   | { type: "continue" }
   | { type: "close_unresolved" }
   | { type: "confirm"; suspectId: string }
-  | { type: "confirm_benign_cause" };
+  | { type: "confirm_cause"; causeType: import("../../engine/characters/haremInvestigation/assessEvidenceDrivenCase").ConfirmableCause };
 
 export interface HaremInvestigationCaseView {
   id: string;
@@ -183,16 +183,19 @@ function CaseDetail({
     if (err) setError(err);
   }
 
-  async function handleReview(intent: "confirm" | "confirm_benign" | "close_unresolved" | "continue") {
-    if (intent === "confirm" && !selectedSuspectForReview) {
+  async function handleReview(
+    intent: "confirm" | "close_unresolved" | "continue",
+    causeType?: import("../../engine/characters/haremInvestigation/assessEvidenceDrivenCase").ConfirmableCause,
+  ) {
+    if (intent === "confirm" && !causeType && !selectedSuspectForReview) {
       setError("请先选择确认主谋");
       return;
     }
     const decision: InvestigationReviewDecision =
-      intent === "confirm"
-        ? { type: "confirm", suspectId: selectedSuspectForReview! }
-        : intent === "confirm_benign"
-          ? { type: "confirm_benign_cause" }
+      intent === "confirm" && causeType
+        ? { type: "confirm_cause", causeType }
+        : intent === "confirm"
+          ? { type: "confirm", suspectId: selectedSuspectForReview! }
           : intent === "close_unresolved"
             ? { type: "close_unresolved" }
             : { type: "continue" };
@@ -206,7 +209,7 @@ function CaseDetail({
 
   const verdict = pres.verdictOptions;
   const canConfirmCulprit = verdict.canConfirmCulprit;
-  const canConfirmBenign = verdict.canConfirmBenignCause;
+  const canConfirmCause = verdict.canConfirmCause;
 
   return (
     <div className="investigation-drawer__detail">
@@ -327,9 +330,9 @@ function CaseDetail({
       {status === "ready_for_review" && (
         <section className="investigation-drawer__review">
           <h4>待圣上裁定</h4>
-          {canConfirmBenign ? (
+          {canConfirmCause ? (
             <p className="investigation-drawer__verdict-note">
-              现有证据表明，此事系皇嗣自身病症{verdict.benignCauseLabel ? `（${verdict.benignCauseLabel}）` : ""}，并非人为加害。
+              现有证据表明，此事并非人为加害。
             </p>
           ) : canConfirmCulprit ? (
             <>
@@ -352,16 +355,17 @@ function CaseDetail({
             </>
           ) : null}
           <div className="investigation-drawer__review-buttons">
-            {canConfirmBenign && (
+            {canConfirmCause && verdict.confirmableCauses.map(({ causeType, label }) => (
               <button
+                key={causeType}
                 type="button"
                 className="investigation-action__btn investigation-action__btn--primary"
-                onClick={() => handleReview("confirm_benign")}
+                onClick={() => handleReview("confirm", causeType)}
                 disabled={pending}
               >
-                确认并非人为加害
+                确认：{label}
               </button>
-            )}
+            ))}
             {canConfirmCulprit && (
               <button
                 type="button"

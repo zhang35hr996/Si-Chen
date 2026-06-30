@@ -101,25 +101,34 @@ describe("5B-2B2b: settlement → ready_for_review by assessment", () => {
 });
 
 describe("5B-2B2b: store 裁定校验（以 assessment 为准）", () => {
-  it("VR-01: benign_ready + confirm_benign_cause → closed_explained + confirmedBenignCause", () => {
+  it("VR-01: cause_ready + confirm_cause → closed_explained + confirmedCause", () => {
     const store = createGameStore();
     store.loadState(seedState({ status: "ready_for_review", leads: TWO_NATURAL }));
-    const r = store.reviewHaremInvestigation("icase_v", { type: "confirm_benign_cause" });
+    const r = store.reviewHaremInvestigation("icase_v", { type: "confirm_cause", causeType: "natural_illness" });
     expect(r.ok).toBe(true);
     const c = store.getState().haremInvestigationCases[0]!;
     expect(c.status).toBe("closed_explained");
-    expect(c.closureReason).toBe("benign_cause_confirmed");
-    expect(c.confirmedBenignCause).toBe("natural_illness");
+    expect(c.closureReason).toBe("cause_confirmed");
+    expect(c.confirmedCause).toBe("natural_illness");
     expect(c.confirmedCulpritId).toBeUndefined();
   });
 
-  it("VR-02: 非 benign_ready 上 confirm_benign_cause → 拒绝，状态不变", () => {
+  it("VR-02: 非 cause_ready 上 confirm_cause → 拒绝，状态不变", () => {
     const store = createGameStore();
     store.loadState(seedState({ status: "ready_for_review", leads: CULPRIT_A }));
-    const r = store.reviewHaremInvestigation("icase_v", { type: "confirm_benign_cause" });
+    const r = store.reviewHaremInvestigation("icase_v", { type: "confirm_cause", causeType: "natural_illness" });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error[0]!.code).toBe("INTRIGUE_CASE_NOT_BENIGN_READY");
+    if (!r.ok) expect(r.error[0]!.code).toBe("INTRIGUE_CASE_NOT_CAUSE_READY");
     expect(store.getState().haremInvestigationCases[0]!.status).toBe("ready_for_review");
+  });
+
+  it("VR-06: cause_ready 上 confirm_cause 指定未确认病因 → 拒绝", () => {
+    const store = createGameStore();
+    store.loadState(seedState({ status: "ready_for_review", leads: TWO_NATURAL }));
+    // 现有证据支持 natural_illness，但玩家裁定 negligence → 拒绝
+    const r = store.reviewHaremInvestigation("icase_v", { type: "confirm_cause", causeType: "negligence" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error[0]!.code).toBe("INTRIGUE_CASE_NOT_CAUSE_READY");
   });
 
   it("VR-03: culprit_ready 确认可确认主谋 → closed_confirmed", () => {
@@ -165,21 +174,27 @@ describe("5B-2B2b: 结案完整性校验", () => {
     } as unknown as Parameters<typeof validateHaremInvestigationLinks>[0]).map((e) => e.code);
   }
 
-  it("CV-01: closed_explained 缺 confirmedBenignCause → 失败", () => {
-    expect(codes({ status: "closed_explained", closureReason: "benign_cause_confirmed" })).toContain("INTRIGUE_CASE_MISSING_BENIGN_CAUSE");
+  it("CV-01: closed_explained 缺 confirmedCause → 失败", () => {
+    expect(codes({ status: "closed_explained", closureReason: "cause_confirmed" })).toContain("INTRIGUE_CASE_MISSING_CAUSE");
   });
   it("CV-02: closed_explained 带 confirmedCulpritId → 失败", () => {
-    expect(codes({ status: "closed_explained", closureReason: "benign_cause_confirmed", confirmedBenignCause: "natural_illness", confirmedCulpritId: "char_002" })).toContain("INTRIGUE_CASE_CULPRIT_WRONG_STATUS");
+    expect(codes({ status: "closed_explained", closureReason: "cause_confirmed", confirmedCause: "natural_illness", confirmedCulpritId: "char_002" })).toContain("INTRIGUE_CASE_CULPRIT_WRONG_STATUS");
   });
-  it("CV-03: closed_confirmed 带 confirmedBenignCause → 失败", () => {
-    expect(codes({ status: "closed_confirmed", closureReason: "culprit_confirmed", confirmedCulpritId: "char_002", confirmedBenignCause: "natural_illness" })).toContain("INTRIGUE_CASE_BENIGN_WRONG_STATUS");
+  it("CV-03: closed_confirmed 带 confirmedCause → 失败", () => {
+    expect(codes({ status: "closed_confirmed", closureReason: "culprit_confirmed", confirmedCulpritId: "char_002", confirmedCause: "natural_illness" })).toContain("INTRIGUE_CASE_CAUSE_WRONG_STATUS");
   });
-  it("CV-04: 非关闭状态带 confirmedBenignCause → 失败", () => {
-    expect(codes({ status: "open", confirmedBenignCause: "natural_illness", closedAt: undefined })).toContain("INTRIGUE_CASE_BENIGN_WRONG_STATUS");
+  it("CV-04: 非关闭状态带 confirmedCause → 失败", () => {
+    expect(codes({ status: "open", confirmedCause: "natural_illness", closedAt: undefined })).toContain("INTRIGUE_CASE_CAUSE_WRONG_STATUS");
   });
-  it("CV-05: 合法 closed_explained → 无结案错误", () => {
-    const cs = codes({ status: "closed_explained", closureReason: "benign_cause_confirmed", confirmedBenignCause: "natural_illness" });
-    for (const c of ["INTRIGUE_CASE_MISSING_BENIGN_CAUSE", "INTRIGUE_CASE_BENIGN_WRONG_STATUS", "INTRIGUE_CASE_CULPRIT_WRONG_STATUS", "INTRIGUE_CASE_CLOSURE_REASON"]) {
+  it("CV-05: 合法 closed_explained（natural_illness）→ 无结案错误", () => {
+    const cs = codes({ status: "closed_explained", closureReason: "cause_confirmed", confirmedCause: "natural_illness" });
+    for (const c of ["INTRIGUE_CASE_MISSING_CAUSE", "INTRIGUE_CASE_CAUSE_WRONG_STATUS", "INTRIGUE_CASE_CULPRIT_WRONG_STATUS", "INTRIGUE_CASE_CLOSURE_REASON"]) {
+      expect(cs).not.toContain(c);
+    }
+  });
+  it("CV-06: 合法 closed_explained（negligence）→ 无结案错误", () => {
+    const cs = codes({ status: "closed_explained", closureReason: "cause_confirmed", confirmedCause: "negligence" });
+    for (const c of ["INTRIGUE_CASE_MISSING_CAUSE", "INTRIGUE_CASE_CAUSE_WRONG_STATUS", "INTRIGUE_CASE_CLOSURE_REASON"]) {
       expect(cs).not.toContain(c);
     }
   });
@@ -217,7 +232,7 @@ describe("5B-2B2b: closed_explained 存档 round-trip", () => {
     const cases = s.haremInvestigationCases.map((c) => c.id === caseId ? { ...c, status: "ready_for_review" as const, confidence: "confirmed" as const, leadIds: ["ilead_000001", "ilead_000002"] } : c);
     store.loadState({ ...s, investigationTruths: [truth], haremInvestigationLeads: leads, haremInvestigationCases: cases, haremInvestigationNextSeq: 3 } as GameState);
 
-    const r = store.reviewHaremInvestigation(caseId, { type: "confirm_benign_cause" });
+    const r = store.reviewHaremInvestigation(caseId, { type: "confirm_cause", causeType: "natural_illness" });
     expect(r.ok).toBe(true);
 
     const storage = createMemoryStorage();
@@ -229,6 +244,6 @@ describe("5B-2B2b: closed_explained 存档 round-trip", () => {
     if (!loaded.ok) return;
     const c = loaded.value.state.haremInvestigationCases.find((x) => x.id === caseId)!;
     expect(c.status).toBe("closed_explained");
-    expect(c.confirmedBenignCause).toBe("natural_illness");
+    expect(c.confirmedCause).toBe("natural_illness");
   });
 });

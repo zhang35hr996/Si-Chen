@@ -23,7 +23,7 @@ import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 38;
+export const SAVE_FORMAT_VERSION = 39;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -733,6 +733,14 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       });
     }
     return { ...env, formatVersion: 38, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+
+  // v38 → v39: 证据评估与自然结案（Phase 5B-2B2b）。
+  // 新增 closed_explained 案件状态与 confirmedCause 字段；旧档无此字段，直接版本前进。
+  // （旧档不含 closed_explained 案件，字段重命名 confirmedBenignCause → confirmedCause 对旧档无影响）
+  38: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    return { ...env, formatVersion: 39, checksum: checksumOf(env.state) };
   },
 };
 

@@ -155,8 +155,8 @@ export interface InvestigationDetailPresentation extends HaremInvestigationPrese
   verdictOptions: {
     canConfirmCulprit: boolean;
     confirmableSuspects: Array<{ id: string; label: string }>;
-    canConfirmBenignCause: boolean;
-    benignCauseLabel?: string;
+    canConfirmCause: boolean;
+    confirmableCauses: Array<{ causeType: import("../engine/characters/haremInvestigation/assessEvidenceDrivenCase").ConfirmableCause; label: string }>;
   };
 }
 
@@ -286,23 +286,30 @@ export function presentHaremInvestigationDetail(
   // 旧宫斗案件保留原行为；证据案件的确认主谋以 assessment 为准（见 verdictOptions）
   const canConfirmCulprit = !isEvidenceCase
     ? investigationCase.status === "ready_for_review" && investigationCase.confidence === "confirmed"
-    : assessment?.kind === "culprit_ready";
+    : (assessment?.confirmableCulpritIds.length ?? 0) > 0;
+
+  const CAUSE_LABELS: Record<string, string> = {
+    natural_illness: "皇嗣自身旧疾发作",
+    negligence: "照料疏失所致",
+    accident: "意外事故",
+  };
 
   const verdictOptions = isEvidenceCase
     ? {
-        canConfirmCulprit: assessment?.kind === "culprit_ready",
-        confirmableSuspects:
-          assessment?.kind === "culprit_ready"
-            ? assessment.confirmableCulpritIds.map((id) => ({ id, label: resolveCharacterName(id) }))
-            : [],
-        canConfirmBenignCause: assessment?.kind === "benign_ready",
-        benignCauseLabel: assessment?.kind === "benign_ready" ? "皇嗣自身旧疾发作" : undefined,
+        canConfirmCulprit: (assessment?.confirmableCulpritIds.length ?? 0) > 0,
+        confirmableSuspects: (assessment?.confirmableCulpritIds ?? []).map((id) => ({ id, label: resolveCharacterName(id) })),
+        canConfirmCause: (assessment?.confirmableCauseTypes.length ?? 0) > 0,
+        confirmableCauses: (assessment?.confirmableCauseTypes ?? []).map((ct) => ({
+          causeType: ct,
+          label: CAUSE_LABELS[ct] ?? ct,
+        })),
       }
     : {
-        // 旧宫斗案件：沿用 confidence 门控、可指认任一在册嫌疑人，无自然病因出口
+        // 旧宫斗案件：沿用 confidence 门控、可指认任一在册嫌疑人，无病因出口
         canConfirmCulprit,
         confirmableSuspects: suspectViews,
-        canConfirmBenignCause: false,
+        canConfirmCause: false,
+        confirmableCauses: [],
       };
 
   return {
