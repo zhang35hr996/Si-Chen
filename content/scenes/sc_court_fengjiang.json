@@ -10,7 +10,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "wei_sui",
-      "text": "吏部奏，东南大郡刺史出缺，世家与寒门各荐其人。伏请圣裁。",
+      "text": "吏部奏，东南大郡刺史出缺，世家与寒门各荐了人选。伏请圣裁。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -87,7 +87,7 @@
       "type": "line",
       "id": "n_end_1",
       "speaker": "wei_sui",
-      "text": "臣领旨。世家既得偿所愿,东南可保无虞。",
+      "text": "臣领旨。",
       "expression": "neutral"
     }
   ]

@@ -81,7 +81,7 @@
   ],
   "openingNarration": {
     "mode": "narration",
-    "text": "陛下远远瞥见山径间{consort}的背影——对方显然也看见了陛下，却悄然转身，往另一条小道走去。"
+    "text": "陛下远远瞥见山径间{consort}的背影，似乎悄然转身，往另一条小道走去。"
   },
   "choices": [
     {
@@ -152,7 +152,7 @@
       "choiceId": "follow_ask",
       "responseLine": {
         "role": "consort",
-        "text": "陛下……臣侍只是……臣侍无事。",
+        "text": "陛下恕罪，臣侍失仪。",
         "expression": "worried"
       },
       "effects": [
@@ -200,7 +200,7 @@
       "choiceId": "send_servant",
       "responseLine": {
         "role": "consort",
-        "text": "……臣侍称无事，只是一时不适，不敢惊扰陛下。",
+        "text": "臣侍无事，只是一时不适，不敢惊扰陛下。望陛下恕罪。",
         "expression": "neutral"
       },
       "effects": [],

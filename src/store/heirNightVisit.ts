@@ -20,7 +20,7 @@ export function describeHeirNeglect(neglect: number): string {
 
 function describeBond(custodianBond: number): string {
   if (custodianBond <= 19) return "与抚养人颇为生疏";
-  if (custodianBond <= 39) return "尚在相处";
+  if (custodianBond <= 39) return "恭谨有礼";
   if (custodianBond <= 59) return "日渐亲近";
   if (custodianBond <= 79) return "感情深厚";
   return "视若亲父";
@@ -112,7 +112,7 @@ function heartToHeartLines(
   }
 
   if (!hasCustodian && neglect >= 40) {
-    lines.push(`陛下听${ta}言语间少有人照拂，心下微动，多陪了${ta}一会儿。`);
+    lines.push(`陛下听${ta}平日少有人照拂，心下微动，多陪了${ta}一会儿。`);
   }
   return lines;
 }
@@ -141,7 +141,7 @@ function quietCompanyLines(
   } else if (assertiveness >= 65) {
     lines.push(`${name}拉着陛下看${ta}新得的弓，比划着今日骑射的招式，兴致颇高。`);
   } else if (guile >= 65) {
-    lines.push(`${name}不动声色地偎在一旁，言语不多，却把陛下的神色看在眼里。`);
+    lines.push(`${name}不动声色地偎在一旁，言语不多，却把陛下的神色认真看在眼里。`);
   } else {
     lines.push(`${name}捧着一卷书，与陛下一同就着灯火翻看，偶尔低声念上一两句。`);
   }

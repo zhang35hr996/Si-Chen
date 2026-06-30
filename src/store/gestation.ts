@@ -168,8 +168,8 @@ export function collectNewbornIds(
 
 function omenLine(omen: BirthVerdict["omen"] | undefined, text: string | undefined, childLabel: string): string | null {
   if (!omen || !text) return null;
-  if (omen === "auspicious") return `${childLabel}降生之时，${text}，宫人皆以为天降吉兆，陛下对此子倍加垂怜。`;
-  return `${childLabel}降生之时，${text}，太史令进言此为凶兆，宫中上下不免暗自惶恐。`;
+  if (omen === "auspicious") return `${childLabel}降生之时，${text}，宫中皆以为天降吉兆，陛下对此子倍加垂怜。`;
+  return `${childLabel}降生之时，${text}，钦天监正使进言此为凶兆，宫中上下不免暗自惶恐。`;
 }
 
 function buildBirthLines(
@@ -197,12 +197,12 @@ function buildBirthLines(
           : `${name}难产，胎死腹中，太医勉力保住了${name}性命。噩耗传来，宫中一片缄默。`;
         break;
       case "bearer_dies":
-        main = `${name}难产，拼死诞下${phrase}，自己却血崩而亡。宫人垂泪相送。`;
+        main = `${name}难产，拼死诞下${phrase}，自己却不幸血崩而亡。宫人垂泪相送。`;
         break;
       case "both":
         main = isTwin
-          ? `${name}难产，一尸三命。太医跪地请罪，宫中举哀。`
-          : `${name}难产，一尸两命。太医跪地请罪，宫中举哀。`;
+          ? `${name}难产，一尸三命。太医跪地请罪，众侍君垂泪请皇上节哀。`
+          : `${name}难产，一尸两命。太医跪地请罪，众侍君垂泪请皇上节哀。`;
         break;
     }
   }

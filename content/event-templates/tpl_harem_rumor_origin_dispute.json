@@ -76,7 +76,7 @@
   ],
   "openingNarration": {
     "mode": "narration",
-    "text": "宫人禀报：宫中近来流传着关于{suspect}的说法，涉及其可能晋位或失宠。消息来源不明，但已在数处宫室流传。陛下尚未公开表态。"
+    "text": "宫人禀报：宫中近来流传着关于{suspect}的说法，涉及其可能失宠。消息来源不明，但已在数处宫室流传。"
   },
   "choices": [
     {
@@ -163,7 +163,7 @@
       "choiceId": "clarify",
       "responseLine": {
         "role": "suspect",
-        "text": "……臣侍谢陛下明鉴。",
+        "text": "臣侍谢陛下明鉴。",
         "expression": "neutral"
       },
       "effects": [

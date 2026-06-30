@@ -10,7 +10,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "wei_sui",
-      "text": "陛下临朝。北境请增军饷，户部为难。臣谨奏，伏请圣裁。",
+      "text": "臣请奏，北境请求增加军饷，户部为难。伏请圣裁。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -93,7 +93,7 @@
       "type": "line",
       "id": "n_end_1",
       "speaker": "wei_sui",
-      "text": "臣领旨。只是边将那头，怕要费些口舌安抚。",
+      "text": "臣领旨。",
       "expression": "neutral"
     }
   ]

@@ -62,8 +62,8 @@ export function buildAdoptionReaction(
   const thanks: AdoptionLine = {
     speakerId: fatherId,
     lines: [
-      `${adoptive}闻陛下择其抚育皇嗣，趋前叩谢天恩。`,
-      `${adoptive}哽咽叩首：定当视如己出，倾心教养这${child}，不负陛下托付。`,
+      `${adoptive}闻陛下择其抚育皇嗣，喜出望外，趋前叩谢天恩。`,
+      `${adoptive}哽咽叩首：侍定当视如己出，倾心教养这${child}，不负陛下托付。`,
     ],
   };
   if (bioFatherAvailable(db, state, heir)) {
@@ -71,7 +71,7 @@ export function buildAdoptionReaction(
       thanks,
       {
         speakerId: "wei_sui",
-        lines: [`司礼官低声回禀：择养父之事已告宗庙。臣听闻……那位侍君闻讯，独坐宫中，泪如雨下。`],
+        lines: [`司礼官低声回禀：择养父之事已告宗庙。臣听闻……那位侍君闻讯，独坐宫中，泪如雨下，嗓子都哑了。`],
       },
     ];
   }

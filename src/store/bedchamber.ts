@@ -14,15 +14,15 @@ import type { BedchamberMode, GameState } from "../engine/state/types";
 export const DEFAULT_CONCEPTION_CHANCE = 30;
 
 const FALLBACK_SCRIPT: Record<BedchamberMode, string[]> = {
-  passion: ["{name}敛衽称是，上前服侍帝王。承欢一夕，陛下只觉神清气爽。"],
-  pleasure: ["{name}近前奉茶解乏，一夕清谈相伴，陛下神清气爽。"],
-  companionship: ["{name}近前相伴，理妆奉茶、轻声叙话，陪着陛下闲话家常。"],
+  passion: ["{name}害羞地敛衽称是，上前服侍帝王更衣。宛转承欢，神清气爽。"],
+  pleasure: ["{name}一副小男儿情态，羞涩地低着头膝行靠近，依偎在陛下身旁。"],
+  companionship: ["{name}近前相伴，轻声叙话宫中琐事，陪着陛下闲话家常。"],
 };
 
 /** 陪伴按 (帝王有孕, 侍君有孕) 分四种台词的引擎内置 fallback（content 缺省时用）。 */
 const FALLBACK_COMPANIONSHIP = {
-  neither: ["{name}近前相伴，理妆奉茶、轻声叙话，陪着陛下闲话家常。"],
-  sovereign: ["{name}见陛下凤体有孕，扶坐奉茶，轻声宽慰，唯恐惊动龙胎。"],
+  neither: ["{name}近前相伴，轻声叙话宫中琐事，陪着陛下闲话家常。"],
+  sovereign: ["{name}见陛下凤体有孕，扶坐奉茶，轻手轻脚地服侍，唯恐惊动龙胎。"],
   consort: ["{name}腹中已怀皇嗣，陛下亲来探视，命其安坐，不必多礼。"],
   both: ["陛下与{name}皆怀身孕，相对而坐，彼此叮咛保重。"],
 };

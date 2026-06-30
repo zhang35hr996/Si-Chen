@@ -10,7 +10,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "wei_sui",
-      "text": "工部奏，运河淤塞，请征夫疏浚，岁可省漕费巨万。伏请圣裁。",
+      "text": "工部奏，运河淤塞，请征工疏浚，每岁可省漕费巨万。伏请圣裁。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -20,13 +20,13 @@
       "choices": [
         {
           "id": "c_0",
-          "text": "准其疏浚，户部拨帑。",
+          "text": "准其疏浚，户部拨款。",
           "tone": "neutral",
           "next": "n_fx_0"
         },
         {
           "id": "c_1",
-          "text": "征夫扰民，且缓一岁。",
+          "text": "征工扰民，且缓一岁。",
           "tone": "guarded",
           "next": "n_fx_1"
         }
@@ -87,7 +87,7 @@
       "type": "line",
       "id": "n_end_1",
       "speaker": "wei_sui",
-      "text": "臣领旨。只是淤塞日深，终非长久之计。",
+      "text": "臣领旨。只是淤塞日深，终非长久之计，恐有后患。",
       "expression": "neutral"
     }
   ]

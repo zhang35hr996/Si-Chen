@@ -130,7 +130,7 @@ export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: stri
         char: pickId,
         entry: {
           kind: "episodic",
-          summary: "被太后召去慈宁宫训诫，戒臣勿恃宠骄纵、独占圣心。",
+          summary: "被太后召去慈宁宫训诫，戒臣勿恃宠骄纵、独占恩宠。",
           strength: 65,
           retention: "slow",
           subjectIds: ["taihou", pickId],
@@ -142,7 +142,7 @@ export function buildTaihouRebuke(db: ContentDB, state: GameState, seedKey: stri
       },
     ],
     beats: [
-      { speakerId: "taihou", lines: [`${name}近来圣眷正浓，哀家有句话须叮嘱：宠不可恃，更不可独揽圣心，免招后宫非议。`] },
+      { speakerId: "taihou", lines: [`${name}近来圣眷正浓，哀家却有句话不得不叮嘱：不可恃宠生骄，更不可独占雨露，须得恪守本分，免招后宫非议。`] },
       { speakerId: pickId, lines: [`${name}惶恐领训，谨记太后教诲，不敢有违。`] },
     ],
   };

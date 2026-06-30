@@ -10,7 +10,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "wei_sui",
-      "text": "度支奏，盐铁之利散于豪强，请收归官榷，以裕国用。伏请圣裁。",
+      "text": "臣请奏，盐铁之利散于豪强，请收归官榷，以为国用。伏请圣裁。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -26,7 +26,7 @@
         },
         {
           "id": "c_1",
-          "text": "与民争利非善政，仍其旧。",
+          "text": "与民争利非善政，照旧即可。",
           "tone": "guarded",
           "next": "n_fx_1"
         }
@@ -61,7 +61,7 @@
       "type": "line",
       "id": "n_end_0",
       "speaker": "wei_sui",
-      "text": "臣领旨。国库虽丰，只恐豪强切齿，陛下需防其反扑。",
+      "text": "臣领旨。",
       "expression": "neutral"
     },
     {
@@ -93,7 +93,7 @@
       "type": "line",
       "id": "n_end_1",
       "speaker": "wei_sui",
-      "text": "臣领旨。豪强弹冠相庆，国用却仍是拮据。",
+      "text": "臣领旨。",
       "expression": "neutral"
     }
   ]

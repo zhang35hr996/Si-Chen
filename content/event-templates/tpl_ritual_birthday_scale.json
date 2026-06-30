@@ -126,7 +126,7 @@
       "choiceId": "simple",
       "responseLine": {
         "role": "official",
-        "text": "……是，臣等谨遵圣命，一切从俭。",
+        "text": "是，臣等谨遵圣命，一切从俭。",
         "expression": "neutral"
       },
       "effects": [
@@ -154,7 +154,7 @@
       "choiceId": "cancel",
       "responseLine": {
         "role": "official",
-        "text": "……陛下仁德，臣等遵旨，将万寿节用度悉数转作他用，礼部记档备查。",
+        "text": "陛下仁德，臣民同沐恩德。臣等遵旨，将万寿节用度悉数转作他用，礼部记档备查。",
         "expression": "neutral"
       },
       "effects": [

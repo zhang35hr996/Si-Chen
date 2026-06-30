@@ -18,24 +18,24 @@ export function buildConversation(db: ContentDB, state: GameState, charId: strin
 
   if (lifecycle === "carrying") {
     return [
-      `${name}抚着微隆的小腹，向陛下屈膝行礼，言谈格外小心。`,
+      `${name}抚着微隆的小腹，向陛下屈膝行礼，动作格外小心。`,
       `${self}定当安心养胎，护持皇嗣周全，不负圣恩。`,
     ];
   }
   if (lifecycle === "delivered") {
-    return [`${name}向陛下盈盈下拜，言及育儿琐事，眉眼间难掩慈色。`];
+    return [`${name}向陛下盈盈下拜，言及育儿琐事，眉眼间满是对孩子的慈爱。`];
   }
   if (lifecycle === "candidate") {
-    return [`${name}神色恭谨，似已知晓宗正寺之议，垂首听候陛下示下。`];
+    return [`${name}神色轻快，似已听闻了好消息，眉眼间难掩喜色。`];
   }
 
   // normal：按恩宠深浅分亲疏。
   const favor = st?.favor ?? 0;
   if (favor >= 60) {
-    return [`${name}见陛下亲临，喜动颜色，敛衽近前，柔声叙话，言谈间满是孺慕之情。`];
+    return [`${name}见陛下亲临，喜形于色，敛衽近前，柔声请安，又忙着招呼宫人上茶点心，样样都是按皇帝的喜好来。`];
   }
   if (favor >= 30) {
-    return [`${name}从容行礼，应对得体，与陛下闲谈片刻，神色渐渐舒展。`];
+    return [`${name}从容行礼，应对得体，与陛下闲谈片刻，尽是小男儿羞怯的神态。`];
   }
-  return [`${name}屈膝见礼，言辞拘谨，对答之间，略显疏离。`];
+  return [`${name}屈膝见礼，言辞拘谨，对答之间，恪守礼仪。`];
 }

@@ -10,7 +10,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "wei_sui",
-      "text": "河南大水，流民载道，地方请开仓赈济、蠲免钱粮。伏请圣裁。",
+      "text": "问水关大水，流民载道，地方请开仓赈济、减免徭役。伏请圣裁。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -20,13 +20,13 @@
       "choices": [
         {
           "id": "c_0",
-          "text": "速开常平仓赈济，蠲免一年。",
+          "text": "速开常平仓赈济，免除徭役一年。",
           "tone": "friendly",
           "next": "n_fx_0"
         },
         {
           "id": "c_1",
-          "text": "着地方自筹，朝廷略拨些许。",
+          "text": "着地方自筹即可。",
           "tone": "guarded",
           "next": "n_fx_1"
         }
@@ -55,7 +55,7 @@
       "type": "line",
       "id": "n_end_0",
       "speaker": "wei_sui",
-      "text": "臣领旨。即遣使驰赈，灾民有救矣。",
+      "text": "臣领旨。陛下盛名，万民必感戴天恩。",
       "expression": "neutral"
     },
     {

@@ -7,7 +7,7 @@ import type { GameState } from "../engine/state/types";
 export type GateResult = { ok: true } | { ok: false; reason: string };
 
 const SOVEREIGN_CRITICAL = "陛下凤体违和，太医请陛下静养。";
-const TAIHOU_MOURNING = "国丧期间，举哀守制，不宜临朝侍寝。";
+const TAIHOU_MOURNING = "国丧期间，上下皆默默守制，不宜行周公之礼。";
 
 function blockReason(state: GameState): string | null {
   if (state.resources.sovereign.healthStatus === "critical") return SOVEREIGN_CRITICAL; // 重病优先

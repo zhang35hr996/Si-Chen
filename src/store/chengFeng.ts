@@ -74,7 +74,7 @@ function gossipGardenConflict(db: ContentDB, state: GameState, seed: string): Go
   const nameB = displayName(db, state, charB.id);
   const locA = db.locations[charA.defaultLocation]?.name ?? "宫中";
 
-  const line = `陛下，臣听闻${nameA}在御花园遇见了${nameB}，闹了些不愉快，罚${nameB}跪在${locA}门口一个时辰。${nameB}回宫的时候看着都有些可怜呢。`;
+  const line = `陛下，臣听闻${nameA}在御花园遇见了${nameB}，闹了些不愉快，罚${nameB}跪在${locA}门口一个时辰。宫里都传遍了，臣瞧着${nameB}神色有些难看。`;
 
   return {
     effects: [
@@ -130,7 +130,7 @@ function gossipEmpressScold(db: ContentDB, state: GameState, seed: string): Goss
   const empressId = activeEmpressId(state);
   if (!empressId) return null;
 
-  const line = `陛下，听闻皇后殿下斥责${nameB}在宫中言行失仪，冒犯尊上，训诫了一番。${nameB}领训之后回宫，臣瞧着神色有些难看。`;
+  const line = `陛下，听闻皇后殿下斥责${nameB}在宫中言行失仪，以下犯上，训诫了一番。${nameB}领训之后回宫，听说身边的大宫隶很是忿忿不平。`;
 
   return {
     effects: [
@@ -181,7 +181,7 @@ function gossipYieldPath(db: ContentDB, state: GameState, seed: string): GossipP
   const nameA = displayName(db, state, charA.id);
   const nameB = displayName(db, state, charB.id);
 
-  const line = `陛下，臣路过宫道，见${nameA}和${nameB}迎面碰上了。${nameA}叫${nameB}让路，${nameB}候在墙边等了好一会儿，臣看着都有些替${nameB}捏把汗。`;
+  const line = `陛下，臣路过宫道，见${nameA}和${nameB}迎面碰上了。${nameA}叫${nameB}让路，${nameB}候在墙边跪了好一会儿，似乎站起来还有些踉跄。`;
 
   return {
     effects: [
@@ -190,7 +190,7 @@ function gossipYieldPath(db: ContentDB, state: GameState, seed: string): GossipP
         char: charB.id,
         entry: {
           kind: "episodic",
-          summary: `在宫道被${nameA}呵令让路，候立墙边，颇感委屈。`,
+          summary: `在宫道被${nameA}呵令让路，跪等在墙边，颇感委屈。`,
           strength: 50,
           retention: "slow",
           subjectIds: [charA.id, charB.id],
@@ -216,7 +216,7 @@ function gossipDowncast(db: ContentDB, state: GameState, seed: string): GossipPl
   if (!char) return null;
 
   const name = displayName(db, state, char.id);
-  const line = `陛下，臣见${name}近来神色郁郁，瞧着眼眶都是红的，也不知是有什么委屈。陛下若有空，或许可去看看她——嗯，看看他。`;
+  const line = `陛下，臣见${name}近来神色郁郁，瞧着眼眶都是红的，也不知是有什么委屈。陛下若有空，不如去看看侍君？`;
 
   return {
     effects: [
@@ -225,7 +225,7 @@ function gossipDowncast(db: ContentDB, state: GameState, seed: string): GossipPl
         char: char.id,
         entry: {
           kind: "impression",
-          summary: `近日郁郁寡欢，宫人皆知，乘风也留意到了。`,
+          summary: `近日郁郁寡欢，被不少宫人看见了。`,
           strength: 45,
           retention: "fast",
           subjectIds: [char.id],
@@ -261,7 +261,7 @@ export function buildChengFengGossip(db: ContentDB, state: GameState, seedKey: s
 export function chengFengHaremGreeting(): DecreeReaction {
   return {
     speakerId: "cheng_feng",
-    lines: ["不知陛下今日想去看哪位侍君呢？"],
+    lines: ["不知陛下今日想去哪位侍君那儿呢？"],
     backgroundKey: "bg.hougong",
   };
 }

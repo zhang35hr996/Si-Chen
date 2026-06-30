@@ -216,7 +216,7 @@ function buildCustodyReactions(
     if (isLivingConsort) {
       reactions.push({
         speakerId: "wei_sui",
-        lines: [`司礼官低声回禀：更易抚养之事，已告于宗庙。臣听闻……那位侍君闻讯，独在宫中，久久不语。`],
+        lines: [`司礼官低声回禀：皇嗣已搬到新住处，臣已告于宗庙。臣听闻……那位侍君闻讯，独在宫中，久久不语。`],
       });
     }
   }
@@ -282,7 +282,7 @@ export function planHeirCustodyTransfer(
           char: fromCustodianId,
           entry: {
             kind: "grievance",
-            summary: "陛下将皇嗣交由他人抚养，自己被夺去抚养之权。",
+            summary: "陛下将皇嗣交由他人抚养，被夺去了抚养之权。",
             subjectIds: [fromCustodianId, heirId, toCustodianId],
             perspective: "target",
             strength: 75,

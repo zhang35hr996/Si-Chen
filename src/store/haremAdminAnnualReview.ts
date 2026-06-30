@@ -25,10 +25,10 @@ import {
 // ─── 乘风禀报文案生成 ─────────────────────────────────────────────────────────
 
 const REASON_PHRASE: Record<"service_merit" | "household_order" | "disloyalty" | "household_disorder", string> = {
-  service_merit:      "念其侍奉勤谨",
-  household_order:    "念其宫中有序",
+  service_merit:      "念其勤谨侍奉",
+  household_order:    "念其谨守宫规",
   disloyalty:         "以其失于恭谨",
-  household_disorder: "以其宫中失序",
+  household_disorder: "以其冒犯宫规",
 };
 
 /** 从 character content 中提取"氏"形简称（有姓用「某氏」，无姓用本名）。 */
@@ -42,7 +42,7 @@ function bareConsorName(db: ContentDB, consortId: string): string {
  * 生成乘风年度例核禀报台词（纯函数，可独立测试）。
  *
  * 皇后：乘风回禀：皇后念文氏侍奉勤谨，将其由常在晋为才人。
- * 协理：乘风回禀：协理六宫的许驸以文氏宫中失序，将其由常在降为答应。
+ * 协理：乘风回禀：协理六宫的许驸以文氏冒犯宫规，将其由常在降为答应。
  *
  * @param db       合并了 generatedConsorts 的运行态 ContentDB
  * @param review   outcome === "rank_changed" 的例核记录
