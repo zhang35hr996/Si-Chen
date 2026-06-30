@@ -25,6 +25,8 @@ function seedState(opts: {
   status: IntrigueInvestigationStatus;
   leads: SeedLead[];
   pendingMethod?: string;
+  /** 来源立案报告（anomaly）的置信度基线，默认 plausible。 */
+  sourceConfidence?: "tenuous" | "plausible" | "strong" | "confirmed";
 }): GameState {
   const nodeIds = new Map<string, boolean>();
   for (const l of opts.leads) nodeIds.set(l.nodeId, l.misleading ?? false);
@@ -64,9 +66,20 @@ function seedState(opts: {
     knownTargetIds: ["heir_001"], suspectIds: [...new Set(opts.leads.flatMap((l) => l.claims.filter((c) => c.kind === "implicates_character").map((c) => (c as { characterId: string }).characterId)))],
     suspectedKinds: [], confidence: "plausible", leadIds,
   };
+  // 来源立案报告：assessment 的置信度基线由此读取（不被「未获新证」抹去）。
+  const anomalyReport = {
+    id: "iarep_v", source: { kind: "investigation_incident", incidentId: "inc_v" },
+    reportKind: "anomaly", eventFamily: "heir_health_anomaly",
+    createdAt: AT, status: "investigating",
+    knownTargetIds: ["heir_001"], suspectedActorIds: [],
+    confidence: opts.sourceConfidence ?? "plausible",
+    symptomCode: "hysteria", publicFactCodes: [], accuserIds: [],
+    acknowledgedAt: AT, linkedInvestigationId: "icase_v",
+  };
   return {
     ...base, investigationTruths: [truth], haremInvestigationCases: [c],
     haremInvestigationLeads: leads, haremInvestigationTasks: tasks, haremInvestigationNextSeq: nextSeq,
+    investigationPublicReports: [anomalyReport],
   } as unknown as GameState;
 }
 
@@ -97,6 +110,17 @@ describe("5B-2B2b: settlement → ready_for_review by assessment", () => {
     const { state: after } = settleDueInvestigationTasks(db, state, fromTurnIndex(task.dueAt.dayIndex));
     expect(after.haremInvestigationCases[0]!.status).toBe("open");
     expect(after.investigationPublicReports.some((r) => r.reportKind === "investigation_update")).toBe(true);
+  });
+
+  it("ST-03: 立案基线为 plausible，单次未获新证（tenuous）后仍保持 plausible，不被降级", () => {
+    // 无任何可发现证据（truth 无节点）→ 任务必得 noEvidenceLead(tenuous)。
+    // 置信度应保留立案报告基线 plausible，而非被「未获新证」抹成 tenuous。
+    const state = seedState({ status: "in_progress", leads: [], pendingMethod: "search_quarters", sourceConfidence: "plausible" });
+    const task = Object.values(state.haremInvestigationTasks)[0]!;
+    const { state: after } = settleDueInvestigationTasks(db, state, fromTurnIndex(task.dueAt.dayIndex));
+    const c = after.haremInvestigationCases[0]!;
+    expect(c.status).toBe("open");
+    expect(c.confidence).toBe("plausible");
   });
 });
 
@@ -188,15 +212,22 @@ describe("5B-2B2b: 结案完整性校验", () => {
   });
   it("CV-05: 合法 closed_explained（natural_illness）→ 无结案错误", () => {
     const cs = codes({ status: "closed_explained", closureReason: "cause_confirmed", confirmedCause: "natural_illness" });
-    for (const c of ["INTRIGUE_CASE_MISSING_CAUSE", "INTRIGUE_CASE_CAUSE_WRONG_STATUS", "INTRIGUE_CASE_CULPRIT_WRONG_STATUS", "INTRIGUE_CASE_CLOSURE_REASON"]) {
+    for (const c of ["INTRIGUE_CASE_MISSING_CAUSE", "INTRIGUE_CASE_CAUSE_WRONG_STATUS", "INTRIGUE_CASE_CULPRIT_WRONG_STATUS", "INTRIGUE_CASE_CLOSURE_REASON", "INTRIGUE_CASE_CAUSE_WRONG_SOURCE"]) {
       expect(cs).not.toContain(c);
     }
   });
   it("CV-06: 合法 closed_explained（negligence）→ 无结案错误", () => {
     const cs = codes({ status: "closed_explained", closureReason: "cause_confirmed", confirmedCause: "negligence" });
-    for (const c of ["INTRIGUE_CASE_MISSING_CAUSE", "INTRIGUE_CASE_CAUSE_WRONG_STATUS", "INTRIGUE_CASE_CLOSURE_REASON"]) {
+    for (const c of ["INTRIGUE_CASE_MISSING_CAUSE", "INTRIGUE_CASE_CAUSE_WRONG_STATUS", "INTRIGUE_CASE_CLOSURE_REASON", "INTRIGUE_CASE_CAUSE_WRONG_SOURCE"]) {
       expect(cs).not.toContain(c);
     }
+  });
+  it("CV-07: 旧宫斗案件（legacy_intrigue）不得 closed_explained → 失败", () => {
+    const cs = codes({
+      status: "closed_explained", closureReason: "cause_confirmed", confirmedCause: "natural_illness",
+      source: { kind: "legacy_intrigue", reportId: "ireport_x", incidentId: "hinc_x" },
+    });
+    expect(cs).toContain("INTRIGUE_CASE_CAUSE_WRONG_SOURCE");
   });
 });
 

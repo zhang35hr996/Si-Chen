@@ -64,7 +64,18 @@ function collectDiscoveredEvidence(state: GameState, caseId: string): Discovered
 function caseConfidence(state: GameState, caseId: string): HaremIntrigueReportConfidence {
   const c = state.haremInvestigationCases.find((x) => x.id === caseId);
   if (!c) return "tenuous";
+
+  // 基线取来源立案报告（anomaly）的置信度：立案时已公开存在的合理嫌疑（如已有公开
+  // 被指控者）不应被某次「未查到新证据」抹去。再与各线索强度取最大值。
+  // 不读 c.confidence——它可能是上一轮 assessment 写入的派生 confirmed；玩家选择
+  // 继续调查后若证据回落，置信度应能跟随实际证据强度下降，而非被旧派生值锁定。
   let best: InvestigationLeadStrength = "tenuous";
+  if (c.source.kind === "investigation_incident") {
+    const sourceReport = (state.investigationPublicReports ?? []).find(
+      (r) => r.id === c.source.reportId && r.reportKind === "anomaly",
+    );
+    if (sourceReport) best = sourceReport.confidence as InvestigationLeadStrength;
+  }
   for (const lid of c.leadIds) {
     const lead = state.haremInvestigationLeads[lid];
     if (lead) best = maxStrength(best, lead.strength);

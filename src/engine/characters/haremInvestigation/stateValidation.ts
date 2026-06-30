@@ -167,6 +167,11 @@ export function validateHaremInvestigationLinks(
       if (!c.confirmedCause) {
         errors.push(stateError("INTRIGUE_CASE_MISSING_CAUSE", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但无 confirmedCause`));
       }
+      // 病因裁定仅适用于证据驱动案件；旧宫斗案件无 ConfirmableCause 出口（store 已禁止，
+      // validator 同步守恒，防损坏存档绕过）。
+      if (c.source.kind !== "investigation_incident") {
+        errors.push(stateError("INTRIGUE_CASE_CAUSE_WRONG_SOURCE", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但 source.kind="${c.source.kind}"，仅 investigation_incident 可结案为并非人为加害`));
+      }
     } else if (c.confirmedCause) {
       errors.push(stateError("INTRIGUE_CASE_CAUSE_WRONG_STATUS", `haremInvestigationCases[id=${c.id}]: status=${c.status} 不得有 confirmedCause`));
     }

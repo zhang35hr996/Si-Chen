@@ -221,6 +221,7 @@ const LEAD_SUMMARY_LABELS: Record<string, string> = {
   evidence_timeline_conflict_in_accusation: "指控与时序相互矛盾",
   evidence_servants_pressured_unified_testimony: "宫人口供似受人胁迫而趋一致",
   evidence_accuser_has_old_grievance: "指控之人与被指者素有旧怨",
+  evidence_accuser_directed_false_witness: "查明指控者曾授意宫人作伪证",
   // misc
   orphan_task_skipped: "（调查记录缺失）",
 };
