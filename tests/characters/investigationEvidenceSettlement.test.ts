@@ -64,6 +64,11 @@ function makeState(): GameState {
   return {
     ...base,
     standing,
+    // 受害皇嗣自孕（fatherId=null）：parentage 必须随之存在（load 期校验 + 镜像不变量）。
+    parentage: {
+      ...base.parentage,
+      heir_001: { biologicalMotherId: "sovereign", biologicalFatherId: null, legalMotherId: "sovereign", legalFatherId: null },
+    },
     resources: {
       ...base.resources,
       bloodline: { ...base.resources.bloodline, heirs: [VICTIM_HEIR] },
