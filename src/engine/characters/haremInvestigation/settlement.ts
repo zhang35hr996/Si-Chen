@@ -28,6 +28,7 @@ import type {
 } from "./types";
 import { isActiveCase } from "./types";
 import { applyInvestigationLead } from "./leads";
+import { assessEvidenceDrivenCase } from "./assessEvidenceDrivenCase";
 import { hashStr } from "./truth/truthResolver";
 import type { HiddenEvidenceNode, EvidenceClaim, InvestigationTruth } from "./truth/types";
 
@@ -465,9 +466,22 @@ export function settleDueInvestigationTasks(
       lead,
     );
 
-    // 4) 案件结算后若仍在 in_progress，且线索不足 → 回到 open 等待下一步指令
+    // 4) 案件结算后的状态机
     const c = state.haremInvestigationCases.find((x) => x.id === task.caseId);
-    if (c && c.status === "in_progress") {
+    if (c && c.source.kind === "investigation_incident") {
+      // 证据案件（5B-2B2b）：跑评估决定是否具备合法裁定出口。
+      // 不再让 confidence 单独驱动状态机。
+      const assessment = assessEvidenceDrivenCase(state, c.id);
+      const cIdx = state.haremInvestigationCases.findIndex((x) => x.id === task.caseId);
+      const cases = [...state.haremInvestigationCases];
+      if (assessment.readyForReview) {
+        cases[cIdx] = { ...c, status: "ready_for_review", confidence: "confirmed" };
+      } else {
+        cases[cIdx] = { ...c, status: "open", confidence: assessment.confidence };
+      }
+      state = { ...state, haremInvestigationCases: cases };
+    } else if (c && c.status === "in_progress") {
+      // 旧宫斗案件：结算后若仍 in_progress（线索不足）→ 回到 open 等待下一步指令
       const cIdx = state.haremInvestigationCases.findIndex((x) => x.id === task.caseId);
       const cases = [...state.haremInvestigationCases];
       cases[cIdx] = { ...c, status: "open" };

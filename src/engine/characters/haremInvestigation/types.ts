@@ -23,6 +23,7 @@ export type IntrigueInvestigationStatus =
   | "ready_for_review"
   | "closed_unresolved"
   | "closed_confirmed"
+  | "closed_explained"   // 5B-2B2b：查明系自然病因，并非人为加害
   | "cancelled";
 
 /** 是否属于"活跃"案件（未关闭/未取消）。 */
@@ -71,9 +72,11 @@ export interface IntrigueInvestigationCase {
 
   /** 玩家终止或结案时间。 */
   closedAt?: GameTime;
-  closureReason?: "player_cancelled" | "insufficient_evidence" | "culprit_confirmed";
+  closureReason?: "player_cancelled" | "insufficient_evidence" | "culprit_confirmed" | "cause_confirmed";
   /** 玩家在 closed_confirmed 状态时指认的主谋 ID。 */
   confirmedCulpritId?: string;
+  /** closed_explained 状态查明的病因（5B-2B2b）：natural_illness / negligence / accident。 */
+  confirmedCause?: import("./assessEvidenceDrivenCase").ConfirmableCause;
 }
 
 // ── 5B-2B：皇嗣异常公开报告（玩家可见层） ──────────────────────────────

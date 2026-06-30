@@ -144,8 +144,36 @@ export function validateHaremInvestigationLinks(
       } else if (!c.suspectIds.includes(c.confirmedCulpritId)) {
         errors.push(stateError("INTRIGUE_CASE_CULPRIT_NOT_SUSPECT", `haremInvestigationCases[id=${c.id}]: confirmedCulpritId="${c.confirmedCulpritId}" 不在 suspectIds 中`));
       }
+      if (c.closureReason !== "culprit_confirmed") {
+        errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=closed_confirmed 但 closureReason="${c.closureReason}"，期望 culprit_confirmed`));
+      }
     } else if (c.confirmedCulpritId) {
       errors.push(stateError("INTRIGUE_CASE_CULPRIT_WRONG_STATUS", `haremInvestigationCases[id=${c.id}]: status=${c.status} 不得有 confirmedCulpritId`));
+    }
+
+    // 全状态 closureReason 约束
+    if (c.status === "closed_unresolved" && c.closureReason && c.closureReason !== "insufficient_evidence") {
+      errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=closed_unresolved 但 closureReason="${c.closureReason}"，期望 insufficient_evidence`));
+    }
+    if (c.status === "cancelled" && c.closureReason && c.closureReason !== "player_cancelled") {
+      errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=cancelled 但 closureReason="${c.closureReason}"，期望 player_cancelled`));
+    }
+
+    // 5B-2B2b：closed_explained → cause_confirmed + confirmedCause；其余状态不得有 confirmedCause
+    if (c.status === "closed_explained") {
+      if (c.closureReason !== "cause_confirmed") {
+        errors.push(stateError("INTRIGUE_CASE_CLOSURE_REASON", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但 closureReason="${c.closureReason}"，期望 cause_confirmed`));
+      }
+      if (!c.confirmedCause) {
+        errors.push(stateError("INTRIGUE_CASE_MISSING_CAUSE", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但无 confirmedCause`));
+      }
+      // 病因裁定仅适用于证据驱动案件；旧宫斗案件无 ConfirmableCause 出口（store 已禁止，
+      // validator 同步守恒，防损坏存档绕过）。
+      if (c.source.kind !== "investigation_incident") {
+        errors.push(stateError("INTRIGUE_CASE_CAUSE_WRONG_SOURCE", `haremInvestigationCases[id=${c.id}]: status=closed_explained 但 source.kind="${c.source.kind}"，仅 investigation_incident 可结案为并非人为加害`));
+      }
+    } else if (c.confirmedCause) {
+      errors.push(stateError("INTRIGUE_CASE_CAUSE_WRONG_STATUS", `haremInvestigationCases[id=${c.id}]: status=${c.status} 不得有 confirmedCause`));
     }
 
     // B2：in_progress 案件 → 恰好 1 个 pending task

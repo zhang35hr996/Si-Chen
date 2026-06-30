@@ -40,6 +40,7 @@ function makeView(
       availableActionViews: [],
       canConfirmCulprit: false,
       suspectViews: [],
+      verdictOptions: { canConfirmCulprit: false, confirmableSuspects: [], canConfirmCause: false, confirmableCauses: [] },
     },
   };
 }
@@ -130,6 +131,7 @@ function makeDetailPresentation(overrides: Partial<InvestigationDetailPresentati
     availableActionViews: [],
     canConfirmCulprit: false,
     suspectViews: [],
+    verdictOptions: { canConfirmCulprit: false, confirmableSuspects: [], canConfirmCause: false, confirmableCauses: [] },
     ...overrides,
   };
 }
@@ -177,22 +179,28 @@ describe("HaremInvestigationDrawer: 交互", () => {
     expect(callbacks.onCancelCase).not.toHaveBeenCalled();
   });
 
-  it("strong 置信度 → 确认主谋按钮禁用（canConfirmCulprit=false）", () => {
-    const c = makeInteractiveCase("ready_for_review", { canConfirmCulprit: false });
-    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
-    fireEvent.click(screen.getByText("测试案件"));
-    const confirmBtn = screen.getByText("确认主谋");
-    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("confirmed 置信度 + 嫌疑人已选 → 确认主谋按钮可点击", async () => {
+  it("无可确认主谋（verdictOptions.canConfirmCulprit=false）→ 不渲染确认主谋按钮", () => {
     const c = makeInteractiveCase("ready_for_review", {
-      canConfirmCulprit: true,
-      suspectViews: [{ id: "suspect_x", label: "嫌疑人乙" }],
+      verdictOptions: { canConfirmCulprit: false, confirmableSuspects: [], canConfirmCause: false, confirmableCauses: [] },
     });
     render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
     fireEvent.click(screen.getByText("测试案件"));
-    // 选择嫌疑人
+    expect(screen.queryByText("确认主谋")).toBeNull();
+    // 但「证据不足，结案」仍可用
+    expect(screen.getByText("证据不足，结案")).toBeTruthy();
+  });
+
+  it("culprit_ready + 嫌疑人已选 → 确认主谋按钮可点击，派发 confirm", async () => {
+    const c = makeInteractiveCase("ready_for_review", {
+      verdictOptions: {
+        canConfirmCulprit: true,
+        confirmableSuspects: [{ id: "suspect_x", label: "嫌疑人乙" }],
+        canConfirmCause: false,
+        confirmableCauses: [],
+      },
+    });
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "suspect_x" } });
     const confirmBtn = screen.getByText("确认主谋");
@@ -202,6 +210,27 @@ describe("HaremInvestigationDrawer: 交互", () => {
     const call = (callbacks.onReviewCase as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect((call[1] as InvestigationReviewDecision).type).toBe("confirm");
     expect((call[1] as Extract<InvestigationReviewDecision, {type:"confirm"}>).suspectId).toBe("suspect_x");
+  });
+
+  it("cause_ready → 显示病因确认按钮，不显示主谋选择器，派发 confirm_cause", async () => {
+    const c = makeInteractiveCase("ready_for_review", {
+      verdictOptions: {
+        canConfirmCulprit: false,
+        confirmableSuspects: [],
+        canConfirmCause: true,
+        confirmableCauses: [{ causeType: "natural_illness", label: "皇嗣自身旧疾发作" }],
+      },
+    });
+    render(<HaremInvestigationDrawer cases={[c]} playerAp={3} onClose={() => {}} callbacks={callbacks} />);
+    fireEvent.click(screen.getByText("测试案件"));
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByText("确认主谋")).toBeNull();
+    const causeBtn = screen.getByText("确认：皇嗣自身旧疾发作");
+    fireEvent.click(causeBtn);
+    await vi.waitFor(() => expect(callbacks.onReviewCase).toHaveBeenCalledTimes(1));
+    const call = (callbacks.onReviewCase as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect((call[1] as InvestigationReviewDecision).type).toBe("confirm_cause");
+    expect((call[1] as Extract<InvestigationReviewDecision, {type:"confirm_cause"}>).causeType).toBe("natural_illness");
   });
 
   it("调查候选下拉显示姓名，不显示 raw ID", () => {

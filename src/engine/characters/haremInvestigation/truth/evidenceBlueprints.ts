@@ -202,7 +202,7 @@ export const FRAMING_BLUEPRINTS: readonly EvidenceBlueprint[] = [
     type: "financial",
     factCode: "suspicious_money_or_letter",
     claims: [
-      { kind: "implicates_character", characterRef: "culprit", strength: "moderate" },
+      { kind: "implicates_character", characterRef: "culprit", strength: "strong" },
     ],
     difficulty: 65,
     decayPerPeriod: 15,
@@ -248,12 +248,24 @@ export const FALSE_ACCUSATION_BLUEPRINTS: readonly EvidenceBlueprint[] = [
     type: "correspondence",
     factCode: "accuser_has_old_grievance",
     claims: [
-      { kind: "implicates_character", characterRef: "culprit", strength: "weak" },
+      { kind: "implicates_character", characterRef: "culprit", strength: "moderate" },
     ],
     difficulty: 60,
     decayPerPeriod: 5,
     discoverableBy: ["search_quarters", "obtain_testimony"],
     prerequisiteEvidenceIds: [],
+    misleading: false,
+  },
+  {
+    type: "testimony",
+    factCode: "accuser_directed_false_witness",
+    claims: [
+      { kind: "implicates_character", characterRef: "culprit", strength: "strong" },
+    ],
+    difficulty: 75,
+    decayPerPeriod: 5,
+    discoverableBy: ["obtain_testimony"],
+    prerequisiteEvidenceIds: ["accuser_has_old_grievance"],
     misleading: false,
   },
 ];

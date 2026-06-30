@@ -2214,6 +2214,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
                     Object.values(liveState.haremInvestigationLeads),
                     store.getAvailableInvestigationActions(c.id),
                     resolveName,
+                    store.getEvidenceCaseAssessment(c.id),
                   ),
                 }));
               })()}
