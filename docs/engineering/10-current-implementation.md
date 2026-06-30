@@ -22,7 +22,7 @@ Last updated: 2026-06-19. Save format version: **4**.
 | **AI dialogue** | real providers (Anthropic/OpenAI/Gemini) + mock + eval harness; structured-claim gates; reaction planner; mention cooldown (incl. `mentionedContextRefs`) | richer reaction coverage; free-chat `topicTags` | unrestricted state mutation by the model |
 | **Save** | checksum, content-hash warning, missing-ref quarantine, autosave on scene-commit & travel; versioned format (v4) with laddered `MIGRATIONS[]` | — | automatic ID aliasing |
 | **Resources** | court (authority/publicSupport/factionPressure), harem (harmony/jealousy), bloodline (legitimacy/menstrualStatus) — written by effects; read-only 国情面板 UI | faction simulation | resource-based event conditions (deliberately none) |
-| **Heirs** | full lifecycle: gestation → birth → 小名 → 百日宴正名 → 开蒙 → 文昭殿教育 → 奉先殿择养父; `Heir` state with petName/givenName/education/adoptiveFatherId; 4 heir effects (see below) | grown-up / succession events | LLM-driven heir dialogue |
+| **Heirs** | full lifecycle: gestation → birth → 小名 → 百日宴正名 → 开蒙 → 文昭殿教育 → 奉先殿择养父; `Heir` state with petName/givenName/education/custodianId; 4 heir effects (see below) | grown-up / succession events | LLM-driven heir dialogue |
 | **Location flags** | `actionFirstSlotOnly: boolean` — action disabled after first AP of the day, with hint text | — | — |
 | **Empress decree** | 凤后 auto-adjusts 贵人及以下 consort ranks per consumed AP (3% chance, seeded deterministic); `buildEmpressDecree` in `src/store/empressDecree.ts` | — | — |
 | **太后 (Empress Dowager)** | `elder` NPC at 慈宁宫; illness rolled per 旬 (5%+1%/yr, cap 25%; 50%/旬 self-heal); 侍疾 encounter (50%/旬 while ill → +恩宠, heals); 敲打 per-AP (5%, favor-weighted); selectable adoptive father. All in `src/store/taihou.ts`, seeded-deterministic | — | — |
@@ -73,7 +73,7 @@ placeholder. Keep it that way until those systems are real.
   `ReactionScreen` via `DialogueProvider`. 凤后 is the 正宫 cap and is excluded from
   all rank/title ops.
 - **Heir lifecycle system** — `bloodline.heirs[]` tracks each born heir with `petName`
-  / `givenName` / `education {scholarship,martial,virtue}` / `adoptiveFatherId`. Four
+  / `givenName` / `education {scholarship,martial,virtue}` / `custodianId`. Four
   effects: `heir_name` (set small or given name), `heir_summon` (+20 favor, bypasses
   ±10 cap), `heir_educate` (attribute + favor delta, both clamped), `heir_adopt`
   (set adoptive father). Growth stages derived at render time from birth date

@@ -28,7 +28,7 @@ interface Heir {
   petName: string;      // 小名 (2字), set at birth
   givenName?: string;   // 正名 (2字), set at 百日宴 (≥3 months old)
   education: { scholarship: number; martial: number; virtue: number }; // each 0–100, init 5
-  adoptiveFatherId?: string;
+  custodianId?: string;
 }
 ```
 
@@ -51,7 +51,7 @@ Key derived functions in `src/engine/characters/heirs.ts`:
 | `heir_name` | `heirId`, `field: "pet"\|"given"`, `name` | sets `petName` or `givenName` |
 | `heir_summon` | `heirId` | `favor += 20` (clamped) |
 | `heir_educate` | `heirId`, `subject`, `attrDelta` (0–20), `favorDelta` (0–20) | `education[subject] += attrDelta`; `favor += favorDelta` |
-| `heir_adopt` | `heirId`, `fatherId` | sets `adoptiveFatherId`; validates target is not deceased/冷宫 |
+| `heir_adopt` | `heirId`, `fatherId` | sets `custodianId`; validates target is not deceased/冷宫 |
 
 ### Naming flow
 - **小名** — modal appears immediately after birth; player inputs or rolls random from `PET_NAME_POOL` (seeded, deterministic). Commits `heir_name {field:"pet"}`.
