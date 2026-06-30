@@ -12,6 +12,7 @@ import {
   type NamedHeir,
 } from "../../engine/characters/heirs";
 import { resolveIdentityLabel } from "../../engine/characters/standing";
+import { getBiologicalParents } from "../../engine/characters/parentage/parentageSelectors";
 import type { ContentDB } from "../../engine/content/loader";
 import type { GameState, Heir } from "../../engine/state/types";
 import { describe } from "../format/descriptors";
@@ -44,10 +45,16 @@ export function HeirListModal({
   };
 
   const bearerLabel = (h: Heir): string => {
-    if (h.fatherId === null) return "自孕";
-    const c = db.characters[h.fatherId];
-    if (!c) return h.fatherId;
-    const st = state.standing[h.fatherId];
+    // 生父以 parentage 为唯一权威（不读 Heir.fatherId 镜像）。
+    // 显式区分「无 parentage 记录（损坏状态）」与「生父为 null（自孕）」——
+    // 不得用 ?? null 把缺失静默解释成自孕（Slice A 禁止 undefined→null 合并）。
+    const parents = getBiologicalParents(state, h.id);
+    if (!parents) return "亲缘数据缺失";
+    const fatherId = parents.fatherId;
+    if (fatherId === null) return "自孕";
+    const c = db.characters[fatherId];
+    if (!c) return fatherId;
+    const st = state.standing[fatherId];
     const name = resolveIdentityLabel(c, st, st ? db.ranks[st.rank] : undefined);
     return st?.lifecycle === "deceased" ? `${name}（已故）` : name;
   };

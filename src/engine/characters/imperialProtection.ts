@@ -1,5 +1,6 @@
 import type { ContentDB } from "../content/loader";
 import type { GameState } from "../state/types";
+import { getBiologicalParents } from "./parentage/parentageSelectors";
 
 /**
  * Position of actorRankId relative to targetRankId in the rank hierarchy.
@@ -20,12 +21,13 @@ export function rankDistance(
 }
 
 /**
- * Number of living heirs whose fatherId matches consortId.
+ * Number of living heirs biologically fathered by consortId.
+ * Reads parentage authority (not the Heir.fatherId mirror).
  * Does not count heirs in carrier lifecycle (not yet born) or deceased heirs.
  */
 export function livingHeirCountForConsort(state: GameState, consortId: string): number {
   return state.resources.bloodline.heirs.filter(
-    (h) => h.fatherId === consortId && h.lifecycle !== "deceased",
+    (h) => getBiologicalParents(state, h.id)?.fatherId === consortId && h.lifecycle !== "deceased",
   ).length;
 }
 

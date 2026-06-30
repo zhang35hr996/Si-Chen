@@ -5,6 +5,7 @@ import { toGameTime } from "../../engine/calendar/time";
 import { computeFavorStats, FAVOR_TIER_LABEL } from "../../engine/characters/favorTier";
 import { listHeirsBySex } from "../../engine/characters/heirs";
 import { inPalaceConsorts } from "../../engine/characters/presence";
+import { getBiologicalParents } from "../../engine/characters/parentage/parentageSelectors";
 import { activeConfinement } from "../../engine/characters/confinement";
 import { eligibleHaremAdministrators } from "../../engine/characters/haremAdministration";
 import { describeActiveConfinement } from "../format/confinement";
@@ -93,7 +94,8 @@ export function ConsortListModal({
       toGameTime(state.calendar),
       bedchamberConfig(db).tiers,
     );
-    const raised = heirs.filter((h) => h.fatherId === c.id || h.custodianId === c.id);
+    // 生身关系以 parentage 为唯一权威；抚养关系仍读 custodianId。
+    const raised = heirs.filter((h) => getBiologicalParents(state, h.id)?.fatherId === c.id || h.custodianId === c.id);
     const isEmpress = st.rank === "huanghou";
     const lc = st.lifecycle;
     const confinement = activeConfinement(state, c.id);
