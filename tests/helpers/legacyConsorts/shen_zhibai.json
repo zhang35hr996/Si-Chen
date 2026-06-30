@@ -1,0 +1,101 @@
+{
+  "id": "shen_zhibai",
+  "kind": "consort",
+  "spawnMode": "event_only",
+  "attributes": {
+    "appearance": 72,
+    "health": 78,
+    "nurture": 60,
+    "specialty": "书法",
+    "likes": [
+      "古礼",
+      "熏香"
+    ]
+  },
+  "hidden": {
+    "affection": 50,
+    "fear": 25,
+    "ambition": 45
+  },
+  "profile": {
+    "name": "沈知白",
+    "surname": "沈",
+    "age": 23,
+    "role": "执掌凤印，总理后宫的世族之后",
+    "appearance": "身量颀长，常服绯红凤纹礼衣，眉目端凝，不怒自威。",
+    "personalityTraits": [
+      "端肃",
+      "克制",
+      "重礼法",
+      "外冷内热"
+    ],
+    "reactionTraits": [
+      "status_conscious",
+      "discreet",
+      "compassionate"
+    ],
+    "coreFacts": [
+      "大婚四年，执掌凤印总理后宫",
+      "出身世族，母家在朝中有根基",
+      "久不承宠，地位全系名分"
+    ],
+    "goals": [
+      "整肃宫规，维持后宫秩序",
+      "守住皇后体面与母家颜面"
+    ],
+    "speechStyle": "措辞雅正，多用敬语，句短而克制；急时仍不失礼数。"
+  },
+  "defaultLocation": "kunninggong",
+  "portraitSet": "consort24",
+  "expressions": [
+    "neutral"
+  ],
+  "voice": {
+    "register": "formal",
+    "quirks": [
+      "对陛下自称『臣侍』，仪式场合用『本宫』",
+      "称玩家『陛下』，绝不直呼"
+    ],
+    "tabooTopics": [
+      "自己久不承宠之事"
+    ]
+  },
+  "initialStanding": {
+    "rank": "huanghou",
+    "favor": 25,
+    "peakFavor": 25
+  },
+  "initialMemories": [
+    {
+      "kind": "episodic",
+      "summary": "陛下已有两月未入后宫，各宫期盼雨露，还望陛下早日垂顾，开枝散叶，方才后继有人。",
+      "strength": 65,
+      "retention": "permanent",
+      "subjectIds": [
+        "player",
+        "shen_zhibai"
+      ],
+      "perspective": "witness",
+      "triggerTags": [
+        "favor",
+        "rules"
+      ],
+      "unresolved": true,
+      "emotions": {}
+    }
+  ],
+  "secrets": [],
+  "stances": [
+    {
+      "charId": "lu_huaijin",
+      "stance": "friendly",
+      "attitude": "怜其失宠，亦虑其失仪，面上以礼相待"
+    }
+  ],
+  "maternalClan": {
+    "familyId": "fam_shen_main",
+    "postId": "chengxiang",
+    "legitimate": true,
+    "birthOrder": 1
+  }
+}

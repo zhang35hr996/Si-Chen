@@ -1,19 +1,45 @@
 /**
  * Helpers for tests that need consort fixtures.
  *
- * After the random-harem-init change, story consorts (lu_huaijin, xu_qinghuan,
- * wenya) are spawnMode="event_only" and do NOT appear in the initial standing.
- * Generated consorts live in state.generatedConsorts, not db.characters.
+ * After the random-harem-init change, consorts are no longer authored in
+ * content/ — they are generated procedurally into state.generatedConsorts at
+ * new-game time, and db.characters contains zero consorts. The four legacy
+ * story consorts (lu_huaijin, xu_qinghuan, shen_zhibai, wenya) were deleted
+ * from production content.
+ *
+ * Tests that still need those specific authored identities use synthetic
+ * test-only fixtures recovered under tests/helpers/legacyConsorts/*.json
+ * (NOT restored to production content/). withConsort injects them into
+ * state.generatedConsorts so name/standing/presence lookups resolve.
  *
  * This module provides two utilities:
- *   withConsort  – injects a specific story consort into the state
+ *   withConsort  – injects a specific consort (db or legacy-test) into the state
  *   firstNonEmpressConsortId – finds any alive non-empress consort across
  *                               both db.characters and state.generatedConsorts
  */
 import { toGameTime } from "../../src/engine/calendar/time";
 import { consortStandingExtras } from "../../src/engine/state/newGame";
+import { characterSchema } from "../../src/engine/content/schemas";
+import type { CharacterContent } from "../../src/engine/content/schemas";
 import type { ContentDB } from "../../src/engine/content/loader";
 import type { GameState, CharacterStanding } from "../../src/engine/state/types";
+import luHuaijinRaw from "./legacyConsorts/lu_huaijin.json";
+import xuQinghuanRaw from "./legacyConsorts/xu_qinghuan.json";
+import shenZhibaiRaw from "./legacyConsorts/shen_zhibai.json";
+import wenyaRaw from "./legacyConsorts/wenya.json";
+
+/**
+ * Synthetic, test-only reconstructions of the four story consorts deleted from
+ * production content. Parsed through the live characterSchema so any schema
+ * drift fails loudly here rather than silently degrading dependent tests.
+ * These are NOT in db.characters; withConsort injects them into generatedConsorts.
+ */
+const LEGACY_TEST_CONSORTS: Record<string, CharacterContent> = Object.fromEntries(
+  [luHuaijinRaw, xuQinghuanRaw, shenZhibaiRaw, wenyaRaw].map((raw) => {
+    const c = characterSchema.parse(raw);
+    return [c.id, c];
+  }),
+);
 
 /**
  * Palaces that are valid location IDs but NOT in the generated-consort palace pool.
@@ -29,9 +55,15 @@ const EVICTION_PALACES = [
 ];
 
 /**
- * Returns a new state with the given story consort added to state.standing.
+ * Returns a new state with the given consort added to state.standing.
  * Uses the character's initialStanding + consortStandingExtras for the standing values.
- * The character must be in db.characters and must have initialStanding.
+ *
+ * Source resolution:
+ * - db.characters[charId] (authored consort, if any survive in content), or
+ * - LEGACY_TEST_CONSORTS[charId] (synthetic reconstruction of a deleted story
+ *   consort) — in which case the synthetic CharacterContent is also registered
+ *   into state.generatedConsorts so downstream name/presence lookups resolve.
+ * Unknown IDs still throw, so a typo is never silently masked.
  *
  * Also:
  * - Sets residence from char.defaultLocation when not already in initialStanding.
@@ -43,8 +75,10 @@ export function withConsort(
   charId: string,
   overrides?: Partial<CharacterStanding>,
 ): GameState {
-  const char = db.characters[charId];
-  if (!char) throw new Error(`withConsort: character ${charId} not found in db`);
+  const fromDb = db.characters[charId];
+  const legacy = LEGACY_TEST_CONSORTS[charId];
+  const char = fromDb ?? legacy;
+  if (!char) throw new Error(`withConsort: character ${charId} not found in db or legacy test consorts`);
   if (char.kind !== "consort") throw new Error(`withConsort: ${charId} is not a consort`);
   if (!char.initialStanding) throw new Error(`withConsort: ${charId} has no initialStanding`);
 
@@ -98,13 +132,26 @@ export function withConsort(
     }
   }
 
+  // A legacy-test consort is not in db.characters; register its synthetic
+  // CharacterContent into generatedConsorts so name/presence/standing lookups
+  // (which fall back to generatedConsorts) resolve it.
+  const finalGeneratedConsorts =
+    legacy && !fromDb
+      ? { ...patchedGeneratedConsorts, [charId]: char }
+      : patchedGeneratedConsorts;
+
   return {
     ...state,
     standing: { ...patchedStanding, [charId]: standing },
-    generatedConsorts: patchedGeneratedConsorts,
+    generatedConsorts: finalGeneratedConsorts,
     bedchamber: state.bedchamber[charId]
       ? state.bedchamber
       : { ...state.bedchamber, [charId]: { encounters: [] } },
+    // Every consort needs a memory store (createNewGameState seeds one for each);
+    // without it, memory-targeting effects (e.g. cold-palace) fail BAD_EFFECT_TARGET.
+    memories: state.memories[charId]
+      ? state.memories
+      : { ...state.memories, [charId]: { entries: [], nextSeq: 1 } },
   };
 }
 
