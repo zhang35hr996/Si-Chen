@@ -6,7 +6,7 @@ import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const base = withConsort(createNewGameState(db), db, "lu_huaijin");
-const home = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
+const home = base.generatedConsorts.lu_huaijin!.defaultLocation; // zhongcui_gong
 
 describe("excuseFromGreeting", () => {
   it("favor +2、affection +3，并记入当日 excused，清 overnightWith", () => {

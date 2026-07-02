@@ -25,8 +25,9 @@ import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
-const consortId = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort" && id !== "shen_zhibai")!;
-const consort = db.characters[consortId]!;
+const consortId = "lu_huaijin";
+const base0 = withConsort(createNewGameState(db), db, consortId);
+const consort = base0.generatedConsorts[consortId]!;
 
 const gest = (carrier: string, cy: number, cm: number): GestationState => ({ carrier, conceivedAt: makeGameTime(cy, cm, "early") });
 
