@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { createSaveData, readSlot, SAVE_KEY_PREFIX } from "../../src/engine/save/saveSystem";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { createMemoryStorage } from "../../src/engine/save/storage";
 import { checksumOf } from "../../src/engine/save/canonical";
 import { makeGameTime } from "../../src/engine/calendar/time";
@@ -14,7 +15,9 @@ const db = loadRealContent();
 
 /** 把当前版本状态降级成 v38 形态（删新字段、heir 还原 adoptiveFatherId/faction）。 */
 function makeV38Save(mutateHeir?: (h: Record<string, unknown>) => void): string {
-  const s = createNewGameState(db);
+  // The heir's bio father lu_huaijin is a procedurally-generated story consort; inject her
+  // so the migrated save references a valid consort and passes readSlot validation.
+  const s = withConsort(createNewGameState(db), db, "lu_huaijin");
   (s.resources.bloodline.heirs as unknown as Array<Record<string, unknown>>).push({
     id: "heir_000001", sex: "daughter", fatherId: "lu_huaijin", bearer: "lu_huaijin",
     birthAt: makeGameTime(1, 1, "early"), favor: 10, legitimate: true, petName: "",
