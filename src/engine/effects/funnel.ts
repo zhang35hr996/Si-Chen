@@ -29,7 +29,7 @@ import {
 import { nextHeirId, residesInYuqing } from "../characters/heirs";
 import { resolveCustodianAvailability, custodianUnlocksRecustody } from "../characters/custodianAvailability";
 import { gestationRollRaw } from "../characters/gestation";
-import { getCharacterLocation } from "../characters/presence";
+import { getCharacterLocation, allCharacters } from "../characters/presence";
 import type { ContentDB } from "../content/loader";
 import { isAssignableRank, eventEffectSchema, type EventEffect } from "../content/schemas";
 import { stateError, type GameError } from "../infra/errors";
@@ -470,10 +470,9 @@ export function validateEffects(
           bad(index, "BAD_EFFECT", `relocate target "${e.location}" is not a 设宫室 palace`, { location: e.location });
         } else {
           // 目标宫室不可已被「他人」占用（搬回原位/换宫室自身允许）。
-          // Consorts live in db.characters (authored) OR state.generatedConsorts (procedural);
-          // check both so a generated consort's chamber is not silently double-booked.
-          const allConsorts = [...Object.values(db.characters), ...Object.values(state.generatedConsorts)];
-          const occupied = allConsorts.some(
+          // Keyed union (db.characters ∪ generatedConsorts) so a generated consort's
+          // chamber is checked exactly once (App runtime db already merges them in).
+          const occupied = allCharacters(db, state).some(
             (c) =>
               c.id !== e.char &&
               c.kind === "consort" &&

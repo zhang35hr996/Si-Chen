@@ -23,7 +23,7 @@ import { generateOfficialWorld } from "../../src/engine/officials/worldgen";
 import { characterSchema } from "../../src/engine/content/schemas";
 import type { CharacterContent } from "../../src/engine/content/schemas";
 import type { ContentDB } from "../../src/engine/content/loader";
-import type { GameState, CharacterStanding } from "../../src/engine/state/types";
+import type { GameState, CharacterStanding, Official } from "../../src/engine/state/types";
 import luHuaijinRaw from "./legacyConsorts/lu_huaijin.json";
 import xuQinghuanRaw from "./legacyConsorts/xu_qinghuan.json";
 import shenZhibaiRaw from "./legacyConsorts/shen_zhibai.json";
@@ -96,6 +96,26 @@ function seedMemoryStore(char: CharacterContent, startTime: ReturnType<typeof to
   };
 }
 
+/** Posts the legacy story consorts' maternal clans claim; never evict an incumbent onto one. */
+const LEGACY_AUTHORED_POSTS = new Set(
+  Object.values(LEGACY_TEST_CONSORTS)
+    .map((c) => c.maternalClan?.postId)
+    .filter((p): p is string => p !== undefined),
+);
+
+/** First non-commoner post with a free seat (excluding legacy authored posts). null = unseated. */
+function findVacantPost(db: ContentDB, officials: Record<string, Official>): string | null {
+  const occ: Record<string, number> = {};
+  for (const o of Object.values(officials)) {
+    if (o.postId && o.status === "active") occ[o.postId] = (occ[o.postId] ?? 0) + 1;
+  }
+  const posts = Object.values(db.officialPosts)
+    .filter((p) => p.gradeOrder > 0 && !LEGACY_AUTHORED_POSTS.has(p.id))
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+  for (const p of posts) if ((occ[p.id] ?? 0) < p.seatCount) return p.id;
+  return null;
+}
+
 /**
  * The four deleted story consorts each carry a `maternalClan` (familyId + postId).
  * The save-integrity validator (validateOfficialWorld) requires that clan to exist
@@ -103,37 +123,80 @@ function seedMemoryStore(char: CharacterContent, startTime: ReturnType<typeof to
  * kinship edge. Production worldgen builds those from db.characters, but these
  * consorts are no longer authored, so no family/official/edge is generated.
  *
- * To keep the injected world internally consistent (seat counts, kinship symmetry,
- * member surnames all pass validation), we regenerate the ENTIRE official world from
- * a db that treats every currently-injected legacy consort as authored, then replace
- * the official-world slices wholesale. Deterministic (fixed seed), so repeated calls
- * over the same set of legacy consorts converge to the same world.
+ * We MERGE only this consort's maternal family (official + members + kinship), leaving
+ * the rest of the official world (including prior appointments/retirements/kin edits)
+ * untouched. The family is generated with `state.rngSeed` (not a hardcoded seed) so it
+ * is consistent with the state it is merged into. If an incumbent already holds the
+ * family official's post, it is relocated to a vacant post so seatCount is never exceeded.
+ * Idempotent: if the family is already present, the state is returned unchanged.
  */
-function regenerateOfficialWorldWithLegacyConsorts(state: GameState, db: ContentDB): GameState {
-  const legacyIds = Object.keys(state.standing).filter(
-    (id) => LEGACY_TEST_CONSORTS[id] && state.standing[id]?.lifecycle !== "deceased",
+function injectLegacyMaternalFamily(state: GameState, db: ContentDB, char: CharacterContent): GameState {
+  const clan = char.maternalClan;
+  if (!clan) return state;
+  const famId = clan.familyId;
+  if (state.officialFamilies[famId]) return state; // already injected
+
+  // Generate a scratch world containing ONLY this consort as authored, seeded by the
+  // state's own rngSeed, then extract just this family's slices.
+  const miniDb: ContentDB = { ...db, characters: { [char.id]: char } };
+  const world = generateOfficialWorld(miniDb, state.rngSeed, toGameTime(state.calendar));
+
+  const famOfficials = Object.fromEntries(
+    Object.entries(world.officials).filter(([, o]) => o.familyId === famId),
   );
-  if (legacyIds.length === 0) return state;
+  const famMembers = Object.fromEntries(
+    Object.entries(world.familyMembers).filter(([, m]) => m.familyId === famId),
+  );
+  const personIds = new Set<string>([char.id, ...Object.keys(famOfficials), ...Object.keys(famMembers)]);
+  const famKinship = world.kinship.filter(
+    (k) => personIds.has(k.fromPersonId) && personIds.has(k.toPersonId),
+  );
 
-  const authored: Record<string, CharacterContent> = {};
-  for (const id of legacyIds) authored[id] = LEGACY_TEST_CONSORTS[id]!;
-  const dbWithLegacy: ContentDB = { ...db, characters: { ...db.characters, ...authored } };
-
-  const world = generateOfficialWorld(dbWithLegacy, 1, toGameTime(state.calendar));
-
-  const standing = { ...state.standing };
-  for (const id of legacyIds) {
-    const famId = world.consortBirthFamily[id];
-    if (famId !== undefined) standing[id] = { ...standing[id]!, birthFamilyId: famId };
+  // Relocate incumbents so the family official's post never exceeds seatCount.
+  let officials = { ...state.officials };
+  for (const newOfficial of Object.values(famOfficials)) {
+    const post = newOfficial.postId;
+    if (!post) continue;
+    const cap = db.officialPosts[post]?.seatCount ?? 1;
+    const holders = Object.values(officials).filter((o) => o.postId === post && o.status === "active");
+    const overflow = holders.length - (cap - 1); // keep cap-1 incumbents; new official takes one seat
+    for (let i = 0; i < overflow; i++) {
+      const victim = holders[i]!;
+      officials = { ...officials, [victim.id]: { ...victim, postId: findVacantPost(db, officials) } };
+    }
   }
+  officials = { ...officials, ...famOfficials };
 
   return {
     ...state,
-    standing,
-    officials: world.officials,
-    officialFamilies: world.officialFamilies,
-    familyMembers: world.familyMembers,
-    kinship: world.kinship,
+    officials,
+    officialFamilies: { ...state.officialFamilies, [famId]: world.officialFamilies[famId]! },
+    familyMembers: { ...state.familyMembers, ...famMembers },
+    kinship: [...state.kinship, ...famKinship],
+    standing: { ...state.standing, [char.id]: { ...state.standing[char.id]!, birthFamilyId: famId } },
+  };
+}
+
+/**
+ * Removes any living generated empress (rank huanghou) other than `keepId` from every
+ * per-character map. New games seed exactly one empress (generated_empress_<seed>);
+ * injecting an empress fixture (shen_zhibai) must REPLACE it, not add a second huanghou.
+ */
+function removeExistingEmpress(state: GameState, keepId: string): GameState {
+  const empressId = Object.keys(state.standing).find(
+    (id) => id !== keepId && state.standing[id]?.rank === "huanghou" && state.standing[id]?.lifecycle !== "deceased",
+  );
+  if (!empressId) return state;
+  const drop = <T,>(m: Record<string, T>): Record<string, T> => {
+    const { [empressId]: _omit, ...rest } = m;
+    return rest;
+  };
+  return {
+    ...state,
+    standing: drop(state.standing),
+    generatedConsorts: drop(state.generatedConsorts),
+    memories: drop(state.memories),
+    bedchamber: drop(state.bedchamber),
   };
 }
 
@@ -181,18 +244,21 @@ export function withConsort(
     ...overrides,
   };
 
+  // An empress fixture must replace the generated empress, not create a second huanghou.
+  const base = standing.rank === "huanghou" ? removeExistingEmpress(state, charId) : state;
+
   // Evict any generated consort that occupies the same palace/chamber slot.
   // Generated consorts may have been randomly assigned to the story consort's home palace.
   // We move them to eviction palaces so the story consort's slot is unambiguously free.
   const targetResidence = standing.residence;
   const targetChamber = (standing.chamber ?? "main") as string;
 
-  let patchedStanding = state.standing;
-  let patchedGeneratedConsorts = state.generatedConsorts;
+  let patchedStanding = base.standing;
+  let patchedGeneratedConsorts = base.generatedConsorts;
 
   if (targetResidence) {
     let evictionIdx = 0;
-    for (const [id, gc] of Object.entries(state.generatedConsorts)) {
+    for (const [id, gc] of Object.entries(base.generatedConsorts)) {
       const st = patchedStanding[id];
       if (!st || st.lifecycle === "deceased") continue;
 
@@ -224,24 +290,24 @@ export function withConsort(
       : patchedGeneratedConsorts;
 
   const next: GameState = {
-    ...state,
+    ...base,
     standing: { ...patchedStanding, [charId]: standing },
     generatedConsorts: finalGeneratedConsorts,
-    bedchamber: state.bedchamber[charId]
-      ? state.bedchamber
-      : { ...state.bedchamber, [charId]: { encounters: [] } },
+    bedchamber: base.bedchamber[charId]
+      ? base.bedchamber
+      : { ...base.bedchamber, [charId]: { encounters: [] } },
     // Every consort needs a memory store (createNewGameState seeds one for each);
     // without it, memory-targeting effects (e.g. cold-palace) fail BAD_EFFECT_TARGET.
     // Seed the consort's authored initialMemories (mirrors createNewGameState) so
     // memory-dependent tests see the same entries production would.
-    memories: state.memories[charId]
-      ? state.memories
-      : { ...state.memories, [charId]: seedMemoryStore(char, startTime) },
+    memories: base.memories[charId]
+      ? base.memories
+      : { ...base.memories, [charId]: seedMemoryStore(char, startTime) },
   };
 
-  // Legacy story consorts carry a maternalClan; rebuild the official world so their
-  // family/official/mother-edge exist and pass save-integrity validation.
-  return legacy && !fromDb ? regenerateOfficialWorldWithLegacyConsorts(next, db) : next;
+  // Legacy story consorts carry a maternalClan; merge only their maternal family so the
+  // family/official/mother-edge exist and pass save-integrity validation (no world clobber).
+  return legacy && !fromDb ? injectLegacyMaternalFamily(next, db, char) : next;
 }
 
 /**

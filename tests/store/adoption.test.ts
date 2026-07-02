@@ -36,6 +36,15 @@ describe("eligibleAdoptiveFathers", () => {
     expect(ids).not.toContain("wenya"); // 冷宫
     expect(ids).not.toContain("wei_sui"); // official
   });
+
+  it("production-shaped runtime db (generatedConsorts merged into characters) lists each consort once", () => {
+    const s = fresh();
+    // App builds its runtime db by merging generatedConsorts into db.characters.
+    const runtimeDb = { ...db, characters: { ...db.characters, ...s.generatedConsorts } };
+    const ids = eligibleAdoptiveFathers(runtimeDb, s).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length); // no duplicates
+    expect(ids).toContain("lu_huaijin");
+  });
 });
 
 describe("bioFatherAvailable", () => {
@@ -67,6 +76,10 @@ describe("buildAdoptionReaction", () => {
     const out = buildAdoptionReaction(db, s, heir({ fatherId: "xu_qinghuan" }), "lu_huaijin");
     expect(out).toHaveLength(2);
     expect(out[0]!.speakerId).toBe("lu_huaijin");
+    // The adoptive father's line must render her resolved name, not the raw generated id.
+    const thanks = out[0]!.lines.join("");
+    expect(thanks).not.toContain("lu_huaijin");
+    expect(thanks).toContain("陆"); // 陆氏/陆<rank> — resolveDisplayName via generatedConsorts fallback
     expect(out[1]!.speakerId).toBe("wei_sui");
     expect(out[1]!.lines.join("")).toContain("泪如雨下");
   });

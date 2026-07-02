@@ -1,5 +1,6 @@
 /** 奉先殿择养父：候选池、生父可依性、谢恩/司礼官播报（脚本台词）。 */
 import { resolveDisplayName } from "../engine/characters/standing";
+import { allCharacters } from "../engine/characters/presence";
 import type { ContentDB } from "../engine/content/loader";
 import type { CharacterContent } from "../engine/content/schemas";
 import type { GameState, Heir } from "../engine/state/types";
@@ -7,7 +8,8 @@ import type { GameState, Heir } from "../engine/state/types";
 const SEX_CHILD: Record<Heir["sex"], string> = { daughter: "皇子", son: "皇郎" };
 
 function nameOf(db: ContentDB, state: GameState, charId: string): string {
-  const c = db.characters[charId];
+  // Consorts live in state.generatedConsorts (App runtime db already merges them in).
+  const c = db.characters[charId] ?? state.generatedConsorts[charId];
   if (!c) return charId;
   const st = state.standing[charId];
   return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
@@ -15,10 +17,9 @@ function nameOf(db: ContentDB, state: GameState, charId: string): string {
 
 /** 养父候选：在宫(非冷宫)、非已故的侍君（含皇后）及尊长（太后）。 */
 export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): CharacterContent[] {
-  // Consorts are procedurally generated into state.generatedConsorts; elders (太后) stay
-  // in db.characters. Consider both so generated consorts can be adoptive fathers.
-  const candidates = [...Object.values(db.characters), ...Object.values(state.generatedConsorts)];
-  return candidates.filter((c) => {
+  // Keyed union (db.characters ∪ generatedConsorts) so generated consorts are candidates
+  // exactly once — App runtime db already contains them, so a plain concat double-counts.
+  return allCharacters(db, state).filter((c) => {
     if (c.kind !== "consort" && c.kind !== "elder") return false;
     if (c.defaultLocation === "changmengong") return false;
     if (state.standing[c.id]?.lifecycle === "deceased") return false;
