@@ -198,6 +198,23 @@ function makeHeir(overrides: Partial<Heir> & { fatherId: string | null }): Heir 
   };
 }
 
+/**
+ * 由皇嗣镜像构造 parentage 权威记录（生父=heir.fatherId、生母=sovereign），
+ * 使权威与 Heir.fatherId 镜像一致——livingHeirCountForConsort 现读取 parentage 权威。
+ */
+function parentageFor(heirs: Heir[]): GameState["parentage"] {
+  const out: GameState["parentage"] = {};
+  for (const h of heirs) {
+    out[h.id] = {
+      biologicalMotherId: "sovereign",
+      biologicalFatherId: h.fatherId,
+      legalMotherId: "sovereign",
+      legalFatherId: h.fatherId,
+    };
+  }
+  return out;
+}
+
 describe("livingHeirCountForConsort — A3", () => {
   it("returns 0 for new-game state with no heirs", () => {
     const state = baseState();
@@ -209,6 +226,7 @@ describe("livingHeirCountForConsort — A3", () => {
     const state = baseState();
     const s: GameState = {
       ...state,
+      parentage: { ...state.parentage, ...parentageFor([heir]) },
       resources: {
         ...state.resources,
         bloodline: { ...state.resources.bloodline, heirs: [heir] },
@@ -222,6 +240,7 @@ describe("livingHeirCountForConsort — A3", () => {
     const state = baseState();
     const s: GameState = {
       ...state,
+      parentage: { ...state.parentage, ...parentageFor([heir]) },
       resources: {
         ...state.resources,
         bloodline: { ...state.resources.bloodline, heirs: [heir] },
@@ -235,6 +254,7 @@ describe("livingHeirCountForConsort — A3", () => {
     const state = baseState();
     const s: GameState = {
       ...state,
+      parentage: { ...state.parentage, ...parentageFor([heir]) },
       resources: {
         ...state.resources,
         bloodline: { ...state.resources.bloodline, heirs: [heir] },
@@ -376,6 +396,7 @@ describe("imperialProtectionSnapshot — A5", () => {
     );
     const patched: GameState = {
       ...state,
+      parentage: { ...state.parentage, ...parentageFor(manyHeirs) },
       standing: {
         ...state.standing,
         [TARGET]: { ...state.standing[TARGET]!, favor: 50, peakFavor: 50 },
@@ -419,6 +440,7 @@ describe("imperialProtectionSnapshot — A5", () => {
     const dead = makeHeir({ id: "heir_000002", fatherId: TARGET, lifecycle: "deceased" });
     const patched: GameState = {
       ...state,
+      parentage: { ...state.parentage, ...parentageFor([alive, dead]) },
       standing: {
         ...state.standing,
         [TARGET]: { ...state.standing[TARGET]!, favor: 0, peakFavor: 0 },

@@ -14,16 +14,18 @@ import { validateOfficialWorld } from "../officials/validation";
 import { validateMemorials } from "../court/memorials";
 import { validateTreasuryLedger } from "../court/treasuryLedger";
 import { validateFrontierAssessments } from "../court/frontierAssessment";
+import { validateParentage } from "./parentageValidation";
 import { saveError, type GameError } from "../infra/errors";
 import type { RingBufferLogger } from "../infra/logger";
 import { err, ok, type Result } from "../infra/result";
 import type { GameState, Official, OfficialAptitude, TreasuryLedgerEntry, FrontierAssessment } from "../state/types";
+import { SOVEREIGN_PERSON_ID } from "../state/types";
 import { deriveOfficialAptitude, initialReviewState } from "../officials/careerMetrics";
 import { canonicalStringify, checksumOf, fnv1a64Hex } from "./canonical";
 import { gameStateSchema, saveEnvelopeSchema, type SaveEnvelope } from "./stateSchema";
 import type { KVStorage } from "./storage";
 
-export const SAVE_FORMAT_VERSION = 38;
+export const SAVE_FORMAT_VERSION = 39;
 export const ENGINE_VERSION = "0.1.0";
 export const SAVE_KEY_PREFIX = "sichen.save.";
 export const CORRUPT_KEY_PREFIX = "sichen.corrupt.";
@@ -659,6 +661,8 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       if (h["imperialFear"] === undefined) h["imperialFear"] = 20;
       if (h["neglect"] === undefined) h["neglect"] = 30;
       if (h["custodianBond"] === undefined) {
+        // legacy field — v33 raw heirs still carry pre-rename `adoptiveFatherId`
+        // (rename to custodianId happens later at the v38→v39 migration).
         h["custodianBond"] = h["adoptiveFatherId"] !== undefined ? 50 : 0;
       }
       if (h["portraitVariants"] === undefined) {
@@ -733,6 +737,34 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
       });
     }
     return { ...env, formatVersion: 38, state: state as unknown as GameState, checksum: checksumOf(state) };
+  },
+
+  // v38 → v39: 宗亲 Slice A 亲缘数据基础。回填 parentage（legal=bio，母=sovereign）；
+  // Heir.adoptiveFatherId → custodianId；faction "adoptive" → "custodian"；
+  // 新增 adoptionRecords / royalResidences 容器 + adoptionNextSeq / royalResidenceNextSeq。
+  38: (old): SaveEnvelope => {
+    const env = old as SaveEnvelope;
+    const state = structuredClone(env.state) as Record<string, unknown>;
+    const bl = (state["resources"] as Record<string, unknown> | undefined)?.["bloodline"] as
+      { heirs?: Array<Record<string, unknown>> } | undefined;
+    const parentage = (state["parentage"] as Record<string, unknown>) ?? {};
+    for (const heir of bl?.heirs ?? []) {
+      // 不做 `?? null`：null=自孕、undefined=损坏。原值原样保留，坏档由 required schema 拒绝。
+      const fatherId = heir["fatherId"];
+      parentage[heir["id"] as string] = {
+        biologicalMotherId: SOVEREIGN_PERSON_ID, biologicalFatherId: fatherId,
+        legalMotherId: SOVEREIGN_PERSON_ID, legalFatherId: fatherId,
+      };
+      heir["custodianId"] = heir["adoptiveFatherId"]; // 可能 undefined
+      delete heir["adoptiveFatherId"];
+      if (heir["faction"] === "adoptive") heir["faction"] = "custodian";
+    }
+    state["parentage"] = parentage;
+    if (typeof state["adoptionRecords"] !== "object" || state["adoptionRecords"] == null) state["adoptionRecords"] = {};
+    if (typeof state["royalResidences"] !== "object" || state["royalResidences"] == null) state["royalResidences"] = {};
+    if (typeof state["adoptionNextSeq"] !== "number") state["adoptionNextSeq"] = 1;
+    if (typeof state["royalResidenceNextSeq"] !== "number") state["royalResidenceNextSeq"] = 1;
+    return { ...env, formatVersion: 39, state: state as unknown as GameState, checksum: checksumOf(state) };
   },
 };
 
@@ -981,6 +1013,19 @@ function validateSave(
     return err({
       error: saveError("FRONTIER_INTEGRITY", `存档边情评估完整性校验失败（${first.code}）：${first.message}`, {
         context: { diagnostics: frontierErrors.map((e) => ({ code: e.code, message: e.message })) },
+      }),
+      quarantineWorthy: true,
+    });
+  }
+
+  // 亲缘 cross-link 不变量（宗亲 Slice A 约束 8）：每个皇嗣必有 parentage、镜像一致、
+  // 无自指/未知引用/环、过继记录双向自洽、map key 自洽。任一 error → 拒绝并 quarantine。
+  const parentageErrors = validateParentage(state, db);
+  if (parentageErrors.length > 0) {
+    const first = parentageErrors[0]!;
+    return err({
+      error: saveError("PARENTAGE_INTEGRITY", `存档亲缘数据完整性校验失败（${first.code}）：${first.message}`, {
+        context: { diagnostics: parentageErrors.map((e) => ({ code: e.code, message: e.message })) },
       }),
       quarantineWorthy: true,
     });

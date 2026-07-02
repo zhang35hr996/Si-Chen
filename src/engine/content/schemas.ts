@@ -305,7 +305,7 @@ export const eventEffectSchema = z.union([
   z.strictObject({
     type: z.literal("heir_custody"),
     heirId: nonEmpty,
-    /** The new legal custodian (抚养人). Must pass eligibility; stored in Heir.adoptiveFatherId. */
+    /** The new legal custodian (抚养人). Must pass eligibility; stored in Heir.custodianId. */
     custodianId: idSchema,
     // makeLegitimate is intentionally absent — derived at apply time by engine rule.
   }),

@@ -25,7 +25,7 @@
 | 皇帝 | `resources.sovereign.{health,diligence,prestige,martial,statecraft,cruelty,fatigue,regimeSecurity}`；年龄/生日在 `calendar` |
 | 国家 | `resources.nation.{military,treasury,publicSupport,productivity,governance,consortClanPower,ministerLoyalty,corruption,clanDiscontent,rumor,borderPressure}` |
 | 侍君 | 明面 `character.attributes.{appearance,family,health,nurture,specialty,likes}`；暗 `character.hidden.{affection,fear,ambition,clanLoyalty,clanPower}`；位分/恩宠 `standing` |
-| 皇嗣 | `Heir.{favor,legitimate,adoptiveFatherId,health,talent,diligence,ambition,closeness,support,faction}`；`HeirEducation.{scholarship,martial,virtue}`（政治=scholarship）|
+| 皇嗣 | `Heir.{favor,legitimate,custodianId,health,talent,diligence,ambition,closeness,support,faction}`；`HeirEducation.{scholarship,martial,virtue}`（政治=scholarship）|
 
 开发期暗属性全显示（国情抽屉 + 侍君详情）；正式版改 `???` 由血滴子解锁。
 
@@ -184,7 +184,7 @@
 > 天赋/努力是**养成元参数**(上限/速度);政治·武力·道德是**被训练的能力**。
 > **政治即学问**,对应 `HeirEducation.scholarship`,不另设字段;martial=武力、virtue=道德,
 > 三者由**上书房问功课**提升(已落地)。天赋/努力为待落地元参数。
-> 宠爱=`Heir.favor`、嫡=`legitimate`、承养人=`adoptiveFatherId` 已落地。
+> 宠爱=`Heir.favor`、嫡=`legitimate`、承养人=`custodianId` 已落地。
 
 ### 暗属性
 

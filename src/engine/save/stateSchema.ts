@@ -683,6 +683,45 @@ const heirHealthAnomalyIncidentSchema = z.strictObject({
   publicFactCodes: z.array(z.string()),
 });
 
+// ── 亲缘数据 schema（宗亲 Slice A）──────────────────────────────────────────────
+
+const characterParentageSchema = z.strictObject({
+  biologicalMotherId: idSchema,                       // SOVEREIGN_PERSON_ID 满足 idSchema
+  biologicalFatherId: z.union([idSchema, z.null()]),
+  legalMotherId: idSchema,
+  legalFatherId: z.union([idSchema, z.null()]),
+  activeAdoptionRecordId: z.string().regex(/^adopt_\d{6}$/).optional(),
+});
+
+const adoptionRecordSchema = z.strictObject({
+  id: z.string().regex(/^adopt_\d{6}$/),
+  childId: idSchema,
+  previousLegalMotherId: idSchema,
+  previousLegalFatherId: z.union([idSchema, z.null()]),
+  newLegalMotherId: idSchema,
+  newLegalFatherId: z.union([idSchema, z.null()]),
+  fromResidenceId: z.string().regex(/^res_\d{6}$/).optional(),
+  toResidenceId: z.string().regex(/^res_\d{6}$/).optional(),
+  effectiveAt: gameTimeSchema,
+  reason: z.enum(["imperial_succession", "preserve_branch", "political_settlement"]),
+  status: z.enum(["active", "revoked", "superseded"]),
+});
+
+const royalResidenceSchema = z.strictObject({
+  id: z.string().regex(/^res_\d{6}$/),
+  holderId: idSchema,
+  titleType: z.enum([
+    "fengzhu", "guizhu", "zhang_fengzhu", "zhang_guizhu",
+    "dazhang_fengzhu", "dazhang_guizhu",
+  ]),
+  spouseIds: z.array(idSchema),
+  legalHeirId: idSchema.optional(),
+  lineage: z.strictObject({
+    founderId: idSchema,
+    parentResidenceId: z.string().regex(/^res_\d{6}$/).optional(),
+  }),
+});
+
 export const gameStateSchema = z.strictObject({
   calendar: calendarStateSchema,
   playerLocation: z.string(),
@@ -744,7 +783,7 @@ export const gameStateSchema = z.strictObject({
             martial: percent,
             virtue: percent,
           }),
-          adoptiveFatherId: idSchema.optional(),
+          custodianId: idSchema.optional(),
           health: percent,
           talent: percent,
           diligence: percent,
@@ -777,7 +816,7 @@ export const gameStateSchema = z.strictObject({
           faction: z.enum([
             "none",
             "empress",
-            "adoptive",
+            "custodian",
             "maternal",
             "scholars",
             "generals",
@@ -1364,6 +1403,11 @@ export const gameStateSchema = z.strictObject({
     selectedChoiceId: z.string().optional(),
     resolvedAt: gameTimeSchema.optional(),
   })).default({}),
+  parentage: z.record(idSchema, characterParentageSchema),
+  adoptionRecords: z.record(z.string().regex(/^adopt_\d{6}$/), adoptionRecordSchema),
+  royalResidences: z.record(z.string().regex(/^res_\d{6}$/), royalResidenceSchema),
+  adoptionNextSeq: z.number().int().min(1),
+  royalResidenceNextSeq: z.number().int().min(1),
   rngSeed: z.number(),
 }).superRefine((data, ctx) => {
   const errs = [

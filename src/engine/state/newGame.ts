@@ -182,6 +182,11 @@ export function createNewGameState(db: ContentDB, rngSeed = 1): GameState {
     pendingAftermath: [],
     coldPalaceIncidents: [],
     coldPalaceInterventions: [],
+    parentage: {},
+    adoptionRecords: {},
+    royalResidences: {},
+    adoptionNextSeq: 1,
+    royalResidenceNextSeq: 1,
     rngSeed,
   };
 

@@ -8,6 +8,7 @@ import type { ContentDB } from "../../engine/content/loader";
 import type { CharacterContent } from "../../engine/content/schemas";
 import type { GameState } from "../../engine/state/types";
 import { getCharacterLocation } from "../../engine/characters/presence";
+import { getBiologicalParents } from "../../engine/characters/parentage/parentageSelectors";
 import { familyText, maternalLoyalty, maternalPower } from "../../engine/officials/derive";
 import { Drawer } from "./Drawer";
 import { DescriptorStat } from "./DescriptorStat";
@@ -59,8 +60,9 @@ export function CharacterProfileDrawer({
   const homeId = getCharacterLocation(db, state, character.id);
   const home = homeId ? db.locations[homeId]?.name : undefined;
   const displayName = character.profile.name; // 抽屉标题显本名；位分见 subtitle
+  // 生身关系以 parentage 为唯一权威；抚养关系仍读 custodianId。
   const heirs = state.resources.bloodline.heirs.filter(
-    (h) => h.fatherId === character.id || h.adoptiveFatherId === character.id,
+    (h) => getBiologicalParents(state, h.id)?.fatherId === character.id || h.custodianId === character.id,
   );
   const memories = state.memories[character.id]?.entries ?? [];
 
@@ -175,7 +177,7 @@ export function CharacterProfileDrawer({
                   </span>
                   <span className="profile-children__meta">
                     {h.sex === "daughter" ? "皇子" : "皇郎"}
-                    {h.adoptiveFatherId === character.id ? " · 承养" : ""}
+                    {h.custodianId === character.id ? " · 承养" : ""}
                   </span>
                 </li>
               ))}

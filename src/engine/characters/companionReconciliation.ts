@@ -121,7 +121,7 @@ export function computePatronage(db: ContentDB, state: GameState, heirId: string
   const heir = state.resources.bloodline.heirs.find((h) => h.id === heirId);
   if (!heir) return 0;
 
-  const custodianId = heir.adoptiveFatherId;
+  const custodianId = heir.custodianId;
   const standing = custodianId ? state.standing[custodianId] : undefined;
 
   const rank = standing ? db.ranks[standing.rank] : undefined;

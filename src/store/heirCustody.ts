@@ -28,6 +28,7 @@ import { stateError, type GameError } from "../engine/infra/errors";
 import { err, ok, type Result } from "../engine/infra/result";
 import { toGameTime } from "../engine/calendar/time";
 import { resolveDisplayName } from "../engine/characters/standing";
+import { getBiologicalParents } from "../engine/characters/parentage/parentageSelectors";
 import type { ContentDB } from "../engine/content/loader";
 import type { CharacterContent, EventEffect } from "../engine/content/schemas";
 import type { ReactionBeat } from "../engine/punishments/types";
@@ -101,7 +102,7 @@ export function eligibleCustodiansForHeir(
 
   const guirenOrder = db.ranks["guiren"]?.order ?? 116;
   const changzaiOrder = db.ranks["changzai"]?.order ?? 84;
-  const currentCustodianId = heir.adoptiveFatherId;
+  const currentCustodianId = heir.custodianId;
   const empress = currentEligibleEmpress(db, state);
 
   const candidates: CustodianCandidate[] = [];
@@ -187,7 +188,7 @@ function buildCustodyReactions(
         `此事当告于宗庙，${childLabel}自此列为嫡出，由${toName}亲自抚育，不负天恩。`,
       ],
     });
-  } else if (toChar?.kind === "consort" && toChar.id === heir.fatherId) {
+  } else if (toChar?.kind === "consort" && toChar.id === getBiologicalParents(state, heir.id)?.fatherId) {
     const toSt = state.standing[toCustodianId];
     const toRank = toSt ? db.ranks[toSt.rank] : undefined;
     const toName = toChar ? resolveDisplayName(toChar, toSt, toRank) : toCustodianId;
@@ -246,7 +247,7 @@ export function planHeirCustodyTransfer(
   }
 
   // Same custodian
-  if (toCustodianId === heir.adoptiveFatherId) {
+  if (toCustodianId === heir.custodianId) {
     return err([stateError("SAME_CUSTODIAN", "此人已是当前抚养人")]);
   }
 
@@ -261,7 +262,7 @@ export function planHeirCustodyTransfer(
   }
 
   const becomesLegitimate = candidate.becomesLegitimate;
-  const fromCustodianId = heir.adoptiveFatherId;
+  const fromCustodianId = heir.custodianId;
   const now = toGameTime(state.calendar);
 
   // Build effects

@@ -38,6 +38,7 @@ import { memoryEntryId } from "../state/newGame";
 import type { GameTime } from "../calendar/time";
 import type { ChamberId, ColdPalaceEffect, GameState, HeirInterest } from "../state/types";
 import { resolveConsortRuntimeAttrs } from "../characters/consortAttrs";
+import { establishBirthParentage } from "../characters/parentage/establishBirthParentage";
 
 /** Max |cumulative delta| per axis (char×field / pillar×field) per batch. */
 export const AXIS_CAP = 10;
@@ -352,7 +353,7 @@ export function validateEffects(
             break;
           }
         }
-        if (e.custodianId === heir.adoptiveFatherId) {
+        if (e.custodianId === heir.custodianId) {
           bad(index, "BAD_EFFECT", `heir_custody: custodian "${e.custodianId}" is already the current custodian`, { heir: e.heirId, custodian: e.custodianId });
           break;
         }
@@ -874,9 +875,19 @@ export function applyEffects(
               healthStatus: "healthy" as const,
             };
           };
-          bl.heirs.push(makeHeir(effect.sex, effect.favor));
+          const pushHeir = (sex: typeof effect.sex, favor: number) => {
+            const heir = makeHeir(sex, favor);
+            bl.heirs.push(heir);
+            const res = establishBirthParentage(next, { childId: heir.id, biologicalFatherId: effect.fatherId });
+            if (!res.ok) return res;          // 新 id 不可能撞，仍按 Result 通道传播
+            next.parentage = res.value.parentage;
+            return undefined;
+          };
+          const e1 = pushHeir(effect.sex, effect.favor);
+          if (e1) return e1;
           if (effect.twinSex !== undefined && effect.twinFavor !== undefined) {
-            bl.heirs.push(makeHeir(effect.twinSex, effect.twinFavor));
+            const e2 = pushHeir(effect.twinSex, effect.twinFavor);
+            if (e2) return e2;
           }
         }
         if (effect.bearer !== "sovereign") {
@@ -964,8 +975,8 @@ export function applyEffects(
       }
       case "heir_custody": {
         const heir = next.resources.bloodline.heirs.find((h) => h.id === effect.heirId)!;
-        const changedCustodian = heir.adoptiveFatherId !== effect.custodianId;
-        heir.adoptiveFatherId = effect.custodianId;
+        const changedCustodian = heir.custodianId !== effect.custodianId;
+        heir.custodianId = effect.custodianId;
         if (changedCustodian) {
           heir.custodianBond = 30;
           heir.neglect = Math.max(0, heir.neglect - 10);

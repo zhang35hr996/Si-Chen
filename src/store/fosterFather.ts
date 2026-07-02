@@ -1,6 +1,7 @@
-/** 奉先殿择养父：候选池、生父可依性、谢恩/司礼官播报（脚本台词）。 */
+/** 奉先殿抚养父候选与播报（抚养/监护语义，区别于过继）：候选池、生父可依性、谢恩/司礼官播报（脚本台词）。 */
 import { resolveDisplayName } from "../engine/characters/standing";
 import { allCharacters } from "../engine/characters/presence";
+import { getBiologicalParents } from "../engine/characters/parentage/parentageSelectors";
 import type { ContentDB } from "../engine/content/loader";
 import type { CharacterContent } from "../engine/content/schemas";
 import type { GameState, Heir } from "../engine/state/types";
@@ -15,8 +16,8 @@ function nameOf(db: ContentDB, state: GameState, charId: string): string {
   return resolveDisplayName(c, st, st ? db.ranks[st.rank] : undefined);
 }
 
-/** 养父候选：在宫(非冷宫)、非已故的侍君（含皇后）及尊长（太后）。 */
-export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): CharacterContent[] {
+/** 抚养父候选：在宫(非冷宫)、非已故的侍君（含皇后）及尊长（太后）。 */
+export function eligibleFosterFathers(db: ContentDB, state: GameState): CharacterContent[] {
   // Keyed union (db.characters ∪ generatedConsorts) so generated consorts are candidates
   // exactly once — App runtime db already contains them, so a plain concat double-counts.
   return allCharacters(db, state).filter((c) => {
@@ -27,29 +28,32 @@ export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): Charac
   });
 }
 
-/** 生父是否仍可依（存活 + 在宫非冷宫）。自孕(fatherId null)恒 false。 */
+/** 生父是否仍可依（存活 + 在宫非冷宫）。自孕或无 parentage 记录恒 false。 */
 export function bioFatherAvailable(db: ContentDB, state: GameState, heir: Heir): boolean {
-  if (heir.fatherId === null) return false;
-  const c = db.characters[heir.fatherId] ?? state.generatedConsorts[heir.fatherId];
+  const parents = getBiologicalParents(state, heir.id);
+  if (!parents) return false;          // 无 parentage（损坏）→ 不可依
+  const fatherId = parents.fatherId;
+  if (fatherId === null) return false; // 自孕 → 无生父
+  const c = db.characters[fatherId] ?? state.generatedConsorts[fatherId];
   if (!c || c.kind !== "consort") return false;
   if (c.defaultLocation === "changmengong") return false;
-  return state.standing[heir.fatherId]?.lifecycle !== "deceased";
+  return state.standing[fatherId]?.lifecycle !== "deceased";
 }
 
-export interface AdoptionLine {
+export interface FosterFatherLine {
   speakerId: string;
   lines: string[];
 }
 
-/** 择养父后的播报：养父谢恩；若生父尚在宫中，加司礼官「生父泪如雨下」。
+/** 择抚养父后的播报：养父谢恩；若生父尚在宫中，加司礼官「生父泪如雨下」。
  *  若养父为尊长（太后），单段欣然，无谢恩、无生父泪报。
  */
-export function buildAdoptionReaction(
+export function buildFosterFatherReaction(
   db: ContentDB,
   state: GameState,
   heir: Heir,
   fatherId: string,
-): AdoptionLine[] {
+): FosterFatherLine[] {
   const fatherChar = db.characters[fatherId] ?? state.generatedConsorts[fatherId];
   if (fatherChar?.kind === "elder") {
     const child = SEX_CHILD[heir.sex];
@@ -63,7 +67,7 @@ export function buildAdoptionReaction(
   }
   const child = SEX_CHILD[heir.sex];
   const adoptive = nameOf(db, state, fatherId);
-  const thanks: AdoptionLine = {
+  const thanks: FosterFatherLine = {
     speakerId: fatherId,
     lines: [
       `${adoptive}闻陛下择其抚育皇嗣，喜出望外，趋前叩谢天恩。`,
