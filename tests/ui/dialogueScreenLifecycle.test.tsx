@@ -15,6 +15,7 @@ import { SceneRunner } from "../../src/engine/scenes/runner";
 import type { AssetRegistry } from "../../src/engine/assets/registry";
 import { loadTestContent } from "../helpers/testContentFixture";
 import { createGameStore } from "../../src/store/gameStore";
+import { withConsort } from "../helpers/consortFixture";
 
 const FALLBACK = { url: "data:,", isFallback: true };
 const registry = {
@@ -36,6 +37,7 @@ describe("DialogueScreen 异步生命周期隔离", () => {
     const db = loadTestContent();
     const store = createGameStore();
     store.newGame(db, 1);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
 
     // 证明 StrictMode 确实双调用 effect（创建两代 runner）——竞态被真实触发，而非假通过。
     const startSpy = vi.spyOn(SceneRunner.prototype, "start");
@@ -62,6 +64,7 @@ describe("DialogueScreen 异步生命周期隔离", () => {
     const db = loadTestContent();
     const store = createGameStore();
     store.newGame(db, 1);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
     const onDone = vi.fn();
 
     const { unmount } = render(
@@ -83,6 +86,7 @@ describe("DialogueScreen 异步生命周期隔离", () => {
     const db = loadTestContent();
     const store = createGameStore();
     store.newGame(db, 1);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
 
     const advanceSpy = vi.spyOn(SceneRunner.prototype, "advance");
     const { container } = render(
@@ -107,6 +111,7 @@ describe("DialogueScreen 异步生命周期隔离", () => {
     const db = loadTestContent();
     const store = createGameStore();
     store.newGame(db, 1);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
     const onDone = vi.fn();
 
     const { container } = render(

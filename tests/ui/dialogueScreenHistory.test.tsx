@@ -9,6 +9,7 @@ import { DialogueScreen } from "../../src/ui/screens/DialogueScreen";
 import type { AssetRegistry } from "../../src/engine/assets/registry";
 import { loadTestContent } from "../helpers/testContentFixture";
 import { createGameStore } from "../../src/store/gameStore";
+import { withConsort } from "../helpers/consortFixture";
 
 const FALLBACK = { url: "data:,", isFallback: true };
 const registry = {
@@ -23,6 +24,7 @@ describe("DialogueScreen 跨事件历史记录", () => {
     const db = loadTestContent();
     const store = createGameStore();
     store.newGame(db, 1);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
     const onDone = () => {};
 
     // 事件 A：ev_fixture_scene_runner，首帧说话人 wenya（frameSeq=1）

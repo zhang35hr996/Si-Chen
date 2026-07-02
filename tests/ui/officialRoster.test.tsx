@@ -43,7 +43,7 @@ describe("OfficialDetail", () => {
   it("shows family + palace consort kin for a linked official", () => {
     render(<OfficialDetail db={db} state={state} officialId={SHEN_HEAD} onBack={() => {}} />);
     expect(screen.getByText(/沈氏/)).toBeInTheDocument();
-    expect(screen.getByText(db.characters["shen_zhibai"]!.profile.name)).toBeInTheDocument();
+    expect(screen.getByText(state.generatedConsorts["shen_zhibai"]!.profile.name)).toBeInTheDocument();
   });
 
   it("shows an empty-kin state for an official whose family has no palace consorts", () => {

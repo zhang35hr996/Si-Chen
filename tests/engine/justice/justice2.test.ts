@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+import { withConsort } from "../../helpers/consortFixture";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createGameStore } from "../../../src/store/gameStore";
 import { allocateJusticeIds, nextCaseId, nextPunishmentId } from "../../../src/engine/justice/ids";
@@ -520,7 +521,8 @@ describe("validateJusticeState — exhaustive invariants", () => {
 describe("save schema — justice provenance fields", () => {
   it("PROV1. MemoryEntry with sourcePunishmentId saves and loads", () => {
     const store = createGameStore();
-    const state = makeState();
+    // shen_zhibai is procedurally generated; inject her so the memory owner is a valid consort.
+    const state = withConsort(makeState(), db, "shen_zhibai");
     const memory = {
       id: "m001",
       ownerId: "shen_zhibai",

@@ -9,9 +9,11 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState, GestationState } from "../../src/engine/state/types";
 import { consortGestationDisplay, sovereignGestationDisplay } from "../../src/ui/format/gestationDisplay";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const consortId = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort")!;
+// Consorts are procedurally generated; use injected story consorts as carriers.
+const consortId = "lu_huaijin";
 
 /** 把状态的「当前」日历设到指定 year/month，并注入若干胎息/lifecycle。 */
 function stateAt(
@@ -19,7 +21,7 @@ function stateAt(
   month: number,
   opts: { gestations?: GestationState[]; carryingLifecycle?: string; pendingPregnancy?: boolean } = {},
 ): GameState {
-  const base = createNewGameState(db);
+  const base = ["lu_huaijin", "xu_qinghuan"].reduce((s, id) => withConsort(s, db, id), createNewGameState(db));
   const next: GameState = {
     ...base,
     calendar: { ...base.calendar, year, month },
@@ -74,7 +76,7 @@ describe("sovereign/consort gestation display", () => {
   });
 
   it("6. multiple simultaneous gestations select the exact requested carrier", () => {
-    const other = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort" && id !== consortId)!;
+    const other = "xu_qinghuan";
     const s = stateAt(2, 6, { gestations: [gest("sovereign", 2, 5), gest(consortId, 2, 2), gest(other, 2, 1)] });
     expect(sovereignGestationDisplay(s)?.month).toBe(2); // 6-5+1
     expect(consortGestationDisplay(s, consortId)?.month).toBe(5); // 6-2+1

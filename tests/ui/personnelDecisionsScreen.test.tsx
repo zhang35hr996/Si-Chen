@@ -23,7 +23,8 @@ const NOW = toGameTime(createNewGameState(db, 1).calendar);
 
 /** Base state that includes lu_huaijin in standing (required for consort-related decisions). */
 function freshWithLu() {
-  return withConsort(createNewGameState(db, 1), db, LU_CONSORT);
+  // inject lu (LU_CONSORT) and wenya (for WEN_OFFICIAL) story consorts + their families.
+  return withConsort(withConsort(createNewGameState(db, 1), db, LU_CONSORT), db, "wenya");
 }
 
 function withConsortPun(s: GameState): GameState {
