@@ -19,6 +19,7 @@
  */
 import { toGameTime } from "../../src/engine/calendar/time";
 import { consortStandingExtras } from "../../src/engine/state/newGame";
+import { generateOfficialWorld } from "../../src/engine/officials/worldgen";
 import { characterSchema } from "../../src/engine/content/schemas";
 import type { CharacterContent } from "../../src/engine/content/schemas";
 import type { ContentDB } from "../../src/engine/content/loader";
@@ -53,6 +54,47 @@ const EVICTION_PALACES = [
   "zichendian",
   "zuixianlou",
 ];
+
+/**
+ * The four deleted story consorts each carry a `maternalClan` (familyId + postId).
+ * The save-integrity validator (validateOfficialWorld) requires that clan to exist
+ * as a real officialFamily with a seated official and a consort→official `mother`
+ * kinship edge. Production worldgen builds those from db.characters, but these
+ * consorts are no longer authored, so no family/official/edge is generated.
+ *
+ * To keep the injected world internally consistent (seat counts, kinship symmetry,
+ * member surnames all pass validation), we regenerate the ENTIRE official world from
+ * a db that treats every currently-injected legacy consort as authored, then replace
+ * the official-world slices wholesale. Deterministic (fixed seed), so repeated calls
+ * over the same set of legacy consorts converge to the same world.
+ */
+function regenerateOfficialWorldWithLegacyConsorts(state: GameState, db: ContentDB): GameState {
+  const legacyIds = Object.keys(state.standing).filter(
+    (id) => LEGACY_TEST_CONSORTS[id] && state.standing[id]?.lifecycle !== "deceased",
+  );
+  if (legacyIds.length === 0) return state;
+
+  const authored: Record<string, CharacterContent> = {};
+  for (const id of legacyIds) authored[id] = LEGACY_TEST_CONSORTS[id]!;
+  const dbWithLegacy: ContentDB = { ...db, characters: { ...db.characters, ...authored } };
+
+  const world = generateOfficialWorld(dbWithLegacy, 1, toGameTime(state.calendar));
+
+  const standing = { ...state.standing };
+  for (const id of legacyIds) {
+    const famId = world.consortBirthFamily[id];
+    if (famId !== undefined) standing[id] = { ...standing[id]!, birthFamilyId: famId };
+  }
+
+  return {
+    ...state,
+    standing,
+    officials: world.officials,
+    officialFamilies: world.officialFamilies,
+    familyMembers: world.familyMembers,
+    kinship: world.kinship,
+  };
+}
 
 /**
  * Returns a new state with the given consort added to state.standing.
@@ -140,7 +182,7 @@ export function withConsort(
       ? { ...patchedGeneratedConsorts, [charId]: char }
       : patchedGeneratedConsorts;
 
-  return {
+  const next: GameState = {
     ...state,
     standing: { ...patchedStanding, [charId]: standing },
     generatedConsorts: finalGeneratedConsorts,
@@ -153,6 +195,10 @@ export function withConsort(
       ? state.memories
       : { ...state.memories, [charId]: { entries: [], nextSeq: 1 } },
   };
+
+  // Legacy story consorts carry a maternalClan; rebuild the official world so their
+  // family/official/mother-edge exist and pass save-integrity validation.
+  return legacy && !fromDb ? regenerateOfficialWorldWithLegacyConsorts(next, db) : next;
 }
 
 /**
