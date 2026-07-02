@@ -40,7 +40,7 @@ describe("store resolvePersonnelDecision", () => {
 
   it("approving a demotion memorial returns a punishmentId (PUNISH branch)", () => {
     const store = new GameStore();
-    const base = tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 20 });
+    const base = tune(withConsort(createNewGameState(db, 1), db, "wenya"), WEN_OFFICIAL, { merit: 20 });
     const g = generateMemorial(base, db, WEN_OFFICIAL, "memorial_demotion", toGameTime(base.calendar))!;
     store.loadState(g.state);
     const r = store.resolvePersonnelDecision(db, g.decision.id, "approve");

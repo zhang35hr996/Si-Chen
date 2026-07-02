@@ -1,6 +1,7 @@
 // tests/content/officials.test.ts
 import { describe, expect, it } from "vitest";
 import { loadRealContent } from "../helpers/contentFixture";
+import { legacyConsortContent } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
@@ -25,11 +26,13 @@ describe("officialPosts table", () => {
 });
 
 describe("consort maternalClan", () => {
-  it("each consort with a surname declares a maternalClan referencing a real post", () => {
-    const db = loadRealContent();
-    const consorts = Object.values(db.characters).filter((c) => c.kind === "consort" && c.profile.surname);
-    expect(consorts.length).toBeGreaterThan(0);
+  // Authored story consorts were removed from content/; consorts are now procedurally
+  // generated. The legacy test fixtures reconstruct the deleted consorts and must keep
+  // a valid maternalClan (withConsort's family regen depends on the postId resolving).
+  it("each legacy story consort declares a maternalClan referencing a real post", () => {
+    const consorts = ["lu_huaijin", "xu_qinghuan", "shen_zhibai", "wenya"].map(legacyConsortContent);
     for (const c of consorts) {
+      expect(c.profile.surname, c.id).toBeTruthy();
       expect(c.maternalClan, c.id).toBeDefined();
       expect(db.officialPosts[c.maternalClan!.postId], c.id).toBeDefined();
       expect(c.maternalClan!.birthOrder).toBeGreaterThanOrEqual(1);

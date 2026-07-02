@@ -39,7 +39,7 @@ import { consortPersonalitySeedSchema, consortPersonalitySchema, consortHousehol
 import { consortStandingExtras, createNewGameState } from "../../src/engine/state/newGame";
 import { generateCandidates, addGeneratedConsort } from "../../src/store/grandSelection";
 import { loadRealContent } from "../helpers/contentFixture";
-import { withConsort } from "../helpers/consortFixture";
+import { withConsort, legacyConsortContent } from "../helpers/consortFixture";
 import type { ConsortPersonality, ConsortHousehold } from "../../src/engine/state/types";
 
 const db = loadRealContent();
@@ -77,7 +77,7 @@ describe("HOUSEHOLD_DEFAULTS", () => {
 // ── 2–4. Personality resolution order ────────────────────────────────────────
 
 describe("resolveConsortRuntimeAttrs — personality", () => {
-  const state = createNewGameState(db);
+  const state = withConsort(createNewGameState(db), db, "lu_huaijin");
 
   it("falls back to PERSONALITY_DEFAULTS by value when no personality in standing or authored", () => {
     const stripped = {
@@ -94,8 +94,8 @@ describe("resolveConsortRuntimeAttrs — personality", () => {
     const customState = { ...state, standing: { ...state.standing, lu_huaijin: overrideStanding } };
     // generatedConsorts override is needed to inject partial personality into hidden
     const fakeConsort = {
-      ...db.characters["lu_huaijin"]!,
-      hidden: { ...db.characters["lu_huaijin"]!.hidden!, personality: { scheming: 80 } as Partial<ConsortPersonality> },
+      ...legacyConsortContent("lu_huaijin"),
+      hidden: { ...legacyConsortContent("lu_huaijin").hidden!, personality: { scheming: 80 } as Partial<ConsortPersonality> },
     };
     const customDb = { ...db, characters: { ...db.characters, lu_huaijin: fakeConsort } };
     const attrs = resolveConsortRuntimeAttrs(customDb as typeof db, customState, "lu_huaijin");

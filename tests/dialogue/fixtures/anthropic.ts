@@ -1,5 +1,6 @@
 import { createNewGameState } from "../../../src/engine/state/newGame";
 import { loadRealContent } from "../../helpers/contentFixture";
+import { withConsort } from "../../helpers/consortFixture";
 import { assembleDialogueRequest } from "../../../src/engine/dialogue/orchestrator";
 import { ok, err } from "../../../src/engine/infra/result";
 import type { z } from "zod";
@@ -10,7 +11,7 @@ import type { AnthropicTransport, AnthropicTransportResult, AnthropicTransportFa
 type DialogueToolInput = z.input<typeof dialogueToolOutputSchema>;
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+const state = ["shen_zhibai", "lu_huaijin"].reduce((s, id) => withConsort(s, db, id), createNewGameState(db));
 
 export function makeRequest(speakerId: string) {
   const r = assembleDialogueRequest(db, state, speakerId, "zichendian", {});

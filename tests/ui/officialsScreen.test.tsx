@@ -5,15 +5,19 @@ import { OfficialsScreen } from "../../src/ui/officials/OfficialsScreen";
 import { GameStore } from "../../src/store/gameStore";
 import { getHighVacancyPosts } from "../../src/engine/officials/selectors";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
 const SHEN = "official_fam_shen_main";
 
+/** Base world with shen_zhibai injected so official_fam_shen_main exists. */
+const freshWorld = () => withConsort(createNewGameState(db, 1), db, "shen_zhibai");
+
 function mount(mutate?: (s: GameState) => GameState) {
   const store = new GameStore();
-  store.loadState(mutate ? mutate(createNewGameState(db, 1)) : createNewGameState(db, 1));
+  store.loadState(mutate ? mutate(freshWorld()) : freshWorld());
   const onCommitted = vi.fn();
   render(<OfficialsScreen db={db} store={store} onBack={() => {}} onCommitted={onCommitted} />);
   return { store, onCommitted };
@@ -119,7 +123,7 @@ describe("OfficialsScreen — 人事简报 tab (PR3C-2)", () => {
 describe("OfficialsScreen — non-active officials keep their former post (P2)", () => {
   it("groups a retired official under its former department and shows 原任", async () => {
     const store = new GameStore();
-    let s = createNewGameState(db, 1);
+    let s = freshWorld();
     // 沈氏 head 任 丞相(政事堂)；先经 store 罢免再退休，使 history 记 vacatedPostId=chengxiang。
     store.loadState(s);
     store.dismissOfficial(SHEN); // active 去职，写历史 vacatedPostId=chengxiang

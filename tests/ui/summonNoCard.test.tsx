@@ -13,12 +13,13 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { ZichendianScreen, type ZichendianScreenProps } from "../../src/ui/screens/ZichendianScreen";
 import { summonedConsortToView } from "../../src/ui/zichendianView";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
-const state: GameState = { ...createNewGameState(db), playerLocation: "zichendian" };
-const consortId = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort")!;
-const consortName = db.characters[consortId]!.profile.name;
+const consortId = "lu_huaijin";
+const state: GameState = { ...withConsort(createNewGameState(db), db, consortId), playerLocation: "zichendian" };
+const consortName = state.generatedConsorts[consortId]!.profile.name;
 
 const baseProps: ZichendianScreenProps = {
   background: "/bg/zichendian.png",

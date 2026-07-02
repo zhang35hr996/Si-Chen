@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { loadRealContent } from "../helpers/contentFixture";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { runEvalScenarioWithProvider } from "../../src/engine/dialogue/eval/evalRunner";
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 import type { EvalScenario } from "../../src/engine/dialogue/eval/types";
@@ -18,7 +19,7 @@ const scenario: EvalScenario = {
 describe("EvalResult provenance fields", () => {
   it("records provider and speakerId", async () => {
     const db = loadRealContent();
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, "shen_zhibai");
     const result = await runEvalScenarioWithProvider(
       scenario,
       db,
@@ -36,7 +37,7 @@ describe("EvalResult provenance fields", () => {
 
   it("preserves usage + requestId when the provider fails with a billed protocol error", async () => {
     const db = loadRealContent();
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, "shen_zhibai");
     const billedFailure: DialogueProvider = {
       id: "test:billed-fail",
       kind: "generative",
@@ -70,7 +71,7 @@ describe("EvalResult provenance fields", () => {
 
   it("turns an unexpected provider throw into a non-fatal EvalResult (does not abort)", async () => {
     const db = loadRealContent();
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, "shen_zhibai");
     const throwing: DialogueProvider = {
       id: "test:throws",
       kind: "generative",

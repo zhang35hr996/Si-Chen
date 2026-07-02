@@ -50,7 +50,7 @@ describe("annual settlement seam — 人事奏折 + 侍君请托", () => {
   it("a sustained underperformer yields a memorial_dismissal in production (not zeroed away)", () => {
     // 关键回归：考课自动降级会清零 underperformanceYears；请免须据简报 dismissalCandidateIds 生成，
     // 而非读清零后的计数。tune WEN 连年不合格 + 低政绩（保持不合格，避免被 updateMerit 复位）。
-    const s = settleAnnualExamination(createNewGameState(db, 7), db, 1, { year: 1, month: 2, period: "early", dayIndex: 0 });
+    const s = settleAnnualExamination(withConsort(createNewGameState(db, 7), db, "wenya"), db, 1, { year: 1, month: 2, period: "early", dayIndex: 0 });
     const WEN = "official_fam_wen_main";
     const tuned = { ...s, officials: { ...s.officials, [WEN]: { ...s.officials[WEN]!, reviewState: { merit: 15, underperformanceYears: 2 } } } };
     const store = new GameStore();

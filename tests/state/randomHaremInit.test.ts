@@ -82,9 +82,9 @@ describe("R2 / R17: 剧情侍君不自动入宫", () => {
   );
 
   it.each(STORY_CONSORT_IDS)(
-    "%s 的 spawnMode 为 event_only",
+    "%s 不再是 authored content（已从 content/ 删除，不自动入宫）",
     (id) => {
-      expect(db.characters[id]?.spawnMode).toBe("event_only");
+      expect(db.characters[id]).toBeUndefined();
     },
   );
 });

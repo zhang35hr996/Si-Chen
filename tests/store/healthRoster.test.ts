@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { currentAgeOf, livingConsortIds } from "../../src/store/healthRoster";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { legacyConsortContent } from "../helpers/consortFixture";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 
 const content = loadGameContent();
@@ -15,7 +16,7 @@ describe("currentAgeOf", () => {
   it("dynamic consort uses ageAtEntry + (year - enteredAtYear)", () => {
     const s = createNewGameState(db);
     const id = "xiunan_test_1";
-    s.generatedConsorts[id] = { ...Object.values(db.characters).find((c) => c.kind === "consort")!, id } as any;
+    s.generatedConsorts[id] = { ...legacyConsortContent("lu_huaijin"), id } as any;
     s.standing[id] = { rank: Object.keys(db.ranks)[0]!, favor: 10, health: 80, healthStatus: "healthy", ageAtEntry: 16, enteredAtYear: s.calendar.year } as any;
     expect(currentAgeOf(db, s, { kind: "consort", id })).toBe(16);
   });
@@ -31,7 +32,7 @@ describe("livingConsortIds", () => {
 
   it("includes a generated (选秀) consort", () => {
     const s = createNewGameState(db);
-    const base = Object.values(db.characters).find((c) => c.kind === "consort")!;
+    const base = legacyConsortContent("lu_huaijin");
     const id = "gen_test_1";
     s.generatedConsorts[id] = { ...base, id } as any;
     s.standing[id] = { rank: Object.keys(db.ranks)[0]!, favor: 0, health: 100, healthStatus: "healthy" } as any;
@@ -40,7 +41,7 @@ describe("livingConsortIds", () => {
 
   it("excludes deceased and candidate consorts", () => {
     const s = createNewGameState(db);
-    const base = Object.values(db.characters).find((c) => c.kind === "consort")!;
+    const base = legacyConsortContent("lu_huaijin");
     s.generatedConsorts["consort_dead"] = { ...base, id: "consort_dead" } as any;
     s.standing["consort_dead"] = { rank: Object.keys(db.ranks)[0]!, favor: 0, lifecycle: "deceased" } as any;
     s.generatedConsorts["consort_cand"] = { ...base, id: "consort_cand" } as any;

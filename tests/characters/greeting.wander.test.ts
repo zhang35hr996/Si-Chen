@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { wanderChance, wanders, gardenSubLocationFor } from "../../src/engine/characters/greeting";
-import { loadRealContent } from "../helpers/contentFixture";
-
-const db = loadRealContent();
+import { legacyConsortContent } from "../helpers/consortFixture";
 
 describe("wanderChance (性格加权)", () => {
   it("端肃/克制/重礼法 的沈知白低于基础 12", () => {
     // personalityTraits: ["端肃","克制","重礼法","外冷内热"] → 命中 3 个内敛关键词
-    expect(wanderChance(db.characters.shen_zhibai!)).toBeLessThan(12);
+    expect(wanderChance(legacyConsortContent("shen_zhibai"))).toBeLessThan(12);
   });
 
   it("clamp 不低于 3、不高于 40", () => {

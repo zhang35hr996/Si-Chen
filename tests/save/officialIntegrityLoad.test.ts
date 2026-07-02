@@ -18,10 +18,10 @@ import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 
-function expectQuarantineAfter(mutate: (s: GameState) => void, now: number) {
+function expectQuarantineAfter(mutate: (s: GameState) => GameState | void, now: number) {
   const storage = createMemoryStorage();
-  const state = createNewGameState(db, 1);
-  mutate(state);
+  const base = createNewGameState(db, 1);
+  const state = mutate(base) ?? base;
   storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(createSaveData(db, state, "slot1")));
   const loaded = readSlot(storage, db, "slot1", { now: () => now });
   expect(loaded.ok).toBe(false);
@@ -84,9 +84,10 @@ describe("readSlot rejects a save with a broken official world", () => {
 
   it("consort birthFamilyId moved to another family while mother edge kept", () => {
     expectQuarantineAfter((s) => {
-      // shen_zhibai is now event_only; inject her with correct standing then set wrong birthFamilyId
-      const shenSt = withConsort(s, db, "shen_zhibai").standing["shen_zhibai"]!;
-      s.standing["shen_zhibai"] = { ...shenSt, birthFamilyId: "fam_lu_main" };
+      // shen_zhibai is no longer authored; inject her full family, then corrupt birthFamilyId.
+      const injected = withConsort(s, db, "shen_zhibai");
+      injected.standing["shen_zhibai"] = { ...injected.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
+      return injected;
     }, 1008);
   });
 
@@ -120,9 +121,10 @@ describe("readSlot rejects a save with a broken official world", () => {
 
   it("maternalClan.familyId disagreeing with birthFamilyId", () => {
     expectQuarantineAfter((s) => {
-      // shen_zhibai is now event_only; inject her with correct standing then set wrong birthFamilyId
-      const shenSt = withConsort(s, db, "shen_zhibai").standing["shen_zhibai"]!;
-      s.standing["shen_zhibai"] = { ...shenSt, birthFamilyId: "fam_lu_main" };
+      // shen_zhibai is no longer authored; inject her full family, then corrupt birthFamilyId.
+      const injected = withConsort(s, db, "shen_zhibai");
+      injected.standing["shen_zhibai"] = { ...injected.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
+      return injected;
     }, 1011);
   });
 

@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { buildSpeakerProfiles } from "../../../src/engine/dialogue/eval/speakerProfile";
 import { loadRealContent } from "../../helpers/contentFixture";
+import { dbWithLegacyConsorts } from "../../helpers/consortFixture";
 
 describe("buildSpeakerProfiles", () => {
-  const db = loadRealContent();
+  // The eval speaker-profile builder derives from db.characters; re-register the
+  // deleted story consort whose authored voice this test asserts.
+  const db = dbWithLegacyConsorts(loadRealContent(), "lu_huaijin");
   const profiles = buildSpeakerProfiles(db);
 
   it("produces a profile for every character", () => {

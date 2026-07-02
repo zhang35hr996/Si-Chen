@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { GameStore } from "../../src/store/gameStore";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { addGeneratedConsort } from "../../src/store/grandSelection";
-import { withConsort } from "../helpers/consortFixture";
+import { withConsort, legacyConsortContent } from "../helpers/consortFixture";
 import { planPunishmentConsequences } from "../../src/engine/punishments/consequencePlanner";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { WORLD_RULES_TEXT } from "../../src/engine/dialogue/providers/anthropicProvider";
@@ -221,7 +221,7 @@ describe("applyPunitiveRankChangeWithConsequences – demotion", () => {
 
 describe("generated consort as bystander — memory funnel transaction", () => {
   function makeGeneratedConsort(id: string): CharacterContent {
-    const template = Object.values(db.characters).find((c) => c.kind === "consort")!;
+    const template = legacyConsortContent("lu_huaijin");
     const { maternalClan: _mc, ...rest } = template;
     // Strip maternalClan so this reads as a 良家子 (no official mother required).
     return { ...rest, id, profile: { ...rest.profile, name: `测试${id}` } };

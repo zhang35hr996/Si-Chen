@@ -4,18 +4,19 @@ import { applyEffects } from "../../src/engine/effects/funnel";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
-import { firstNonEmpressConsortId } from "../helpers/consortFixture";
+import { firstNonEmpressConsortId, withConsort } from "../helpers/consortFixture";
 import type { EventEffect } from "../../src/engine/content/schemas";
 
 function stateWithHeirAndFosterFather(db = loadRealContent()) {
-  let state = createNewGameState(db);
+  // Consorts are procedurally generated; inject a story consort to serve as foster father.
+  let state = withConsort(createNewGameState(db), db, "lu_huaijin");
   for (const e of [{ type: "pregnancy", op: "begin" }, { type: "pregnancy", op: "carry" }] as EventEffect[]) {
     state = (applyEffects(db, state, [e]) as { value: typeof state }).value;
   }
   state = (applyEffects(db, state, [{ type: "birth", bearer: "sovereign", fatherId: null, sex: "daughter", legitimate: true, favor: 50, bearerOutcome: "safe" }]) as { value: typeof state }).value;
   const heirId = state.resources.bloodline.heirs[0]!.id;
-  const foster = Object.values(db.characters).find((c) => c.kind === "consort" && c.initialStanding)!;
-  return { db, state, heirId, fosterId: foster.id };
+  const fosterId = firstNonEmpressConsortId(db, state);
+  return { db, state, heirId, fosterId };
 }
 
 describe("heir_died 规则", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addGeneratedConsort } from "../../src/store/grandSelection";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { legacyConsortContent } from "../helpers/consortFixture";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 
 const content = loadGameContent();
@@ -11,7 +12,7 @@ describe("addGeneratedConsort seeds health/age", () => {
   it("writes health, healthStatus, ageAtEntry, enteredAtYear", () => {
     const s = createNewGameState(db);
     // 良家子（无 maternalClan）：health/age 播种与母族无关。
-    const content = { ...Object.values(db.characters).find((c) => c.kind === "consort")!, id: "xiunan_y1_1", maternalClan: undefined } as any;
+    const content = { ...legacyConsortContent("lu_huaijin"), id: "xiunan_y1_1", maternalClan: undefined } as any;
     const r = addGeneratedConsort(s, db, content, Object.keys(db.ranks)[0]!, 20);
     expect(r.ok).toBe(true);
     if (!r.ok) return;

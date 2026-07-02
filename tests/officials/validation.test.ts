@@ -3,9 +3,12 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { validateOfficialWorld } from "../../src/engine/officials/validation";
 import type { GameState } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const codes = (s: GameState) => validateOfficialWorld(s, db).map((e) => e.code);
+/** Base world with the shen_zhibai story consort + her fam_shen_main injected. */
+const freshShen = () => withConsort(createNewGameState(db, 1), db, "shen_zhibai");
 
 describe("validateOfficialWorld", () => {
   it("clean generated world has no errors", () => {
@@ -36,7 +39,7 @@ describe("validateOfficialWorld", () => {
   });
 
   it("catches a consort birthFamilyId pointing at no family", () => {
-    const s = createNewGameState(db, 1);
+    const s = freshShen();
     s.standing["shen_zhibai"] = { ...s.standing["shen_zhibai"]!, birthFamilyId: "fam_9999" };
     expect(codes(s)).toContain("CONSORT_BAD_FAMILY");
   });
@@ -69,7 +72,7 @@ describe("validateOfficialWorld", () => {
   );
 
   it("catches a cross-family mother edge (familyId inconsistency)", () => {
-    const s = createNewGameState(db, 1);
+    const s = freshShen();
     // 取沈氏一名生成子女，把其 mother 边改指向别族官员。
     const child = s.kinship.find((k) => k.type === "mother" && state_officialFamily(s, k.toPersonId) === "fam_shen_main")?.fromPersonId
       ?? s.kinship.find((k) => k.type === "mother")!.fromPersonId;
@@ -93,20 +96,20 @@ describe("validateOfficialWorld", () => {
   });
 
   it("catches maternalClan.familyId disagreeing with birthFamilyId", () => {
-    const s = createNewGameState(db, 1);
+    const s = freshShen();
     s.standing["shen_zhibai"] = { ...s.standing["shen_zhibai"]!, birthFamilyId: "fam_lu_main" };
     expect(codes(s)).toContain("CONSORT_CLAN_FAMILY");
   });
 
   it("catches a family surname mismatch", () => {
-    const s = createNewGameState(db, 1);
+    const s = freshShen();
     const head = s.officials["official_fam_shen_main"]!;
     s.officials[head.id] = { ...head, surname: "X" };
     expect(codes(s)).toContain("FAMILY_SURNAME_MISMATCH");
   });
 
   it("catches a male person used as a mother", () => {
-    const s = createNewGameState(db, 1);
+    const s = freshShen();
     // shen_zhibai 为男性侍君，绝不可作 mother。
     const child = Object.values(s.officials)[0]!.id;
     s.kinship = [...s.kinship, { fromPersonId: child, toPersonId: "shen_zhibai", type: "mother" }];

@@ -92,7 +92,9 @@ export function buildBedchamber(
   charId: string,
   mode: BedchamberMode,
 ): BedchamberPlan | null {
-  const character = db.characters[charId];
+  // Consorts are procedurally generated into state.generatedConsorts; fall back to it
+  // so the bedchamber works for generated consorts (db.characters holds no consorts).
+  const character = db.characters[charId] ?? state.generatedConsorts[charId];
   const record = state.bedchamber[charId];
   if (!character || character.kind !== "consort" || !record) return null;
 

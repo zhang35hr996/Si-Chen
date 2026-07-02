@@ -10,10 +10,11 @@ import { deriveConverseSceneContext } from "../../src/ui/converseScene";
 import { assembleDialogueRequest, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
 import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+const state = ["shen_zhibai"].reduce((st, id) => withConsort(st, db, id), createNewGameState(db));
 const SPEAKER = "shen_zhibai";
 const OTHER = "wei_sui"; // an unrelated consort who might co-reside in the broad location
 const LOC = "zichendian";

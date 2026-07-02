@@ -39,7 +39,7 @@ const hasMiscarriage = (s: ReturnType<typeof createNewGameState>, cid: string): 
 
 describe("冷宫孕侍君月度小产（+20%）", () => {
   it("wenya 确在长门宫", () => {
-    expect(getCharacterLocation(db, createNewGameState(db), "wenya")).toBe("changmengong");
+    expect(getCharacterLocation(db, withConsort(createNewGameState(db), db, "wenya"), "wenya")).toBe("changmengong");
   });
 
   it("冷宫孕侍君在某些月份会小产；宫中孕侍君（对照）永不命中此机制", () => {

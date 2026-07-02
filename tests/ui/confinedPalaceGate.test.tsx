@@ -20,7 +20,7 @@ const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const now = toGameTime(base.calendar);
 
 const CONSORT_ID = "lu_huaijin";
-const character = db.characters[CONSORT_ID]!;
+const character = base.generatedConsorts[CONSORT_ID]!;
 const location = db.locations[character.defaultLocation!]!;
 
 function confined() {

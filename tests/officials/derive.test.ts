@@ -6,7 +6,7 @@ import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const state = withConsort(createNewGameState(db), db, "xu_qinghuan");
-const xu = db.characters["xu_qinghuan"]!; // surname 徐, maternalClan{bingbu_shangshu, 嫡, 次}
+const xu = state.generatedConsorts["xu_qinghuan"]!; // surname 徐, maternalClan{bingbu_shangshu, 嫡, 次}
 
 describe("maternal derivations", () => {
   it("familyText = 品级+官职+嫡庶+排行子", () => {

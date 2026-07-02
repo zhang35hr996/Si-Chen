@@ -110,6 +110,8 @@ describe("validateDialogueProviderResult", () => {
       request,
       policy,
       makeResponse(),
+      undefined,
+      state.generatedConsorts,
     );
 
     expect(outcome.ok).toBe(true);
@@ -277,7 +279,7 @@ function stateWithEvents(events: CourtEvent[]): GameState {
 describe("assembleDialogueRequest — promptContext", () => {
   it("reactionPlan undefined in fresh game (no eligible events)", () => {
     // Fresh game: state.chronicle is empty → no events → buildReactionPlan returns undefined
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, "shen_zhibai");
     const result = assembleDialogueRequest(db, state, T8_SPEAKER, T8_LOCATION);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.promptContext.reactionPlan).toBeUndefined();
@@ -449,7 +451,7 @@ describe("assembleDialogueRequest — promptContext", () => {
     // get a relevance boost (subject match). We test the observable effect:
     // assembleDialogueRequest returns successfully with relevantMemories containing
     // entries whose subjectIds include the speakerId when they exist.
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, "shen_zhibai");
     const result = assembleDialogueRequest(db, state, T8_SPEAKER, T8_LOCATION);
     if (!result.ok) throw new Error(result.error.message);
     // The request must succeed (subjectIds=[speakerId] doesn't crash buildMemoryContext)
@@ -459,7 +461,7 @@ describe("assembleDialogueRequest — promptContext", () => {
   });
 
   it("uses toGameTime(state.calendar)", () => {
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, "shen_zhibai");
     const result = assembleDialogueRequest(db, state, T8_SPEAKER, T8_LOCATION);
     if (!result.ok) throw new Error(result.error.message);
     const expected = toGameTime(state.calendar);
@@ -888,7 +890,7 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
       mentionedContextRefs: [offeredRef, hallucRef],
     };
     const logger = new RingBufferLogger();
-    const outcome = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponse, logger);
+    const outcome = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponse, logger, state.generatedConsorts);
     expect(outcome.ok).toBe(true);
     expect(outcome.diagnostics.provenanceFindings).toEqual([
       { code: "unknown_context_ref", ref: hallucRef },
@@ -899,7 +901,7 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
     // Duplicate invalid refs are deduped in diagnostics and logs (one finding, one log entry)
     const logger2 = new RingBufferLogger();
     const mockResponseDup: DialogueProviderResult = { ...mockResponse, mentionedContextRefs: [offeredRef, hallucRef, hallucRef] };
-    const outcomeDup = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponseDup, logger2);
+    const outcomeDup = validateDialogueProviderResult(db, capturingProvider, enrichedRequest, policy, mockResponseDup, logger2, state.generatedConsorts);
     expect(outcomeDup.ok).toBe(true);
     const dupFindings = outcomeDup.diagnostics.provenanceFindings.filter((f) => f.ref.id === "hallucinated_chunk");
     expect(dupFindings).toEqual([{ code: "unknown_context_ref", ref: hallucRef }]);
@@ -1009,7 +1011,7 @@ describe("produceDialogueTurn — Suite H: knowledge retriever wiring", () => {
 });
 
 describe("assembleDialogueRequest — etiquette.forbiddenTerms lifted by resolvedAddress", () => {
-  const gameState = createNewGameState(db);
+  const gameState = withConsort(createNewGameState(db), db, "shen_zhibai");
 
   it("凤君 remains forbidden when register=public (fail-closed)", () => {
     const r = assembleDialogueRequest(db, gameState, "shen_zhibai", "zichendian", { register: "public" });
