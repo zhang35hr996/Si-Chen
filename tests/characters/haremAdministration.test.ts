@@ -38,9 +38,12 @@ function mkState(): GameState {
   }
   base = withConsort(base, db, "shen_zhibai");
   const s = withConsort(withConsort(base, db, "xu_qinghuan"), db, "lu_huaijin");
+  // Downgrade only the RANDOM generated consorts to cairen so they don't interfere
+  // with administrator eligibility; keep the injected story consorts' authored ranks.
+  const injected = new Set(["shen_zhibai", "xu_qinghuan", "lu_huaijin"]);
   const updatedStanding = { ...s.standing };
   for (const id of Object.keys(s.generatedConsorts)) {
-    if (updatedStanding[id]) {
+    if (updatedStanding[id] && !injected.has(id)) {
       updatedStanding[id] = { ...updatedStanding[id]!, rank: "cairen" as const };
     }
   }
