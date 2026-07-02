@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import { MIGRATIONS, SAVE_FORMAT_VERSION } from "../../src/engine/save/saveSystem";
 
 describe("v38 → v39 parentage 迁移", () => {
-  it("SAVE_FORMAT_VERSION = 39", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(39);
+  it("SAVE_FORMAT_VERSION >= 39", () => {
+    expect(SAVE_FORMAT_VERSION).toBeGreaterThanOrEqual(39);
   });
 
   it("回填 parentage、rename custodian、flip faction、加空容器", () => {

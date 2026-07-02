@@ -274,6 +274,7 @@ const defaultPersonality = { empathy: 50, guile: 50, restraint: 50, sociability:
 
 function makeCompanionAssignment(companionName: string): HeirCompanionAssignment {
   return {
+    id: "companion_assignment_edu_0",
     heirId: HEIR_ID,
     companion: { kind: "royal_relative", personId: "royal_youth_h1_6" },
     assignedAt: makeGameTime(6, 1, "early"),

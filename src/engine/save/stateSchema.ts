@@ -72,6 +72,26 @@ const companionRefSchema = z.union([
   z.object({ kind: z.literal("family_member"), personId: z.string().min(1) }),
   z.object({ kind: z.literal("royal_relative"), personId: z.string().min(1) }),
 ]);
+// 单段伴读关系（active map 与 ended 历史共用形状；跨集合不变量由 validateCompanionWorld 校验）。
+const companionAssignmentSchema = z.object({
+  id: nonEmpty,
+  heirId: nonEmpty,
+  companion: companionRefSchema,
+  assignedAt: gameTimeSchema,
+  status: z.enum(["active", "ended"]),
+  endedAt: gameTimeSchema.optional(),
+  endReason: z.enum(["heir_left_school", "companion_deceased", "dismissed"]).optional(),
+  bond: percent,
+  ageAtAssignment: z.number().int().min(0),
+  profile: z.object({
+    name: nonEmpty,
+    sex: z.enum(["female", "male"]),
+    legitimate: z.boolean(),
+    personality: companionPersonalitySchema,
+    familyName: z.string().optional(),
+    familyRole: z.string().optional(),
+  }),
+});
 
 const calendarStateSchema = gameTimeSchema
   .extend({
@@ -1374,24 +1394,9 @@ export const gameStateSchema = z.strictObject({
     lifecycle: z.enum(["alive", "deceased"]),
     deceasedAt: gameTimeSchema.optional(),
   })).default({}),
-  heirCompanions: z.record(z.string(), z.object({
-    heirId: nonEmpty,
-    companion: companionRefSchema,
-    assignedAt: gameTimeSchema,
-    status: z.enum(["active", "ended"]),
-    endedAt: gameTimeSchema.optional(),
-    endReason: z.enum(["heir_left_school", "companion_deceased", "dismissed"]).optional(),
-    bond: percent,
-    ageAtAssignment: z.number().int().min(0),
-    profile: z.object({
-      name: nonEmpty,
-      sex: z.enum(["female", "male"]),
-      legitimate: z.boolean(),
-      personality: companionPersonalitySchema,
-      familyName: z.string().optional(),
-      familyRole: z.string().optional(),
-    }),
-  })).default({}),
+  heirCompanions: z.record(z.string(), companionAssignmentSchema).default({}),
+  endedCompanionAssignments: z.array(companionAssignmentSchema).default([]),
+  nextCompanionAssignmentSeq: z.number().int().min(0).default(0),
   templateEventNextSeq: z.number().int().min(0).default(0),
   templateEventRecords: z.record(z.string(), z.object({
     id: z.string(),

@@ -298,7 +298,7 @@ describe("planCompanionReconciliation — 基础", () => {
     const heir = makeHeir("h1", 1);
     const s = makeState([heir]);
     s.heirCompanions["h1"] = {
-      heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
+      id: "companion_assignment_h1_0", heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
       assignedAt: NOW, status: "active", bond: 5, ageAtAssignment: 5,
       profile: { name: "已有", sex: "female", legitimate: true, personality: defaultPersonality },
     };
@@ -333,13 +333,13 @@ describe("planCompanionReconciliation — 结束", () => {
     const s = makeState([son]);
     s.calendar = { ...s.calendar, year: 19 }; // son age=18 不再在读
     s.heirCompanions["h1"] = {
-      heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
+      id: "companion_assignment_h1_0", heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
       assignedAt: makeGameTime(8, 1, "early"), status: "active", bond: 10, ageAtAssignment: 10,
       profile: { name: "旧", sex: "male", legitimate: true, personality: defaultPersonality },
     };
     const now19 = makeGameTime(19, 1, "early");
     const plan = planCompanionReconciliation(db, s, now19);
-    expect(plan.endedAssignments).toContainEqual({ heirId: "h1", reason: "heir_left_school" });
+    expect(plan.endedAssignments).toContainEqual({ heirId: "h1", assignmentId: "companion_assignment_h1_0", reason: "heir_left_school" });
   });
 
   it("伴读身故结束(companion_deceased)并为在读皇嗣补选", () => {
@@ -348,12 +348,12 @@ describe("planCompanionReconciliation — 结束", () => {
     // 伴读宗室已身故
     s.royalRelatives["r1"] = { id: "r1", name: "亡友", sex: "female", age: 6, branch: "close", branchPrestige: 50, legitimate: true, personality: defaultPersonality, lifecycle: "deceased", deceasedAt: NOW };
     s.heirCompanions["h1"] = {
-      heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
+      id: "companion_assignment_h1_0", heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
       assignedAt: makeGameTime(5, 1, "early"), status: "active", bond: 8, ageAtAssignment: 5,
       profile: { name: "亡友", sex: "female", legitimate: true, personality: defaultPersonality },
     };
     const plan = planCompanionReconciliation(db, s, NOW);
-    expect(plan.endedAssignments).toContainEqual({ heirId: "h1", reason: "companion_deceased" });
+    expect(plan.endedAssignments).toContainEqual({ heirId: "h1", assignmentId: "companion_assignment_h1_0", reason: "companion_deceased" });
     // 替补：同次为在读皇嗣 h1 选了新伴读
     expect(plan.newAssignments.some((a) => a.heirId === "h1")).toBe(true);
   });
@@ -375,7 +375,7 @@ describe("planCompanionReconciliation — 结束", () => {
 
     // 第二次 reconciliation：结束身故 + 补选不同 personId 的活人。
     const plan1 = planCompanionReconciliation(db, s2, NOW);
-    expect(plan1.endedAssignments).toContainEqual({ heirId: "h1", reason: "companion_deceased" });
+    expect(plan1.endedAssignments.some((e) => e.heirId === "h1" && e.reason === "companion_deceased")).toBe(true);
     const replacement = plan1.newAssignments.find((a) => a.heirId === "h1")!;
     expect(replacement.companion.personId).not.toBe(firstId);
     const newRel = plan1.newRoyalRelatives.find((r) => r.id === replacement.companion.personId)!;
@@ -415,21 +415,26 @@ describe("applyCompanionReconciliation — 不可变", () => {
     expect(applyCompanionReconciliation(s, plan, NOW)).toBe(s);
   });
 
-  it("结束时设 endedAt/endReason 且 active 不留结束字段", () => {
+  it("结束：从 active 移出并入历史（endedAt/endReason 齐全），active 不再保留该 heir", () => {
     const son = makeHeir("h1", 1, { sex: "son" });
     const s = makeState([son]);
     s.calendar = { ...s.calendar, year: 19 };
     s.heirCompanions["h1"] = {
-      heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
+      id: "companion_assignment_h1_0", heirId: "h1", companion: { kind: "royal_relative", personId: "r1" },
       assignedAt: makeGameTime(8, 1, "early"), status: "active", bond: 5, ageAtAssignment: 10,
       profile: { name: "旧", sex: "male", legitimate: true, personality: defaultPersonality },
     };
     const now19 = makeGameTime(19, 1, "early");
     const plan = planCompanionReconciliation(db, s, now19);
     const s2 = applyCompanionReconciliation(s, plan, now19);
-    expect(s2.heirCompanions["h1"]!.status).toBe("ended");
-    expect(s2.heirCompanions["h1"]!.endReason).toBe("heir_left_school");
-    expect(s2.heirCompanions["h1"]!.endedAt).toEqual(now19);
+    // active map 中已无该皇嗣（离校后无替补）
+    expect(s2.heirCompanions["h1"]).toBeUndefined();
+    // 历史中保留该段关系，含 endedAt/endReason
+    const hist = s2.endedCompanionAssignments.find((a) => a.id === "companion_assignment_h1_0")!;
+    expect(hist).toBeDefined();
+    expect(hist.status).toBe("ended");
+    expect(hist.endReason).toBe("heir_left_school");
+    expect(hist.endedAt).toEqual(now19);
   });
 });
 
@@ -474,7 +479,7 @@ describe("resolveCompanionView", () => {
     s.familyMembers["m1"] = makeMember("m1", "fam1", 12);
     s.officialFamilies["fam1"] = makeFamily("fam1");
     s.heirCompanions["h1"] = {
-      heirId: "h1", companion: { kind: "family_member", personId: "m1" },
+      id: "companion_assignment_h1_0", heirId: "h1", companion: { kind: "family_member", personId: "m1" },
       assignedAt: makeGameTime(2, 1, "early"), status: "active", bond: 3, ageAtAssignment: 6,
       profile: { name: "成员m1", sex: "female", legitimate: false, personality: defaultPersonality, familyName: "张", familyRole: "daughter" },
     };
@@ -487,7 +492,7 @@ describe("resolveCompanionView", () => {
     const heir = makeHeir("h1", 1);
     const s = makeState([heir]);
     s.heirCompanions["h1"] = {
-      heirId: "h1", companion: { kind: "royal_relative", personId: "missing" },
+      id: "companion_assignment_h1_0", heirId: "h1", companion: { kind: "royal_relative", personId: "missing" },
       assignedAt: NOW, status: "active", bond: 0, ageAtAssignment: 5,
       profile: { name: "快照", sex: "female", legitimate: true, personality: defaultPersonality },
     };
