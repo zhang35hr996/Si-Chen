@@ -161,7 +161,9 @@ export function assembleDialogueRequest(
     beliefs: new GroundTruthBeliefProjection(state),
     state,
     audience,
-    forbiddenClaims: db.characters[speakerId]?.dialoguePolicy?.forbiddenClaims,  // NEW
+    // Resolve from the same character source as everything else (db.characters OR
+    // state.generatedConsorts) so forbidden claims apply to generated consorts too.
+    forbiddenClaims: character.dialoguePolicy?.forbiddenClaims,
   });
 
   const behavioralState = character.kind === "consort"

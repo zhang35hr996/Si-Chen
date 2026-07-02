@@ -11,9 +11,10 @@ import type { GameState } from "../../src/engine/state/types";
 import type { GameError } from "../../src/engine/infra/errors";
 import type { Result } from "../../src/engine/infra/result";
 import { loadTestContent } from "../helpers/testContentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadTestContent();
-const fresh = (): GameState => createNewGameState(db);
+const fresh = (): GameState => withConsort(createNewGameState(db), db, "wenya");
 
 const unwrap = (r: Result<RunnerStep, GameError>): RunnerStep => {
   if (!r.ok) throw new Error(r.error.message);
@@ -148,6 +149,7 @@ describe("quit drill (acceptance §13 #6)", () => {
   it("abandon mid-scene: store state deep-equal incl. AP, once unconsumed, re-entry replays", async () => {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
     const before = store.getState();
     const snapshot = structuredClone(before);
 
@@ -168,6 +170,7 @@ describe("quit drill (acceptance §13 #6)", () => {
   it("full commit path through the store: effects + AP + fired + sceneHistory land together", async () => {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
     const runner = new SceneRunner(db, { provider: mockProvider });
 
     unwrap(await runner.start(store.getState(), "ev_fixture_scene_runner"));
@@ -286,6 +289,7 @@ describe("SceneRunner (scripted-only)", () => {
   it("no reaction records written after scripted scene", async () => {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
     const runner = new SceneRunner(db, { provider: mockProvider });
 
     unwrap(await runner.start(store.getState(), "ev_fixture_scene_runner"));
@@ -305,6 +309,7 @@ describe("SceneRunner (scripted-only)", () => {
   it("abort existing contract: abandon has no consequences (no records written)", async () => {
     const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, "wenya"));
     const stateBeforeAp = store.getState().calendar.ap;
 
     const runner = new SceneRunner(db, { provider: mockProvider });

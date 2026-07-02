@@ -30,7 +30,7 @@ export function getCharacterLocation(
  *  merged generated consorts, so the spread is a no-op; in raw-db tests it ensures
  *  the full CharacterContent from db prevails over any partial state.generatedConsorts
  *  entry that a test may have set up. */
-function allCharacters(db: ContentDB, state: GameState): CharacterContent[] {
+export function allCharacters(db: ContentDB, state: GameState): CharacterContent[] {
   return Object.values({ ...state.generatedConsorts, ...db.characters });
 }
 

@@ -114,7 +114,7 @@
       "choiceId": "stay_talk",
       "responseLine": {
         "role": "protagonist",
-        "text": "……臣侍……不胜感激。陛下能在此驻足，臣侍已别无所求。",
+        "text": "给陛下请安。景色宜人，陛下可愿与臣侍同行？",
         "expression": "smile"
       },
       "effects": [
@@ -161,7 +161,7 @@
       "choiceId": "ask_wait",
       "responseLine": {
         "role": "protagonist",
-        "text": "……臣侍只是来散步。太液池的莲花开得好，一时贪看，陛下勿怪。",
+        "text": "给陛下请安。太液池的莲花开得好，一时贪看，陛下勿怪。",
         "expression": "frown"
       },
       "effects": [
@@ -203,7 +203,7 @@
       "choiceId": "walk_together",
       "responseLine": {
         "role": "protagonist",
-        "text": "陛下……愿意带臣侍同行？臣侍遵旨。",
+        "text": "陛下……愿意带臣侍同行？谢陛下。",
         "expression": "smile"
       },
       "effects": [
@@ -259,7 +259,7 @@
       "choiceId": "pass_by",
       "responseLine": {
         "role": "protagonist",
-        "text": "……臣侍恭送陛下。",
+        "text": "是，臣侍恭送陛下。",
         "expression": "frown"
       },
       "effects": [

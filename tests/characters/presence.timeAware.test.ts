@@ -20,7 +20,7 @@ const base = (() => {
   s = withConsort(s, db, "shen_zhibai");
   return withConsort(s, db, "lu_huaijin");
 })();
-const home = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
+const home = base.generatedConsorts.lu_huaijin!.defaultLocation; // zhongcui_gong
 
 /** 把日历调到指定 slot（apMax-ap=slot）。 */
 function atSlot(state: GameState, slot: number): GameState {

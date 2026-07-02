@@ -102,7 +102,9 @@ import { BestowModal } from "./components/BestowModal";
 import { MORNING_SLOT, AFTERNOON_SLOT } from "../engine/calendar/time";
 import type { ChengFengPrompt, PromptAction } from "../store/prompt";
 import { buildIncense, buildFortune } from "../store/temple";
-import { buildShizhiEncounter, buildTaihouRebuke } from "../store/taihou";
+import { buildShizhiEncounter, type RebukePlan } from "../store/taihou";
+import { derivePresentedZone, isImperialInteriorZone } from "../store/presentedScene";
+import { buildTaihouRebukePrompt, maybeBuildRebukeForAction, rebukeAttendBeats } from "../store/taihouRebukeFlow";
 import { audioController } from "./audio/AudioController";
 import { trackFor } from "./audio/trackFor";
 import { CourtyardScreen } from "./screens/CourtyardScreen";
@@ -308,6 +310,10 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const [shopId, setShopId] = useState<"wanbaolou" | "zuixianlou" | null>(null);
   const [currentBoard, setCurrentBoard] = useState<string>("palace");
   const [prompt, setPrompt] = useState<ChengFengPrompt | null>(null);
+  // 太后训诫·待乘风询问（瞬时态，不入存档）。命中后先存计划、不应用 effects；由乘风 prompt 决定去看/不去。
+  const [pendingTaihouRebuke, setPendingTaihouRebuke] = useState<RebukePlan | null>(null);
+  const pendingRebukeRef = useRef<RebukePlan | null>(null); // 同步读（playReactions/flush 在 setState 落地前需判定）
+  const rebukeFlightRef = useRef(false); // 选择按钮同步单飞守卫（防快速双击重复结算）
   const [giftItemId, setGiftItemId] = useState<string | null>(null);
   const [dianxuan, setDianxuan] = useState<{ candidates: Candidate[]; year: number } | null>(null);
   // 殿选（四月）选择 prompt。pendingDaxuan（持久）经结算系统选中 grand_selection 时由消费 effect 置位；
@@ -707,6 +713,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   /** 重置每行动点的去重 ref：新游戏或读档后必须清空，否则旧局的 key（rngSeed 固定为 1）会压制本局掷骰。 */
   const resetRollGuards = () => {
     rolledSlots.current.clear();
+    pendingRebukeRef.current = null;
+    rebukeFlightRef.current = false;
+    setPendingTaihouRebuke(null);
   };
 
   const continueGame = () => {
@@ -734,8 +743,16 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     }
   };
 
+  /** 太后训诫·乘风询问 prompt 显示（持有 checkpoint：在玩家选择前不消费/不完成）。 */
+  const showTaihouRebukePrompt = () => {
+    const plan = pendingRebukeRef.current;
+    if (plan) setPrompt(buildTaihouRebukePrompt(plan));
+  };
+
   /** 终结一段过场时统一消费待补跑上下文：快照→consume→（若有）把该 request 转入全局结算。 */
   const flushPendingReactionCheckpoint = () => {
+    // 仍有待询问的太后训诫：先显示乘风 prompt，**不**消费 checkpoint——由玩家选择后再完成。
+    if (pendingRebukeRef.current !== null) { showTaihouRebukePrompt(); return; }
     const pending = pendingReactionCheckpoint;
     pendingReactionDispatch({ type: "consume" });
     // 反应队列结束后续接：arrival 即时完成（仅 location_enter，不排空全局中断）；转旬进结算排空。
@@ -777,21 +794,37 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     return beats;
   };
 
-  /** 每行动点掷太后敲打（独立于懿旨；至多一次/行动）。返回台词节拍。 */
-  const rollRebuke = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): DecreeReaction[] => {
-    const beats: DecreeReaction[] = [];
+  /** 当前 UI 呈现场景的 zone（free-view 不迁移 playerLocation，故须按呈现态推导，不能盲读 playerLocation）。 */
+  const currentPresentedZone = (): string | undefined =>
+    derivePresentedZone({
+      view,
+      freeViewId,
+      shopId,
+      currentBoard,
+      playerLocation: store.getState().playerLocation,
+      zoneOf: (id) => db.locations[id]?.zone,
+    });
+
+  /**
+   * 每行动点掷太后训诫（仅宫内）。命中**不立即应用 effects、不立即播放台词**——只存待乘风询问的
+   * 计划（pendingRebukeRef），由 §乘风 prompt 决定去看/不去。宫外（京城/郊外/慈恩寺）：不掷骰。
+   */
+  const rollRebuke = (before: { apMax: number; ap: number; dayIndex: number }, amount: number): void => {
+    const zone = currentPresentedZone();
     for (let i = 0; i < amount; i++) {
       const slot = before.apMax - before.ap + i;
       const key = `rebuke:${store.getState().rngSeed}:${before.dayIndex}:${slot}`;
       if (rolledSlots.current.has(key)) continue;
+      // 宫外：不掷骰、不占用 slot（不应用任何 effects / 不提示）。
+      if (!isImperialInteriorZone(zone)) return;
       rolledSlots.current.add(key);
-      const plan = buildTaihouRebuke(db, store.getState(), key);
+      const plan = maybeBuildRebukeForAction(db, store.getState(), key, zone);
       if (plan) {
-        const applied = store.applyEffects(db, plan.effects);
-        if (applied.ok) { beats.push(...plan.beats); break; }
+        pendingRebukeRef.current = plan; // 同步置位：后续 playReactions/flush 据此持有 checkpoint
+        setPendingTaihouRebuke(plan);
+        break;
       }
     }
-    return beats;
   };
 
   /** 每行动点掷乘风八卦汇报（至多一条/行动）。返回台词节拍。 */
@@ -843,6 +876,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
       case "huntDecline":
         store.declineAutumnHunt();
         setPrompt(null);
+        break;
+      case "taihouRebukeAttend":
+        resolveTaihouRebuke("attend");
+        break;
+      case "taihouRebukeDecline":
+        resolveTaihouRebuke("decline");
         break;
     }
   };
@@ -906,9 +945,12 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     amount: number,
   ): DecreeReaction[] => {
     let beats = rollDecree(before, amount);
-    beats = [...beats, ...rollRebuke(before, amount)];
+    // 进贡与（太后训诫 prompt + 乘风汇报）互斥：单次行动至多一个「prompt 式」交互，进贡优先。
     const tributeShown = rollTribute(before, amount);
-    if (!tributeShown) beats = [...beats, ...rollChengFeng(before, amount)];
+    if (!tributeShown) {
+      rollRebuke(before, amount); // 命中仅置 pendingRebukeRef（不返回 beats；台词改由乘风 prompt 决定）
+      beats = [...beats, ...rollChengFeng(before, amount)];
+    }
     return beats;
   };
 
@@ -925,6 +967,9 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const onSovereignDeath = () => {
     setReaction(null);
     setReactionQueue([]);
+    pendingRebukeRef.current = null;
+    rebukeFlightRef.current = false;
+    setPendingTaihouRebuke(null);
     navDispatch({ type: "clear" }); // 驾崩清场：清空事件返回上下文
     pendingReactionDispatch({ type: "clear" });
     setRankAdmin(null);
@@ -944,6 +989,13 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
   const playReactions = (beats: DecreeReaction[], request: AutoCheckpointRequest | null | "preserve") => {
     if (beats.length === 0) {
       if (request !== "preserve") {
+        // 有待询问的太后训诫：持有 checkpoint——登记 request（若转旬）后显示乘风 prompt，绝不立即完成。
+        if (pendingRebukeRef.current !== null) {
+          if (request) pendingReactionDispatch({ type: "begin", request });
+          else pendingReactionDispatch({ type: "consume" });
+          showTaihouRebukePrompt();
+          return;
+        }
         pendingReactionDispatch({ type: "consume" }); // 无队列：不留待处理上下文
         if (request) completeDeferredAutoCheckpoint(request);
       }
@@ -956,6 +1008,36 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     // 故队列中尚未显示的后续台词不会提前入历史。
     setReaction(beats[0]!);
     setReactionQueue(beats.slice(1));
+  };
+
+  /**
+   * 太后训诫·乘风询问的选择结算（单飞）。无论去看/不去，训诫都已发生 → 应用同一份 effects；
+   * 仅「去看看」额外播放慈宁宫背景过场。effects 失败时不播成功剧情、不部分应用、保留 prompt 允许重试。
+   */
+  const resolveTaihouRebuke = (choice: "attend" | "decline") => {
+    if (rebukeFlightRef.current) return; // 同步单飞：快速双击仅结算一次
+    const plan = pendingRebukeRef.current;
+    if (!plan) return;
+    rebukeFlightRef.current = true;
+    const applied = store.applyEffects(db, plan.effects);
+    if (!applied.ok) {
+      rebukeFlightRef.current = false; // 失败：不关 prompt、不丢事件，允许重试
+      return;
+    }
+    // 成功：清待处理态、关 prompt、autosave（effects 恰好应用一次）。
+    pendingRebukeRef.current = null;
+    setPendingTaihouRebuke(null);
+    setPrompt(null);
+    doAutosave();
+    if (choice === "attend") {
+      // 慈宁宫背景临时过场（不 setView("cining_gong")、不改 playerLocation、不 travel）；
+      // beats 播完 onDone → flush 完成此前已登记的 checkpoint，自然回到选择前的宫内画面。
+      playReactions(rebukeAttendBeats(plan, db.locations["cining_gong"]!.backgroundKey), "preserve");
+    } else {
+      // 不必了：无现场台词 → 立即完成已登记 checkpoint（pendingRebukeRef 已清，flush 正常推进）。
+      flushPendingReactionCheckpoint();
+    }
+    rebukeFlightRef.current = false;
   };
 
   const proceedAfterNewGame = () => {
@@ -1347,7 +1429,7 @@ export function App({ store, dialogueRuntime }: { store: GameStore; dialogueRunt
     reaction !== null || childReaction !== null || physicianReaction !== null ||
     firstNightPromptId !== null || namePetHeirId !== null ||
     bedchamberRun !== null || bedchamberPickId !== null || rankAdmin !== null ||
-    prompt !== null || daxuanPrompt !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
+    prompt !== null || daxuanPrompt !== null || pendingTaihouRebuke !== null || giftItemId !== null || successorOpen || morningAfterOpen || ceremonyOpen ||
     activeSession !== null || court !== null || dianxuan !== null ||
     shopId !== null || view === "shop" || dialogueInFlight ||
     view === "title" || view === "coronation"; // 标题/登基（开局前）不呈现全局中断

@@ -21,6 +21,7 @@
  */
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+import { withConsort } from "../../helpers/consortFixture";
 import type { EvalFixtureDefinition } from "../../../src/engine/dialogue/eval/fixtureProvider";
 import type { MemoryEntry, CourtEvent } from "../../../src/engine/state/types";
 import { toGameTime } from "../../../src/engine/calendar/time";
@@ -29,7 +30,12 @@ import { toGameTime } from "../../../src/engine/calendar/time";
 
 function loadBase() {
   const db = loadRealContent();
-  const state = createNewGameState(db);
+  // These eval fixtures reference the (now event-only / deleted) story consorts as
+  // speakers; inject them so assembleDialogueRequest resolves them.
+  const state = ["shen_zhibai", "lu_huaijin", "wenya"].reduce(
+    (s, id) => withConsort(s, db, id),
+    createNewGameState(db),
+  );
   return { db, state };
 }
 

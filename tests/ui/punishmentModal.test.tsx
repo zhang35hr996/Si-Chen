@@ -16,7 +16,7 @@ import type { ImperialCommand } from "../../src/store/imperialCommands";
 
 const db = loadRealContent();
 const base = withConsort(createNewGameState(db), db, "lu_huaijin");
-const character = db.characters.lu_huaijin!;
+const character = base.generatedConsorts.lu_huaijin!;
 
 function renderModal(state: GameState) {
   const onCommand = vi.fn<(c: ImperialCommand) => void>();

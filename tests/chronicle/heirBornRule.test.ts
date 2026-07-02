@@ -4,17 +4,19 @@ import { applyEffects } from "../../src/engine/effects/funnel";
 import { toGameTime } from "../../src/engine/calendar/time";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 import type { EventEffect } from "../../src/engine/content/schemas";
 
 /** before=出生前（无嗣）；after=帝王自孕→生产后（有嗣）。applyEffects 不改入参，故 before 保持洁净。 */
 function bornStates(db = loadRealContent()) {
-  const before = createNewGameState(db);
+  // Consorts are procedurally generated; inject a story consort to serve as birth father.
+  const before = withConsort(createNewGameState(db), db, "lu_huaijin");
   let after = before;
   for (const e of [{ type: "pregnancy", op: "begin" }, { type: "pregnancy", op: "carry" }] as EventEffect[]) {
     after = (applyEffects(db, after, [e]) as { value: typeof after }).value;
   }
   after = (applyEffects(db, after, [{ type: "birth", bearer: "sovereign", fatherId: null, sex: "daughter", legitimate: true, favor: 50, bearerOutcome: "safe" }]) as { value: typeof after }).value;
-  const father = Object.values(db.characters).find((c) => c.kind === "consort" && c.initialStanding)!;
+  const father = before.generatedConsorts["lu_huaijin"]!;
   return { db, before, after, heirId: after.resources.bloodline.heirs[0]!.id, fatherId: father.id };
 }
 

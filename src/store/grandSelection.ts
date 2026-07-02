@@ -156,11 +156,11 @@ export function pickableRanks(db: ContentDB): CharacterRank[] {
 }
 
 // ── 生成池（确定性取样） ──────────────────────────────────────────────
-const SPECIALTY_POOL = ["古筝", "琵琶", "书法", "丹青", "刺绣", "烹茶", "棋艺", "舞乐", "诗赋", "骑射"];
+const SPECIALTY_POOL = ["古筝", "琵琶", "书法", "丹青", "刺绣", "棋艺", "诗赋", "骑射", "古琴", "香道", "茶艺", "花艺", "书画", "马术", "剑术", "舞蹈", "歌唱"] as const;
 // Each pool entry carries the narrative display word AND its canonical reaction
 // traits, so generated consorts never need free-text trait inference.
 const TRAIT_POOL = [
-  { display: "温婉", reactionTraits: ["compassionate", "discreet"] },
+  { display: "温宛", reactionTraits: ["compassionate", "discreet"] },
   { display: "活泼", reactionTraits: ["blunt"] },
   { display: "沉静", reactionTraits: ["discreet"] },
   { display: "孤傲", reactionTraits: ["proud", "cold"] },
@@ -169,9 +169,9 @@ const TRAIT_POOL = [
   { display: "爽利", reactionTraits: ["blunt"] },
   { display: "细腻", reactionTraits: ["compassionate"] },
   { display: "执拗", reactionTraits: ["proud"] },
-  { display: "娴雅", reactionTraits: ["status_conscious", "discreet"] },
+  { display: "贤惠", reactionTraits: ["status_conscious", "discreet"] },
 ] as const satisfies readonly { display: string; reactionTraits: readonly CanonicalReactionTrait[] }[];
-const LIKES_POOL = ["玉器", "香料", "古籍", "骏马", "茶饮", "花木", "字画", "珠玉", "琴谱", "棋具"];
+const LIKES_POOL = ["玉器", "香料", "古籍", "骏马", "茶叶", "花草", "字画", "珠玉", "琴谱", "棋具", "兵器", "墨宝", "美食", "宠物", "乐器", "茶具", "舞蹈", "水果"] as const;
 const FALLBACK_PORTRAIT_SETS = ["consort1", "consort2", "consort3", "consort4", "consort5", "consort6"];
 
 function pick<T>(pool: readonly T[], seed: string): T {
@@ -310,13 +310,13 @@ export function generateCandidates(db: ContentDB, state: GameState, year: number
         name: `${surname}${givenName}`,
         surname,
         age,
-        role: isShijia ? "殿选新晋，世家出身" : "殿选新晋，良家子",
+        role: isShijia ? "出身世家大族" : "良家子出身",
         appearance: "眉目清秀，举止拘谨，初入宫闱，难掩怯意。",
         personalityTraits: traits,
         reactionTraits,
-        coreFacts: [isShijia ? "经三年大选入宫，初居储秀宫" : "良家子，经大选入宫，初居储秀宫"],
+        coreFacts: [isShijia ? "经大选入宫，初居储秀宫" : "良家子，经大选入宫，初居储秀宫"],
         goals: ["在宫中站稳脚跟", "得陛下垂顾"],
-        speechStyle: "语气谨慎，言辞守礼。",
+        speechStyle: "语气谨慎，行为守礼。",
       },
       defaultLocation: "chuxiu_gong",
       portraitSet: pick(portraitSets, `${seed}:portrait`),
@@ -341,12 +341,12 @@ export function describeRaiseHead(content: CharacterContent): string {
   const app = content.attributes?.appearance ?? 50;
   const trait = content.profile.personalityTraits[0] ?? "腼腆";
   const looks = app >= 75 ? "眉目如画、容色出众" : app >= 50 ? "面目清秀" : "样貌寻常却也周正";
-  return `秀男${trait}地微微抬头，是个${looks}的小男儿。`;
+  return `秀男看起来很${trait}，微微抬头，是个${looks}的小男儿。`;
 }
 
 export function describeTalent(content: CharacterContent): string {
-  const specialty = content.attributes?.specialty ?? "女红";
-  return `秀男恭敬回道：小男儿自幼习${specialty}，略通一二，让陛下见笑了。`;
+  const specialty = content.attributes?.specialty ?? "男红";
+  return `秀男恭敬回道：小男儿自幼习${specialty}，算不得精通，让陛下见笑了。`;
 }
 
 /**
@@ -416,7 +416,7 @@ export function daxuanAnnounceBeats(): DecreeReaction[] {
     {
       speakerId: "cheng_feng",
       lines: [
-        "陛下，皇后遣人来禀——三年一度的大选已备得差不多了，秀男们都已入住储秀宫，正学着宫里的规矩呢。",
+        "陛下，皇后遣人来禀:三年一度的大选已准备得差不多了，入选的秀男们都已入住储秀宫，正由公公们教导着宫里的规矩呢。",
       ],
     },
   ];
@@ -426,10 +426,10 @@ export function daxuanAnnounceBeats(): DecreeReaction[] {
 export function daxuanDianxuanPromptFor(year: number): ChengFengPrompt {
   return {
     speakerId: "cheng_feng",
-    line: "陛下，礼部来报，殿选已准备完毕，请陛下移驾体元殿选看秀男，皇后与皇太后都已到了。",
+    line: "陛下，礼部来报，殿选已准备就绪，请陛下移驾体元殿选看秀男，皇后与皇太后都已到了。",
     choices: [
       { label: "前往体元殿", action: { type: "daxuanEnter", year } },
-      { label: "让太后皇后决定", action: { type: "daxuanDelegate", year } },
+      { label: "交给太后和皇后罢", action: { type: "daxuanDelegate", year } },
     ],
   };
 }
@@ -630,7 +630,7 @@ export function addGeneratedConsort(
           kind: "episodic",
           subjectIds: ["player", id],
           perspective: "witness",
-          summary: "殿选承恩，蒙陛下留牌子，迁入储秀宫。",
+          summary: "殿选承恩，得幸留牌子，迁入储秀宫。",
           strength: 60,
           retention: "slow",
           emotions: { joy: 40 },
@@ -648,7 +648,7 @@ export function addGeneratedConsort(
   const integrity = validateOfficialWorld(next, db);
   if (integrity.length > 0) {
     const first = integrity[0]!;
-    return err(stateError("CONSORT_INTEGRITY", `落库后官员完整性失败（${first.code}）：${first.message}`, { context: { id, code: first.code } }));
+    return err(stateError("CONSORT_INTEGRITY", `落库后官员完整性失败（${first.code}):${first.message}`, { context: { id, code: first.code } }));
   }
 
   return ok(next);

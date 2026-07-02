@@ -143,7 +143,7 @@ describe("save migration v33 → v34: heir personality backfill", () => {
     expect(heir.neglect).toBe(30);
   });
 
-  it("V34-06: heir with adoptiveFatherId gets custodianBond = 50", () => {
+  it("V34-06: heir with adoptiveFatherId (v33 legacy field) gets custodianBond = 50", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV33SaveWithHeir("son", true));
     const loaded = readSlot(storage, db, "slot1");
@@ -153,7 +153,7 @@ describe("save migration v33 → v34: heir personality backfill", () => {
     expect(heir.custodianBond).toBe(50);
   });
 
-  it("V34-07: heir without adoptiveFatherId gets custodianBond = 0", () => {
+  it("V34-07: heir without custodianId gets custodianBond = 0", () => {
     const storage = createMemoryStorage();
     storage.set(`${SAVE_KEY_PREFIX}slot1`, makeV33SaveWithHeir("daughter", false));
     const loaded = readSlot(storage, db, "slot1");

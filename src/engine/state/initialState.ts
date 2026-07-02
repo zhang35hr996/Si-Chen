@@ -102,6 +102,11 @@ export function createInitialState(overrides: InitialStateOverrides = {}): GameS
     pendingAftermath: [],
     coldPalaceIncidents: [],
     coldPalaceInterventions: [],
+    parentage: {},
+    adoptionRecords: {},
+    royalResidences: {},
+    adoptionNextSeq: 1,
+    royalResidenceNextSeq: 1,
     rngSeed: overrides.rngSeed ?? 1,
   };
 }

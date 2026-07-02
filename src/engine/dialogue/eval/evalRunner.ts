@@ -237,7 +237,15 @@ export async function runEvalScenarioWithProvider(
   // Populate knownEventIds from the assembled request's promptContext.knownEvents
   const knownEventIds = request.promptContext.knownEvents.map((e) => e.id);
 
-  const outcome = validateDialogueProviderResult(db, provider, request, policy, raw.value);
+  const outcome = validateDialogueProviderResult(
+    db,
+    provider,
+    request,
+    policy,
+    raw.value,
+    undefined,
+    state.generatedConsorts,
+  );
 
   const claimFindings = outcome.diagnostics.claimFindings.map((f) => ({
     code: f.code,

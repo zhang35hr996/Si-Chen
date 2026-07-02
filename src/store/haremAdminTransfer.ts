@@ -109,7 +109,7 @@ export function planHaremAdministrationTransfer(
 
   // ── No-op detection ──────────────────────────────────────────────────────────
   if (admin.mode === "empress" && target.kind === "empress") {
-    return { ok: false, reason: "皇后已正常掌管六宫，无需变更。" };
+    return { ok: false, reason: "皇后正常掌管六宫，无需变更。" };
   }
   if (admin.mode === "acting_consort" && target.kind === "consort" && admin.charId === target.charId) {
     return { ok: false, reason: "该侍君已是当前六宫协理者，无需重新委任。" };
@@ -185,8 +185,8 @@ export function planHaremAdministrationTransfer(
   // Memory for empress (always)
   if (empressId) {
     const memorySummary = isPunitive
-      ? "皇帝收回皇后六宫主理权，令他人协理，臣深感失落。"
-      : "臣抱恙，皇帝体恤令他人暂代宫务，以减臣之劳顿。";
+      ? "皇帝命他人协理六宫，臣侍深感失落。"
+      : "臣侍抱恙，皇帝体恤令他人暂代宫务，以免操劳不利于病情。";
     effects.push({
       type: "memory",
       char: empressId,
@@ -211,7 +211,7 @@ export function planHaremAdministrationTransfer(
       char: target.charId,
       entry: {
         kind: "episodic",
-        summary: "皇帝下旨命臣协理六宫，臣领旨谨慎从事。",
+        summary: "皇帝下旨命臣侍协理六宫，臣侍领旨，定勤勉尽心。",
         strength: 60,
         retention: "slow",
         subjectIds: [SOVEREIGN, target.charId],
@@ -238,7 +238,7 @@ export function planHaremAdministrationTransfer(
     const char = db.characters[target.charId] ?? state.generatedConsorts[target.charId];
     reactionBeats.push({
       speakerId: target.charId,
-      lines: [`${char?.profile.name ?? "侍君"}领旨，定当谨慎协理六宫事务。`],
+      lines: [`${char?.profile.name ?? "侍君"}领旨，定当尽心协理六宫事务。`],
     });
   }
 
@@ -259,7 +259,7 @@ function buildBaseLines(
   newAdmin: HaremAdministrationState,
 ): string[] {
   if (target.kind === "empress") {
-    return ["六宫主理权归还皇后，皇后领旨。"];
+    return ["六宫主理权归还皇后，皇后领旨谢恩。"];
   }
   if (target.kind === "neiwu_proxy") {
     return isPunitive

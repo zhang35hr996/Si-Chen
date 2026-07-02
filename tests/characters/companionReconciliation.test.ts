@@ -136,7 +136,7 @@ describe("computePatronage", () => {
     const lowRank = Object.values(db.ranks).filter((r) => r.domain === "harem").sort((a, b) => a.order - b.order)[0]!;
     const highRank = Object.values(db.ranks).filter((r) => r.domain === "harem" && r.id !== "huanghou").sort((a, b) => b.order - a.order)[0]!;
 
-    const heir = makeHeir("h1", 1, { adoptiveFatherId: "cust1" });
+    const heir = makeHeir("h1", 1, { custodianId: "cust1" });
     const sLow = makeState([heir]);
     sLow.standing["cust1"] = { rank: lowRank.id, favor: 50, peakFavor: 50 };
     const sHigh = makeState([heir]);
@@ -147,7 +147,7 @@ describe("computePatronage", () => {
 
   it("养父恩宠越高 → patronage 越高", () => {
     const rank = Object.values(db.ranks).find((r) => r.domain === "harem")!;
-    const heir = makeHeir("h1", 1, { adoptiveFatherId: "cust1" });
+    const heir = makeHeir("h1", 1, { custodianId: "cust1" });
     const sLow = makeState([heir]);
     sLow.standing["cust1"] = { rank: rank.id, favor: 10, peakFavor: 10 };
     const sHigh = makeState([heir]);
@@ -157,7 +157,7 @@ describe("computePatronage", () => {
 
   it("养父母族 influence 越高 → patronage 越高", () => {
     const rank = Object.values(db.ranks).find((r) => r.domain === "harem")!;
-    const heir = makeHeir("h1", 1, { adoptiveFatherId: "cust1" });
+    const heir = makeHeir("h1", 1, { custodianId: "cust1" });
     const sLow = makeState([heir], [], [makeFamily("famA", 10)]);
     sLow.standing["cust1"] = { rank: rank.id, favor: 50, peakFavor: 50, birthFamilyId: "famA" };
     const sHigh = makeState([heir], [], [makeFamily("famA", 90)]);
@@ -253,7 +253,7 @@ describe("planCompanionReconciliation — 年龄分层", () => {
 describe("planCompanionReconciliation — patronage 驱动", () => {
   it("高 patronage 匹配更高 familyQuality 家族", () => {
     const rank = Object.values(db.ranks).filter((r) => r.domain === "harem").sort((a, b) => b.order - a.order)[1]!;
-    const heir = makeHeir("h1", 1, { adoptiveFatherId: "cust1", favor: 90, legitimate: true });
+    const heir = makeHeir("h1", 1, { custodianId: "cust1", favor: 90, legitimate: true });
     const richMember = makeMember("m_rich", "famHigh", 5);
     const poorMember = makeMember("m_poor", "famLow", 5);
     const s = makeState([heir], [richMember, poorMember], [makeFamily("famHigh", 95, 95), makeFamily("famLow", 10, 10)]);
@@ -265,7 +265,7 @@ describe("planCompanionReconciliation — patronage 驱动", () => {
 
   it("高 patronage 宗室 fallback 获得近支(close)", () => {
     const rank = Object.values(db.ranks).filter((r) => r.domain === "harem" && r.id !== "huanghou").sort((a, b) => b.order - a.order)[0]!;
-    const heir = makeHeir("h1", 1, { adoptiveFatherId: "cust1", favor: 100, legitimate: true });
+    const heir = makeHeir("h1", 1, { custodianId: "cust1", favor: 100, legitimate: true });
     const s = makeState([heir], [], [makeFamily("famA", 100)]);
     s.standing["cust1"] = { rank: rank.id, favor: 100, peakFavor: 100, birthFamilyId: "famA" };
     const plan = planCompanionReconciliation(db, s, NOW);

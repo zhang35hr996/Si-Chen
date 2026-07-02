@@ -138,8 +138,10 @@ describe("save migration v26→v27 rank remapping", () => {
   function makeV26Save(rankOverrides: Record<string, string>): string {
     let s = createNewGameState(db);
     // Inject any story consorts referenced in rankOverrides so they appear in standing.
+    // These are the deleted story consorts (no longer in db.characters); withConsort
+    // resolves them from the legacy test fixtures.
     for (const charId of Object.keys(rankOverrides)) {
-      if (!s.standing[charId] && db.characters[charId]) {
+      if (!s.standing[charId]) {
         s = withConsort(s, db, charId);
       }
     }

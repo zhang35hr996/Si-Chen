@@ -91,7 +91,7 @@ describe("planMonthlyHeirUpbringing — 守卫", () => {
 
 describe("无有效抚养人", () => {
   it("无养父且久未召见 → 忽视上升", () => {
-    const s = makeState([makeHeir("h1")]); // no adoptiveFatherId, no lastImperialInteractionAt
+    const s = makeState([makeHeir("h1")]); // no custodianId, no lastImperialInteractionAt
     const plan = planMonthlyHeirUpbringing(db, s, NOW);
     const c = plan.changes[0]!;
     expect(c.neglectDelta).toBe(6);
@@ -147,7 +147,7 @@ describe("applyImperialDamping", () => {
 
 describe("太后抚养", () => {
   it("太后为养父 → 用显式基准 careScore，合法 careOutcome 且 bond 可增", () => {
-    const heir = makeHeir("h1", { adoptiveFatherId: "taihou", custodianBond: 50, lastImperialInteractionAt: undefined });
+    const heir = makeHeir("h1", { custodianId: "taihou", custodianBond: 50, lastImperialInteractionAt: undefined });
     const s = makeState([heir]);
     // 太后在世（createNewGameState 默认 taihou 未亡）
     const c = planMonthlyHeirUpbringing(db, s, NOW).changes[0]!;
@@ -157,7 +157,7 @@ describe("太后抚养", () => {
   });
 
   it("太后已故 → 按无有效抚养人处理", () => {
-    const heir = makeHeir("h1", { adoptiveFatherId: "taihou" });
+    const heir = makeHeir("h1", { custodianId: "taihou" });
     const s = makeState([heir]);
     s.taihou = { ...s.taihou, deceased: true };
     const c = planMonthlyHeirUpbringing(db, s, NOW).changes[0]!;
@@ -169,7 +169,7 @@ describe("太后抚养", () => {
 
 describe("抚养人六态对月结的影响", () => {
   function withCustodian(lifecycle: "normal" | "candidate" | "deceased", opts: { confined?: boolean } = {}): GameState {
-    const heir = makeHeir("h1", { adoptiveFatherId: "cust1" });
+    const heir = makeHeir("h1", { custodianId: "cust1" });
     const s = makeState([heir]);
     s.standing["cust1"] = consortStanding({ lifecycle });
     s.generatedConsorts["cust1"] = {
@@ -219,7 +219,7 @@ describe("抚养人六态对月结的影响", () => {
 
 describe("有有效抚养人", () => {
   function stateWithCustodian(personality: Partial<CharacterStanding["personality"]> = {}, household: Partial<CharacterStanding["household"]> = {}): GameState {
-    const heir = makeHeir("h1", { adoptiveFatherId: "cust1", custodianBond: 30 });
+    const heir = makeHeir("h1", { custodianId: "cust1", custodianBond: 30 });
     const s = makeState([heir]);
     const base = consortStanding();
     s.standing["cust1"] = {
@@ -253,6 +253,13 @@ describe("有有效抚养人", () => {
     const s = stateWithCustodian();
     const c = planMonthlyHeirUpbringing(db, s, NOW).changes[0]!;
     expect(["attentive_custodian", "ordinary_custodian", "inattentive_custodian"]).toContain(c.careOutcome);
+  });
+
+  it("rename 回归：custodianId 字段有效 → 不判为无人照料", () => {
+    // 验证 custodianId 字段（抚养人登记）仍被正确识别为有效抚养人
+    const s = stateWithCustodian();
+    const c = planMonthlyHeirUpbringing(db, s, NOW).changes[0]!;
+    expect(c.careOutcome).not.toBe("no_effective_custodian");
   });
 
   it("相同 seed/state 结果完全稳定", () => {

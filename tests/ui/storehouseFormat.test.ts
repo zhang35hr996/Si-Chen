@@ -15,4 +15,14 @@ describe("库房展示辅助", () => {
     expect(t.consorts.length).toBeGreaterThan(0);
     expect(t.clan.length).toBe(0);
   });
+  it("production-shaped runtime db lists each consort once (no duplicate keys)", () => {
+    const db = loadRealContent();
+    const s = createNewGameState(db);
+    // App merges generatedConsorts into db.characters; bestowTargets must not double-list.
+    const runtimeDb = { ...db, characters: { ...db.characters, ...s.generatedConsorts } };
+    const t = bestowTargets(runtimeDb, s);
+    const ids = t.consorts.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBeGreaterThan(0);
+  });
 });

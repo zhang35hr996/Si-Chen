@@ -4,6 +4,7 @@ import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { withConsort } from "../helpers/consortFixture";
 import type { GameState } from "../../src/engine/state/types";
+import { buildBirthParentage } from "../../src/engine/characters/parentage/establishBirthParentage";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -43,12 +44,13 @@ describe("funnel: birth", () => {
     expect(heirs[0]!.petName).toBe("");
     expect(heirs[0]!.givenName).toBeUndefined();
     expect(heirs[0]!.education).toEqual({ scholarship: 5, martial: 5, virtue: 5 });
-    expect(heirs[0]!.adoptiveFatherId).toBeUndefined();
+    expect(heirs[0]!.custodianId).toBeUndefined();
     expect(heirs[0]!.fatherId).toBe("lu_huaijin");
     expect(r.value.standing.lu_huaijin!.lifecycle).toBe("delivered");
     expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBe(20);
     expect(r.value.resources.bloodline.gestations).toEqual([]);
     expect(r.value.resources.bloodline.pregnancy).toEqual({ status: "none", candidateIds: [] });
+    expect(r.value.parentage["heir_000001"]).toEqual(buildBirthParentage("lu_huaijin"));
   });
 
   it("child_dies → no heir, carrier normal + recoverUntilMonth", () => {
@@ -58,6 +60,7 @@ describe("funnel: birth", () => {
     expect(r.value.resources.bloodline.heirs).toHaveLength(0);
     expect(r.value.standing.lu_huaijin!.lifecycle).toBe("normal");
     expect(r.value.standing.lu_huaijin!.recoverUntilMonth).toBe(20);
+    expect(r.value.parentage).toEqual({});
   });
 
   it("bearer_dies → heir survives, gestation cleared; maternal death NOT set by birth effect alone", () => {
@@ -86,6 +89,7 @@ describe("funnel: birth", () => {
     expect(r.value.resources.bloodline.gestations).toEqual([]);
     expect(r.value.standing.lu_huaijin!.lifecycle).not.toBe("deceased"); // not dead yet without consort_decease
     expect(r.value.standing.lu_huaijin!.deathRecord).toBeUndefined();
+    expect(r.value.parentage).toEqual({});
   });
 
   it("self-pregnancy birth (bearer sovereign) appends heir, no standing change", () => {
@@ -103,6 +107,8 @@ describe("funnel: birth", () => {
     expect(r.value.resources.bloodline.heirs[0]!.bearer).toBe("sovereign");
     expect(r.value.resources.bloodline.heirs[0]!.fatherId).toBeNull();
     expect(r.value.resources.bloodline.gestations).toEqual([]);
+    expect(r.value.parentage[r.value.resources.bloodline.heirs[0]!.id])
+      .toEqual(buildBirthParentage(null));
   });
 
   it("rejects a birth when no gestation is active (double-fire guard)", () => {
@@ -131,6 +137,9 @@ describe("funnel: birth", () => {
     expect(heirs[1]!.id).toBe("heir_000002");
     expect(heirs[1]!.bearer).toBe("lu_huaijin");
     expect(heirs[1]!.fatherId).toBe("lu_huaijin");
+    expect(r.value.parentage["heir_000001"]).toEqual(buildBirthParentage("lu_huaijin"));
+    expect(r.value.parentage["heir_000002"]).toEqual(buildBirthParentage("lu_huaijin"));
+    expect(Object.keys(r.value.parentage)).toHaveLength(2);
   });
 
   it("twin birth with child_dies → no heirs (both die)", () => {

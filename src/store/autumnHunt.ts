@@ -35,7 +35,7 @@ export function buildAutumnHuntPrompt(state: GameState, _seedKey: string): Cheng
   if (state.flags[autumnHuntFlagKey(cal.year)]) return null;
   return {
     speakerId: "cheng_feng",
-    line: "陛下，今年的秋猎将至，可要参与？",
+    line: "陛下，今年的秋猎将至，可要去松快下筋骨？",
     choices: [
       { label: "参加", action: { type: "huntJoin", year: cal.year } },
       { label: "不必了", action: { type: "huntDecline", year: cal.year } },

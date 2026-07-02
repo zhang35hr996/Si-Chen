@@ -23,6 +23,7 @@ import type { ProposedClaim } from "../../../src/engine/dialogue/claims";
 import type { ProviderError } from "../../../src/engine/dialogue/providerContract";
 import { loadRealContent } from "../../helpers/contentFixture";
 import { createNewGameState } from "../../../src/engine/state/newGame";
+import { withConsort } from "../../helpers/consortFixture";
 import {
   assembleDialogueRequest,
 } from "../../../src/engine/dialogue/orchestrator";
@@ -31,7 +32,7 @@ import { evalFixtures } from "../../eval/fixtures/builders";
 // ── Shared test infrastructure ────────────────────────────────────────────────
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+const state = ["shen_zhibai","wenya"].reduce((st, id) => withConsort(st, db, id), createNewGameState(db));
 
 const SPEAKER = "shen_zhibai";
 const LOCATION = "zichendian";

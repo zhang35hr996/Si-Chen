@@ -10,12 +10,13 @@ import { assembleDialogueRequest } from "../../src/engine/dialogue/orchestrator"
 import { compilePromptPayload } from "../../src/engine/dialogue/promptPayload";
 import { deriveConverseSceneContext } from "../../src/ui/converseScene";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { loadRealContent } from "../helpers/contentFixture";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import type { GameState, MemoryEntry } from "../../src/engine/state/types";
 
 const db = loadRealContent();
-const baseState = createNewGameState(db);
+const baseState = ["shen_zhibai"].reduce((st, id) => withConsort(st, db, id), createNewGameState(db));
 const SPEAKER = "shen_zhibai";
 const LOC = "zichendian";
 const SUBJECT = "heir_7"; // a character the memory is about, not the speaker

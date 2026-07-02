@@ -6,10 +6,11 @@ import type { DialogueProviderResult } from "../../src/engine/dialogue/providerC
 import { RingBufferLogger } from "../../src/engine/infra/logger";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { loadRealContent } from "../helpers/contentFixture";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+const state = ["shen_zhibai","lu_huaijin"].reduce((st, id) => withConsort(st, db, id), createNewGameState(db));
 
 // Scripted request — for use with scripted (mockProvider-kind) providers
 const requestFor = (speakerId: string, text = "台词。"): DialogueRequest => {

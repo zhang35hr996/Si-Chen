@@ -10,7 +10,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "taihou",
-      "text": "皇帝来了。皇帝日理万机，近日身体可还安顺？",
+      "text": "皇帝来了。皇帝政务繁忙，也要注意圣体。近日身体可还安顺？",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -36,7 +36,7 @@
       "type": "line",
       "id": "n_fx_filial",
       "speaker": "taihou",
-      "text": "好孩子。你身在万乘之位，也莫太亏了自己。哀家别无所求，只盼你保重。",
+      "text": "好孩子。你身在万乘之位，也莫太亏了自己。哀家别无所求，只盼早日含饴弄孙。",
       "expression": "neutral",
       "next": "n_fx_apply"
     },

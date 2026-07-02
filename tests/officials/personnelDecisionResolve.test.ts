@@ -179,7 +179,7 @@ describe("family implication resolution — PUNISH branch", () => {
 
 describe("memorial resolution — administrative vs PUNISH boundary", () => {
   it("memorial_promotion approve is administrative (no PunishmentRecord)", () => {
-    let s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 95 });
+    let s = tune(withConsort(createNewGameState(db, 1), db, "wenya"), WEN_OFFICIAL, { merit: 95 });
     s = { ...s, officials: { ...s.officials, [WEN_OFFICIAL]: { ...s.officials[WEN_OFFICIAL]!, loyalty: 95, aptitude: { governance: 95, scholarship: 95, military: 95, integrity: 95 } } } };
     const g = generateMemorial(s, db, WEN_OFFICIAL, "memorial_promotion", at(3))!;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "approve", at(3));
@@ -191,7 +191,7 @@ describe("memorial resolution — administrative vs PUNISH boundary", () => {
   });
 
   it("memorial_demotion approve routes through PUNISH; reject changes nothing", () => {
-    const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 20 });
+    const s = tune(withConsort(createNewGameState(db, 1), db, "wenya"), WEN_OFFICIAL, { merit: 20 });
     const g = generateMemorial(s, db, WEN_OFFICIAL, "memorial_demotion", at(3))!;
     const ok = resolvePersonnelDecision(g.state, db, g.decision.id, "approve", at(3));
     expect(ok.ok).toBe(true);
@@ -199,7 +199,7 @@ describe("memorial resolution — administrative vs PUNISH boundary", () => {
     expect(ok.value.state.justice.punishments[ok.value.punishmentId!]!.kind).toBe("official_demotion");
     expect(validateOfficialWorld(ok.value.state, db)).toEqual([]);
 
-    const g2 = generateMemorial(tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 20 }), db, WEN_OFFICIAL, "memorial_demotion", at(3))!;
+    const g2 = generateMemorial(tune(withConsort(createNewGameState(db, 1), db, "wenya"), WEN_OFFICIAL, { merit: 20 }), db, WEN_OFFICIAL, "memorial_demotion", at(3))!;
     const rej = resolvePersonnelDecision(g2.state, db, g2.decision.id, "reject", at(3));
     expect(rej.ok).toBe(true);
     if (!rej.ok) return;
@@ -208,7 +208,7 @@ describe("memorial resolution — administrative vs PUNISH boundary", () => {
   });
 
   it("memorial_dismissal approve routes through PUNISH (official_dismissal)", () => {
-    const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { underperformanceYears: 2 });
+    const s = tune(withConsort(createNewGameState(db, 1), db, "wenya"), WEN_OFFICIAL, { underperformanceYears: 2 });
     const g = generateMemorial(s, db, WEN_OFFICIAL, "memorial_dismissal", at(3))!;
     const r = resolvePersonnelDecision(g.state, db, g.decision.id, "approve", at(3));
     expect(r.ok).toBe(true);
@@ -242,7 +242,8 @@ describe("atomic failure & lifecycle", () => {
   });
 
   it("promotion approve fails atomically when the recommended seat is no longer vacant", () => {
-    const g = generateConsortPetition(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, LU_CONSORT, at(3))!;
+    const base = withConsort(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), db, "wenya");
+    const g = generateConsortPetition(base, db, LU_CONSORT, at(3))!;
     // 把建议席位塞满（seatCount=1 的 g15 官职）→ 升迁 API 失败 → 整体不变。
     const target = g.decision.recommendedPostId!;
     const blocked = { ...g.state, officials: { ...g.state.officials, [WEN_OFFICIAL]: { ...g.state.officials[WEN_OFFICIAL]!, postId: target } } };

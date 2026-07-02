@@ -5,6 +5,7 @@ import type { AnthropicTransport } from "../../src/engine/dialogue/providers/ant
 import { assembleDialogueRequest } from "../../src/engine/dialogue/orchestrator";
 import { loadRealContent } from "../helpers/contentFixture";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 describe("anthropicProvider — success", () => {
   it("forces a single tool, parses input, derives speaker, fills meta from envelope", async () => {
@@ -115,7 +116,7 @@ describe("WORLD_RULES_TEXT", () => {
 
 describe("anthropic tool contract carries mentionedContextRefs", () => {
   const db = loadRealContent();
-  const state = createNewGameState(db);
+  const state = withConsort(createNewGameState(db), db, "shen_zhibai");
   function toolOf() {
     const req = assembleDialogueRequest(db, state, "shen_zhibai", "zichendian");
     if (!req.ok) throw new Error(req.error.message);
@@ -209,7 +210,7 @@ describe("buildAnthropicToolRequest — caching structure", () => {
 
   it("messages[0].content includes currentScene.directive when sceneDirective set", () => {
     const db2 = loadRealContent();
-    const state2 = createNewGameState(db2);
+    const state2 = withConsort(createNewGameState(db2), db2, "shen_zhibai");
     const r2 = assembleDialogueRequest(db2, state2, "shen_zhibai", "zichendian", { sceneDirective: "今日风雪，气氛压抑。" });
     if (!r2.ok) return;
     const payload = buildAnthropicToolRequest(r2.value, "claude-sonnet-4-6");

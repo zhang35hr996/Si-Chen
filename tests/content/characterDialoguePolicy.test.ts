@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { characterSchema } from "../../src/engine/content/schemas";
-import { loadRealContent } from "../helpers/contentFixture";
+import { legacyConsortContent } from "../helpers/consortFixture";
 
 /**
  * Minimal valid character for testing (includes only required fields).
@@ -115,16 +115,17 @@ describe("characterSchema dialoguePolicy", () => {
     expect(result.success).toBe(false);
   });
 
+  // wenya was removed from authored content/; the legacy test fixture preserves her
+  // authored dialoguePolicy (the forbidden-claim contract still ships via generated consorts).
   it("wenya content has dialoguePolicy.forbiddenClaims entry", () => {
-    const db = loadRealContent();
-    expect(db.characters["wenya"]?.dialoguePolicy).toBeDefined();
-    expect(db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims.length).toBe(1);
-    expect(db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims[0]?.id).toBe("forbid_wenya_rank_huanghou");
+    const wenya = legacyConsortContent("wenya");
+    expect(wenya.dialoguePolicy).toBeDefined();
+    expect(wenya.dialoguePolicy?.forbiddenClaims.length).toBe(1);
+    expect(wenya.dialoguePolicy?.forbiddenClaims[0]?.id).toBe("forbid_wenya_rank_huanghou");
   });
 
   it("wenya forbidden claim is huanghou not zhaoyi — promotion to zhaoyi must not fire claim_explicitly_forbidden", () => {
-    const db = loadRealContent();
-    const claims = db.characters["wenya"]?.dialoguePolicy?.forbiddenClaims ?? [];
+    const claims = legacyConsortContent("wenya").dialoguePolicy?.forbiddenClaims ?? [];
     // Regression: holds_rank(wenya, zhaoyi) is not in the forbidden list.
     // If the player legitimately promotes wenya to zhaoyi, the gate must not fire.
     expect(claims.some((c) => c.object === "zhaoyi")).toBe(false);

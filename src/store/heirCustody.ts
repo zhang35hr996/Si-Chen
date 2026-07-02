@@ -28,6 +28,7 @@ import { stateError, type GameError } from "../engine/infra/errors";
 import { err, ok, type Result } from "../engine/infra/result";
 import { toGameTime } from "../engine/calendar/time";
 import { resolveDisplayName } from "../engine/characters/standing";
+import { getBiologicalParents } from "../engine/characters/parentage/parentageSelectors";
 import type { ContentDB } from "../engine/content/loader";
 import type { CharacterContent, EventEffect } from "../engine/content/schemas";
 import type { ReactionBeat } from "../engine/punishments/types";
@@ -101,7 +102,7 @@ export function eligibleCustodiansForHeir(
 
   const guirenOrder = db.ranks["guiren"]?.order ?? 116;
   const changzaiOrder = db.ranks["changzai"]?.order ?? 84;
-  const currentCustodianId = heir.adoptiveFatherId;
+  const currentCustodianId = heir.custodianId;
   const empress = currentEligibleEmpress(db, state);
 
   const candidates: CustodianCandidate[] = [];
@@ -187,7 +188,7 @@ function buildCustodyReactions(
         `此事当告于宗庙，${childLabel}自此列为嫡出，由${toName}亲自抚育，不负天恩。`,
       ],
     });
-  } else if (toChar?.kind === "consort" && toChar.id === heir.fatherId) {
+  } else if (toChar?.kind === "consort" && toChar.id === getBiologicalParents(state, heir.id)?.fatherId) {
     const toSt = state.standing[toCustodianId];
     const toRank = toSt ? db.ranks[toSt.rank] : undefined;
     const toName = toChar ? resolveDisplayName(toChar, toSt, toRank) : toCustodianId;
@@ -216,7 +217,7 @@ function buildCustodyReactions(
     if (isLivingConsort) {
       reactions.push({
         speakerId: "wei_sui",
-        lines: [`司礼官低声回禀：更易抚养之事，已告于宗庙。臣听闻……那位侍君闻讯，独在宫中，久久不语。`],
+        lines: [`司礼官低声回禀：皇嗣已搬到新住处，臣已告于宗庙。臣听闻……那位侍君闻讯，独在宫中，久久不语。`],
       });
     }
   }
@@ -246,7 +247,7 @@ export function planHeirCustodyTransfer(
   }
 
   // Same custodian
-  if (toCustodianId === heir.adoptiveFatherId) {
+  if (toCustodianId === heir.custodianId) {
     return err([stateError("SAME_CUSTODIAN", "此人已是当前抚养人")]);
   }
 
@@ -261,7 +262,7 @@ export function planHeirCustodyTransfer(
   }
 
   const becomesLegitimate = candidate.becomesLegitimate;
-  const fromCustodianId = heir.adoptiveFatherId;
+  const fromCustodianId = heir.custodianId;
   const now = toGameTime(state.calendar);
 
   // Build effects
@@ -282,7 +283,7 @@ export function planHeirCustodyTransfer(
           char: fromCustodianId,
           entry: {
             kind: "grievance",
-            summary: "陛下将皇嗣交由他人抚养，自己被夺去抚养之权。",
+            summary: "陛下将皇嗣交由他人抚养，被夺去了抚养之权。",
             subjectIds: [fromCustodianId, heirId, toCustodianId],
             perspective: "target",
             strength: 75,

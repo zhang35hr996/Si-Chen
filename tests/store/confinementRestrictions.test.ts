@@ -15,7 +15,7 @@ import type { GameState } from "../../src/engine/state/types";
 const db = loadRealContent();
 const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const now = toGameTime(base.calendar);
-const HOME = db.characters.lu_huaijin!.defaultLocation; // zhongcui_gong
+const HOME = base.generatedConsorts.lu_huaijin!.defaultLocation; // zhongcui_gong
 
 function confined(durationTurns: number | null = null): GameState {
   const r = applyEffects(db, base, [

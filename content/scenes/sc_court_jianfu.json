@@ -10,7 +10,7 @@
       "type": "line",
       "id": "n_open",
       "speaker": "wei_sui",
-      "text": "今岁丰稔，州县请减田赋一分，以纾民力。伏请圣裁。",
+      "text": "今岁歉收，州县请减田赋一分，以纾民力。伏请圣裁。",
       "expression": "neutral",
       "next": "n_choice"
     },
@@ -26,7 +26,7 @@
         },
         {
           "id": "c_1",
-          "text": "国用方殷，赋税不可轻动。",
+          "text": "国库空虚，赋税不可轻动。",
           "tone": "neutral",
           "next": "n_fx_1"
         }
@@ -55,7 +55,7 @@
       "type": "line",
       "id": "n_end_0",
       "speaker": "wei_sui",
-      "text": "臣领旨。明发诏书，万民必感戴天恩。",
+      "text": "臣领旨。万民必感戴天恩。",
       "expression": "neutral"
     },
     {
@@ -81,7 +81,7 @@
       "type": "line",
       "id": "n_end_1",
       "speaker": "wei_sui",
-      "text": "臣领旨。只是民间难免有怨声，还请陛下垂察。",
+      "text": "臣领旨。只是民间难免有怨声，还请陛下明察。",
       "expression": "neutral"
     }
   ]

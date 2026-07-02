@@ -99,8 +99,8 @@ export function computePatronage(db: ContentDB, state: GameState, heirId: string
   const heir = state.resources.bloodline.heirs.find((candidate) => candidate.id === heirId);
   if (!heir) return 0;
 
-  const custodianStanding = heir.adoptiveFatherId
-    ? state.standing[heir.adoptiveFatherId]
+  const custodianStanding = heir.custodianId
+    ? state.standing[heir.custodianId]
     : undefined;
   const rank = custodianStanding ? db.ranks[custodianStanding.rank] : undefined;
   const familyId = custodianStanding?.birthFamilyId;

@@ -11,9 +11,10 @@ import { describe, it, expect } from "vitest";
 import { resolveAddress } from "../../src/engine/dialogue/addressResolver";
 import { loadRealContent } from "../helpers/contentFixture";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+const state = ["shen_zhibai","lu_huaijin"].reduce((st, id) => withConsort(st, db, id), createNewGameState(db));
 
 describe("resolveAddress — 太后 speaking to emperor (player)", () => {
   it("uses 皇帝 as targetAddress, not 陛下", () => {

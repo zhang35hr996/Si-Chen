@@ -20,13 +20,13 @@
       "choices": [
         {
           "id": "c_0",
-          "text": "世家所请，朕准了。",
+          "text": "准了。",
           "tone": "friendly",
           "next": "n_fx_0"
         },
         {
           "id": "c_1",
-          "text": "加封之事，朕自有计较，且缓。",
+          "text": "加封之事且缓办吧。",
           "tone": "guarded",
           "next": "n_fx_1"
         }
@@ -55,7 +55,7 @@
       "type": "line",
       "id": "n_end_0",
       "speaker": "wei_sui",
-      "text": "臣领旨。只是恩出于上，望陛下勿使一姓独重。",
+      "text": "臣领旨。只是外戚独大，恐威胁皇权。",
       "expression": "neutral"
     },
     {
@@ -81,7 +81,7 @@
       "type": "line",
       "id": "n_end_1",
       "speaker": "wei_sui",
-      "text": "臣领旨。世家那边，臣自当婉言回禀。",
+      "text": "臣领旨。",
       "expression": "neutral"
     }
   ]

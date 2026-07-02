@@ -25,12 +25,13 @@ import { mockProvider } from "../../src/engine/dialogue/providers/mockProvider";
 import { SceneRunner } from "../../src/engine/scenes/runner";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { loadRealContent } from "../helpers/contentFixture";
 import { readFileSync } from "fs";
 import { createGameStore } from "../../src/store/gameStore";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
+const state = withConsort(createNewGameState(db), db, "shen_zhibai");
 const SPEAKER = "shen_zhibai";
 const VALID_TEXT = "臣侍告退，陛下早些歇息。";
 
