@@ -27,7 +27,8 @@ export function bestowTargets(
   state: GameState,
 ): { consorts: BestowTarget[]; heirs: BestowTarget[]; clan: BestowTarget[] } {
   const consorts: BestowTarget[] = [];
-  for (const c of Object.values(db.characters)
+  // Consorts live in db.characters (authored) OR state.generatedConsorts (procedural).
+  for (const c of [...Object.values(db.characters), ...Object.values(state.generatedConsorts)]
     .filter((c) => c.kind === "consort" && state.standing[c.id]?.lifecycle !== "deceased")
     .sort(byRankDesc(db, state))) {
     const st = state.standing[c.id];

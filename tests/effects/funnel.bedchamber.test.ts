@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadGameContent } from "../../src/engine/content/viteSource";
 import { applyEffects, validateEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -9,7 +10,7 @@ const db = content.value;
 
 describe("funnel: bedchamber", () => {
   it("appends an encounter at current time", () => {
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, "lu_huaijin");
     const r = applyEffects(db, state, [{ type: "bedchamber", char: "lu_huaijin", mode: "passion" }]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
