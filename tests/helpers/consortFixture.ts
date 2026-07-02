@@ -18,7 +18,7 @@
  *                               both db.characters and state.generatedConsorts
  */
 import { toGameTime } from "../../src/engine/calendar/time";
-import { consortStandingExtras } from "../../src/engine/state/newGame";
+import { consortStandingExtras, memoryEntryId } from "../../src/engine/state/newGame";
 import { generateOfficialWorld } from "../../src/engine/officials/worldgen";
 import { characterSchema } from "../../src/engine/content/schemas";
 import type { CharacterContent } from "../../src/engine/content/schemas";
@@ -54,6 +54,28 @@ const EVICTION_PALACES = [
   "zichendian",
   "zuixianlou",
 ];
+
+/** Builds a memory store from a character's authored initialMemories (mirrors createNewGameState). */
+function seedMemoryStore(char: CharacterContent, startTime: ReturnType<typeof toGameTime>) {
+  return {
+    entries: char.initialMemories.map((draft, index) => ({
+      id: memoryEntryId(char.id, index + 1),
+      ownerId: char.id,
+      kind: draft.kind,
+      ...(draft.sourceEventId !== undefined ? { sourceEventId: draft.sourceEventId } : {}),
+      subjectIds: [...draft.subjectIds],
+      perspective: draft.perspective,
+      summary: draft.summary,
+      strength: draft.strength,
+      retention: draft.retention,
+      emotions: { ...draft.emotions },
+      triggerTags: [...draft.triggerTags],
+      unresolved: draft.unresolved,
+      createdAt: startTime,
+    })),
+    nextSeq: char.initialMemories.length + 1,
+  };
+}
 
 /**
  * The four deleted story consorts each carry a `maternalClan` (familyId + postId).
@@ -191,9 +213,11 @@ export function withConsort(
       : { ...state.bedchamber, [charId]: { encounters: [] } },
     // Every consort needs a memory store (createNewGameState seeds one for each);
     // without it, memory-targeting effects (e.g. cold-palace) fail BAD_EFFECT_TARGET.
+    // Seed the consort's authored initialMemories (mirrors createNewGameState) so
+    // memory-dependent tests see the same entries production would.
     memories: state.memories[charId]
       ? state.memories
-      : { ...state.memories, [charId]: { entries: [], nextSeq: 1 } },
+      : { ...state.memories, [charId]: seedMemoryStore(char, startTime) },
   };
 
   // Legacy story consorts carry a maternalClan; rebuild the official world so their

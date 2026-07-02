@@ -11,10 +11,11 @@ import { toPromptMemory } from "../../src/engine/dialogue/promptPayload";
 import type { MemoryEntry } from "../../src/engine/state/types";
 import { createNewGameState } from "../../src/engine/state/newGame";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
-const state = createNewGameState(db);
 const SPEAKER = "shen_zhibai";
+const state = withConsort(createNewGameState(db), db, SPEAKER);
 const ELDER = "taihou"; // elder character (no rank)
 const LOC = "zichendian";
 
