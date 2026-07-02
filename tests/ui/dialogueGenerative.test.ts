@@ -16,6 +16,7 @@ import type { DialogueLine, DialogueProvider } from "../../src/engine/dialogue/t
 import type { DialogueProviderResult } from "../../src/engine/dialogue/providerContract";
 import { ok } from "../../src/engine/infra/result";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { createGameStore } from "../../src/store/gameStore";
 import { loadRealContent } from "../helpers/contentFixture";
 
@@ -47,6 +48,7 @@ describe("DialogueScreen generative mode", () => {
   beforeEach(() => {
     store = createGameStore();
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, SPEAKER));
   });
 
   // 1. Snapshot is taken BEFORE the async produceDialogueTurn call
@@ -247,6 +249,7 @@ describe("ReactionScreen choice rendering and meta badges", () => {
   beforeEach(() => {
     store = createGameStore();
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, SPEAKER));
   });
 
   it("generative line with choices produces N choice descriptors", () => {
@@ -309,6 +312,7 @@ describe("ReactionScreen generatedLine prop", () => {
   beforeEach(() => {
     store = createGameStore();
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, SPEAKER));
   });
 
   it("generatedLine round-trips: expression, choices, meta.generated all preserved", () => {
@@ -403,6 +407,7 @@ describe("T3 — choice-driven generative turns", () => {
   beforeEach(() => {
     store = createGameStore();
     store.newGame(db);
+    store.loadState(withConsort(store.getState(), db, SPEAKER));
   });
 
   // T3-1: choice click drives turn 2 with appended transcript

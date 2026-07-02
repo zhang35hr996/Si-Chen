@@ -8,7 +8,9 @@ import type { ContentDB } from "../engine/content/loader";
 import type { GameState } from "../engine/state/types";
 
 export function buildConversation(db: ContentDB, state: GameState, charId: string): string[] | null {
-  const ch = db.characters[charId];
+  // Consorts are procedurally generated into state.generatedConsorts; fall back to it
+  // so conversation lines resolve for generated consorts (db.characters holds none).
+  const ch = db.characters[charId] ?? state.generatedConsorts[charId];
   if (!ch || ch.kind !== "consort") return null;
   const st = state.standing[charId];
   const rank = st ? db.ranks[st.rank] : undefined;
