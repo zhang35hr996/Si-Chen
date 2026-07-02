@@ -64,6 +64,14 @@ describe("validateParentage", () => {
     const s = stateWithHeir({ heir_000001: { biologicalMotherId: "sovereign", biologicalFatherId: "ghost", legalMotherId: "sovereign", legalFatherId: "ghost" } }, { id: "heir_000001", fatherId: "ghost" });
     expect(validateParentage(s, db).map((e) => e.code)).toContain("PARENTAGE_UNKNOWN_PERSON");
   });
+  it("孤儿 parentage key（key 本身无对应人物）→ PARENTAGE_UNKNOWN_CHILD", () => {
+    const s = stateWithHeir({
+      heir_000001: { biologicalMotherId: "sovereign", biologicalFatherId: "c1", legalMotherId: "sovereign", legalFatherId: "c1" },
+      // heir_000002 不在 heirs/standing/generatedConsorts/db.characters → 幽灵 key
+      heir_000002: { biologicalMotherId: "sovereign", biologicalFatherId: null, legalMotherId: "sovereign", legalFatherId: null },
+    });
+    expect(validateParentage(s, db).map((e) => e.code)).toContain("PARENTAGE_UNKNOWN_CHILD");
+  });
   it("residence map key 与 id 不符 → 失败", () => {
     const s = stateWithHeir({ heir_000001: { biologicalMotherId: "sovereign", biologicalFatherId: "c1", legalMotherId: "sovereign", legalFatherId: "c1" } });
     s.royalResidences = { res_000001: { id: "res_000002", holderId: "heir_000001", titleType: "fengzhu", spouseIds: [], lineage: { founderId: "heir_000001" } } } as any;

@@ -51,8 +51,11 @@ export function validateParentage(state: GameState, db: { characters: Record<str
     }
   }
 
-  // 2. 自指 + 引用合法
+  // 2. map key 本身须对应已知人物 + 自指 + 引用合法
   for (const [childId, p] of Object.entries(state.parentage)) {
+    if (!known.has(childId)) {
+      errs.push(stateError("PARENTAGE_UNKNOWN_CHILD", `parentage entry references unknown child ${childId}`, { context: { char: childId } }));
+    }
     for (const ref of [p.biologicalMotherId, p.biologicalFatherId, p.legalMotherId, p.legalFatherId]) {
       if (ref == null) continue;
       if (ref === childId) errs.push(stateError("PARENTAGE_SELF_REFERENCE", `${childId} references self`, { context: { char: childId } }));

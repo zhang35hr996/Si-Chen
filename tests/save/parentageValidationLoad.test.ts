@@ -37,4 +37,22 @@ describe("readSlot parentage validation 接线", () => {
     // 已 quarantine：原 slot 不再可正常读出该状态
     expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
   });
+
+  it("parentage 含孤儿 key（无对应人物）→ readSlot 失败并 quarantine", () => {
+    const s = createNewGameState(db);
+    // 幽灵 key：state 中没有 heir_000002，但 parentage 里有一条指向它的记录。
+    (s.parentage as Record<string, unknown>)["heir_000002"] = {
+      biologicalMotherId: "sovereign", biologicalFatherId: null,
+      legalMotherId: "sovereign", legalFatherId: null,
+    };
+
+    const storage = createMemoryStorage();
+    const env = { ...createSaveData(db, s, "slot1"), checksum: checksumOf(s) };
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(env));
+
+    const loaded = readSlot(storage, db, "slot1");
+    expect(loaded.ok).toBe(false);
+    if (!loaded.ok) expect(loaded.error.code).toBe("PARENTAGE_INTEGRITY");
+    expect(storage.get(`${SAVE_KEY_PREFIX}slot1`)).toBeNull();
+  });
 });
