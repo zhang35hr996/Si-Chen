@@ -131,10 +131,14 @@ describe("view-model mapping", () => {
 describe("summonedConsortToView", () => {
   const db = dbWith(mkEvent({}));
   it("renders an existing consort as a presence view-model", () => {
-    const charId = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort")!;
-    const v = summonedConsortToView(db, freshAt(db), registry, charId);
+    const state = freshAt(db);
+    // consorts are procedurally generated into state.generatedConsorts.
+    const charId = Object.keys(state.standing).find(
+      (id) => state.generatedConsorts[id]?.kind === "consort",
+    )!;
+    const v = summonedConsortToView(db, state, registry, charId);
     expect(v?.characterId).toBe(charId);
-    expect(v?.name).toBe(db.characters[charId]!.profile.name);
+    expect(v?.name).toBe(state.generatedConsorts[charId]!.profile.name);
     expect(v?.portraitSrc).toBeTruthy();
   });
   it("returns undefined for an unknown character", () => {

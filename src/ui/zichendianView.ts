@@ -89,13 +89,14 @@ export function summonedConsortToView(
   registry: AssetRegistry,
   characterId: string,
 ): ZichendianSummonedView | undefined {
-  const character = db.characters[characterId];
+  // Consorts are procedurally generated into state.generatedConsorts.
+  const character = db.characters[characterId] ?? state.generatedConsorts[characterId];
   if (!character) return undefined;
   return {
     characterId,
     name: character.profile.name,
     role: resolveVisitorTitle(db, state, characterId),
-    portraitSrc: neutralPortrait(db, registry, characterId),
+    portraitSrc: registry.portrait(character.portraitSet, "neutral").url,
   };
 }
 

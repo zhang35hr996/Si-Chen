@@ -7,6 +7,7 @@ import type { GameState } from "../../src/engine/state/types";
 import { buildCourtSummary, courtHoldGate } from "../../src/ui/xuanzhengView";
 import type { CourtMetricsDiff } from "../../src/engine/court/agenda";
 import { loadRealContent } from "../helpers/contentFixture";
+import { dbWithLegacyConsorts } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const fresh = (): GameState => createNewGameState(db);
@@ -64,10 +65,13 @@ describe("buildCourtSummary", () => {
   });
 
   it("maps attitude deltas to character display names + charId as stable id", () => {
-    const charId = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort")!;
-    const view = buildCourtSummary(db, diff({ attitudeDeltas: [{ char: charId, delta: 7 }] }));
+    // buildCourtSummary resolves names from db.characters; in production it receives a
+    // runtime db with generatedConsorts merged. Use a merged db with a story consort.
+    const charId = "lu_huaijin";
+    const mdb = dbWithLegacyConsorts(db, charId);
+    const view = buildCourtSummary(mdb, diff({ attitudeDeltas: [{ char: charId, delta: 7 }] }));
     expect(view.attitudes).toHaveLength(1);
-    expect(view.attitudes[0]!.label).toBe(db.characters[charId]!.profile.name);
+    expect(view.attitudes[0]!.label).toBe(mdb.characters[charId]!.profile.name);
     expect(view.attitudes[0]!.id).toBe(charId); // 行 id = charId（重名人物不冲突）
     expect(view.attitudes[0]!.delta).toBe(7);
     expect(view.attitudes[0]!.polarity).toBe(1);

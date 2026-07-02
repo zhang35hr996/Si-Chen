@@ -54,7 +54,8 @@ export function focusedCharacterView(
   registry: AssetRegistry,
   charId: string,
 ): FocusedCharacterView | undefined {
-  const character = db.characters[charId];
+  // Consorts are procedurally generated into state.generatedConsorts.
+  const character = db.characters[charId] ?? state.generatedConsorts[charId];
   if (!character) return undefined;
   const isConsort = character.kind === "consort";
   const hasAp = state.calendar.ap >= 1;

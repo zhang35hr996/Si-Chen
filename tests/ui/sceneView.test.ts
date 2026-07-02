@@ -9,7 +9,7 @@ import { consortLocationAt } from "../../src/engine/characters/presence";
 import type { GameState } from "../../src/engine/state/types";
 import { displayRole, focusedCharacterView, presentBarItems, reconcileSelection } from "../../src/ui/sceneView";
 import { loadRealContent } from "../helpers/contentFixture";
-import { withConsort } from "../helpers/consortFixture";
+import { withConsort, firstNonEmpressConsortId } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
@@ -67,7 +67,7 @@ describe("presentBarItems is driven by presentAt (physical), not residence roste
 describe("focusedCharacterView gating mirrors existing summon rules", () => {
   it("a consort with no AP is not actionable and gives a real reason", () => {
     const state: GameState = { ...fresh(), calendar: { ...fresh().calendar, ap: 0 } };
-    const consortId = Object.keys(db.characters).find((id) => db.characters[id]!.kind === "consort")!;
+    const consortId = firstNonEmpressConsortId(db, state);
     const view = focusedCharacterView(db, state, registry, consortId)!;
     expect(view.isConsort).toBe(true);
     expect(view.actionable).toBe(false);
