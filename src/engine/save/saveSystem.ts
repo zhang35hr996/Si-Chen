@@ -750,7 +750,9 @@ export const MIGRATIONS: Record<number, (old: unknown) => unknown> = {
     for (const [heirId, a] of Object.entries(rawCompanions)) {
       const assignment = { ...a };
       if (typeof assignment["id"] !== "string") {
-        assignment["id"] = `companion_assignment_legacy_${heirId}`;
+        // 结尾用非数字 token，避免被 companionAssignmentSequence 的 `_(\d+)$` 误当作序号
+        // （真实 heirId 形如 heir_000006，若结尾是数字会被解析成巨大的伪序号）。
+        assignment["id"] = `companion_assignment_${heirId}_legacy`;
       }
       if (assignment["status"] === "ended") {
         // 遗留：active map 中的已结束条目 → 迁入历史，离开 active。

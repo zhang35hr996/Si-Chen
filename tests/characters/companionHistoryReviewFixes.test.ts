@@ -168,7 +168,9 @@ describe("companion history review fixes", () => {
   it("legacy ids do not participate in the numeric sequence invariant", () => {
     const state = stateWithHeir();
     state.royalRelatives.r1 = royal("r1");
-    state.heirCompanions.h1 = assignment("companion_assignment_legacy_h1");
+    // 真实迁移形态：companion_assignment_<heirId>_legacy，heirId 形如 heir_000006（数字结尾）。
+    // 结尾的 `_legacy` 令 `_(\d+)$` 序号正则返回 null，故不参与序号不变量。
+    state.heirCompanions.h1 = assignment("companion_assignment_heir_000006_legacy");
     state.nextCompanionAssignmentSeq = 0;
 
     expect(

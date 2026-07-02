@@ -27,8 +27,8 @@ function makeV38Save(): string {
   const s = createNewGameState(db);
   // 两个皇嗣 + 一个宗室人物供引用
   s.resources.bloodline.heirs = [
-    { id: "heir_a", sex: "daughter", fatherId: null, bearer: "sovereign", birthAt: gt(1, 1), favor: 50, legitimate: false, petName: "", education: { scholarship: 10, martial: 10, virtue: 10 }, health: 70, talent: 50, diligence: 50, personality, interests: [], imperialFear: 20, neglect: 20, custodianBond: 0, portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" }, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive" },
-    { id: "heir_b", sex: "daughter", fatherId: null, bearer: "sovereign", birthAt: gt(1, 1), favor: 50, legitimate: false, petName: "", education: { scholarship: 10, martial: 10, virtue: 10 }, health: 70, talent: 50, diligence: 50, personality, interests: [], imperialFear: 20, neglect: 20, custodianBond: 0, portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" }, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive" },
+    { id: "heir_000001", sex: "daughter", fatherId: null, bearer: "sovereign", birthAt: gt(1, 1), favor: 50, legitimate: false, petName: "", education: { scholarship: 10, martial: 10, virtue: 10 }, health: 70, talent: 50, diligence: 50, personality, interests: [], imperialFear: 20, neglect: 20, custodianBond: 0, portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" }, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive" },
+    { id: "heir_000002", sex: "daughter", fatherId: null, bearer: "sovereign", birthAt: gt(1, 1), favor: 50, legitimate: false, petName: "", education: { scholarship: 10, martial: 10, virtue: 10 }, health: 70, talent: 50, diligence: 50, personality, interests: [], imperialFear: 20, neglect: 20, custodianBond: 0, portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" }, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive" },
   ];
   s.royalRelatives = {
     r_a: { id: "r_a", name: "甲友", sex: "female", age: 6, branch: "close", branchPrestige: 50, legitimate: true, personality, lifecycle: "alive" },
@@ -38,8 +38,8 @@ function makeV38Save(): string {
   const raw = structuredClone(s) as unknown as Record<string, unknown>;
   // v38 形状：heirCompanions 无 id；含一个遗留 ended 条目；无历史/seq 字段。
   raw["heirCompanions"] = {
-    heir_a: { heirId: "heir_a", companion: { kind: "royal_relative", personId: "r_a" }, assignedAt: gt(2, 1), status: "active", bond: 5, ageAtAssignment: 6, profile: { name: "甲友", sex: "female", legitimate: true, personality } },
-    heir_b: { heirId: "heir_b", companion: { kind: "royal_relative", personId: "r_b" }, assignedAt: gt(2, 1), status: "ended", endedAt: gt(3, 1), endReason: "companion_deceased", bond: 8, ageAtAssignment: 6, profile: { name: "乙友", sex: "female", legitimate: true, personality } },
+    heir_000001: { heirId: "heir_000001", companion: { kind: "royal_relative", personId: "r_a" }, assignedAt: gt(2, 1), status: "active", bond: 5, ageAtAssignment: 6, profile: { name: "甲友", sex: "female", legitimate: true, personality } },
+    heir_000002: { heirId: "heir_000002", companion: { kind: "royal_relative", personId: "r_b" }, assignedAt: gt(2, 1), status: "ended", endedAt: gt(3, 1), endReason: "companion_deceased", bond: 8, ageAtAssignment: 6, profile: { name: "乙友", sex: "female", legitimate: true, personality } },
   };
   delete raw["endedCompanionAssignments"];
   delete raw["nextCompanionAssignmentSeq"];
@@ -61,9 +61,9 @@ describe("save migration v38 → v39", () => {
     if (!loaded.ok) console.error("migration error:", JSON.stringify(loaded.error));
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    const active = loaded.value.state.heirCompanions["heir_a"];
+    const active = loaded.value.state.heirCompanions["heir_000001"];
     expect(active).toBeDefined();
-    expect(active!.id).toBe("companion_assignment_legacy_heir_a");
+    expect(active!.id).toBe("companion_assignment_heir_000001_legacy");
     expect(active!.status).toBe("active");
   });
 
@@ -74,12 +74,12 @@ describe("save migration v38 → v39", () => {
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     const st = loaded.value.state;
-    // ended 的 heir_b 已离开 active map
-    expect(st.heirCompanions["heir_b"]).toBeUndefined();
+    // ended 的 heir_000002 已离开 active map
+    expect(st.heirCompanions["heir_000002"]).toBeUndefined();
     // 迁入历史，带稳定 id + endedAt/endReason
-    const hist = st.endedCompanionAssignments.find((a) => a.heirId === "heir_b");
+    const hist = st.endedCompanionAssignments.find((a) => a.heirId === "heir_000002");
     expect(hist).toBeDefined();
-    expect(hist!.id).toBe("companion_assignment_legacy_heir_b");
+    expect(hist!.id).toBe("companion_assignment_heir_000002_legacy");
     expect(hist!.status).toBe("ended");
     expect(hist!.endReason).toBe("companion_deceased");
   });
@@ -91,5 +91,34 @@ describe("save migration v38 → v39", () => {
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     expect(loaded.value.state.nextCompanionAssignmentSeq).toBeGreaterThanOrEqual(2);
+  });
+
+  // 回归：真实 heirId（heir_NNNNNN 数字结尾）+ 仅一名在读伴读——最常见的旧档形态。
+  // legacy id 若以数字结尾会被 companionAssignmentSequence 误解析成伪序号，导致
+  // validateCompanionWorld 报 COMPANION_SEQUENCE_NOT_AHEAD、迁移档无法加载。
+  it("V39-05: 单个 active 伴读、数字结尾 heirId 的旧档可迁移并通过校验", () => {
+    const s = createNewGameState(db);
+    s.resources.bloodline.heirs = [
+      { id: "heir_000006", sex: "daughter", fatherId: null, bearer: "sovereign", birthAt: gt(1, 1), favor: 50, legitimate: false, petName: "", education: { scholarship: 10, martial: 10, virtue: 10 }, health: 70, talent: 50, diligence: 50, personality, interests: [], imperialFear: 20, neglect: 20, custodianBond: 0, portraitVariants: { baby: "girl_baby1", kid: "girl_kid1", child: "girl_child1", teen: "girl_teen1" }, ambition: 20, closeness: 50, support: 20, faction: "none", lifecycle: "alive" },
+    ];
+    s.royalRelatives = {
+      r_a: { id: "r_a", name: "甲友", sex: "female", age: 6, branch: "close", branchPrestige: 50, legitimate: true, personality, lifecycle: "alive" },
+    };
+    const raw = structuredClone(s) as unknown as Record<string, unknown>;
+    raw["heirCompanions"] = {
+      heir_000006: { heirId: "heir_000006", companion: { kind: "royal_relative", personId: "r_a" }, assignedAt: gt(2, 1), status: "active", bond: 5, ageAtAssignment: 6, profile: { name: "甲友", sex: "female", legitimate: true, personality } },
+    };
+    delete raw["endedCompanionAssignments"];
+    delete raw["nextCompanionAssignmentSeq"];
+    const env = { ...createSaveData(db, s, "slot1"), formatVersion: 38, state: raw, checksum: checksumOf(raw as unknown as GameState) };
+
+    const storage = createMemoryStorage();
+    storage.set(`${SAVE_KEY_PREFIX}slot1`, JSON.stringify(env));
+    const loaded = readSlot(storage, db, "slot1");
+    if (!loaded.ok) console.error("migration error:", JSON.stringify(loaded.error));
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const active = loaded.value.state.heirCompanions["heir_000006"];
+    expect(active!.id).toBe("companion_assignment_heir_000006_legacy");
   });
 });
