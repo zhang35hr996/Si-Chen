@@ -116,7 +116,7 @@ describe("event reaction writeback", () => {
 
   it("does NOT write when reactionSourceEventId undefined", async () => {
     // Fresh state with no chronicle events → no reactionSourceEventId
-    const state = createNewGameState(db);
+    const state = withConsort(createNewGameState(db), db, SPEAKER);
     const reqResult = assembleDialogueRequest(db, state, SPEAKER, LOCATION);
     if (!reqResult.ok) throw new Error(reqResult.error.message);
     const request = reqResult.value;

@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import { ok } from "../../src/engine/infra/result";
 import { assembleDialogueRequest, produceDialogueTurn } from "../../src/engine/dialogue/orchestrator";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import { loadRealContent } from "../helpers/contentFixture";
 import { makeGameTime } from "../../src/engine/calendar/time";
 import type { DialogueProvider } from "../../src/engine/dialogue/types";
@@ -58,7 +59,7 @@ function refOnlyProvider(): DialogueProvider {
 
 describe("generative mention writeback via mentionedContextRefs", () => {
   it("logs the mention even though no factual claim was proposed", async () => {
-    const state = withMemory(createNewGameState(db), traumaMemory);
+    const state = withMemory(withConsort(createNewGameState(db), db, SPEAKER), traumaMemory);
     const r = assembleDialogueRequest(db, state, SPEAKER, LOC, { topicTags: ["humiliation"] });
     expect(r.ok).toBe(true);
     if (!r.ok) return;

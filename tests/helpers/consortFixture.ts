@@ -42,6 +42,25 @@ const LEGACY_TEST_CONSORTS: Record<string, CharacterContent> = Object.fromEntrie
   }),
 );
 
+/** The synthetic CharacterContent for a deleted story consort (for tests asserting its authored identity). */
+export function legacyConsortContent(id: string): CharacterContent {
+  const c = LEGACY_TEST_CONSORTS[id];
+  if (!c) throw new Error(`legacyConsortContent: no legacy test consort "${id}"`);
+  return c;
+}
+
+/**
+ * Returns a copy of the content DB with the given deleted story consorts re-registered
+ * into db.characters. For test-only tooling that derives from db.characters directly
+ * (e.g. the eval speaker-profile builder), NOT for gameplay state — production consorts
+ * live in state.generatedConsorts. Unknown IDs throw.
+ */
+export function dbWithLegacyConsorts(db: ContentDB, ...ids: string[]): ContentDB {
+  const extra: Record<string, CharacterContent> = {};
+  for (const id of ids) extra[id] = legacyConsortContent(id);
+  return { ...db, characters: { ...db.characters, ...extra } };
+}
+
 /**
  * Palaces that are valid location IDs but NOT in the generated-consort palace pool.
  * Used as eviction targets when a generated consort occupies a story consort's slot.
