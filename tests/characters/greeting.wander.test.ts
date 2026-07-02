@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { wanderChance, wanders, gardenSubLocationFor } from "../../src/engine/characters/greeting";
-import { loadRealContent } from "../helpers/contentFixture";
 import { legacyConsortContent } from "../helpers/consortFixture";
-
-const db = loadRealContent();
 
 describe("wanderChance (性格加权)", () => {
   it("端肃/克制/重礼法 的沈知白低于基础 12", () => {

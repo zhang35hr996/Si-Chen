@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { characterSchema } from "../../src/engine/content/schemas";
-import { loadRealContent } from "../helpers/contentFixture";
 import { legacyConsortContent } from "../helpers/consortFixture";
 
 /**
