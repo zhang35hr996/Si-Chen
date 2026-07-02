@@ -31,6 +31,10 @@ const LU_OFFICIAL = "official_fam_lu_main";
 const SHEN_CONSORT = "shen_zhibai";
 const WEN_OFFICIAL = "official_fam_wen_main";
 
+/** Base world with the lu/wen/shen/xu story consorts + their maternal families injected. */
+const fresh = (): GameState =>
+  ["lu_huaijin", "wenya", "shen_zhibai", "xu_qinghuan"].reduce((s, id) => withConsort(s, db, id), createNewGameState(db, 1));
+
 /** 注入一条侍君 PunishmentRecord（牵连来源），并推进 nextSeq。 */
 function withConsortPunishment(s: GameState, consortId: string, severity: PunishmentSeverity, id = "pun_000001"): GameState {
   const rec: PunishmentRecord = {
@@ -47,7 +51,7 @@ function withConsortPunishment(s: GameState, consortId: string, severity: Punish
 
 describe("selection helpers — deterministic & bounded", () => {
   it("higher target is within (from, from+2] and vacant; top-grade official has none", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     const lu = s.officials[LU_OFFICIAL]!;
     const target = selectHigherVacantPost(s, db, lu)!;
     expect(target).not.toBeNull();
@@ -58,7 +62,7 @@ describe("selection helpers — deterministic & bounded", () => {
   });
 
   it("lower target is within [from-2, from-1] and vacant", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     const lu = s.officials[LU_OFFICIAL]!;
     const target = selectLowerVacantPost(s, db, lu)!;
     expect(gradeOf(target)).toBeLessThan(gradeOf(lu.postId));
@@ -66,7 +70,7 @@ describe("selection helpers — deterministic & bounded", () => {
   });
 
   it("selection is deterministic across repeated calls", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     const lu = s.officials[LU_OFFICIAL]!;
     expect(selectHigherVacantPost(s, db, lu)).toBe(selectHigherVacantPost(s, db, lu));
     expect(selectLowerVacantPost(s, db, lu)).toBe(selectLowerVacantPost(s, db, lu));
@@ -75,7 +79,7 @@ describe("selection helpers — deterministic & bounded", () => {
 
 describe("generateConsortPetition", () => {
   it("creates a pending administrative-promotion decision targeting a kin official", () => {
-    const s = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
+    const s = withConsort(fresh(), db, "lu_huaijin");
     const r = generateConsortPetition(s, db, LU_CONSORT, at(3))!;
     expect(r).not.toBeNull();
     const d = r.decision;
@@ -90,25 +94,25 @@ describe("generateConsortPetition", () => {
   });
 
   it("does not generate for a consort without birthFamily", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     const plain = Object.entries(s.standing).find(([id, st]) => !st.birthFamilyId && !s.officials[id])![0];
     expect(generateConsortPetition(s, db, plain, at(3))).toBeNull();
   });
 
   it("does not generate for a deceased consort", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     const dead = { ...s, standing: { ...s.standing, [LU_CONSORT]: { ...s.standing[LU_CONSORT]!, lifecycle: "deceased" as const } } };
     expect(generateConsortPetition(dead, db, LU_CONSORT, at(3))).toBeNull();
   });
 
   it("does not generate when no higher vacant post exists for any kin official", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     // shen 的官员已是顶级，无更高空缺。
     expect(generateConsortPetition(s, db, SHEN_CONSORT, at(3))).toBeNull();
   });
 
   it("dedups by source (same consort+official+year) and by pending petition per consort", () => {
-    const s = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
+    const s = withConsort(fresh(), db, "lu_huaijin");
     const first = generateConsortPetition(s, db, LU_CONSORT, at(3))!;
     expect(generateConsortPetition(first.state, db, LU_CONSORT, at(3))).toBeNull(); // pending exists
     // 即使换年，pending 未决 → 仍不重复。
@@ -118,7 +122,7 @@ describe("generateConsortPetition", () => {
 
 describe("generateFamilyImplication", () => {
   it("requires a severe consort punishment as source and targets the highest-grade kin official", () => {
-    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "severe");
+    const s = withConsortPunishment(withConsort(fresh(), db, "lu_huaijin"), LU_CONSORT, "severe");
     const r = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     expect(r).not.toBeNull();
     const d = r.decision;
@@ -131,17 +135,17 @@ describe("generateFamilyImplication", () => {
   });
 
   it("does not generate when the source punishment is not severe enough", () => {
-    const s = withConsortPunishment(createNewGameState(db, 1), LU_CONSORT, "moderate");
+    const s = withConsortPunishment(fresh(), LU_CONSORT, "moderate");
     expect(generateFamilyImplication(s, db, "pun_000001", at(3))).toBeNull();
   });
 
   it("does not generate when the source punishment does not exist", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     expect(generateFamilyImplication(s, db, "pun_999999", at(3))).toBeNull();
   });
 
   it("dedups by sourcePunishmentId", () => {
-    const s = withConsortPunishment(withConsort(createNewGameState(db, 1), db, "lu_huaijin"), LU_CONSORT, "terminal");
+    const s = withConsortPunishment(withConsort(fresh(), db, "lu_huaijin"), LU_CONSORT, "terminal");
     const first = generateFamilyImplication(s, db, "pun_000001", at(3))!;
     expect(generateFamilyImplication(first.state, db, "pun_000001", at(4))).toBeNull();
   });
@@ -155,7 +159,7 @@ describe("generateMemorial", () => {
   }
 
   it("memorial_promotion needs merit + score + higher vacancy", () => {
-    const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 95 });
+    const s = tune(fresh(), WEN_OFFICIAL, { merit: 95 });
     const tuned = { ...s, officials: { ...s.officials, [WEN_OFFICIAL]: { ...s.officials[WEN_OFFICIAL]!, loyalty: 95, aptitude: { governance: 95, scholarship: 95, military: 95, integrity: 95 } } } };
     const r = generateMemorial(tuned, db, WEN_OFFICIAL, "memorial_promotion", at(3));
     expect(r).not.toBeNull();
@@ -165,29 +169,29 @@ describe("generateMemorial", () => {
   });
 
   it("memorial_demotion needs low merit + lower vacancy", () => {
-    const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 20 });
+    const s = tune(fresh(), WEN_OFFICIAL, { merit: 20 });
     const r = generateMemorial(s, db, WEN_OFFICIAL, "memorial_demotion", at(3));
     expect(r).not.toBeNull();
     expect(gradeOf(r!.decision.recommendedPostId!)).toBeLessThan(gradeOf(r!.decision.fromPostId!));
   });
 
   it("memorial_dismissal needs sustained underperformance", () => {
-    const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { underperformanceYears: 2 });
+    const s = tune(fresh(), WEN_OFFICIAL, { underperformanceYears: 2 });
     const r = generateMemorial(s, db, WEN_OFFICIAL, "memorial_dismissal", at(3));
     expect(r).not.toBeNull();
     expect(r!.decision.recommendedPostId).toBeUndefined();
     // 政绩尚可（默认）且无连续不合格 → 不生成。
-    expect(generateMemorial(createNewGameState(db, 1), db, WEN_OFFICIAL, "memorial_dismissal", at(3))).toBeNull();
+    expect(generateMemorial(fresh(), db, WEN_OFFICIAL, "memorial_dismissal", at(3))).toBeNull();
   });
 
   it("does not generate for a non-seated official", () => {
-    const s = createNewGameState(db, 1);
+    const s = fresh();
     const noPost = { ...s, officials: { ...s.officials, [WEN_OFFICIAL]: { ...s.officials[WEN_OFFICIAL]!, postId: null } } };
     expect(generateMemorial(noPost, db, WEN_OFFICIAL, "memorial_promotion", at(3))).toBeNull();
   });
 
   it("dedups same kind+official+year", () => {
-    const s = tune(createNewGameState(db, 1), WEN_OFFICIAL, { merit: 20 });
+    const s = tune(fresh(), WEN_OFFICIAL, { merit: 20 });
     const first = generateMemorial(s, db, WEN_OFFICIAL, "memorial_demotion", at(3))!;
     expect(generateMemorial(first.state, db, WEN_OFFICIAL, "memorial_demotion", at(3))).toBeNull();
   });
@@ -195,7 +199,7 @@ describe("generateMemorial", () => {
   it("dismissal priority is GLOBAL: a late-id severe candidate is not starved out of the annual cap", () => {
     // 3 名 id 更靠前的请降候选（merit 低 + 有低品空缺）+ 1 名 id 更靠后的严重失职请免候选；年度 cap=3。
     // 若优先级只是「每官内」，3 个请降会先占满 cap，请免被挤出。全局优先则请免先入，挤出一个请降。
-    let s = createNewGameState(db, 1);
+    let s = fresh();
     const demoteIds = ["official_fam_gen_0003", "official_fam_gen_0004", "official_fam_gen_0005"]; // g7/g9/g13，均有低品空缺
     const SEVERE = "official_fam_xu_main"; // id 排序最后
     for (const id of demoteIds) {
@@ -214,7 +218,7 @@ describe("generateMemorial", () => {
   });
 
   it("getPendingPersonnelDecisions returns pending sorted by id", () => {
-    let s: GameState = withConsort(createNewGameState(db, 1), db, "lu_huaijin");
+    let s: GameState = withConsort(fresh(), db, "lu_huaijin");
     s = generateConsortPetition(s, db, LU_CONSORT, at(3))!.state;
     s = tune(s, WEN_OFFICIAL, { merit: 20 });
     s = generateMemorial(s, db, WEN_OFFICIAL, "memorial_demotion", at(3))!.state;

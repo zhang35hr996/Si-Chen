@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 import {
   resolveHaremDisciplineOccurrence,
   resolveHaremDiscipline,
@@ -31,7 +32,7 @@ const TARGET_ID = "wenya";
 // ── 工具 ─────────────────────────────────────────────────────────────────────
 
 function makePairState(opts: { actorRank?: string; targetRank?: string; rngSeed?: number } = {}): GameState {
-  const s = createNewGameState(db);
+  const s = withConsort(withConsort(createNewGameState(db), db, ACTOR_ID), db, TARGET_ID);
   const { actorRank = "fu", targetRank = "changzai", rngSeed = 42 } = opts;
   const actorSt = s.standing[ACTOR_ID]!;
   const targetSt = s.standing[TARGET_ID]!;
