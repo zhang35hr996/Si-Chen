@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { loadRealContent } from "../helpers/contentFixture";
+import { legacyConsortContent } from "../helpers/consortFixture";
 import { deriveDisposition, DEFAULT_DISPOSITION } from "../../src/engine/dialogue/disposition";
 import { deriveSubjectRelation } from "../../src/engine/dialogue/subjectRelation";
 
@@ -29,16 +30,19 @@ describe("canonical reaction-field coverage", () => {
   });
 });
 
-describe("real content derives non-default disposition / relation", () => {
+// shen_zhibai / xu_qinghuan were removed from authored content/; the legacy test
+// fixtures preserve their authored reactionTraits/stances so the derivation logic
+// (disposition / subject-relation) stays covered.
+describe("derived disposition / relation from authored reaction fields", () => {
   it("沈知白's reactionTraits derive a high discretion, not the default", () => {
-    const shen = db.characters["shen_zhibai"]!;
+    const shen = legacyConsortContent("shen_zhibai");
     const d = deriveDisposition(shen.profile.reactionTraits);
     expect(d.discretion).toBeGreaterThan(DEFAULT_DISPOSITION.discretion);
     expect(d.discretion).toBeGreaterThanOrEqual(80);
   });
 
   it("徐清欢's structured stance toward 沈知白 derives a non-neutral (competitive) relation", () => {
-    const xu = db.characters["xu_qinghuan"]!;
+    const xu = legacyConsortContent("xu_qinghuan");
     const stance = xu.stances?.find((s) => s.charId === "shen_zhibai")?.stance;
     expect(stance).toBeDefined();
     const { relation } = deriveSubjectRelation({ charId: "shen_zhibai", authoredStance: stance });

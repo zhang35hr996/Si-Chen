@@ -63,11 +63,12 @@ describe("checkManifest", () => {
 
   it("content-referenced key absent from manifest is an error", () => {
     const manifest = realManifest();
-    delete manifest.entries["portrait.consort24.neutral"]; // 皇后's portrait (portraitSet="consort24")
+    // taihou is authored content (portraitSet="taihou"); story consorts were removed.
+    delete manifest.entries["portrait.taihou.neutral"];
     const result = checkManifest(manifest, allPaths(manifest), db);
     expect(
       result.errors.some(
-        (e) => e.code === "MISSING_ASSET_KEY" && e.message.includes("portrait.consort24.neutral"),
+        (e) => e.code === "MISSING_ASSET_KEY" && e.message.includes("portrait.taihou.neutral"),
       ),
     ).toBe(true);
   });

@@ -18,11 +18,13 @@ describe("real content/ boots", () => {
     }
   });
 
-  it("contains the planned slice + cold-palace pack: 8 characters, 23 locations, 15 events, 16 scenes, 28 ranks", () => {
+  it("contains the planned slice: 4 characters, 23 locations, 13 events, 13 scenes, 28 ranks", () => {
     if (!result.ok) return;
     const db = result.value;
+    // The four story consorts (lu_huaijin/xu_qinghuan/shen_zhibai/wenya) were removed
+    // from authored content; consorts are now procedurally generated at new-game time.
     expect(Object.keys(db.characters).sort()).toEqual(
-      ["xu_qinghuan", "shen_zhibai", "lu_huaijin", "wei_sui", "taihou", "wenya", "cheng_feng", "zhuchi"].sort(),
+      ["wei_sui", "taihou", "cheng_feng", "zhuchi"].sort(),
     );
     expect(Object.keys(db.locations).sort()).toEqual(
       [
@@ -35,8 +37,6 @@ describe("real content/ boots", () => {
     );
     expect(Object.keys(db.events).sort()).toEqual(
       [
-        "arc_changmengong__ev_aftermath",
-        "arc_changmengong__ev_visit",
         "ev_chaohui",
         "ev_menses_rite",
         "ev_taihou_converse",
@@ -53,7 +53,7 @@ describe("real content/ boots", () => {
         "ev_court_fengjiang",
       ].sort(),
     );
-    expect(Object.keys(db.scenes)).toHaveLength(15);
+    expect(Object.keys(db.scenes)).toHaveLength(13);
     expect(Object.keys(db.ranks)).toHaveLength(28);
   });
 
@@ -61,9 +61,9 @@ describe("real content/ boots", () => {
     if (!result.ok) return;
     const db = result.value;
     expect(db.world.startingLocation).toBe("zichendian");
-    expect(db.ranks[db.characters["shen_zhibai"]!.initialStanding!.rank]?.domain).toBe("harem");
+    // harem-rank wiring is now exercised via generated consorts (see randomHaremInit);
+    // authored content retains the official-domain wei_sui.
     expect(db.ranks[db.characters["wei_sui"]!.initialStanding!.rank]?.domain).toBe("official");
     expect(db.events["ev_menses_rite"]?.apCost).toBe(1); // 召对是轻行动；真正的大祭（3+ AP 重行动）是未来单独的事件
-    expect(db.characters["lu_huaijin"]?.defaultLocation).toBe("zhongcui_gong");
   });
 });
