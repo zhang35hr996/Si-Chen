@@ -37,7 +37,8 @@ const base = withConsort(createNewGameState(db), db, "lu_huaijin");
 const now = toGameTime(base.calendar);
 
 const CONSORT_ID = "lu_huaijin";
-const character = db.characters[CONSORT_ID]!;
+// lu_huaijin is no longer authored in db.characters; take her injected content.
+const character = base.generatedConsorts[CONSORT_ID]!;
 
 /** 将指定侍君打入冷宫的辅助状态构建（via engine funnel 直接注入 send_to_cold_palace effect）。 */
 function stateInColdPalace(state: GameState, charId: string = CONSORT_ID, seq = 0): GameState {

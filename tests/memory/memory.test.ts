@@ -15,12 +15,20 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import { createLogger } from "../../src/engine/infra/logger";
 import { createGameStore, type GameStore } from "../../src/store/gameStore";
 import { loadTestContent } from "../helpers/testContentFixture";
+import { withConsort } from "../helpers/consortFixture";
+import type { GameState } from "../../src/engine/state/types";
 
 const db = loadTestContent();
+
+/** The deleted story consorts these tests exercise for their authored memories. */
+const STORY_CONSORTS = ["lu_huaijin", "shen_zhibai", "wenya", "xu_qinghuan"] as const;
+const withStoryConsorts = (s: GameState): GameState =>
+  STORY_CONSORTS.reduce((acc, id) => withConsort(acc, db, id), s);
 
 const startedStore = (): GameStore => {
   const store = createGameStore({ logger: createLogger({ now: () => 0 }) });
   store.newGame(db);
+  store.loadState(withStoryConsorts(store.getState()));
   return store;
 };
 
@@ -98,7 +106,7 @@ describe("origin trace (acceptance: source + writing scene)", () => {
 
 describe("inspection helpers", () => {
   it("per-character isolation, overview counts, and permanentCount", () => {
-    const state = createNewGameState(db);
+    const state = withStoryConsorts(createNewGameState(db));
     expect(listMemories(state, "char_ghost")).toEqual([]);
     const overview = memoryOverview(state)
       .filter((o) => !o.charId.startsWith("generated_"))
@@ -116,7 +124,7 @@ describe("inspection helpers", () => {
   });
 
   it("memoryAgeDays counts action-days, clamped at 0", () => {
-    const state = createNewGameState(db);
+    const state = withStoryConsorts(createNewGameState(db));
     const entry = listMemories(state, "shen_zhibai")[0]!;
     expect(memoryAgeDays(entry, { year: 1, month: 1, period: "early", dayIndex: 0 })).toBe(0);
     expect(memoryAgeDays(entry, { year: 1, month: 2, period: "mid", dayIndex: 4 })).toBe(4);
