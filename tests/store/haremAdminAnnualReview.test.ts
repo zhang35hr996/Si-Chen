@@ -23,7 +23,7 @@ import { makeGameTime, dayIndexOf } from "../../src/engine/calendar/time";
 import type { CalendarState } from "../../src/engine/calendar/time";
 import type { GameState, HaremAdminReviewRecord } from "../../src/engine/state/types";
 import { loadRealContent } from "../helpers/contentFixture";
-import { withConsort } from "../helpers/consortFixture";
+import { withConsort, dbWithLegacyConsorts } from "../helpers/consortFixture";
 import {
   SAVE_FORMAT_VERSION,
   createSaveData,
@@ -35,6 +35,9 @@ import { checksumOf } from "../../src/engine/save/canonical";
 import { HOUSEHOLD_DEFAULTS, PERSONALITY_DEFAULTS } from "../../src/engine/characters/consortAttrs";
 
 const db = loadRealContent();
+// buildHaremAdminReviewLine expects a runtime ContentDB with generatedConsorts merged;
+// the story consorts are no longer authored, so build a merged db for the line unit tests.
+const runtimeDb = dbWithLegacyConsorts(db, "wenya", "xu_qinghuan", "lu_huaijin", "shen_zhibai");
 
 // ─── 工具 ────────────────────────────────────────────────────────────────────
 
@@ -546,10 +549,10 @@ describe("buildHaremAdminReviewLine", () => {
       { targetId: "wenya", direction: "demote", fromRankId: "cairen", toRankId: "changzai" },
       { administratorId: "xu_qinghuan", office: "acting_consort" },
     );
-    const line = buildHaremAdminReviewLine(db, review);
+    const line = buildHaremAdminReviewLine(runtimeDb, review);
     expect(line).not.toContain("皇后");
     expect(line).toContain("协理六宫");
-    const char = db.characters["xu_qinghuan"]!;
+    const char = runtimeDb.characters["xu_qinghuan"]!;
     const expectedName = char.profile.surname ? char.profile.surname + "氏" : char.profile.name;
     expect(line).toContain(expectedName);
   });
@@ -564,10 +567,10 @@ describe("buildHaremAdminReviewLine", () => {
 
   it("AR-31: generated consort（有姓）使用「某氏」形式", () => {
     const genChar = {
-      ...db.characters["wenya"]!,
-      profile: { ...db.characters["wenya"]!.profile, surname: "林", name: "林小雪" },
+      ...runtimeDb.characters["wenya"]!,
+      profile: { ...runtimeDb.characters["wenya"]!.profile, surname: "林", name: "林小雪" },
     };
-    const db_ = { ...db, characters: { ...db.characters, gen_1: genChar } };
+    const db_ = { ...runtimeDb, characters: { ...runtimeDb.characters, gen_1: genChar } };
     const review = makeRankChangedReview(
       { targetId: "gen_1", direction: "promote", fromRankId: "changzai", toRankId: "cairen" },
     );
@@ -577,9 +580,9 @@ describe("buildHaremAdminReviewLine", () => {
 
   it("AR-32: service_merit→念其侍奉勤谨；household_disorder→以其宫中失序", () => {
     const r1 = makeRankChangedReview({ reason: "service_merit" });
-    expect(buildHaremAdminReviewLine(db, r1)).toContain("念其侍奉勤谨");
+    expect(buildHaremAdminReviewLine(runtimeDb, r1)).toContain("念其勤谨侍奉");
     const r2 = makeRankChangedReview({ reason: "household_disorder" });
-    expect(buildHaremAdminReviewLine(db, r2)).toContain("以其宫中失序");
+    expect(buildHaremAdminReviewLine(runtimeDb, r2)).toContain("以其冒犯宫规");
   });
 });
 

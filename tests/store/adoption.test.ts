@@ -9,6 +9,14 @@ const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
 const db = content.value;
 
+/** Base state with the story consorts used by these tests injected (shen empress,
+ *  lu/xu in-palace, wenya in 冷宫 via her changmengong defaultLocation). */
+const fresh = () =>
+  ["shen_zhibai", "lu_huaijin", "xu_qinghuan", "wenya"].reduce(
+    (s, id) => withConsort(s, db, id),
+    createNewGameState(db),
+  );
+
 const heir = (over: Partial<Heir>): Heir => ({
   id: "heir_000001", sex: "son", fatherId: null, bearer: "sovereign",
   birthAt: { year: 1, month: 1, period: "early", dayIndex: 0 },
@@ -21,7 +29,7 @@ const heir = (over: Partial<Heir>): Heir => ({
 
 describe("eligibleAdoptiveFathers", () => {
   it("includes in-palace consorts + 皇后, excludes 冷宫 + deceased + officials", () => {
-    const s = createNewGameState(db);
+    const s = fresh();
     const ids = eligibleAdoptiveFathers(db, s).map((c) => c.id);
     expect(ids).toContain("shen_zhibai");
     expect(ids).toContain("lu_huaijin");
@@ -32,7 +40,7 @@ describe("eligibleAdoptiveFathers", () => {
 
 describe("bioFatherAvailable", () => {
   it("false for self-conceived (fatherId null)", () => {
-    const s = createNewGameState(db);
+    const s = fresh();
     expect(bioFatherAvailable(db, s, heir({ fatherId: null }))).toBe(false);
   });
   it("false when bio father deceased or in 冷宫", () => {
@@ -42,20 +50,20 @@ describe("bioFatherAvailable", () => {
     expect(bioFatherAvailable(db, createNewGameState(db), heir({ fatherId: "wenya" }))).toBe(false);
   });
   it("true when bio father alive and in palace", () => {
-    const s = createNewGameState(db);
+    const s = fresh();
     expect(bioFatherAvailable(db, s, heir({ fatherId: "lu_huaijin" }))).toBe(true);
   });
 });
 
 describe("buildAdoptionReaction", () => {
   it("no-bio-father path: adoptive father thanks (single speaker)", () => {
-    const s = createNewGameState(db);
+    const s = fresh();
     const out = buildAdoptionReaction(db, s, heir({ fatherId: null }), "lu_huaijin");
     expect(out).toHaveLength(1);
     expect(out[0]!.speakerId).toBe("lu_huaijin");
   });
   it("bio-father-alive path: adoptive thanks + 司礼官 reports bio father weeps", () => {
-    const s = createNewGameState(db);
+    const s = fresh();
     const out = buildAdoptionReaction(db, s, heir({ fatherId: "xu_qinghuan" }), "lu_huaijin");
     expect(out).toHaveLength(2);
     expect(out[0]!.speakerId).toBe("lu_huaijin");

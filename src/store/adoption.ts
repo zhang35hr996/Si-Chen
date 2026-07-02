@@ -15,7 +15,10 @@ function nameOf(db: ContentDB, state: GameState, charId: string): string {
 
 /** 养父候选：在宫(非冷宫)、非已故的侍君（含皇后）及尊长（太后）。 */
 export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): CharacterContent[] {
-  return Object.values(db.characters).filter((c) => {
+  // Consorts are procedurally generated into state.generatedConsorts; elders (太后) stay
+  // in db.characters. Consider both so generated consorts can be adoptive fathers.
+  const candidates = [...Object.values(db.characters), ...Object.values(state.generatedConsorts)];
+  return candidates.filter((c) => {
     if (c.kind !== "consort" && c.kind !== "elder") return false;
     if (c.defaultLocation === "changmengong") return false;
     if (state.standing[c.id]?.lifecycle === "deceased") return false;
@@ -26,7 +29,7 @@ export function eligibleAdoptiveFathers(db: ContentDB, state: GameState): Charac
 /** 生父是否仍可依（存活 + 在宫非冷宫）。自孕(fatherId null)恒 false。 */
 export function bioFatherAvailable(db: ContentDB, state: GameState, heir: Heir): boolean {
   if (heir.fatherId === null) return false;
-  const c = db.characters[heir.fatherId];
+  const c = db.characters[heir.fatherId] ?? state.generatedConsorts[heir.fatherId];
   if (!c || c.kind !== "consort") return false;
   if (c.defaultLocation === "changmengong") return false;
   return state.standing[heir.fatherId]?.lifecycle !== "deceased";
@@ -46,7 +49,7 @@ export function buildAdoptionReaction(
   heir: Heir,
   fatherId: string,
 ): AdoptionLine[] {
-  const fatherChar = db.characters[fatherId];
+  const fatherChar = db.characters[fatherId] ?? state.generatedConsorts[fatherId];
   if (fatherChar?.kind === "elder") {
     const child = SEX_CHILD[heir.sex];
     const pronoun = heir.sex === "daughter" ? "她" : "他";

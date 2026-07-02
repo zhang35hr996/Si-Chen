@@ -11,14 +11,17 @@ import { createNewGameState } from "../../src/engine/state/newGame";
 import type { GameState } from "../../src/engine/state/types";
 import { CharacterScene } from "../../src/ui/screens/CharacterScene";
 import { loadRealContent } from "../helpers/contentFixture";
+import { withConsort } from "../helpers/consortFixture";
 
 const db = loadRealContent();
 const registry = new AssetRegistry({ version: 1, entries: {} });
-const consort = db.characters.lu_huaijin!; // 住 zhongcui_gong（设宫室）
+// lu_huaijin is procedurally injected (no longer authored); 住 zhongcui_gong（设宫室）
+const baseState = withConsort(createNewGameState(db), db, "lu_huaijin");
+const consort = baseState.generatedConsorts.lu_huaijin!;
 const location = db.locations.zhongcui_gong!;
 
 function render_away() {
-  const state: GameState = createNewGameState(db);
+  const state: GameState = baseState;
   return render(
     <CharacterScene
       db={db}
