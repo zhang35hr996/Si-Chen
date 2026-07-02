@@ -172,12 +172,12 @@ describe("addGeneratedConsort — 重复/冲突提交", () => {
   });
 
   it.each([
-    ["authored character", "shen_zhibai"],
-    ["official", "official_fam_shen_main"],
-  ])("拒绝与既有 %s id 冲突的新侍君", (_label, conflictId) => {
+    ["authored character", (_s: GameState) => "taihou"], // taihou 仍是 authored 人物
+    ["official", (s: GameState) => Object.keys(s.officials)[0]!],
+  ])("拒绝与既有 %s id 冲突的新侍君", (_label, pickId) => {
     const state = createNewGameState(db, 1);
     const c = liangjiaziCandidate(state);
-    const bad = { ...c.content, id: conflictId };
+    const bad = { ...c.content, id: pickId(state) };
     const before = state.generatedConsorts;
     const r = addGeneratedConsort(state, db, bad, "guiren", 18);
     expect(r.ok).toBe(false);

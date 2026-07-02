@@ -3,6 +3,7 @@ import { loadGameContent } from "../../src/engine/content/viteSource";
 import { gameStateSchema } from "../../src/engine/save/stateSchema";
 import { applyEffects } from "../../src/engine/effects/funnel";
 import { createNewGameState } from "../../src/engine/state/newGame";
+import { withConsort } from "../helpers/consortFixture";
 
 const content = loadGameContent();
 if (!content.ok) throw new Error("content failed to load");
@@ -10,7 +11,7 @@ const db = content.value;
 
 describe("gameStateSchema persists bedchamber + pregnancy", () => {
   it("round-trips a state with encounters and a carrying pregnancy", () => {
-    let state = createNewGameState(db);
+    let state = withConsort(createNewGameState(db), db, "lu_huaijin");
     const a = applyEffects(db, state, [{ type: "bedchamber", char: "lu_huaijin", mode: "passion" }]);
     expect(a.ok).toBe(true);
     if (!a.ok) return;
